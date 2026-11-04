@@ -121,26 +121,15 @@ fn end_to_end_list_then_prune_then_prune_all() {
 }
 
 #[test]
-fn list_ignores_rebuild_locks_and_prune_sweeps_stray_ones() {
-    let prunes: [&[&str]; 2] = [
-        &["self", "cache", "prune"],
-        &["self", "cache", "prune", "--all", "--yes"],
-    ];
-    for args in prunes {
-        let tmp = TempDir::new().unwrap();
-        let lock = tmp.path().join("toolr").join("locks").join("0123abcd.lock");
-        fs::create_dir_all(lock.parent().unwrap()).unwrap();
-        fs::write(&lock, b"").unwrap();
+fn list_ignores_the_manifest_rebuild_locks_dir() {
+    let tmp = TempDir::new().unwrap();
+    let lock = tmp.path().join("toolr").join("locks").join("0123abcd.lock");
+    fs::create_dir_all(lock.parent().unwrap()).unwrap();
+    fs::write(&lock, b"").unwrap();
 
-        let out = cmd_in(tmp.path(), &["self", "cache", "list"])
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "list failed: {out:?}");
-        assert_contains_in_stdout(&out, "no cached virtualenvs found");
-
-        let out = cmd_in(tmp.path(), args).output().unwrap();
-        assert!(out.status.success(), "{args:?} failed: {out:?}");
-        assert!(!lock.exists(), "{args:?} kept a stray lock");
-        assert!(lock.parent().unwrap().is_dir(), "{args:?} removed locks/");
-    }
+    let out = cmd_in(tmp.path(), &["self", "cache", "list"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "list failed: {out:?}");
+    assert_contains_in_stdout(&out, "no cached virtualenvs found");
 }

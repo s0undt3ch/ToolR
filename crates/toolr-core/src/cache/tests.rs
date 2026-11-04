@@ -528,7 +528,7 @@ fn sweep_keeps_the_lock_of_a_kept_repo() {
     let lock = lock_path_for_repo(cache.path(), &repo);
     write_lock(&lock);
 
-    let sweep = sweep_rebuild_locks(cache.path(), &[repo.as_path()], false).unwrap();
+    let sweep = sweep_rebuild_locks(cache.path(), std::slice::from_ref(&repo), false).unwrap();
     assert!(lock.is_file());
     assert_eq!(
         sweep,
@@ -631,7 +631,7 @@ fn sweep_keeps_the_lock_of_a_repo_reached_through_a_symlink() {
     let lock = lock_path_for_repo(cache.path(), &real);
     write_lock(&lock);
 
-    let sweep = sweep_rebuild_locks(cache.path(), &[link.as_path()], false).unwrap();
+    let sweep = sweep_rebuild_locks(cache.path(), std::slice::from_ref(&link), false).unwrap();
     assert!(lock.is_file());
     assert_eq!(sweep, LockSweep::default());
 }

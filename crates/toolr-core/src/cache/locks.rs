@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::fs::{File, TryLockError};
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::manifest::{LOCKS_DIR, lock_path_for_repo};
 
@@ -19,7 +19,7 @@ pub struct LockSweep {
 /// would lock. Held locks stay; `locks/` itself is never removed.
 pub fn sweep_rebuild_locks(
     cache_root: &Path,
-    keep_repos: &[&Path],
+    keep_repos: &[PathBuf],
     dry_run: bool,
 ) -> std::io::Result<LockSweep> {
     let keep: HashSet<_> = keep_repos
@@ -45,8 +45,8 @@ pub fn sweep_rebuild_locks(
 }
 
 /// Tallies one lock into `sweep`. A lock gone since `read_dir`, as when two
-/// prunes overlap, counts as nothing. Opened read-only, all locking needs, so a
-/// dry run works on a read-only cache.
+/// prunes overlap, counts as nothing. Opened read-only: locking needs no more,
+/// and a dry run must work on a read-only cache.
 pub(super) fn sweep_one(path: &Path, dry_run: bool, sweep: &mut LockSweep) -> std::io::Result<()> {
     let file = match File::open(path) {
         Err(e) if e.kind() == ErrorKind::NotFound => return Ok(()),

@@ -92,7 +92,6 @@ fn prune_classified(
         .iter()
         .map(|e| e.meta.repo_path.clone())
         .collect();
-    let keep_repos: Vec<&Path> = keep_repos.iter().map(PathBuf::as_path).collect();
     let candidates: Vec<Candidate> = classification
         .orphan
         .into_iter()
@@ -144,7 +143,7 @@ fn prune_classified(
 /// Remove rebuild locks none of `keep_repos` needs. A failure only warns, like `remove_entry`.
 fn sweep_locks(
     cache_root: &Path,
-    keep_repos: &[&Path],
+    keep_repos: &[PathBuf],
     dry_run: bool,
     out: &mut dyn Write,
 ) -> Result<usize> {

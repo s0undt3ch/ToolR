@@ -594,10 +594,10 @@ mod tests {
             // SAFETY: CACHE_HOME_LOCK serialises every test in this module
             // that touches env vars, and it is still held here.
             unsafe {
-                self.prev.as_ref().map_or_else(
-                    || std::env::remove_var("XDG_CACHE_HOME"),
-                    |v| std::env::set_var("XDG_CACHE_HOME", v),
-                )
+                match &self.prev {
+                    Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                    None => std::env::remove_var("XDG_CACHE_HOME"),
+                }
             }
         }
     }
