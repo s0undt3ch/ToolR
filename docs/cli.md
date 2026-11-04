@@ -201,7 +201,7 @@ exits with 128 plus the signal number, as in a shell.
 This is the one-liner for running a command-package's tests:
 
 ```sh
-toolr project venv run -- pytest tools/
+toolr project venv run -- pytest tests/tools/
 ```
 
 `--no-sync` never touches the venv — it errors if the venv is missing or stale

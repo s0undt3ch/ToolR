@@ -17,6 +17,13 @@ A directory at the root of your repo where your commands live. Each
 directory is a [PEP 420 namespace package][pep-420] — **no
 `__init__.py` is needed**. See [Writing commands](writing-commands/index.md).
 
+toolr reads every `*.py` under `tools/` for commands, so keep test files
+out of it. Put a command's tests in your project's own tests tree, e.g.
+`tests/tools/<module>/test_<command>.py`, with an `__init__.py` in `tests/`
+and each directory below it so pytest doesn't import `tests/tools/` as a
+second `tools` package. Fixture data goes in a `files/` directory next to
+the tests that use it; see [Testing your commands](writing-commands/testing.md).
+
 A `tools/` is a toolr project only if it contains a `pyproject.toml`
 (`toolr project init` creates one). toolr finds the project by walking up
 from the current directory to the nearest `tools/pyproject.toml`, so a

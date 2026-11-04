@@ -9,7 +9,12 @@ setup at all.
   function directly and assert on what it did — see [Calling a command directly](#calling-a-command-directly)
   below.
 - A `pytest11` plugin appends your repo root to `sys.path` automatically, so `import tools.*`
-  resolves under `pytest tools/` with zero configuration.
+  resolves under `pytest tests/tools/` with zero configuration.
+
+Keep these tests out of `tools/`: toolr reads every `*.py` there for commands. Put them in your project's own tests
+tree, e.g. `tests/tools/<module>/test_<command>.py`, with an `__init__.py` in `tests/` and each directory below it so
+pytest doesn't import `tests/tools/` as a second `tools` package. Keep fixture data, such as a sample `tools/` tree for
+`CommandsTester`, in a `files/` directory next to the tests that use it, without an `__init__.py`.
 
 It's designed for the case where you want to test *your own* command modules: "does my decorator
 land in the registry?", "do my command groups collect the right commands?", "does my dispatcher
