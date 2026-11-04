@@ -322,7 +322,7 @@ fn build_project_venv_subcommand() -> Command {
                         .num_args(1..)
                         .trailing_var_arg(true)
                         .allow_hyphen_values(true)
-                        .help("Command to run in the venv, e.g. `pytest tools/`. toolr's own flags must come before the command (or a `--`)."),
+                        .help("Command to run in the venv, e.g. `pytest tests/`. toolr's own flags must come before the command (or a `--`)."),
                 ),
         )
         .subcommand(
