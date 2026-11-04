@@ -40,12 +40,12 @@ def layout_problems(tests_dir: Path) -> list[str]:
     paths = [path for path in _test_tree_paths(tests_dir) if FIXTURES_DIR not in path.parts[:-1]]
     package_dirs = {path.parent for path in paths if path.suffix == ".py"}
     problems = [
-        f"add an `__init__.py` to tests/{directory}"
+        f"add an `__init__.py` to tests/{directory.as_posix()}"
         for directory in sorted(package_dirs)
         if not (tests_dir / directory / "__init__.py").is_file()
     ]
     problems.extend(
-        f"move tests/{path} under a `{FIXTURES_DIR}/` directory next to the tests that use it"
+        f"move tests/{path.as_posix()} under a `{FIXTURES_DIR}/` directory next to the tests that use it"
         for path in paths
         if path.suffix != ".py"
     )
