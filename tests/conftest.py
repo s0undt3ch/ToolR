@@ -17,11 +17,29 @@ from types import ModuleType
 import pytest
 from packaging.version import Version
 
+from toolr._decorators import _get_command_group_storage
 from toolr.testing import CommandsTester
 
 pytest_plugins = ["pytester"]
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(autouse=True)
+def _clean_registry() -> Iterator[None]:
+    """Give every test an empty process-wide command-group registry.
+
+    Snapshots the storage, clears it, and restores the snapshot afterwards,
+    so a ``command_group`` call in one test can't be returned by the next.
+    ``CommandsTester`` patches the storage function per test and is
+    unaffected: this fixture sets up first and tears down last.
+    """
+    storage = _get_command_group_storage()
+    saved = dict(storage)
+    storage.clear()
+    yield
+    storage.clear()
+    storage.update(saved)
 
 
 @pytest.fixture(scope="session")
