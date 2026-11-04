@@ -660,20 +660,51 @@ fn zsh_completion_never_executes_values() {
     assert!(!script.contains("eval "), "zsh script must not eval values");
 }
 
+/// Runs the real `_toolr` under `zsh -f` with `_files` and `compadd` stubbed
+/// to record their arguments; `words` completes the last word.
+fn zsh_complete(fx: &Fixture, words: &[&str]) -> Vec<String> {
+    const DRIVER: &str = r#"
+compdef() { :; }
+_files() { print -r -- "FILES:$*"; }
+compadd() { print -r -- "COMPADD:$*"; }
+eval "$1"; shift
+words=("$@"); CURRENT=$#
+_toolr
+"#;
+    let out = StdCommand::new("zsh")
+        .arg("-f")
+        .arg("-c")
+        .arg(DRIVER)
+        .arg("driver")
+        .arg(print_script("zsh"))
+        .args(words)
+        .current_dir(fx.tmp.path())
+        .env("PATH", path_with_toolr())
+        .env("XDG_CACHE_HOME", common::test_cache_home())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
 /// zsh's own `_files` quotes the names it inserts.
 #[test]
 fn zsh_path_slots_use_native_file_completion() {
-    let script = print_script("zsh");
-    let calls: Vec<&str> = script
-        .lines()
-        .map(str::trim)
-        .filter(|l| l.contains("_files"))
-        .collect();
-    assert!(calls.iter().any(|l| l.contains("_files -/")), "{calls:?}");
-    assert!(
-        calls
-            .iter()
-            .any(|l| l.contains("_files") && !l.contains("-/")),
-        "{calls:?}"
-    );
+    if !have("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--cfg", "files/"]);
+    assert_eq!(calls, vec!["FILES:".to_string()]);
+    let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--out", "files/"]);
+    assert_eq!(calls, vec!["FILES:-/".to_string()]);
+    let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--mode", "fa"]);
+    assert_eq!(calls, vec!["COMPADD:-d descriptions -a values".to_string()]);
 }
