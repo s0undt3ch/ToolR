@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev601-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev631-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev601 - 2026-11-04
+        0.35.2-dev631 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev601 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev631 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev601-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev631-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev601 - 2026-11-04
+        0.35.2-dev631 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev601 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev631 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev601-2026-11-04">0.35.2-dev601 - 2026-11-04<a class="headerlink" href="#0352-dev601-2026-11-04" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev631-2026-11-04">0.35.2-dev631 - 2026-11-04<a class="headerlink" href="#0352-dev631-2026-11-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7703,6 +7703,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>Tab completion and the start-up freshness check no longer reread every file under <code>tools/</code>, and every file an external command source scans, each time. toolr now keeps each file's size and timestamps in the manifest and rereads only the files that changed, so completion stays fast with large <code>tools/</code> trees and large <code>scan_paths</code>. Files outside the project, or on another filesystem than <code>tools/</code>, are still reread every time. On NFS, an edit made from another machine can take up to the attribute-cache timeout (typically under a minute) to be noticed.</p>
 <p>A child killed by a signal is now reported consistently. <code>ctx.run(...).returncode</code> is <code>-N</code> for a child killed by signal <code>N</code>, as with <code>subprocess</code> (it used to be <code>-1</code> for every signal). On Unix, <code>ctx.exit()</code> turns a negative status into <code>128 + N</code>, as a shell does, so <code>ctx.exit(result.returncode)</code> after a SIGTERM'd child exits 143 rather than 255. <code>toolr project venv run</code> and <code>toolr project venv shell</code> now exit <code>128 + N</code> for a signal-killed child instead of 1. An exit code that doesn't fit in a byte (Windows crash statuses, or 256) now makes toolr exit 1; it used to be truncated, and could turn a failure into exit 0.</p>
 <p><code>toolr self cache prune</code> now also removes leftover manifest rebuild locks under the cache's <code>locks/</code> dir that no cached project still uses.</p>
+<p><code>ctx.run(..., capture_output=True)</code> keeps capturing when whatever reads its streamed copy of the output goes away, for example when toolr's output is piped into <code>head</code>. Both copies used to stop together, so the command was cut off and <code>result.stdout</code> came back truncated without a warning. A failure to write the captured output itself now raises <code>CommandError</code> instead of returning partial output.</p>
+<p>A streamed copy that fails for any other reason, such as a full disk behind <code>toolr cmd &gt; file</code>, raises <code>CommandError</code> too.</p>
+<p>The uv auto-install now checks the downloaded archive against the SHA-256 checksum published with the same uv release, and refuses to install it if the checksum is missing or doesn't match.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7849,6 +7852,12 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(context)</em> Map only int statuses in ctx.exit, and correct the old exit code in the note (<a href="https://github.com/s0undt3ch/ToolR/commit/7251c134c1222cc29e9484c398734cafcce9060d"><code>7251c13</code></a>)</li>
 <li><em>(cache)</em> Keep sweeping past a vanished lock, and lock read-only (<a href="https://github.com/s0undt3ch/ToolR/commit/08bb614de7ce414f71720c32ecae7fd20e394d5e"><code>08bb614</code></a>)</li>
 <li><em>(cache)</em> Report swept locks instead of "nothing to prune" (<a href="https://github.com/s0undt3ch/ToolR/commit/f33d1cc39fdc8e0b40aaa97674dee89ad5f0f6b1"><code>f33d1cc</code></a>)</li>
+<li><em>(command)</em> Keep ctx.run capture when the stream target fails (<a href="https://github.com/s0undt3ch/ToolR/commit/3f2447ac1989022b175c275ee2373d7404613597"><code>3f2447a</code></a>)</li>
+<li><em>(command)</em> Say an fd couldn't be duplicated, not that it's invalid (<a href="https://github.com/s0undt3ch/ToolR/commit/e5d6e59272363f918a547f055cebc30fc6692f68"><code>e5d6e59</code></a>)</li>
+<li><em>(uv)</em> Verify the auto-installed uv against its release checksum (<a href="https://github.com/s0undt3ch/ToolR/commit/e4433bb68abd785883ee35660850fb127fcd2797"><code>e4433bb</code></a>)</li>
+<li><em>(uv)</em> Cap uv download sizes and install atomically (<a href="https://github.com/s0undt3ch/ToolR/commit/139cca607b56f318b2b67e37a51a682310475d8f"><code>139cca6</code></a>)</li>
+<li><em>(uv)</em> Point download failures at a manual install, and name the path (<a href="https://github.com/s0undt3ch/ToolR/commit/68995018a6a50d1cf1b7d8ff5ebb03f5a33b3133"><code>6899501</code></a>)</li>
+<li><em>(venv)</em> Report a uv sync that can't start without the install-uv hint (<a href="https://github.com/s0undt3ch/ToolR/commit/1060a661b56972d0f7a723673935948c9a251562"><code>1060a66</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7908,6 +7917,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> Attach the hidden commands with Command::subcommands (<a href="https://github.com/s0undt3ch/ToolR/commit/48bbc82a0ec439c578c87e30593f5bf265e9acd0"><code>48bbc82</code></a>)</li>
 <li><em>(cache)</em> Take kept repos as PathBufs and drop a duplicate test (<a href="https://github.com/s0undt3ch/ToolR/commit/d76760dce31e4fe7e62509374ee7556b82b26d0d"><code>d76760d</code></a>)</li>
 <li><em>(cache)</em> Keep prune's output calls on one line, restore the --all prompt (<a href="https://github.com/s0undt3ch/ToolR/commit/835b1f54267d2ef367edda619e6684aab8aa0ab4"><code>835b1f5</code></a>)</li>
+<li><em>(command)</em> Decide up front whether a reader drains to EOF (<a href="https://github.com/s0undt3ch/ToolR/commit/9c82af4627b6a37b7268a17163e908aefcb6b6c4"><code>9c82af4</code></a>)</li>
+<li><em>(command)</em> Pass ctx.run output destinations as owned files (<a href="https://github.com/s0undt3ch/ToolR/commit/4bed4f5cbc6de02e1423a717eedcacf8184b5a40"><code>4bed4f5</code></a>)</li>
+<li><em>(command)</em> Name ctx.run's output files by role (<a href="https://github.com/s0undt3ch/ToolR/commit/41a5b8580cabc7262477bfccc06a758d3f24ffb9"><code>41a5b85</code></a>)</li>
+<li><em>(uv)</em> Share the capped fetch and name install failures (<a href="https://github.com/s0undt3ch/ToolR/commit/cc2241c87438d7accdee19626281fa5349570ebc"><code>cc2241c</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8077,6 +8090,15 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Correct the dump manifest, test module and group wording (<a href="https://github.com/s0undt3ch/ToolR/commit/ec04a70ccc89337d4cb5afaca3c363ebac0b9e32"><code>ec04a70</code></a>)</li>
 <li><em>(specs)</em> Design and plan for the rebuild lock leak (<a href="https://github.com/s0undt3ch/ToolR/commit/4f104346e7d5f1846d68d6d2f94f5acf14f0cde7"><code>4f10434</code></a>)</li>
 <li><em>(specs)</em> Archive the rebuild lock leak design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/617b2bdc8b92eb927e268ff2cd17fd1e529d78b9"><code>617b2bd</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-40 ctx.run reader drain (<a href="https://github.com/s0undt3ch/ToolR/commit/e5a06253c09002febcebf8a8d5899a82fc5cffed"><code>e5a0625</code></a>)</li>
+<li><em>(specs)</em> Revise F-40 against the single reader loop from #645 (<a href="https://github.com/s0undt3ch/ToolR/commit/c5d0faf73e49a22619826a055240b1468eea22b8"><code>c5d0faf</code></a>)</li>
+<li><em>(specs)</em> Archive the F-40 ctx.run reader drain design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/2285ad35cd1e7158bd34c9e8a5836440f9ff0373"><code>2285ad3</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-41 ctx.run owned fds (<a href="https://github.com/s0undt3ch/ToolR/commit/a6ea688d96c5b31fa8b4c574733442fac8781b73"><code>a6ea688</code></a>)</li>
+<li><em>(specs)</em> Trim F-41 to what #645 left: owned files in CommandConfig (<a href="https://github.com/s0undt3ch/ToolR/commit/41f7662cfe1a314eb69cfa043797358a3fb2f8d3"><code>41f7662</code></a>)</li>
+<li><em>(specs)</em> Archive the F-41 ctx.run owned files design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/9d9acd19d1cd18c696f0c25be0c9e2792453e37c"><code>9d9acd1</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-06 uv install artefact verification (<a href="https://github.com/s0undt3ch/ToolR/commit/f0e1f9424c820d00e01ca8cf622e8f45dce1a34a"><code>f0e1f94</code></a>)</li>
+<li><em>(specs)</em> Record the confirmed uv install verification decisions (<a href="https://github.com/s0undt3ch/ToolR/commit/c6b4b6faf930225eb2181ff907d208be31ccd1a0"><code>c6b4b6f</code></a>)</li>
+<li><em>(specs)</em> Archive the F-06 uv install verification design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/293160759517b88e6ca60b525be7bb8e8289fe5f"><code>2931607</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8170,6 +8192,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cache)</em> Cover the hint's self-cache exit and every human_ago bucket (<a href="https://github.com/s0undt3ch/ToolR/commit/bedac067ac88ea880b99f79adef9dfdf3427c99c"><code>bedac06</code></a>)</li>
 <li><em>(bootstrap)</em> Rebuild in a temp cache home, not the real one (<a href="https://github.com/s0undt3ch/ToolR/commit/c936ef2481b54ac6165a6636db6c0f5151dec43e"><code>c936ef2</code></a>)</li>
 <li><em>(cache)</em> Expect prune to sweep stray rebuild locks (<a href="https://github.com/s0undt3ch/ToolR/commit/92382e2e3c0876d616e60d773869051287de8692"><code>92382e2</code></a>)</li>
+<li><em>(command)</em> Prove a capture failure lets the child finish (<a href="https://github.com/s0undt3ch/ToolR/commit/6e070a88cea562c3a3c91f944396d9d048dd0f8e"><code>6e070a8</code></a>)</li>
+<li><em>(command)</em> Run the write-failure tests on Windows too (<a href="https://github.com/s0undt3ch/ToolR/commit/37fa9004f0b103c3bd5c00bf42f5c69cbf0e5f40"><code>37fa900</code></a>)</li>
+<li><em>(command)</em> Use an fd no one can reuse, and document the Windows abort (<a href="https://github.com/s0undt3ch/ToolR/commit/439bad992f7fca79e58361fd84d909bb02b08e52"><code>439bad9</code></a>)</li>
+<li><em>(uv)</em> Serve several routes from the install test server (<a href="https://github.com/s0undt3ch/ToolR/commit/544acfa4f75b3bead0ef7a15816d9b71283f2c72"><code>544acfa</code></a>)</li>
+<li><em>(uv)</em> Follow GitHub's asset redirect (<a href="https://github.com/s0undt3ch/ToolR/commit/3de5c9670eb64f799463db84d3deecd46e6abf51"><code>3de5c96</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
