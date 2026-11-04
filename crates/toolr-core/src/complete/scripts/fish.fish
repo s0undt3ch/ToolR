@@ -17,7 +17,7 @@ function __toolr_complete
     # `--` token into the call and trip clap's option-terminator logic.
     set -a args $current
     set -l out (toolr __complete "$PWD" $args 2>/dev/null)
-    # Exit 10 and 11 ask for file system paths and directories.
+    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
     switch $status
         case 0
             for line in $out

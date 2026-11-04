@@ -23,7 +23,7 @@ _toolr() {
     # its candidate.
     local -a lines values descriptions
     lines=("${(@f)$(toolr __complete "$PWD" "${passthrough[@]}" 2>/dev/null)}")
-    # Exit 10 and 11 ask for file system paths and directories.
+    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
     case $? in
         0) ;;
         10) _files; return ;;

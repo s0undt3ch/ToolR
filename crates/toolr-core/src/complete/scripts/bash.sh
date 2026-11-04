@@ -5,6 +5,17 @@
 # directly. Re-source on every shell start; manifest contents are read
 # at Tab time, not when this script is sourced.
 
+# Sets the caller's `q` to `$1` quoted as one inert word, with no `eval`.
+_toolr_quote() {
+    local bare_tilde
+    printf -v q '%q' "$1"
+    # Bash < 5 `%q` leaves `~` bare, and bash tilde-expands it at a word start or after `=`.
+    printf -v bare_tilde '%q' '~'
+    if [[ $bare_tilde == '~' ]]; then
+        q=${q//\~/\\~}
+    fi
+}
+
 _toolr_complete() {
     local cur prev words cword
     _init_completion || return
@@ -31,7 +42,7 @@ _toolr_complete() {
     # `|| rc=$?` keeps a non-zero exit from tripping the user's `set -e`.
     local raw rc=0
     raw=$(toolr __complete "$PWD" "${args[@]}" 2>/dev/null) || rc=$?
-    # Exit 10 and 11 ask for file system paths and directories.
+    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
     case $rc in
         0) ;;
         10) _toolr_complete_paths -f "$raw_cur"; return 0 ;;
@@ -44,12 +55,9 @@ _toolr_complete() {
     # description support, so drop everything from the tab onward.
     # Candidates are repo-derived data: `compgen -W` would expand `$(...)`
     # inside a value, so compare literally and quote with `printf %q`.
-    local value q bare_tilde
-    # Bash < 5 `%q` leaves `~` bare, and bash tilde-expands it at a word start or after `=`.
-    printf -v bare_tilde '%q' '~'
+    local value q
     while IFS=$'\t' read -r value _; do
-        printf -v q '%q' "$value"
-        [[ $bare_tilde == '~' ]] && q=${q//\~/\\~}
+        _toolr_quote "$value"
         # `cur` may already hold the quoted form from an earlier insertion.
         if [[ $value == "$raw_cur"* || $q == "$cur"* ]]; then
             COMPREPLY+=("$q")
@@ -60,22 +68,14 @@ _toolr_complete() {
 # File names are data too: `compgen` only lists them, and each is quoted with
 # `%q` like a candidate value.
 _toolr_complete_paths() {
-    local mode=$1 raw_cur=$2 name rest q bare_tilde tilde is_dir tilde_list='' dirs=0
+    local mode=$1 raw_cur=$2 name rest q tilde is_dir tilde_list='' dirs=0
     # Bash 3.2 errors on `${#COMPREPLY[@]}` under `set -u` while it is unset.
     COMPREPLY=()
-    printf -v bare_tilde '%q' '~'
     # `[[ -d ]]` can't test `~user/...` without expanding it, but `compgen -d` resolves it.
     if [[ $mode == -f && $raw_cur == '~'* ]]; then
-        if ((BASH_VERSINFO[0] >= 4)); then
-            local -A tilde_dirs=()
-            while IFS= read -r name; do
-                tilde_dirs[$name]=1
-            done < <(compgen -d -- "$raw_cur")
-        else
-            # No associative arrays; a typed `~` rarely lists enough names for this to matter.
-            # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
-            tilde_list=$'\n'$(compgen -d -- "$raw_cur" || :)$'\n'
-        fi
+        # A typed `~` rarely lists enough names for a string scan to matter.
+        # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
+        tilde_list=$'\n'$(compgen -d -- "$raw_cur" || :)$'\n'
     fi
     while IFS= read -r name; do
         tilde=
@@ -86,10 +86,7 @@ _toolr_complete_paths() {
             rest=${name#\~}
         fi
         q=
-        if [[ -n $rest ]]; then
-            printf -v q '%q' "$rest"
-            [[ $bare_tilde == '~' ]] && q=${q//\~/\\~}
-        fi
+        [[ -n $rest ]] && _toolr_quote "$rest"
         q=$tilde$q
         is_dir=0
         if [[ $mode == -d ]]; then
@@ -97,8 +94,6 @@ _toolr_complete_paths() {
         elif [[ -z $tilde ]]; then
             # A test on the name `compgen` produced, so nothing is expanded.
             [[ -d $name ]] && is_dir=1
-        elif ((BASH_VERSINFO[0] >= 4)); then
-            [[ -n ${tilde_dirs[$name]+x} ]] && is_dir=1
         else
             [[ $tilde_list == *$'\n'"$name"$'\n'* ]] && is_dir=1
         fi
