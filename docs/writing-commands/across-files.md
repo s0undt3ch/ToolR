@@ -77,6 +77,10 @@ def check_snippets(ctx: Context) -> None: ...
 # → toolr ci snippet-checker
 ```
 
+Whichever file declares it, each command name is defined once per group:
+a second definition in another file fails the build with "duplicate
+commands".
+
 ## When to choose which form
 
 | Situation | Form |

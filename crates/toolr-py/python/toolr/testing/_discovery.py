@@ -31,11 +31,16 @@ from unittest.mock import patch
 from attrs import define
 from attrs import field
 
+from toolr._decorators import CommandGroup
 from toolr._exc import ToolrError
+from toolr.testing._duplicates import _format_duplicate_commands
+from toolr.testing._shapes import _format_unsupported_commands
+from toolr.testing._shapes import _unsupported_commands
 from toolr.testing._unknown_groups import _escape_control_chars
 from toolr.testing._unknown_groups import _format_unknown_groups
 
 if TYPE_CHECKING:
+    from toolr._decorators import DuplicateCommand
     from toolr._decorators import PendingCommand
 
 
@@ -261,6 +266,10 @@ class CommandsTester:
     command_group_patcher: _patch = field(init=False, repr=False)
     pending_command_collector: list[PendingCommand] = field(init=False, repr=False, factory=list)
     pending_command_patcher: _patch = field(init=False, repr=False)
+    duplicate_command_collector: list[DuplicateCommand] = field(
+        init=False, repr=False, factory=list
+    )
+    duplicate_command_patcher: _patch = field(init=False, repr=False)
     cwd: Path = field(init=False, repr=False, factory=Path.cwd)
     tools_finder: _FixtureToolsFinder = field(init=False, repr=False)
 
@@ -300,22 +309,54 @@ class CommandsTester:
             return_value=self.pending_command_collector,
         )
 
+    @duplicate_command_patcher.default
+    def _default_duplicate_command_patcher(self) -> _patch:
+        # Unpatched, `_get_duplicate_command_storage` keeps nothing.
+        return patch(
+            "toolr._decorators._get_duplicate_command_storage",
+            return_value=self.duplicate_command_collector,
+        )
+
     def collected_command_groups(self) -> dict[str, object]:
         """
         Get the collected command groups.
 
         Raises:
-            ValueError: A standalone ``@command(group=...)`` names a group
-                that no ``command_group(...)`` declares, or passes
-                ``group=""``. The message is the one the manifest build
-                gives, which fails the same way.
+            ValueError: A command under ``tools/`` decorates a nested
+                ``def`` or passes a non-literal ``group=`` or name; a
+                standalone ``@command(group=...)`` names a group that no
+                ``command_group(...)`` declares, or passes ``group=""``; or
+                two functions define the same command in a group. The
+                message is the one the manifest build gives, which fails
+                the same way.
         """
+        tools_dir = self.search_path / "tools"
+        funcs = [
+            func
+            for group in self.command_group_collector.values()
+            if isinstance(group, CommandGroup)
+            for func in group.get_commands().values()
+        ]
+        funcs += [entry.func for entry in self.pending_command_collector]
+        funcs += [
+            f for entry in self.duplicate_command_collector for f in (entry.first, entry.second)
+        ]
+        # Checked first, as the manifest build does: these hide what the others report.
+        unsupported = _unsupported_commands(funcs, tools_dir)
+        if unsupported:
+            raise ValueError(_format_unsupported_commands(unsupported))
         if self.pending_command_collector:
             raise ValueError(
                 _format_unknown_groups(
                     self.pending_command_collector,
                     self.command_group_collector,
-                    self.search_path / "tools",
+                    tools_dir,
+                )
+            )
+        if self.duplicate_command_collector:
+            raise ValueError(
+                _format_duplicate_commands(
+                    self.duplicate_command_collector, self.search_path / "tools"
                 )
             )
         return {**self.command_group_collector}
@@ -351,6 +392,7 @@ class CommandsTester:
         sys.modules.update(self.sys_modules)
         os.chdir(self.search_path)
         self.pending_command_patcher.start()
+        self.duplicate_command_patcher.start()
         self.command_group_patcher.start()
         sys.path[:] = _tester_sys_path(self.search_path, self.sys_path)
         # Only the fixture may provide `tools`; see `_FixtureToolsFinder`.
@@ -366,6 +408,8 @@ class CommandsTester:
         self.command_group_collector.clear()
         self.pending_command_patcher.stop()
         self.pending_command_collector.clear()
+        self.duplicate_command_patcher.stop()
+        self.duplicate_command_collector.clear()
         sys.path[:] = self.sys_path
         # Reverse the module table back to the filtered snapshot `__enter__`
         # installed (real modules minus the volatile `tools` /

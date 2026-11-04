@@ -183,7 +183,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: s0undt3ch/ToolR@<sha>   # v0.20.0
       - run: toolr project venv sync
-      - run: toolr project venv run --no-sync -- pytest tools/
+      - run: toolr project venv run --no-sync -- pytest tests/tools/
 ```
 
 `--no-sync` makes the run step fail fast (instead of silently re-syncing) if

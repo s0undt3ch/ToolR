@@ -101,11 +101,11 @@ pub fn merge_into_manifest(
 }
 
 /// The command as typed after `toolr`: `docker image build`, or `hello` at top level.
-fn command_path(cmd: &Command) -> String {
-    if cmd.group.is_empty() {
-        cmd.name.clone()
+pub(crate) fn command_path(group: &str, name: &str) -> String {
+    if group.is_empty() {
+        name.to_string()
     } else {
-        format!("{} {}", cmd.group.replace('.', " "), cmd.name)
+        format!("{} {name}", group.replace('.', " "))
     }
 }
 
@@ -116,7 +116,7 @@ fn shadow_message(local_module: &str, plugin_cmd: &Command, package: &str) -> St
     format!(
         "{file} defines {}, hiding the one from {package}. \
          Choosing a winner in config is tracked in {RESOLVE_ISSUE_URL}",
-        command_path(plugin_cmd)
+        command_path(&plugin_cmd.group, &plugin_cmd.name)
     )
 }
 
@@ -131,7 +131,7 @@ fn conflict_warning(defs: &[Definition]) -> PluginWarning {
         message: format!(
             "{} is defined by more than one plugin ({}), so it is disabled. \
              Uninstall all but one. Choosing a winner in config is tracked in {RESOLVE_ISSUE_URL}",
-            command_path(&first.command),
+            command_path(&first.command.group, &first.command.name),
             packages.join(", ")
         ),
     }

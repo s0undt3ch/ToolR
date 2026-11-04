@@ -119,6 +119,12 @@ rename it once (`colour = not no_colour`). For more than two states, use
 - **Group across files.** Pass `group="ci.build"` to `@command` from
   any file; only one file needs to call `command_group("ci.build",
   ...)`.
+- **What toolr can read.** It parses `tools/` without running it:
+  decorate top-level `def`s, with `group=` and any name as string
+  literals. `@command`, `@toolr.command` and
+  `from toolr import command as cmd` all work. A nested `def`, a
+  non-literal `group=`/name or a command name defined twice in a group
+  fails the build, and `CommandsTester` the same way.
 - **Nested subgroups.** A dotted name (`command_group("docker.image",
   ...)`) attaches under the parent named before the last dot.
 - **Help sections.** Build an `ArgSection` at module scope via
@@ -295,17 +301,21 @@ make its registration a top-level, statically-visible declaration.
 
 ## Running your commands' tests
 
-Put your tests under **`tools/tests/`** — that's the blessed convention,
-regardless of how deep your command files are nested. Mirror the source
-layout: `tools/mypackage/ledger.py` → `tools/tests/mypackage/test_ledger.py`.
-For a single file with multiple commands, use one subdirectory per module
-with one test file per command — `tools/db.py`'s `add`/`remove` commands →
-`tools/tests/db/test_add.py` / `tools/tests/db/test_remove.py` — rather than
-piling every command's tests into one `tools/tests/test_db.py`. Run them in
-the managed venv with:
+toolr reads every `*.py` under `tools/` for commands, so keep test files
+out of it. Put your tests in the project's own tests tree, under
+**`tests/tools/`**, mirroring the source layout:
+`tools/mypackage/ledger.py` → `tests/tools/mypackage/test_ledger.py`. For a
+single file with multiple commands, use one subdirectory per module with one
+test file per command — `tools/db.py`'s `add`/`remove` commands →
+`tests/tools/db/test_add.py` / `tests/tools/db/test_remove.py` — rather than
+piling every command's tests into one `tests/tools/test_db.py`. Give `tests/`
+and every directory below it an `__init__.py`, or pytest imports
+`tests/tools/` as a second `tools` package. Keep fixture data, such as a
+sample `tools/` tree, in a `files/` directory next to the tests that use
+it, without an `__init__.py`. Run them in the managed venv with:
 
 ```sh
-toolr project venv run -- pytest tools/
+toolr project venv run -- pytest tests/tools/
 ```
 
 This syncs the venv if stale, then runs `pytest` from it. No need to hand-build

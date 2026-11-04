@@ -9,7 +9,12 @@ setup at all.
   function directly and assert on what it did — see [Calling a command directly](#calling-a-command-directly)
   below.
 - A `pytest11` plugin appends your repo root to `sys.path` automatically, so `import tools.*`
-  resolves under `pytest tools/` with zero configuration.
+  resolves under `pytest tests/tools/` with zero configuration.
+
+Keep these tests out of `tools/`: toolr reads every `*.py` there for commands. Put them in your project's own tests
+tree, e.g. `tests/tools/<module>/test_<command>.py`, with an `__init__.py` in `tests/` and each directory below it so
+pytest doesn't import `tests/tools/` as a second `tools` package. Keep fixture data, such as a sample `tools/` tree for
+`CommandsTester`, in a `files/` directory next to the tests that use it, without an `__init__.py`.
 
 It's designed for the case where you want to test *your own* command modules: "does my decorator
 land in the registry?", "do my command groups collect the right commands?", "does my dispatcher
@@ -140,10 +145,30 @@ unknown group references (1):
   - tools.cmds::check: references group `ci.typo` which has no `command_group(...)` declaration.
 ```
 
-`CommandsTester` runs your code, but `toolr` reads it without running it, so only the shape it recognises counts. Write
-`from toolr import command` and decorate a top-level `def` with `@command(...)`, giving `group=` and any name as string
-literals. `CommandsTester` accepts `@toolr.command`, an aliased import, a nested `def` or `group=SOME_CONSTANT`, but
-`toolr` doesn't register those commands or fails to build.
+`CommandsTester` runs your code, but `toolr` reads it without running it, so the tester checks the source for what
+`toolr` can't read. `@command(...)`, `@toolr.command(...)` (also after `import toolr as t`) and an alias from
+`from toolr import command as cmd` all work, on a top-level `def` with `group=` and any name as string literals. A
+command on a nested `def` (inside another function, a class or an `if`), a `group=SOME_CONSTANT` or a non-literal name
+fails both:
+
+```text
+unsupported command declarations (2):
+  - tools.cmds::nested: `@command` must decorate a top-level `def`, which toolr reads without running it.
+  - tools.cmds::check: `group=` must be a string literal.
+```
+
+A command a test body defines isn't checked. A nested command whose outer function never runs fails `toolr` but is
+invisible to the tester.
+
+Two functions that define the same command in a group fail both too, listing every definition:
+
+```text
+duplicate commands (1):
+  - `ci check` is defined more than once: tools.a::check, tools.b::check. Rename all but one, e.g. with `name="…"`.
+```
+
+`collected_command_groups()` reports unsupported declarations first, then unknown groups, then duplicates, the order
+`toolr` checks them in.
 
 ## What it can't do
 

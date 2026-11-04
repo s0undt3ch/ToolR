@@ -61,10 +61,13 @@ def collected_command_groups(self) -> dict[str, object]:
 Get the collected command groups.
 
 Raises:
-    ValueError: A standalone ``@command(group=...)`` names a group
-        that no ``command_group(...)`` declares, or passes
-        ``group=""``. The message is the one the manifest build
-        gives, which fails the same way.
+    ValueError: A command under ``tools/`` decorates a nested
+        ``def`` or passes a non-literal ``group=`` or name; a
+        standalone ``@command(group=...)`` names a group that no
+        ``command_group(...)`` declares, or passes ``group=""``; or
+        two functions define the same command in a group. The
+        message is the one the manifest build gives, which fails
+        the same way.
 
 ```
 

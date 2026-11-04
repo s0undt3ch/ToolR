@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use ruff_python_ast::statement_visitor::{StatementVisitor, walk_body, walk_stmt};
 use ruff_python_ast::{Arguments, Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 
 use super::groups::GroupBinding;
@@ -39,16 +40,15 @@ pub fn extract_commands(
     // global map so a same-named variable defined in this file wins
     // over an inherited one; otherwise the global cross-file map
     // covers `from ._common import group; @group.command` style.
-    let mut by_var: HashMap<String, String> = global_vars.clone();
-    for b in bindings {
-        by_var.insert(b.var.clone(), b.group.full_path());
-    }
+    let by_var = binding_vars(bindings, global_vars);
+    let empty = ImportTable::default();
+    let names = ToolrNames(all_imports.get(module_path).unwrap_or(&empty));
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
             continue;
         };
-        let Some(target) = command_decorator(&func.decorator_list) else {
+        let Some(target) = command_decorator(&func.decorator_list, names) else {
             continue;
         };
         let (group_full_path, override_name) = match target {
@@ -89,6 +89,139 @@ pub fn extract_commands(
         ));
     }
     out
+}
+
+/// `binding_var → group_full_path` for one module: its own bindings shadow
+/// the ones earlier files made visible.
+pub fn binding_vars(bindings: &[GroupBinding], global_vars: &GlobalVars) -> GlobalVars {
+    let mut by_var = global_vars.clone();
+    for b in bindings {
+        by_var.insert(b.var.clone(), b.group.full_path());
+    }
+    by_var
+}
+
+/// Why toolr can't read a command declaration without running it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnsupportedCommandKind {
+    /// The decorated `def` isn't directly in the module body.
+    Nested,
+    /// `group=` isn't a string literal.
+    NonLiteralGroup,
+    /// The positional name or `name=` isn't a string literal.
+    NonLiteralName,
+}
+
+impl std::fmt::Display for UnsupportedCommandKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Nested => {
+                "`@command` must decorate a top-level `def`, which toolr reads without running it."
+            }
+            Self::NonLiteralGroup => "`group=` must be a string literal.",
+            Self::NonLiteralName => "the command name must be a string literal.",
+        })
+    }
+}
+
+/// A command declaration the static parser can't read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsupportedCommand {
+    /// Dotted python module the command lives in (`tools.foo.bar`).
+    pub module: String,
+    /// Python function name of the offending command.
+    pub function: String,
+    pub kind: UnsupportedCommandKind,
+}
+
+/// Every unsupported command declaration in `module`, in source order.
+///
+/// `toolr.testing._shapes._unsupported_commands` mirrors this in Python;
+/// change both together.
+pub fn detect_unsupported_commands(
+    module: &ModModule,
+    module_path: &str,
+    imports: &ImportTable,
+    by_var: &GlobalVars,
+) -> Vec<UnsupportedCommand> {
+    let mut finder = UnsupportedFinder {
+        module_path,
+        names: ToolrNames(imports),
+        by_var,
+        depth: 0,
+        out: Vec::new(),
+    };
+    for stmt in &module.body {
+        finder.visit_stmt(stmt);
+    }
+    finder.out
+}
+
+struct UnsupportedFinder<'a> {
+    module_path: &'a str,
+    names: ToolrNames<'a>,
+    by_var: &'a GlobalVars,
+    /// How many bodies deep the walk is; module-level statements are at 0.
+    depth: usize,
+    out: Vec<UnsupportedCommand>,
+}
+
+impl UnsupportedFinder<'_> {
+    fn check(&mut self, func: &StmtFunctionDef) {
+        let Some((decorator, target)) = matched_decorator(&func.decorator_list, self.names) else {
+            return;
+        };
+        let string_path = match target {
+            CommandDecorator::Binding { var, .. } if !self.by_var.contains_key(&var) => return,
+            CommandDecorator::Binding { .. } => false,
+            CommandDecorator::StringPath { .. } => true,
+        };
+        let mut push = |kind| {
+            self.out.push(UnsupportedCommand {
+                module: self.module_path.to_string(),
+                function: func.name.as_str().to_string(),
+                kind,
+            });
+        };
+        if self.depth > 0 {
+            push(UnsupportedCommandKind::Nested);
+            return;
+        }
+        let Expr::Call(call) = &decorator.expression else {
+            return;
+        };
+        let non_literal = |e: &Expr| !matches!(e, Expr::StringLiteral(_));
+        let keyword = |name: &str| {
+            call.arguments
+                .keywords
+                .iter()
+                .find(|k| k.arg.as_ref().map(ruff_python_ast::Identifier::as_str) == Some(name))
+                .map(|k| &k.value)
+        };
+        if string_path && keyword("group").is_some_and(non_literal) {
+            push(UnsupportedCommandKind::NonLiteralGroup);
+        }
+        if call.arguments.args.first().is_some_and(non_literal)
+            || keyword("name").is_some_and(non_literal)
+        {
+            push(UnsupportedCommandKind::NonLiteralName);
+        }
+    }
+}
+
+impl<'a> StatementVisitor<'a> for UnsupportedFinder<'_> {
+    fn visit_body(&mut self, body: &'a [Stmt]) {
+        self.depth += 1;
+        walk_body(self, body);
+        self.depth -= 1;
+    }
+
+    fn visit_stmt(&mut self, stmt: &'a Stmt) {
+        if let Stmt::FunctionDef(func) = stmt {
+            self.check(func);
+        }
+        walk_stmt(self, stmt);
+    }
 }
 
 /// Which flavour of `@command` decorator we saw on a function, plus the
@@ -184,13 +317,18 @@ fn resolve_explicit_name(args: &Arguments) -> (Option<String>, bool) {
 /// Walk a module for `@command`/`@<var>.command` decorators that passed
 /// the name both positionally and via `name=`, returning one
 /// [`CommandNameConflict`] per offender.
-pub fn detect_name_conflicts(module: &ModModule, module_path: &str) -> Vec<CommandNameConflict> {
+pub fn detect_name_conflicts(
+    module: &ModModule,
+    module_path: &str,
+    imports: &ImportTable,
+) -> Vec<CommandNameConflict> {
+    let names = ToolrNames(imports);
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
             continue;
         };
-        let Some(target) = command_decorator(&func.decorator_list) else {
+        let Some(target) = command_decorator(&func.decorator_list, names) else {
             continue;
         };
         let conflict = match target {
@@ -207,16 +345,43 @@ pub fn detect_name_conflicts(module: &ModModule, module_path: &str) -> Vec<Comma
     out
 }
 
-fn command_decorator(decorators: &[Decorator]) -> Option<CommandDecorator> {
-    for d in decorators {
-        if let Some(meta) = parse_string_path_command(&d.expression) {
-            return Some(meta);
-        }
-        if let Some(meta) = parse_binding_command(&d.expression) {
-            return Some(meta);
-        }
+/// Which of a module's names are toolr's `command` or the `toolr` module.
+#[derive(Clone, Copy)]
+struct ToolrNames<'a>(&'a ImportTable);
+
+impl ToolrNames<'_> {
+    /// `import toolr [as t]`; `import toolr.types` binds `toolr` too.
+    fn is_toolr_module(self, name: &str) -> bool {
+        self.0
+            .resolve_module_binding(name)
+            .is_some_and(|m| m == "toolr" || (name == "toolr" && m.starts_with("toolr.")))
     }
-    None
+
+    /// `command`, or a name `from toolr import command as …` binds.
+    fn is_command(self, name: &str) -> bool {
+        name == "command"
+            || self
+                .0
+                .candidates(name)
+                .iter()
+                .any(|c| c.module == "toolr" && c.original_name == "command")
+    }
+}
+
+fn command_decorator(decorators: &[Decorator], names: ToolrNames) -> Option<CommandDecorator> {
+    matched_decorator(decorators, names).map(|(_, target)| target)
+}
+
+/// The first decorator toolr reads as a command, and what it read.
+fn matched_decorator<'d>(
+    decorators: &'d [Decorator],
+    names: ToolrNames,
+) -> Option<(&'d Decorator, CommandDecorator)> {
+    decorators.iter().find_map(|d| {
+        parse_string_path_command(&d.expression, names)
+            .or_else(|| parse_binding_command(&d.expression))
+            .map(|target| (d, target))
+    })
 }
 
 /// Recognise the group-binding `@<var>.command` shape, as well as the call form
@@ -283,27 +448,29 @@ fn keyword_str(args: &Arguments, name: &str) -> Option<String> {
         .and_then(|k| literal_str(&k.value))
 }
 
-/// Recognise the string-path `@command` / `@command("name", group="…")` shape.
-fn parse_string_path_command(expr: &Expr) -> Option<CommandDecorator> {
-    // Bare `@command` — Name expression on the decorator.
-    if let Expr::Name(n) = expr {
-        if n.id.as_str() == "command" {
-            return Some(CommandDecorator::StringPath {
-                explicit_name: None,
-                group: None,
-                name_conflict: false,
-            });
+/// Recognise the string-path `@command` / `@command("name", group="…")` shape,
+/// also spelt `@toolr.command`, `@t.command` or an alias of `command`.
+fn parse_string_path_command(expr: &Expr, names: ToolrNames) -> Option<CommandDecorator> {
+    let is_toolr_command = |callee: &Expr| match callee {
+        Expr::Name(n) => names.is_command(n.id.as_str()),
+        Expr::Attribute(attr) => {
+            attr.attr.as_str() == "command"
+                && matches!(attr.value.as_ref(), Expr::Name(n) if names.is_toolr_module(n.id.as_str()))
         }
-        return None;
+        _ => false,
+    };
+    // Bare `@command` / `@toolr.command`.
+    if is_toolr_command(expr) {
+        return Some(CommandDecorator::StringPath {
+            explicit_name: None,
+            group: None,
+            name_conflict: false,
+        });
     }
-    // `@command(...)` — Call whose func is a Name "command".
     let Expr::Call(call) = expr else {
         return None;
     };
-    let Expr::Name(callee) = call.func.as_ref() else {
-        return None;
-    };
-    if callee.id.as_str() != "command" {
+    if !is_toolr_command(&call.func) {
         return None;
     }
     // The explicit name may be the first positional string literal
@@ -642,7 +809,7 @@ def check_snippets(ctx):
             &HashMap::new(),
             &mut Vec::new(),
         );
-        assert!(detect_name_conflicts(&m, "tools.ci").is_empty());
+        assert!(detect_name_conflicts(&m, "tools.ci", &ImportTable::default()).is_empty());
         assert_eq!(commands.len(), 1);
         // The `name=` keyword wins over the `check-snippets` function name.
         assert_eq!(commands[0].name, "snippet-checker");
@@ -800,14 +967,14 @@ def do_thing(ctx):
             .unwrap();
         // The decorator resolves to no explicit name, flagged as a conflict.
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,
                 name_conflict: true,
             }
         );
-        let conflicts = detect_name_conflicts(&m, "tools.ci");
+        let conflicts = detect_name_conflicts(&m, "tools.ci", &ImportTable::default());
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].module, "tools.ci");
         assert_eq!(conflicts[0].function, "do_thing");
@@ -831,14 +998,14 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::StringPath {
                 explicit_name: None,
                 group: Some("ci".to_string()),
                 name_conflict: true,
             }
         );
-        let conflicts = detect_name_conflicts(&m, "tools.ci");
+        let conflicts = detect_name_conflicts(&m, "tools.ci", &ImportTable::default());
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].function, "do_thing");
     }
@@ -906,7 +1073,7 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,
@@ -951,7 +1118,7 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: Some("hello".to_string()),
@@ -997,7 +1164,7 @@ def collect_data(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: Some("collect".to_string()),
@@ -1044,7 +1211,7 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,

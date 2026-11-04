@@ -156,6 +156,11 @@ class CommandGroup(Struct, frozen=True):
             )
             _require_docstring(func)
             if cli_name in self.__commands:
+                existing = self.__commands[cli_name]
+                if existing is not func:
+                    _get_duplicate_command_storage().append(
+                        DuplicateCommand(self.full_name, cli_name, existing, func)
+                    )
                 log.debug(
                     "Command '%s' already exists in group '%s', overriding",
                     cli_name,
@@ -254,6 +259,33 @@ def _get_pending_command_storage() -> list[PendingCommand]:
     return []
 
 
+class DuplicateCommand(NamedTuple):
+    """A second function registered under a group's existing command name."""
+
+    group: str
+    """The group's full name (``tools.``-prefixed)."""
+    name: str
+    """The command's CLI name."""
+    first: Callable[..., Any]
+    """The function already registered under ``name``."""
+    second: Callable[..., Any]
+    """The function that replaces it."""
+
+
+def _get_duplicate_command_storage() -> list[DuplicateCommand]:
+    """Get the duplicate registrations seen so far.
+
+    Only ``CommandsTester`` keeps entries, by patching this function as it
+    does :func:`_get_pending_command_storage`. Elsewhere each call returns a
+    new list, so the entry is dropped and the last definition wins; ``toolr``
+    refuses such a tree before anything runs.
+
+    Returns:
+        The duplicate entries
+    """
+    return []
+
+
 @overload
 def command(name: F) -> F: ...
 
@@ -280,13 +312,15 @@ def command(
     (``@command(name="snippet-checker", group=...)``) — but not both;
     doing so raises ``TypeError``.
 
-    toolr reads this decorator from the source without running it, so
-    only one shape counts: ``from toolr import command``, then
-    ``@command(...)`` on a top-level ``def`` with ``group=`` (and any
-    name) as a string literal. ``@toolr.command``, an aliased import, a
-    nested ``def`` or ``group=SOME_CONSTANT`` run here, and pass under
-    :class:`toolr.testing.CommandsTester`, but toolr doesn't register
-    them or fails to build.
+    toolr reads this decorator from the source without running it. It
+    accepts ``@command``, ``@toolr.command`` (also after
+    ``import toolr as t``) and an alias from
+    ``from toolr import command as cmd``, on a top-level ``def`` with
+    ``group=`` and any name as string literals. A nested ``def`` (inside
+    another function, a class or an ``if``), ``group=SOME_CONSTANT`` or a
+    non-literal name fails the build with "unsupported command
+    declarations", and so does :class:`toolr.testing.CommandsTester`.
+    A group's command names must be unique within ``tools/``.
 
     Usage::
 
