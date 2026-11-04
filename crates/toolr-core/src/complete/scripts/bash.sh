@@ -146,9 +146,13 @@ _toolr_complete_paths() {
 }
 
 # Bash 3.2-safe syntax, so an older bash sources this without an error.
+# Only an interactive shell warns: a bashrc also runs under `bash -c` and scripts.
 if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] < 404)); then
-    printf 'toolr: tab completion needs bash >= 4.4 (this is %s); upgrade bash to enable it.\n' \
-        "$BASH_VERSION" >&2
+    # An `if`, not `&&`: a false test would make `source` return 1 under the user's `set -e`.
+    if [[ $- == *i* ]]; then
+        printf 'toolr: tab completion needs bash >= 4.4 (this is %s); upgrade bash to enable it.\n' \
+            "$BASH_VERSION" >&2
+    fi
 else
     complete -F _toolr_complete toolr
 fi

@@ -915,9 +915,10 @@ fn old_bash_script_offers_nothing_on_a_path_slot() {
     }
 }
 
-/// An older bash gets one warning line when sourcing, and no completion it can't run.
+/// An older bash registers no completion it can't run, and an interactive one warns once
+/// when sourcing; a non-interactive one, such as a bashrc sourced under `bash -c`, is silent.
 #[test]
-fn bash_older_than_4_4_warns_once_and_registers_nothing() {
+fn bash_older_than_4_4_warns_once_when_interactive_and_registers_nothing() {
     let old = "/bin/bash";
     if !bash_version(old).is_some_and(|v| v < 404) {
         eprintln!("skipping: no bash older than 4.4 at {old}");
@@ -937,11 +938,33 @@ fn bash_older_than_4_4_warns_once_and_registers_nothing() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
     assert_eq!(stdout, "SOURCED\n");
-    let lines: Vec<&str> = stderr.lines().collect();
-    assert_eq!(lines.len(), 1, "{stderr}");
+    assert_eq!(stderr, "");
+
+    let rcfile = fx.tmp.path().join("bashrc");
+    std::fs::write(&rcfile, format!("set -u\nsource '{}'\n", path.display())).unwrap();
+    let mut cmd = StdCommand::new(old);
+    cmd.args(["--noprofile", "--rcfile"])
+        .arg(&rcfile)
+        .arg("-i")
+        .env("TERM", "dumb")
+        .env("INPUTRC", "/dev/null");
+    // Readline echoes the typed line, so the marker printed differs from the text typed.
+    let out = common::run_on_pty(
+        cmd,
+        "complete -p toolr >/dev/null 2>&1 || echo NOT-$?\nexit\n",
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        lines[0].starts_with("toolr: tab completion needs bash >= 4.4 (this is ")
-            && lines[0].ends_with("); upgrade bash to enable it."),
+        stdout.lines().any(|l| l.trim_end_matches('\r') == "NOT-1"),
+        "stdout: {stdout}\nstderr: {stderr}"
+    );
+    let warning = "toolr: tab completion needs bash >= 4.4 (this is ";
+    assert_eq!(stderr.matches(warning).count(), 1, "{stderr}");
+    let line = stderr.lines().find(|l| l.contains(warning)).unwrap();
+    assert!(
+        line.trim_end_matches('\r')
+            .ends_with("); upgrade bash to enable it."),
         "{stderr}"
     );
 }
