@@ -7,7 +7,8 @@ mod schema;
 
 pub use io::{ManifestError, load_manifest, write_manifest};
 pub use lock::{
-    LOCKS_DIR, ManifestRebuildLock, acquire_rebuild_lock, rebuild_if_stale, rebuild_lock_path,
+    LOCKS_DIR, ManifestRebuildLock, acquire_rebuild_lock, lock_path_for_repo, rebuild_if_stale,
+    rebuild_lock_path,
 };
 pub use model::{
     ArgMetadata, Argument, ArgumentKind, Command, Content, FRAGMENT_SHAPE_SCHEMA, Group,
