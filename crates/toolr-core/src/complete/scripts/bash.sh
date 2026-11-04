@@ -60,11 +60,21 @@ _toolr_complete() {
 # File names are data too: `compgen` only lists them, and each is quoted with
 # `%q` like a candidate value.
 _toolr_complete_paths() {
-    local mode=$1 raw_cur=$2 name rest q bare_tilde tilde dirs_list dirs=0
+    local mode=$1 raw_cur=$2 name rest q bare_tilde tilde is_dir tilde_list='' dirs=0
     printf -v bare_tilde '%q' '~'
-    # `compgen -d` resolves `~user` itself, so no expansion of typed text is needed.
-    # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
-    [[ $mode == -f ]] && dirs_list=$'\n'$(compgen -d -- "$raw_cur" || :)$'\n'
+    # `[[ -d ]]` can't test `~user/...` without expanding it, but `compgen -d` resolves it.
+    if [[ $mode == -f && $raw_cur == '~'* ]]; then
+        if ((BASH_VERSINFO[0] >= 4)); then
+            local -A tilde_dirs=()
+            while IFS= read -r name; do
+                tilde_dirs[$name]=1
+            done < <(compgen -d -- "$raw_cur")
+        else
+            # No associative arrays; a typed `~` rarely lists enough names for this to matter.
+            # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
+            tilde_list=$'\n'$(compgen -d -- "$raw_cur" || :)$'\n'
+        fi
+    fi
     while IFS= read -r name; do
         tilde=
         rest=$name
@@ -79,7 +89,18 @@ _toolr_complete_paths() {
             [[ $bare_tilde == '~' ]] && q=${q//\~/\\~}
         fi
         q=$tilde$q
-        if [[ $mode == -d || $dirs_list == *$'\n'"$name"$'\n'* ]]; then
+        is_dir=0
+        if [[ $mode == -d ]]; then
+            is_dir=1
+        elif [[ -z $tilde ]]; then
+            # A test on the name `compgen` produced, so nothing is expanded.
+            [[ -d $name ]] && is_dir=1
+        elif ((BASH_VERSINFO[0] >= 4)); then
+            [[ -n ${tilde_dirs[$name]+x} ]] && is_dir=1
+        else
+            [[ $tilde_list == *$'\n'"$name"$'\n'* ]] && is_dir=1
+        fi
+        if ((is_dir)); then
             q+=/
             dirs=$((dirs + 1))
         fi

@@ -7,6 +7,7 @@ mod common;
 use std::ffi::CStr;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 /// Files under the fixture root that path slots complete. `files/sub/` is a directory.
@@ -443,6 +444,28 @@ fn bash_completion_survives_errexit() {
         let run = run_bash_script(&bash, &script, &fx, "--mode", "fa", "", &[]);
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.reply, vec!["fast".to_string()], "{bash}");
+    }
+}
+
+/// Marking directories must not rescan the whole listing for every name.
+#[test]
+fn bash_path_completion_of_a_large_directory_is_fast() {
+    for bash in bashes() {
+        let fx = fixture();
+        let big = fx.tmp.path().join("big");
+        for i in 0..3000 {
+            std::fs::create_dir_all(big.join(format!("d{i:04}"))).unwrap();
+            std::fs::write(big.join(format!("f{i:04}")), "").unwrap();
+        }
+        let start = Instant::now();
+        let run = run_bash_script(&bash, &print_script("bash"), &fx, "--cfg", "big/", "", &[]);
+        let took = start.elapsed();
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply.len(), 6000, "{bash}");
+        let dirs = run.reply.iter().filter(|r| r.ends_with('/')).count();
+        assert_eq!(dirs, 3000, "{bash}");
+        // The quadratic scan took over 3 s on bash 3.2; the linear one about 0.2 s.
+        assert!(took < Duration::from_secs(2), "{bash}: took {took:?}");
     }
 }
 
