@@ -581,15 +581,57 @@ mod tests {
         tmp
     }
 
+    static CACHE_HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Restores `XDG_CACHE_HOME` on drop, then releases the module lock.
+    struct CacheHomeGuard {
+        prev: Option<std::ffi::OsString>,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for CacheHomeGuard {
+        fn drop(&mut self) {
+            // SAFETY: CACHE_HOME_LOCK serialises every test in this module
+            // that touches env vars, and it is still held here.
+            unsafe {
+                self.prev.as_ref().map_or_else(
+                    || std::env::remove_var("XDG_CACHE_HOME"),
+                    |v| std::env::set_var("XDG_CACHE_HOME", v),
+                )
+            }
+        }
+    }
+
+    /// Points `XDG_CACHE_HOME` at a fresh temp dir, so a persisting rebuild
+    /// writes its lock there instead of the real cache.
+    fn temp_cache_home() -> (CacheHomeGuard, tempfile::TempDir) {
+        let lock = CACHE_HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var_os("XDG_CACHE_HOME");
+        let home = tempfile::TempDir::new().unwrap();
+        // SAFETY: as in `CacheHomeGuard::drop`.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", home.path()) };
+        (CacheHomeGuard { prev, _lock: lock }, home)
+    }
+
+    /// The rebuild lock landed in the temp cache home, proving the redirect.
+    fn assert_one_lock_in(home: &std::path::Path) {
+        let locks = std::fs::read_dir(home.join("toolr/locks")).unwrap();
+        let names: Vec<_> = locks.map(|e| e.unwrap().path()).collect();
+        assert_eq!(names.len(), 1, "{names:?}");
+        assert_eq!(names[0].extension().unwrap(), "lock");
+    }
+
     /// A missing manifest is rebuilt and written, not reported as unreadable.
     #[test]
     fn ensure_manifest_fresh_rebuilds_a_missing_manifest() {
+        let (_guard, home) = temp_cache_home();
         let tmp = tools_repo();
 
         let fresh = ensure_manifest_fresh(tmp.path(), &[], true).unwrap();
 
         assert!(fresh.is_some());
         assert!(tmp.path().join("tools/.toolr-manifest.json").is_file());
+        assert_one_lock_in(home.path());
     }
 
     /// An untrusted repository gets the rebuilt manifest in memory only.
@@ -606,6 +648,7 @@ mod tests {
     /// The bootstrap step builds a missing manifest only when persisting.
     #[test]
     fn bootstrap_writes_a_missing_manifest_only_when_persisting() {
+        let (_guard, home) = temp_cache_home();
         let tmp = tools_repo();
         let manifest = tmp.path().join("tools/.toolr-manifest.json");
 
@@ -614,5 +657,6 @@ mod tests {
 
         ensure_manifest_present_or_bootstrap(tmp.path(), &[], true).unwrap();
         assert!(manifest.is_file());
+        assert_one_lock_in(home.path());
     }
 }
