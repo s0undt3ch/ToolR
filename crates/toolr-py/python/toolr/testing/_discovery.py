@@ -31,7 +31,6 @@ from unittest.mock import patch
 from attrs import define
 from attrs import field
 
-from toolr._decorators import CommandGroup
 from toolr._exc import ToolrError
 from toolr.testing._duplicates import _format_duplicate_commands
 from toolr.testing._shapes import _format_unsupported_commands
@@ -331,18 +330,8 @@ class CommandsTester:
                 the same way.
         """
         tools_dir = self.search_path / "tools"
-        funcs = [
-            func
-            for group in self.command_group_collector.values()
-            if isinstance(group, CommandGroup)
-            for func in group.get_commands().values()
-        ]
-        funcs += [entry.func for entry in self.pending_command_collector]
-        funcs += [
-            f for entry in self.duplicate_command_collector for f in (entry.first, entry.second)
-        ]
         # Checked first, as the manifest build does: these hide what the others report.
-        unsupported = _unsupported_commands(funcs, tools_dir)
+        unsupported = _unsupported_commands(tools_dir)
         if unsupported:
             raise ValueError(_format_unsupported_commands(unsupported))
         if self.pending_command_collector:
