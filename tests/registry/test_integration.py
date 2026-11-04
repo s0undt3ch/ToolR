@@ -1077,3 +1077,116 @@ def test_pending_commands_do_not_leak_between_testers(tools_repo: ToolsRepo) -> 
         group = second.collected_command_groups()["tools.ci.typo"]
         assert isinstance(group, CommandGroup)
         assert group.get_commands() == {}
+
+
+DUP_ONE_MODULE = (
+    "from toolr import command_group\n"
+    'g = command_group("grp", "Grp", "Grp")\n'
+    "@g.command\n"
+    "def dup(ctx):\n"
+    '    """One."""\n'
+    '@g.command(name="dup")\n'
+    "def dup2(ctx):\n"
+    '    """Two."""\n'
+)
+DUP_MODULE = (
+    "from toolr import command_group\n"
+    'g = command_group("grp", "Grp", "Grp")\n'
+    "@g.command\n"
+    "def dup(ctx):\n"
+    '    """Dup."""\n'
+)
+
+
+def _duplicate_error(repo: Path) -> str:
+    """Discover `repo` and return the duplicate-commands message `collected_command_groups()` raises."""
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        with pytest.raises(ValueError, match="duplicate commands") as excinfo:
+            tester.collected_command_groups()
+    return str(excinfo.value)
+
+
+def test_collected_command_groups_rejects_duplicate_in_one_module(tools_repo: ToolsRepo) -> None:
+    """Two defs claiming `grp dup` in one module fail as the manifest build does."""
+    repo = tools_repo({"tools/m.py": DUP_ONE_MODULE})
+    assert _duplicate_error(repo) == (
+        "duplicate commands (1):\n"
+        "  - `grp dup` is defined more than once: tools.m::dup, tools.m::dup2. "
+        'Rename all but one, e.g. with `name="…"`.'
+    )
+
+
+def test_collected_command_groups_rejects_duplicate_across_modules(tools_repo: ToolsRepo) -> None:
+    """Identical modules list their definitions in file order, whatever the import order."""
+    repo = tools_repo(
+        {
+            "tools/m1.py": "from tools import m2  # noqa: F401\n" + DUP_MODULE,
+            "tools/m2.py": DUP_MODULE,
+        }
+    )
+    assert _duplicate_error(repo) == (
+        "duplicate commands (1):\n"
+        "  - `grp dup` is defined more than once: tools.m1::dup, tools.m2::dup. "
+        'Rename all but one, e.g. with `name="…"`.'
+    )
+
+
+def test_duplicate_error_lists_every_definition_and_escapes(tools_repo: ToolsRepo) -> None:
+    """Three definitions of one command, standalone and bound, and an escaped name."""
+    repo = tools_repo(
+        {
+            "tools/a.py": DUP_ONE_MODULE,
+            "tools/b.py": (
+                "from toolr import command\n"
+                '@command("dup", group="grp")\n'
+                "def other(ctx):\n"
+                '    """Three."""\n'
+                '@command(group="grp")\n'
+                "def solo(ctx):\n"
+                '    """Solo."""\n'
+            ),
+            "tools/c.py": (
+                "from toolr import command_group\n"
+                'g = command_group("other", "O", "O")\n'
+                "@g.command\n"
+                "def dup(ctx):\n"
+                '    """Elsewhere."""\n'
+                '@g.command("x\\x1b")\n'
+                "def esc(ctx):\n"
+                '    """Esc."""\n'
+                '@g.command("x\\x1b")\n'
+                "def esc2(ctx):\n"
+                '    """Esc."""\n'
+            ),
+        }
+    )
+    assert _duplicate_error(repo) == (
+        "duplicate commands (2):\n"
+        "  - `grp dup` is defined more than once: tools.a::dup, tools.a::dup2, tools.b::other. "
+        'Rename all but one, e.g. with `name="…"`.\n'
+        "  - `other x\\u{1b}` is defined more than once: tools.c::esc, tools.c::esc2. "
+        'Rename all but one, e.g. with `name="…"`.'
+    )
+
+
+def test_unknown_group_reported_before_duplicate(tools_repo: ToolsRepo) -> None:
+    """A typo'd group is reported first, as the manifest build does."""
+    repo = tools_repo({"tools/m.py": DUP_ONE_MODULE, "tools/t.py": TYPO_GROUP_MODULE})
+    _unknown_group_error(repo)
+
+
+def test_duplicate_commands_do_not_leak_between_testers(tools_repo: ToolsRepo) -> None:
+    """A duplicate from one `CommandsTester` doesn't reach the next."""
+    repo = tools_repo({"tools/m.py": DUP_ONE_MODULE})
+    with CommandsTester(search_path=repo) as first:
+        first.discover()
+        assert len(first.duplicate_command_collector) == 1
+    assert first.duplicate_command_collector == []
+    assert _decorators._get_duplicate_command_storage() is not first.duplicate_command_collector
+    other = repo / "other"
+    (other / "tools").mkdir(parents=True)
+    (other / "tools" / "__init__.py").write_text(CI_MODULE)
+    with CommandsTester(search_path=other) as second:
+        second.discover()
+        assert set(second.collected_command_groups()) == {"tools.ci"}

@@ -256,7 +256,71 @@ fn build_commands_inner(
         return Err(BuildError::UnknownGroupRefs(unknown));
     }
 
+    let duplicates = duplicate_commands(&all_commands);
+    if !duplicates.is_empty() {
+        return Err(BuildError::DuplicateCommands(duplicates));
+    }
+
     Ok((all_groups, all_commands))
+}
+
+/// A `(group, name)` pair more than one function in one source tree defines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateCommand {
+    /// Dotted group path, `""` at top level.
+    pub group: String,
+    /// The command's CLI name.
+    pub name: String,
+    /// `(module, function)` of every definition, in build order.
+    pub definitions: Vec<(String, String)>,
+}
+
+/// Every `(group, name)` defined more than once, keyed in first-seen order.
+fn duplicate_commands(commands: &[Command]) -> Vec<DuplicateCommand> {
+    let mut index: std::collections::HashMap<(&str, &str), usize> =
+        std::collections::HashMap::new();
+    let mut all: Vec<DuplicateCommand> = Vec::new();
+    for cmd in commands {
+        let slot = *index
+            .entry((cmd.group.as_str(), cmd.name.as_str()))
+            .or_insert_with(|| {
+                all.push(DuplicateCommand {
+                    group: cmd.group.clone(),
+                    name: cmd.name.clone(),
+                    definitions: Vec::new(),
+                });
+                all.len() - 1
+            });
+        all[slot]
+            .definitions
+            .push((cmd.module.clone(), cmd.function.clone()));
+    }
+    all.retain(|d| d.definitions.len() > 1);
+    all
+}
+
+/// `toolr.testing._duplicates._format_duplicate_commands` mirrors this in
+/// Python; change both together.
+fn format_duplicate_commands(duplicates: &[DuplicateCommand]) -> String {
+    use crate::text::escape_control_chars;
+    duplicates
+        .iter()
+        .map(|d| {
+            let path = crate::third_party::merge::command_path(&d.group, &d.name);
+            let definitions = d
+                .definitions
+                .iter()
+                .map(|(m, f)| format!("{}::{}", escape_control_chars(m), escape_control_chars(f)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "  - `{}` is defined more than once: {definitions}. \
+                 Rename all but one, e.g. with `name=\"…\"`.",
+                escape_control_chars(&path)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Compute the dotted name a command is addressable by from the CLI
@@ -306,6 +370,10 @@ pub enum BuildError {
     ConflictingCommandName(Vec<CommandNameConflict>),
     #[error("invalid names ({count}):\n{details}", count = .0.len(), details = format_invalid_names(.0))]
     InvalidNames(Vec<InvalidName>),
+    /// `toolr.testing._duplicates._format_duplicate_commands` mirrors this
+    /// message in Python; change both together.
+    #[error("duplicate commands ({count}):\n{details}", count = .0.len(), details = format_duplicate_commands(.0))]
+    DuplicateCommands(Vec<DuplicateCommand>),
     #[error("argparse scanner error: {0}")]
     Argparse(#[from] crate::argparse::ArgparseError),
     #[error(transparent)]
@@ -1232,6 +1300,102 @@ def backend(ctx):
                 );
             }
         }
+    }
+
+    /// Scratch `e`: two defs in one module, the second renamed onto the first.
+    const DUP_ONE_MODULE: &str = r#"from toolr import command_group
+
+g = command_group("grp", "Grp", "Grp")
+
+
+@g.command
+def dup(ctx):
+    """One."""
+
+
+@g.command(name="dup")
+def dup2(ctx):
+    """Two."""
+"#;
+
+    /// Scratch `f`: the same module twice.
+    const DUP_MODULE: &str = r#"from toolr import command_group
+
+g = command_group("grp", "Grp", "Grp")
+
+
+@g.command
+def dup(ctx):
+    """Dup."""
+"#;
+
+    fn build_error_for(files: &[(&str, &str)]) -> String {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        build_static_manifest_inner(&tmp.path().join("tools"))
+            .expect_err("expected the build to fail")
+            .to_string()
+    }
+
+    #[test]
+    fn duplicate_command_in_one_module_fails() {
+        assert_eq!(
+            build_error_for(&[("tools/m.py", DUP_ONE_MODULE)]),
+            "duplicate commands (1):\n  - `grp dup` is defined more than once: tools.m::dup, \
+             tools.m::dup2. Rename all but one, e.g. with `name=\"…\"`."
+        );
+    }
+
+    #[test]
+    fn duplicate_command_across_modules_fails() {
+        assert_eq!(
+            build_error_for(&[("tools/m2.py", DUP_MODULE), ("tools/m1.py", DUP_MODULE)]),
+            "duplicate commands (1):\n  - `grp dup` is defined more than once: tools.m1::dup, \
+             tools.m2::dup. Rename all but one, e.g. with `name=\"…\"`."
+        );
+    }
+
+    #[test]
+    fn three_definitions_list_all_three() {
+        let third = "from toolr import command\n\n\n@command(\"dup\", group=\"grp\")\ndef other(ctx):\n    \"\"\"Three.\"\"\"\n\n\n@command(group=\"grp\")\ndef solo(ctx):\n    \"\"\"Solo.\"\"\"\n";
+        assert_eq!(
+            build_error_for(&[
+                ("tools/a.py", DUP_ONE_MODULE),
+                ("tools/b.py", third),
+                (
+                    "tools/c.py",
+                    "from toolr import command_group\n\ng = command_group(\"other\", \"O\", \"O\")\n\n\n@g.command\ndef dup(ctx):\n    \"\"\"Elsewhere.\"\"\"\n\n\n@g.command(\"x\\x1b\")\ndef esc(ctx):\n    \"\"\"Esc.\"\"\"\n\n\n@g.command(\"x\\x1b\")\ndef esc2(ctx):\n    \"\"\"Esc.\"\"\"\n"
+                ),
+            ]),
+            "duplicate commands (2):\n  - `grp dup` is defined more than once: tools.a::dup, \
+             tools.a::dup2, tools.b::other. Rename all but one, e.g. with `name=\"…\"`.\n  \
+             - `other x\\u{1b}` is defined more than once: tools.c::esc, tools.c::esc2. Rename \
+             all but one, e.g. with `name=\"…\"`."
+        );
+    }
+
+    #[test]
+    fn unknown_group_reported_before_duplicate() {
+        let typo = "from toolr import command\n\n\n@command(group=\"gpr\")\ndef typo(ctx):\n    \"\"\"Typo.\"\"\"\n";
+        let msg = build_error_for(&[("tools/m.py", DUP_ONE_MODULE), ("tools/t.py", typo)]);
+        assert!(msg.starts_with("unknown group references (1):"), "{msg}");
+    }
+
+    /// `toolr self build-manifest` on a plugin package gets the same error.
+    #[test]
+    fn plugin_package_with_a_duplicate_fails() {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "my_plugin/__init__.py", "");
+        write(tmp.path(), "my_plugin/m1.py", DUP_MODULE);
+        write(tmp.path(), "my_plugin/m2.py", DUP_MODULE);
+        let err = build_commands(&tmp.path().join("my_plugin"), "my_plugin").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "duplicate commands (1):\n  - `grp dup` is defined more than once: my_plugin.m1::dup, \
+             my_plugin.m2::dup. Rename all but one, e.g. with `name=\"…\"`."
+        );
     }
 
     /// Several bad references list one per line, in source order.

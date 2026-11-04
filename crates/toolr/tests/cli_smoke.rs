@@ -797,3 +797,29 @@ fn built_ins_after_a_root_option_value_ignore_symlinked_modules() {
         );
     }
 }
+
+/// FU-2: two modules defining `grp dup` used to panic clap in a debug
+/// build on `toolr grp --help`; the build now refuses the tree instead.
+#[test]
+fn duplicate_command_across_modules_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let tools = common::write_project(tmp.path());
+    let module = "from toolr import command_group\n\ng = command_group(\"grp\", \"Grp\", \"Grp\")\n\n\n@g.command\ndef dup(ctx):\n    \"\"\"Dup.\"\"\"\n";
+    std::fs::write(tools.join("m1.py"), module).unwrap();
+    std::fs::write(tools.join("m2.py"), module).unwrap();
+    for args in [&["--help"][..], &["grp", "--help"][..]] {
+        let output = common::toolr()
+            .current_dir(tmp.path())
+            .env("TOOLR_NO_CACHE_HINT", "1")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            "toolr: duplicate commands (1):\n  - `grp dup` is defined more than once: \
+             tools.m1::dup, tools.m2::dup. Rename all but one, e.g. with `name=\"…\"`.\n",
+            "{args:?}"
+        );
+    }
+}

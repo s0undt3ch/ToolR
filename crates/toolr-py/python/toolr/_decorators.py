@@ -156,6 +156,11 @@ class CommandGroup(Struct, frozen=True):
             )
             _require_docstring(func)
             if cli_name in self.__commands:
+                existing = self.__commands[cli_name]
+                if existing is not func:
+                    _get_duplicate_command_storage().append(
+                        DuplicateCommand(self.full_name, cli_name, existing, func)
+                    )
                 log.debug(
                     "Command '%s' already exists in group '%s', overriding",
                     cli_name,
@@ -250,6 +255,33 @@ def _get_pending_command_storage() -> list[PendingCommand]:
 
     Returns:
         The pending entries
+    """
+    return []
+
+
+class DuplicateCommand(NamedTuple):
+    """A second function registered under a group's existing command name."""
+
+    group: str
+    """The group's full name (``tools.``-prefixed)."""
+    name: str
+    """The command's CLI name."""
+    first: Callable[..., Any]
+    """The function already registered under ``name``."""
+    second: Callable[..., Any]
+    """The function that replaces it."""
+
+
+def _get_duplicate_command_storage() -> list[DuplicateCommand]:
+    """Get the duplicate registrations seen so far.
+
+    Only ``CommandsTester`` keeps entries, by patching this function as it
+    does :func:`_get_pending_command_storage`. Elsewhere each call returns a
+    new list, so the entry is dropped and the last definition wins; ``toolr``
+    refuses such a tree before anything runs.
+
+    Returns:
+        The duplicate entries
     """
     return []
 

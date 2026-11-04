@@ -63,8 +63,9 @@ Get the collected command groups.
 Raises:
     ValueError: A standalone ``@command(group=...)`` names a group
         that no ``command_group(...)`` declares, or passes
-        ``group=""``. The message is the one the manifest build
-        gives, which fails the same way.
+        ``group=""``; or two functions define the same command in
+        a group. The message is the one the manifest build gives,
+        which fails the same way.
 
 ```
 
