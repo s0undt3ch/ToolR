@@ -870,7 +870,7 @@ fn bash_older_than_4_4_warns_once_and_registers_nothing() {
     let lines: Vec<&str> = stderr.lines().collect();
     assert_eq!(lines.len(), 1, "{stderr}");
     assert!(
-        lines[0].starts_with("toolr: tab completion needs bash >= 4.4 (this is 3.")
+        lines[0].starts_with("toolr: tab completion needs bash >= 4.4 (this is ")
             && lines[0].ends_with("); upgrade bash to enable it."),
         "{stderr}"
     );
