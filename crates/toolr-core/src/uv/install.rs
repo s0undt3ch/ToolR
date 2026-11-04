@@ -252,6 +252,20 @@ fn ldd_reports_musl_in(path: Option<std::ffi::OsString>) -> bool {
 /// Where uv's GitHub releases live.
 const UV_RELEASES: &str = "https://github.com/astral-sh/uv";
 
+/// A `sha256sum` line is under 200 bytes; anything far bigger isn't one.
+const MAX_SIDECAR_BYTES: u64 = 4 * 1024;
+
+/// uv's largest archive is about 19 MB; ten times that is still no uv.
+const MAX_ARCHIVE_BYTES: u64 = 200 * 1024 * 1024;
+
+/// Read at most `limit` bytes of `body`; `None` when it holds more. Counts
+/// the bytes read, so a lying `Content-Length` can't get past it.
+fn read_capped(body: impl std::io::Read, limit: u64) -> std::io::Result<Option<Vec<u8>>> {
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut body.take(limit + 1), &mut bytes)?;
+    Ok((bytes.len() as u64 <= limit).then_some(bytes))
+}
+
 fn latest_asset_url(base: &str, file: &str) -> String {
     format!("{base}/releases/latest/download/{file}")
 }
@@ -349,13 +363,21 @@ pub(crate) fn perform_install_from(base: &str, dest: &Path) -> Result<UvBinary, 
     let file = format!("{asset}.{ext}");
     let tag = resolve_tag(base, &file)?;
     let sidecar_url = tagged_asset_url(base, &tag, &format!("{file}.sha256"));
-    let sidecar = reqwest::blocking::get(&sidecar_url)
-        .and_then(|r| r.error_for_status())
-        .and_then(|r| r.text());
-    let sidecar = sidecar.map_err(|e| unverified(&file, format!("no checksum file: {e}")))?;
-    let expected = parse_sidecar(&sidecar, &file)?;
+    let no_sidecar =
+        |e: &dyn std::fmt::Display| unverified(&file, format!("no checksum file: {e}"));
+    let response = reqwest::blocking::get(&sidecar_url).and_then(|r| r.error_for_status());
+    let response = response.map_err(|e| no_sidecar(&e))?;
+    let sidecar = read_capped(response, MAX_SIDECAR_BYTES).map_err(|e| no_sidecar(&e))?;
+    let too_big = || {
+        unverified(
+            &file,
+            format!("the checksum file exceeds {MAX_SIDECAR_BYTES} bytes"),
+        )
+    };
+    let sidecar = sidecar.ok_or_else(too_big)?;
+    let expected = parse_sidecar(&String::from_utf8_lossy(&sidecar), &file)?;
     let url = tagged_asset_url(base, &tag, &file);
-    download_and_extract(&url, asset, ext, dest, &expected, &tag)?;
+    download_and_extract(&url, asset, ext, dest, &expected, &tag, MAX_ARCHIVE_BYTES)?;
     probe(dest, UvSource::FreshlyInstalled)
 }
 
@@ -374,14 +396,20 @@ fn download_and_extract(
     dest: &Path,
     expected_sha256: &str,
     tag: &str,
+    max_bytes: u64,
 ) -> Result<(), UvError> {
-    let response = reqwest::blocking::get(url)
-        .map_err(|e| UvError::Http(e.to_string()))?
-        .error_for_status()
-        .map_err(|e| UvError::Http(e.to_string()))?;
-    let bytes = response.bytes().map_err(|e| UvError::Http(e.to_string()))?;
-
     let archive_name = format!("{asset}.{ext}");
+    let response = reqwest::blocking::get(url).and_then(|r| r.error_for_status());
+    let response = response.map_err(|e| UvError::Http(e.to_string()))?;
+    let bytes = read_capped(response, max_bytes).map_err(|e| UvError::Http(e.to_string()))?;
+    let too_big = || {
+        unverified(
+            &archive_name,
+            format!("the archive exceeds {max_bytes} bytes"),
+        )
+    };
+    let bytes = bytes.ok_or_else(too_big)?;
+
     // Hash the exact bytes we unpack, before anything reaches the disk.
     let actual = sha256_hex(&bytes);
     if actual != expected_sha256 {
@@ -422,8 +450,14 @@ fn download_and_extract(
         ))
     })?;
 
-    fs::copy(src, dest)?;
-    set_executable(dest)?;
+    // Stage beside `dest` and rename over it, so a failed write never leaves a
+    // truncated uv; the staged file is removed on drop if we bail out.
+    let mut staged = tempfile::Builder::new()
+        .prefix(".uv-")
+        .tempfile_in(parent)?;
+    std::io::copy(&mut fs::File::open(src)?, staged.as_file_mut())?;
+    set_executable(staged.path())?;
+    staged.persist(dest).map_err(|e| e.error)?;
     Ok(())
 }
 
@@ -1196,6 +1230,134 @@ mod tests {
     }
 
     #[test]
+    fn perform_install_from_refuses_an_oversize_checksum_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, _, file) = host_file();
+        let archive = host_archive(tmp.path());
+        // A valid line padded past the cap: only the size can reject it.
+        let mut sidecar = format!("{}  {file}\n", sha256_hex(&archive));
+        sidecar.push_str(&" ".repeat(MAX_SIDECAR_BYTES as usize));
+        let server = fake_release(&file, archive, Some(sidecar));
+        let dest = tmp.path().join("bin").join("uv");
+
+        let err = perform_install_from(&format!("http://{}", server.addr), &dest).unwrap_err();
+
+        assert!(
+            matches!(&err, UvError::Unverified { asset, reason } if *asset == file && reason.contains("exceeds")),
+            "got {err:?}"
+        );
+        assert!(!dest.parent().unwrap().exists());
+        let tagged = format!("/releases/download/{TAG}/{file}");
+        assert!(!server.hits.lock().unwrap().contains(&tagged));
+    }
+
+    #[test]
+    fn download_and_extract_refuses_an_archive_over_the_cap() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("uv.zip");
+        write_zip(&archive, &[(super::super::uv_basename(), b"fake-uv")]);
+        let payload = fs::read(&archive).unwrap();
+        let digest = sha256_hex(&payload);
+        let max = payload.len() as u64 - 1;
+        let server = serve_one("/uv.zip", payload);
+        let dest = tmp.path().join("dest").join("uv");
+
+        let err = download_and_extract(
+            &format!("http://{}/uv.zip", server.addr),
+            "uv-x86_64-pc-windows-msvc",
+            "zip",
+            &dest,
+            &digest,
+            TAG,
+            max,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(&err, UvError::Unverified { asset, reason } if asset == "uv-x86_64-pc-windows-msvc.zip" && reason.contains("exceeds")),
+            "got {err:?}"
+        );
+        assert!(!dest.parent().unwrap().exists());
+    }
+
+    #[test]
+    fn read_capped_allows_exactly_the_limit() {
+        assert_eq!(read_capped(&b"abc"[..], 3).unwrap(), Some(b"abc".to_vec()));
+        assert_eq!(read_capped(&b"abcd"[..], 3).unwrap(), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn perform_install_from_replaces_an_existing_uv_whole() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, _, file) = host_file();
+        let archive = host_archive(tmp.path());
+        let sidecar = format!("{}  {file}\n", sha256_hex(&archive));
+        let server = fake_release(&file, archive, Some(sidecar));
+        let dest = tmp.path().join("bin").join("uv");
+        fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        fs::write(&dest, b"old uv").unwrap();
+        // Read-only, so only a rename can replace it: an in-place copy fails.
+        fs::set_permissions(&dest, fs::Permissions::from_mode(0o444)).unwrap();
+
+        let uv = perform_install_from(&format!("http://{}", server.addr), &dest).unwrap();
+
+        assert_eq!(uv.version, (9, 9, 9));
+        assert_eq!(dir_names(dest.parent().unwrap()), ["uv"]);
+    }
+
+    #[test]
+    fn a_failed_install_leaves_an_existing_uv_untouched() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, _, file) = host_file();
+        let dest = tmp.path().join("bin").join("uv");
+        fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        fs::write(&dest, b"old uv").unwrap();
+
+        let server = fake_release(
+            &file,
+            host_archive(tmp.path()),
+            Some(format!("{HEX}  {file}\n")),
+        );
+        let err = perform_install_from(&format!("http://{}", server.addr), &dest).unwrap_err();
+        assert!(
+            matches!(err, UvError::ChecksumMismatch { .. }),
+            "got {err:?}"
+        );
+        assert_eq!(fs::read(&dest).unwrap(), b"old uv");
+
+        let archive = tmp.path().join("empty.tar.gz");
+        write_tar_gz(&archive, &[("uv-fake-asset/not-uv", b"placeholder")]);
+        let payload = fs::read(&archive).unwrap();
+        let digest = sha256_hex(&payload);
+        let server = serve_one("/uv.tar.gz", payload);
+        let url = format!("http://{}/uv.tar.gz", server.addr);
+        let err = download_and_extract(
+            &url,
+            "uv-fake-asset",
+            "tar.gz",
+            &dest,
+            &digest,
+            TAG,
+            MAX_ARCHIVE_BYTES,
+        )
+        .unwrap_err();
+        assert!(matches!(err, UvError::Http(_)), "got {err:?}");
+        assert_eq!(fs::read(&dest).unwrap(), b"old uv");
+        assert_eq!(dir_names(dest.parent().unwrap()), ["uv"]);
+    }
+
+    fn dir_names(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
     fn download_and_extract_against_local_http_with_missing_binary_in_archive() {
         // Stands up a local HTTP/1.1 server that serves a tar.gz lacking the `uv` binary, then asserts that
         // `download_and_extract` walks the pipeline and surfaces the
@@ -1217,6 +1379,7 @@ mod tests {
             &dest,
             &digest,
             TAG,
+            MAX_ARCHIVE_BYTES,
         )
         .unwrap_err();
         match err {
@@ -1255,6 +1418,7 @@ mod tests {
             &dest,
             &digest,
             TAG,
+            MAX_ARCHIVE_BYTES,
         )
         .expect("happy path should succeed");
         assert!(dest.is_file(), "destination uv should exist");
@@ -1272,6 +1436,7 @@ mod tests {
         write_zip(&archive, &[(binary_name, b"fake-uv")]);
         let payload = fs::read(&archive).unwrap();
         let digest = sha256_hex(&payload);
+        let max = payload.len() as u64;
         let server = serve_one("/uv.zip", payload);
         let dest = tmp.path().join("dest").join(binary_name);
         download_and_extract(
@@ -1281,8 +1446,9 @@ mod tests {
             &dest,
             &digest,
             TAG,
+            max,
         )
-        .expect("zip asset should install");
+        .expect("an archive at exactly the cap installs");
         assert_eq!(fs::read(&dest).unwrap(), b"fake-uv");
     }
 
