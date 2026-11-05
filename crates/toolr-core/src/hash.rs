@@ -7,7 +7,8 @@ use anyhow::Result;
 use blake3::Hasher;
 use walkdir::WalkDir;
 
-use crate::manifest::{Content, InputRecord, InputRecords, Manifest};
+use crate::manifest::{Content, InputRecord, InputRecords};
+use crate::parser::BuiltManifest;
 use crate::text::escape_control_chars;
 
 /// One file that feeds `static_hash`.
@@ -140,12 +141,12 @@ impl SnapshotClock {
 /// to `tools_dir`.
 pub fn build_to_persist<E>(
     tools_dir: &Path,
-    build: impl FnOnce() -> std::result::Result<Manifest, E>,
-) -> std::result::Result<Manifest, E> {
+    build: impl FnOnce() -> std::result::Result<BuiltManifest, E>,
+) -> std::result::Result<BuiltManifest, E> {
     let clock = SnapshotClock::now(tools_dir);
-    let mut manifest = build()?;
-    clock.stamp(&mut manifest.input_records);
-    Ok(manifest)
+    let mut built = build()?;
+    clock.stamp(&mut built.manifest.input_records);
+    Ok(built)
 }
 
 /// [`snapshot_static_inputs`] with `tools/**/*.py` already listed, so the
@@ -1354,12 +1355,13 @@ parent = "django"
             std::fs::remove_file(probe).unwrap();
             crate::parser::build_static_manifest(&tools)
         })
-        .unwrap();
+        .unwrap()
+        .manifest;
         let records = &manifest.input_records;
         assert_ne!(records.snapshot_at_ns, 0);
         assert!(records.snapshot_at_ns <= built_at, "{records:?}");
         assert_eq!(records.snapshot_dev, SnapshotClock::now(&tools).dev);
-        let failed = build_to_persist(&tools, || Err::<crate::manifest::Manifest, _>("no"));
+        let failed = build_to_persist(&tools, || Err::<crate::parser::BuiltManifest, _>("no"));
         assert_eq!(failed.unwrap_err(), "no");
     }
 

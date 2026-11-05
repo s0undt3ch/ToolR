@@ -536,6 +536,34 @@ fn merge_adds_groups_and_commands_from_fragments() {
     assert_eq!(merged.commands[0].origin, Origin::ThirdParty);
 }
 
+/// A plugin may declare a group `tools/` also declares: the local one wins
+/// silently.
+#[test]
+fn merge_keeps_the_local_group_over_a_disagreeing_plugin_one_silently() {
+    let mut base = empty_base();
+    base.groups.push(Group {
+        name: "deploy".into(),
+        title: "Deploy".into(),
+        description: "Local deploys.".into(),
+        parent: None,
+        origin: Origin::Static,
+    });
+    let merged = merge_into_manifest(
+        base,
+        from_files(vec![sample_fragment("pkg_a", "deploy", "rollout")]),
+    );
+    assert_eq!(merged.groups.len(), 1);
+    assert_eq!(merged.groups[0].title, "Deploy");
+    assert_eq!(merged.groups[0].description, "Local deploys.");
+    assert_eq!(merged.groups[0].origin, Origin::Static);
+    assert_eq!(command_names(&merged), [("deploy", "rollout")]);
+    assert!(
+        merged.plugin_warnings.is_empty(),
+        "{:?}",
+        merged.plugin_warnings
+    );
+}
+
 #[test]
 fn merge_skips_third_party_command_when_local_already_defines_it() {
     let mut base = empty_base();

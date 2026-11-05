@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use crate::hash::{SymlinkedModules, list_python_files, snapshot_from, static_hash_of};
-use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
+use crate::manifest::{ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
 use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
@@ -15,18 +15,26 @@ use crate::parser::{
         detect_name_conflicts, detect_unsupported_commands, extract_commands,
         format_missing_docstrings, missing_docstrings,
     },
-    groups::extract_groups,
+    groups::{Field, GroupFields, extract_groups},
     parse_python_file,
     symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable},
 };
 use crate::third_party::{ThirdPartyError, discover_and_merge};
+
+/// A built manifest and its build's warnings, which the manifest doesn't
+/// keep: they're printed once, by whoever built it.
+#[derive(Debug)]
+pub struct BuiltManifest {
+    pub manifest: Manifest,
+    pub warnings: Vec<String>,
+}
 
 /// Build the static portion of a manifest from a tools directory.
 ///
 /// Surfaces every unsupported-type rejection in a single batch via
 /// [`BuildError::UnsupportedTypes`] so users see all the offending
 /// annotations at once rather than one-at-a-time on each rebuild.
-pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
+pub fn build_static_manifest(tools_dir: &Path) -> Result<BuiltManifest> {
     match build_static_manifest_inner(tools_dir) {
         Ok(m) => Ok(m),
         Err(BuildError::Build(e)) => Err(e),
@@ -36,7 +44,7 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
     }
 }
 
-fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest, BuildError> {
+fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<BuiltManifest, BuildError> {
     // Name validation is deferred so argparse-scanned flags are reported in
     // the same batch as the native names.
     // One walk feeds both the parser and the hash.
@@ -45,15 +53,15 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     // the build must leave a record that no longer matches it, not one
     // describing bytes the manifest doesn't reflect.
     let input_records = snapshot_from(tools_dir, &py_files, None).map_err(BuildError::Build)?;
-    let (all_groups, all_commands) = build_commands_inner(tools_dir, &py_files, "tools", false)?;
+    let built = build_commands_inner(tools_dir, &py_files, "tools", false)?;
 
     let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: static_hash_of(&input_records.files),
         third_party_hash: String::new(),
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
-        groups: all_groups,
-        commands: all_commands,
+        groups: built.groups,
+        commands: built.commands,
         plugin_warnings: Vec::new(),
         input_records,
     };
@@ -103,7 +111,10 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         }
     }
 
-    Ok(manifest)
+    Ok(BuiltManifest {
+        manifest,
+        warnings: built.warnings,
+    })
 }
 
 /// Parse every `.py` under `source_root` and run every validation shared by
@@ -111,7 +122,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
 pub(crate) fn build_commands(
     source_root: &Path,
     module_prefix: &str,
-) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
+) -> std::result::Result<BuiltTree, BuildError> {
     let py_files = list_python_files(source_root)?;
     build_commands_inner(source_root, &py_files, module_prefix, true)
 }
@@ -121,7 +132,7 @@ fn build_commands_inner(
     py_files: &[PathBuf],
     module_prefix: &str,
     check_names: bool,
-) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
+) -> std::result::Result<BuiltTree, BuildError> {
     // Pass 1: build cross-file enum + type-alias + arg-section tables
     // from every module so later passes can resolve symbols regardless
     // of which file they live in.
@@ -154,9 +165,13 @@ fn build_commands_inner(
     // (alphabetical) which matches the conventional `_common.py` →
     // `gh_actions.py` etc. layout where the parent group lives in an
     // underscore-prefixed module.
-    let mut all_groups = Vec::new();
     let mut all_commands = Vec::new();
-    let mut seen_groups: HashSet<String> = HashSet::new();
+    // Each group's declarations so far, in first-declaration order, and the
+    // index of each group's full path in it.
+    let mut seen_groups: Vec<SeenGroup> = Vec::new();
+    let mut seen_index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut contradictory: Vec<ContradictoryGroup> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
     let mut global_vars: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
@@ -167,7 +182,7 @@ fn build_commands_inner(
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
         name_conflicts.extend(detect_name_conflicts(&module, &module_path, &all_imports));
-        let bindings = extract_groups(&module, &module_doc, &global_vars);
+        let bindings = extract_groups(&module, module_doc.as_deref(), &global_vars);
         unsupported.extend(detect_unsupported_commands(
             &module,
             &module_path,
@@ -193,17 +208,61 @@ fn build_commands_inner(
         );
         // Make this file's bindings visible to subsequent files.
         for binding in &bindings {
-            global_vars.insert(binding.var.clone(), binding.group.full_path());
+            global_vars.insert(binding.var.clone(), binding.full_path());
         }
         // Dedup groups by *full_path* (not just leaf name), so nested
         // groups in different branches with the same leaf name (e.g.
-        // `ci.image` + `docker.image`) both survive.
+        // `ci.image` + `docker.image`) both survive. The first declaration
+        // wins, as in Python: a later one fills a field the first left
+        // empty, and is warned about where both are set and differ.
         for binding in bindings {
-            if seen_groups.insert(binding.group.full_path()) {
-                all_groups.push(binding.group);
+            let path = binding.full_path();
+            if binding.contradictory {
+                contradictory.push(ContradictoryGroup {
+                    group: path.clone(),
+                    module: module_path.clone(),
+                });
+            }
+            match seen_index.get(&path) {
+                Some(&index) => {
+                    let seen = &mut seen_groups[index];
+                    if !seen.modules.contains(&module_path) {
+                        seen.modules.push(module_path.clone());
+                    }
+                    seen.describes |= binding.describes;
+                    seen.unreadable |= binding.unreadable;
+                    warnings.extend(redeclaration_warning(
+                        &path,
+                        &seen.fields,
+                        &binding.fields,
+                        &module_path,
+                    ));
+                    fill_empty_fields(&mut seen.fields, &binding.fields, &module_path);
+                }
+                None => {
+                    seen_index.insert(path.clone(), seen_groups.len());
+                    seen_groups.push(SeenGroup {
+                        path,
+                        name: binding.name,
+                        parent: binding.parent,
+                        modules: vec![module_path.clone()],
+                        describes: binding.describes,
+                        unreadable: binding.unreadable,
+                        fields: binding.fields.map(|field| Kept {
+                            field,
+                            from: module_path.clone(),
+                        }),
+                    });
+                }
             }
         }
         all_commands.extend(commands);
+    }
+    let all_groups: Vec<Group> = seen_groups.iter().map(SeenGroup::group).collect();
+
+    // First, as Python's `command_group` raises these when the module imports.
+    if !contradictory.is_empty() {
+        return Err(BuildError::ContradictoryGroups(contradictory));
     }
 
     if !name_conflicts.is_empty() {
@@ -273,7 +332,199 @@ fn build_commands_inner(
         return Err(BuildError::DuplicateCommands(duplicates));
     }
 
-    Ok((all_groups, all_commands))
+    let undescribed = undescribed_groups(&seen_groups);
+    if !undescribed.is_empty() {
+        return Err(BuildError::UndescribedGroups(undescribed));
+    }
+
+    Ok(BuiltTree {
+        groups: all_groups,
+        commands: all_commands,
+        warnings,
+    })
+}
+
+/// The declarations of one group seen so far by `build_commands_inner`.
+struct SeenGroup {
+    /// Dotted group path.
+    path: String,
+    name: String,
+    parent: Option<String>,
+    /// Every declaring module, first declaration first.
+    modules: Vec<String>,
+    /// Whether any declaration passes a description or docstring.
+    describes: bool,
+    /// Whether any declaration may pass one the static parser can't see.
+    unreadable: bool,
+    /// The fields kept so far: the first declaration's, with empty ones
+    /// filled by later declarations.
+    fields: GroupFields<Kept>,
+}
+
+impl SeenGroup {
+    /// The group the manifest gets, with the kept fields' readable text.
+    fn group(&self) -> Group {
+        Group {
+            name: self.name.clone(),
+            title: self.fields.title.field.text().to_string(),
+            description: self.fields.description.field.text().to_string(),
+            parent: self.parent.clone(),
+            origin: Origin::Static,
+        }
+    }
+}
+
+/// A kept group field and the module it came from.
+struct Kept {
+    field: Field,
+    from: String,
+}
+
+/// Every group no declaration describes, in first-declaration order.
+///
+/// `toolr.testing._groups._undescribed_groups` mirrors this in Python; change
+/// both together.
+fn undescribed_groups(seen: &[SeenGroup]) -> Vec<UndescribedGroup> {
+    seen.iter()
+        .filter(|g| !g.describes)
+        .map(|g| UndescribedGroup {
+            group: g.path.clone(),
+            modules: g.modules.clone(),
+            unreadable: g.unreadable,
+        })
+        .collect()
+}
+
+/// A `command_group` call passing a docstring with a description.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContradictoryGroup {
+    /// Dotted group path.
+    pub group: String,
+    /// The module making the call.
+    pub module: String,
+}
+
+/// A group none of whose declarations passes a description or docstring.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndescribedGroup {
+    /// Dotted group path.
+    pub group: String,
+    /// Every declaring module, in build order.
+    pub modules: Vec<String>,
+    /// Whether a declaration may pass a description or docstring the static
+    /// parser can't see.
+    pub unreadable: bool,
+}
+
+/// `toolr.testing._groups._format_contradictory_groups` mirrors this in
+/// Python; change both together.
+fn format_contradictory_groups(groups: &[ContradictoryGroup]) -> String {
+    use crate::text::escape_control_chars;
+    groups
+        .iter()
+        .map(|g| {
+            format!(
+                "  - `{}` in {}: pass `docstring=` or `description=`/`long_description=`, not both.",
+                escape_control_chars(&g.group),
+                escape_control_chars(&g.module)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `toolr.testing._groups._format_undescribed_groups` mirrors this in
+/// Python; change both together.
+fn format_undescribed_groups(groups: &[UndescribedGroup]) -> String {
+    use crate::text::escape_control_chars;
+    groups
+        .iter()
+        .map(|g| {
+            let modules = g
+                .modules
+                .iter()
+                .map(|m| escape_control_chars(m))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let hint = if g.unreadable {
+                "give one declaration a description or docstring the static parser can read: \
+                 a string literal, or the `__doc__` of a module with a docstring."
+            } else {
+                "give one declaration a description or docstring."
+            };
+            format!(
+                "  - `{}` (declared in {modules}): {hint}",
+                escape_control_chars(&g.group)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The groups and commands of one source tree, plus its build warnings.
+#[derive(Debug)]
+pub(crate) struct BuiltTree {
+    pub(crate) groups: Vec<Group>,
+    pub(crate) commands: Vec<Command>,
+    pub(crate) warnings: Vec<String>,
+}
+
+/// The warning for a group re-declaration that disagrees with the kept
+/// fields, naming the module each kept value came from. Python's
+/// `command_group` logs the same disagreement at debug level in its own
+/// words. `None` when they agree.
+fn redeclaration_warning(
+    path: &str,
+    kept: &GroupFields<Kept>,
+    later: &GroupFields,
+    later_module: &str,
+) -> Option<String> {
+    // Only two readable values can differ: an empty one has no opinion, and
+    // an unreadable one can't be compared.
+    let differing: Vec<(&str, &str)> = kept
+        .named()
+        .into_iter()
+        .zip(later.named())
+        .filter(|((_, kept), (_, later))| {
+            matches!((&kept.field, later), (Field::Text(a), Field::Text(b)) if a != b)
+        })
+        .map(|((name, kept), _)| (name, kept.from.as_str()))
+        .collect();
+    if differing.is_empty() {
+        return None;
+    }
+    // `title, description from tools.a and long_description from tools.b`.
+    let mut sources: Vec<(Vec<&str>, &str)> = Vec::new();
+    for &(name, module) in &differing {
+        match sources.iter_mut().find(|(_, m)| *m == module) {
+            Some((names, _)) => names.push(name),
+            None => sources.push((vec![name], module)),
+        }
+    }
+    let kept_text = sources
+        .iter()
+        .map(|(names, module)| format!("the {} from {module}", names.join(", ")))
+        .collect::<Vec<_>>()
+        .join(" and ");
+    let names: Vec<&str> = differing.iter().map(|(name, _)| *name).collect();
+    Some(format!(
+        "group `{path}` is declared more than once; keeping {kept_text} and ignoring the \
+         different {} in {later_module}",
+        names.join(", ")
+    ))
+}
+
+/// Fill the kept fields a later declaration gives where they're empty, as
+/// Python's `command_group` does, recording `module` as their source.
+fn fill_empty_fields(kept: &mut GroupFields<Kept>, later: &GroupFields, module: &str) {
+    for ((_, kept), (_, later)) in kept.named_mut().into_iter().zip(later.named()) {
+        if kept.field == Field::Empty && *later != Field::Empty {
+            *kept = Kept {
+                field: later.clone(),
+                from: module.to_string(),
+            };
+        }
+    }
 }
 
 /// A `(group, name)` pair more than one function in one source tree defines.
@@ -374,9 +625,12 @@ fn dotted_name(cmd: &crate::manifest::Command) -> String {
 pub fn build_static_manifest_with_venv(
     tools_dir: &Path,
     tools_venv: &Path,
-) -> Result<Manifest, BuildError> {
+) -> Result<BuiltManifest, BuildError> {
     let base = build_static_manifest_inner(tools_dir)?;
-    discover_and_merge(tools_venv, base).map_err(BuildError::ThirdParty)
+    Ok(BuiltManifest {
+        manifest: discover_and_merge(tools_venv, base.manifest).map_err(BuildError::ThirdParty)?,
+        warnings: base.warnings,
+    })
 }
 
 /// Error type covering both the local build and the third-party merge.
@@ -408,6 +662,14 @@ pub enum BuildError {
     /// message in Python; change both together.
     #[error("duplicate commands ({count}):\n{details}", count = .0.len(), details = format_duplicate_commands(.0))]
     DuplicateCommands(Vec<DuplicateCommand>),
+    /// `toolr.testing._groups._format_contradictory_groups` mirrors this
+    /// message in Python; change both together.
+    #[error("command groups with contradictory arguments ({count}):\n{details}", count = .0.len(), details = format_contradictory_groups(.0))]
+    ContradictoryGroups(Vec<ContradictoryGroup>),
+    /// `toolr.testing._groups._format_undescribed_groups` mirrors this
+    /// message in Python; change both together.
+    #[error("command groups with no description ({count}):\n{details}", count = .0.len(), details = format_undescribed_groups(.0))]
+    UndescribedGroups(Vec<UndescribedGroup>),
     #[error("argparse scanner error: {0}")]
     Argparse(#[from] crate::argparse::ArgparseError),
     #[error(transparent)]
@@ -743,15 +1005,16 @@ pub(crate) fn module_path_for_prefix(source_dir: &Path, file: &Path, prefix: &st
     out
 }
 
-fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
+/// The module's docstring, or `None` when it has none.
+fn module_docstring(module: &ruff_python_ast::ModModule) -> Option<String> {
     use ruff_python_ast::Stmt;
     let Some(Stmt::Expr(e)) = module.body.first() else {
-        return String::new();
+        return None;
     };
-    if let ruff_python_ast::Expr::StringLiteral(s) = e.value.as_ref() {
-        return s.value.to_str().to_string();
+    match e.value.as_ref() {
+        ruff_python_ast::Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
+        _ => None,
     }
-    String::new()
 }
 
 #[cfg(test)]
@@ -804,7 +1067,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(tools.join("sub/a.py"), "x = 1\n").unwrap();
-        let manifest = build_static_manifest(&tools).unwrap();
+        let manifest = build_static_manifest(&tools).unwrap().manifest;
         let keys: Vec<_> = manifest
             .input_records
             .files
@@ -942,13 +1205,60 @@ def hello(ctx):
         )
         .unwrap();
 
-        let m = build_static_manifest_with_venv(&tmp.path().join("tools"), &venv).unwrap();
+        let m = build_static_manifest_with_venv(&tmp.path().join("tools"), &venv)
+            .unwrap()
+            .manifest;
         let groups: Vec<_> = m.groups.iter().map(|g| g.name.as_str()).collect();
         assert!(groups.contains(&"ci"));
         assert!(groups.contains(&"deploy"));
         let cmds: Vec<_> = m.commands.iter().map(|c| c.name.as_str()).collect();
         assert!(cmds.contains(&"hello"));
         assert!(cmds.contains(&"rollout"));
+    }
+
+    /// The local build's warnings survive the merge, and a plugin declaring
+    /// the same group adds none: the local one wins silently.
+    #[test]
+    fn build_with_venv_keeps_the_local_build_warnings() {
+        let tmp = TempDir::new().unwrap();
+        for (module, title) in [("m1", "Grp"), ("m2", "Other")] {
+            write(
+                tmp.path(),
+                &format!("tools/{module}.py"),
+                &format!("g = command_group(\"grp\", \"{title}\", \"Grp\")\n"),
+            );
+        }
+        let venv = tmp.path().join("venv");
+        let pkg = venv.join("lib/python3.13/site-packages/ext_pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        let frag = ManifestFragment {
+            toolr_schema_version: SCHEMA_VERSION,
+            package: "ext_pkg".into(),
+            groups: vec![Group {
+                name: "grp".into(),
+                title: "Plugin".into(),
+                description: "Plugin group.".into(),
+                parent: None,
+                origin: Origin::ThirdParty,
+            }],
+            commands: vec![],
+        };
+        std::fs::write(
+            pkg.join("toolr-manifest.json"),
+            serde_json::to_string(&frag).unwrap(),
+        )
+        .unwrap();
+
+        let built = build_static_manifest_with_venv(&tmp.path().join("tools"), &venv).unwrap();
+        assert_eq!(built.manifest.groups.len(), 1);
+        assert_eq!(built.manifest.groups[0].title, "Grp");
+        assert_eq!(
+            built.warnings,
+            [
+                "group `grp` is declared more than once; keeping the title from tools.m1 and \
+                 ignoring the different title in tools.m2"
+            ]
+        );
     }
 
     /// `list_python_files` must NOT recurse into dot-prefixed
@@ -1031,7 +1341,7 @@ def hello(ctx):
             (
                 "tools/dispatcher.py",
                 format!(
-                    "group = command_group(\"{group}\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n"
+                    "group = command_group(\"{group}\", \"Django\", \"Django.\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n"
                 ),
             ),
             (
@@ -1254,13 +1564,615 @@ def hello(ctx):
     pass
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         assert_eq!(m.schema_version, SCHEMA_VERSION);
         assert_eq!(m.groups.len(), 1);
         assert_eq!(m.groups[0].name, "ci");
         assert_eq!(m.commands.len(), 1);
         assert_eq!(m.commands[0].name, "hello");
         assert!(!m.static_hash.is_empty());
+    }
+
+    /// Build `files` and return `(group full paths with titles, build warnings)`.
+    fn redeclared(files: &[(&str, &str)]) -> (Vec<(String, String, String)>, Vec<String>) {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        let built = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let groups = built
+            .manifest
+            .groups
+            .iter()
+            .map(|g| (g.full_path(), g.title.clone(), g.description.clone()))
+            .collect();
+        (groups, built.warnings)
+    }
+
+    fn group_row(path: &str, title: &str, description: &str) -> (String, String, String) {
+        (path.into(), title.into(), description.into())
+    }
+
+    const GROUP_IMPORT: &str = "from toolr import command_group\n";
+
+    #[test]
+    fn identical_group_redeclaration_is_silent() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"grp\", \"Grp\", \"Desc\")\nb = command_group(\"grp\", \"Grp\", \"Desc\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("grp", "Grp", "Desc")]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn conflicting_group_redeclaration_in_one_module_warns() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"grp\", \"Grp\", \"Desc\")\nb = command_group(\"grp\", \"Other\", \"Else\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("grp", "Grp", "Desc")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `grp` is declared more than once; keeping the title, description from tools.m and \
+              ignoring the different title, description in tools.m"
+            ]
+        );
+    }
+
+    #[test]
+    fn conflicting_group_redeclaration_across_modules_names_both() {
+        let first = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Grp\", \"Desc\")\n");
+        let second = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Other\", \"Desc\")\n");
+        let third = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Grp\", \"Else\")\n");
+        let (groups, warnings) = redeclared(&[
+            ("tools/m1.py", &first),
+            ("tools/m2.py", &second),
+            ("tools/m3.py", &third),
+        ]);
+        assert_eq!(groups, [group_row("grp", "Grp", "Desc")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `grp` is declared more than once; keeping the title from tools.m1 and \
+                 ignoring the different title in tools.m2",
+                "group `grp` is declared more than once; keeping the description from tools.m1 and \
+                 ignoring the different description in tools.m3",
+            ]
+        );
+    }
+
+    /// A re-declaration without a description fetches the group; it has no
+    /// opinion on the description, so only a different title counts.
+    #[test]
+    fn group_redeclaration_without_description_has_no_opinion_on_it() {
+        let first = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Grp\", \"Desc\")\n");
+        let same = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Grp\")\n");
+        let other = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Other\")\n");
+        let (groups, warnings) = redeclared(&[
+            ("tools/m1.py", &first),
+            ("tools/m2.py", &same),
+            ("tools/m3.py", &other),
+        ]);
+        assert_eq!(groups, [group_row("grp", "Grp", "Desc")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `grp` is declared more than once; keeping the title from tools.m1 and \
+              ignoring the different title in tools.m3"
+            ]
+        );
+    }
+
+    #[test]
+    fn dotted_and_parent_kwarg_declare_the_same_group() {
+        let src = format!(
+            "{GROUP_IMPORT}p1 = command_group(\"p1\", \"P1\", \"P1\")\n\
+             a = command_group(\"p1.kid\", \"Kid\", \"Kid\")\n\
+             b = command_group(\"kid\", \"Child\", \"Kid\", parent=\"p1\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("p1", "P1", "P1"),
+                group_row("p1.kid", "Kid", "Kid")
+            ]
+        );
+        assert_eq!(
+            warnings,
+            [
+                "group `p1.kid` is declared more than once; keeping the title from tools.m and \
+              ignoring the different title in tools.m"
+            ]
+        );
+    }
+
+    #[test]
+    fn same_leaf_under_two_parents_is_two_groups() {
+        let src = format!(
+            "{GROUP_IMPORT}p1 = command_group(\"p1\", \"P1\", \"P1\")\n\
+             p2 = command_group(\"p2\", \"P2\", \"P2\")\n\
+             a = command_group(\"kid\", \"Kid one\", \"One\", parent=\"p1\")\n\
+             b = command_group(\"kid\", \"Kid two\", \"Two\", parent=\"p2\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("p1", "P1", "P1"),
+                group_row("p2", "P2", "P2"),
+                group_row("p1.kid", "Kid one", "One"),
+                group_row("p2.kid", "Kid two", "Two"),
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn group_without_a_description_anywhere_fails() {
+        let lint = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\")\n");
+        let build = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\")\n");
+        let other = format!(
+            "{GROUP_IMPORT}command_group(\"other\", \"Other\")\ncommand_group(\"other\", \"Other\")\n"
+        );
+        assert_eq!(
+            build_error_for(&[
+                ("tools/ci/__init__.py", ""),
+                ("tools/ci/lint.py", &lint),
+                ("tools/ci/build.py", &build),
+                ("tools/other.py", &other),
+            ]),
+            "command groups with no description (2):\n  \
+             - `ci` (declared in tools.ci.build, tools.ci.lint): give one declaration a \
+             description or docstring.\n  \
+             - `other` (declared in tools.other): give one declaration a description or docstring."
+        );
+    }
+
+    /// An empty description, or an empty or whitespace-only docstring, leaves a
+    /// group undescribed; a later declaration with real text still describes it.
+    #[test]
+    fn empty_description_or_docstring_does_not_describe_a_group() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"a\", \"A\", description=\"\")\n\
+             b = command_group(\"b\", \"B\", docstring=\"  \\n \")\n\
+             c = command_group(\"c\", \"C\", docstring=__doc__)\n\
+             d = command_group(\"d\", \"D\", description=\"\")\n\
+             d = command_group(\"d\", \"D\", description=\"D.\")\n"
+        );
+        let src = format!("\"\"\"  \"\"\"\n{src}");
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with no description (3):\n  \
+             - `a` (declared in tools.m): give one declaration a description or docstring.\n  \
+             - `b` (declared in tools.m): give one declaration a description or docstring.\n  \
+             - `c` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
+             a string literal, or the `__doc__` of a module with a docstring."
+        );
+    }
+
+    /// `__doc__` describes a group only when the module has a docstring.
+    #[test]
+    fn module_without_a_docstring_does_not_describe_its_group() {
+        let src = format!(
+            "{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", docstring=__doc__)\n\
+             h = command_group(\"cd\", \"CD\", description=__doc__)\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with no description (2):\n  \
+             - `ci` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
+             a string literal, or the `__doc__` of a module with a docstring.\n  \
+             - `cd` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
+             a string literal, or the `__doc__` of a module with a docstring."
+        );
+    }
+
+    /// Unpacked arguments may hold a description the static parser can't see.
+    #[test]
+    fn unpacked_arguments_ask_for_a_readable_description() {
+        let src = format!(
+            "{GROUP_IMPORT}OPTS = {{\"description\": \"CI.\"}}\n\
+             ARGS = (\"CI\", \"CI.\")\n\
+             a = command_group(\"ci\", **OPTS)\n\
+             b = command_group(\"cd\", *ARGS)\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with no description (2):\n  \
+             - `ci` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
+             a string literal, or the `__doc__` of a module with a docstring.\n  \
+             - `cd` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
+             a string literal, or the `__doc__` of a module with a docstring."
+        );
+    }
+
+    /// Any declaration may describe the group; title-only ones before it
+    /// only fetch it, so the description it gives is the group's.
+    #[test]
+    fn title_only_declarations_take_a_later_description() {
+        let first = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\")\n");
+        let second = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", \"CI commands.\")\n");
+        let third = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", \"Else.\")\n");
+        let (groups, warnings) = redeclared(&[
+            ("tools/a.py", &first),
+            ("tools/b.py", &second),
+            ("tools/c.py", &third),
+        ]);
+        assert_eq!(groups, [group_row("ci", "CI", "CI commands.")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `ci` is declared more than once; keeping the description from tools.b and \
+                 ignoring the different description in tools.c"
+            ]
+        );
+    }
+
+    /// An empty title or description has no opinion, whether passed or not,
+    /// so a later declaration fills it without a warning.
+    #[test]
+    fn empty_title_and_description_take_later_ones() {
+        let first = format!(
+            "{GROUP_IMPORT}a = command_group(\"ci\", \"CI\", \"\")\n\
+             b = command_group(\"cd\", description=\"CD.\")\n"
+        );
+        let second = format!(
+            "{GROUP_IMPORT}a = command_group(\"ci\", \"CI\", \"CI commands.\")\n\
+             b = command_group(\"cd\", \"CD\", \"CD.\")\n\
+             c = command_group(\"cd\", description=\"CD.\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/a.py", &first), ("tools/b.py", &second)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("ci", "CI", "CI commands."),
+                group_row("cd", "CD", "CD.")
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// A name is unreadable even when the module assigns it a string: it
+    /// describes the group, shows empty, and a later literal neither fills it
+    /// nor warns.
+    #[test]
+    fn module_constants_are_unreadable() {
+        let src = format!(
+            "{GROUP_IMPORT}DESC = \"\"\nDESC += \"CI.\"\n\
+             a = command_group(\"ci\", \"CI\", DESC)\n\
+             DESCRIPTION = \"CD commands.\"\n\
+             b = command_group(\"cd\", \"CD\", description=DESCRIPTION)\n\
+             c = command_group(\"cd\", \"CD\", \"Continuous delivery.\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [group_row("ci", "CI", ""), group_row("cd", "CD", "")]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// A value the static parser can't read has an opinion it can't compare:
+    /// a later readable one neither fills it nor warns.
+    #[test]
+    fn unreadable_fields_are_kept_without_a_warning() {
+        let src = format!(
+            "{GROUP_IMPORT}from elsewhere import DESC, TITLE\n\
+             a = command_group(\"ci\", TITLE, description=DESC)\n\
+             b = command_group(\"ci\", \"CI\", description=\"CI.\")\n\
+             c = command_group(\"cd\", \"CD\", docstring=opts.doc)\n\
+             d = command_group(\"cd\", \"CD\", \"CD.\")\n\
+             e = command_group(\"ops\", docstring=make())\n\
+             f = command_group(\"ops\", \"Ops\", \"Ops.\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("ci", "", ""),
+                group_row("cd", "CD", ""),
+                group_row("ops", "", "")
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// An argument the parser can't read may be `None` at runtime, so it
+    /// contradicts nothing.
+    #[test]
+    fn unreadable_arguments_are_no_contradiction() {
+        let src = format!(
+            "\"\"\"Doc.\"\"\"\n{GROUP_IMPORT}LONG = None\n\
+             a = command_group(\"ci\", \"CI\", long_description=LONG, docstring=\"CI.\")\n\
+             b = command_group(\"cd\", \"CD\", description=make(), docstring=__doc__)\n\
+             c = command_group(\"ops\", \"Ops\", \"Ops.\", docstring=DOC)\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("ci", "CI", "CI."),
+                group_row("cd", "CD", ""),
+                group_row("ops", "Ops", "Ops.")
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// A docstring the parser can't read may be `None`, so a literal long
+    /// description beside it is unknown: kept, but never compared.
+    #[test]
+    fn long_description_beside_an_unreadable_docstring_is_unreadable() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"ci\", \"CI\", long_description=\"Long.\", docstring=DOC)\n\
+             b = command_group(\"ci\", \"CI\", \"CI.\", \"Else.\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("ci", "CI", "")]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// An empty module docstring is still a docstring: `__doc__` is `""`, not
+    /// `None`, so it contradicts a description, but doesn't describe a group.
+    #[test]
+    fn empty_module_docstring_is_passed_but_does_not_describe() {
+        let contradictory = format!(
+            "\"\"\"\"\"\"\n{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", description=\"X\", docstring=__doc__)\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &contradictory)]),
+            "command groups with contradictory arguments (1):\n  \
+             - `ci` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both."
+        );
+        let undescribed = format!(
+            "\"\"\"\"\"\"\n{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", docstring=__doc__)\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &undescribed)]),
+            "command groups with no description (1):\n  \
+             - `ci` (declared in tools.m): give one declaration a description or docstring the \
+             static parser can read: a string literal, or the `__doc__` of a module with a docstring."
+        );
+    }
+
+    /// A module that binds `__doc__` outside a function or class makes
+    /// `__doc__` unreadable there, wherever the binding sits.
+    #[test]
+    fn rebinding_doc_makes_it_unreadable() {
+        let (groups, warnings) = redeclared(&[
+            (
+                "tools/a.py",
+                "__doc__ = \"A.\"\ng = command_group(\"a\", \"A\", docstring=__doc__)\n",
+            ),
+            (
+                "tools/b.py",
+                "\"\"\"B doc.\"\"\"\nfrom x import y as __doc__\n\
+                 g = command_group(\"b\", \"B\", description=\"B.\", docstring=__doc__)\n",
+            ),
+            (
+                "tools/c.py",
+                "try:\n    pass\nexcept E as __doc__:\n    pass\n\
+                 g = command_group(\"c\", \"C\", docstring=__doc__)\n",
+            ),
+            (
+                "tools/d.py",
+                "\"\"\"D doc.\"\"\"\nimport os\nclass K:\n    __doc__ = \"k\"\n\
+                 def f():\n    __doc__ = \"f\"\n\
+                 try:\n    pass\nexcept E:\n    pass\n\
+                 g = command_group(\"d\", docstring=__doc__)\n",
+            ),
+            (
+                "tools/e.py",
+                "g = command_group(\"e\", \"E\", docstring=__doc__)\n\
+                 if True:\n    for __doc__ in []:\n        pass\n",
+            ),
+        ]);
+        assert_eq!(
+            groups,
+            [
+                group_row("a", "A", ""),
+                group_row("b", "B", "B."),
+                group_row("c", "C", ""),
+                group_row("d", "D doc.", "D doc."),
+                group_row("e", "E", ""),
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// The warning names the module each kept value came from, which needn't
+    /// be the first declaration's.
+    #[test]
+    fn warning_names_the_module_of_each_kept_field() {
+        let (groups, warnings) = redeclared(&[
+            (
+                "tools/m1.py",
+                "g = command_group(\"ci\", description=\"CI.\")\n",
+            ),
+            ("tools/m2.py", "g = command_group(\"ci\", \"From m2\")\n"),
+            ("tools/m3.py", "g = command_group(\"ci\", \"From m3\")\n"),
+            (
+                "tools/m4.py",
+                "g = command_group(\"ci\", \"Other\", \"Else.\", \"Long.\")\n",
+            ),
+            (
+                "tools/m5.py",
+                "g = command_group(\"ci\", \"Other\", \"Else.\", \"Longer.\")\n",
+            ),
+        ]);
+        assert_eq!(groups, [group_row("ci", "From m2", "CI.")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `ci` is declared more than once; keeping the title from tools.m2 and \
+                 ignoring the different title in tools.m3",
+                "group `ci` is declared more than once; keeping the title from tools.m2 and the \
+                 description from tools.m1 and ignoring the different title, description in tools.m4",
+                "group `ci` is declared more than once; keeping the title from tools.m2 and the \
+                 description from tools.m1 and the long_description from tools.m4 and ignoring \
+                 the different title, description, long_description in tools.m5",
+            ]
+        );
+    }
+
+    /// An unreadable value fills an empty field, which a later readable value
+    /// then can't.
+    #[test]
+    fn unreadable_value_fills_an_empty_field() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"ci\", \"CI\")\n\
+             b = command_group(\"ci\", description=make())\n\
+             c = command_group(\"ci\", \"CI\", \"CI.\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("ci", "CI", "")]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// Long descriptions aren't in the manifest, but conflict like the rest.
+    #[test]
+    fn conflicting_long_description_warns() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"ci\", \"CI\", \"CI.\")\n\
+             b = command_group(\"ci\", \"CI\", \"CI.\", \"Long.\")\n\
+             c = command_group(\"ci\", \"CI\", \"CI.\", long_description=\"Long.\")\n\
+             d = command_group(\"ci\", \"Other\", \"CI.\", \"Else.\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("ci", "CI", "CI.")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `ci` is declared more than once; keeping the title, long_description from tools.m and \
+                 ignoring the different title, long_description in tools.m"
+            ]
+        );
+    }
+
+    /// `title=` and `parent=` read the same by keyword as by position.
+    #[test]
+    fn title_and_parent_read_by_keyword_or_position() {
+        let src = format!(
+            "{GROUP_IMPORT}p = command_group(\"p\", title=\"P\", description=\"P.\")\n\
+             command_group(\"p\", \"Other\")\n\
+             command_group(\"kid\", \"Kid\", \"Kid.\", None, None, \"p\")\n\
+             command_group(\"var\", \"Var\", \"Var.\", None, None, p)\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("p", "P", "P."),
+                group_row("p.kid", "Kid", "Kid."),
+                group_row("p.var", "Var", "Var.")
+            ]
+        );
+        assert_eq!(
+            warnings,
+            [
+                "group `p` is declared more than once; keeping the title from tools.m and \
+                 ignoring the different title in tools.m"
+            ]
+        );
+    }
+
+    /// `d` and `e` pass `None`, which is no argument at all.
+    #[test]
+    fn description_and_docstring_together_fail() {
+        let src = format!(
+            "\"\"\"Doc.\"\"\"\n{GROUP_IMPORT}\
+             a = command_group(\"a\", \"A\", description=\"A.\", docstring=__doc__)\n\
+             b = command_group(\"b\", \"B\", \"B.\", docstring=\"B.\")\n\
+             c = command_group(\"c\", long_description=\"C.\", docstring=__doc__)\n\
+             d = command_group(\"d\", \"D\", None, None, \"D.\")\n\
+             e = command_group(\"e\", \"E\", description=None, docstring=__doc__)\n\
+             f = a.command_group(\"f\", \"F\", \"F.\", None, \"F.\")\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with contradictory arguments (4):\n  \
+             - `a` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both.\n  \
+             - `b` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both.\n  \
+             - `c` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both.\n  \
+             - `a.f` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both."
+        );
+    }
+
+    /// Without a module docstring, `__doc__` is `None`: no contradiction.
+    #[test]
+    fn doc_reference_without_a_module_docstring_is_no_contradiction() {
+        let src = format!(
+            "{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", description=\"CI.\", docstring=__doc__)\n"
+        );
+        let (groups, _) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("ci", "CI", "CI.")]);
+    }
+
+    /// The tree `tests/testing/test_groups.py::test_paths_follow_the_parsers_resolution`
+    /// reads with `toolr.testing._groups`; both must give these paths.
+    #[test]
+    fn group_paths_match_the_testers_port() {
+        let a = "ci = command_group(\"ci\", \"CI\", \"CI.\")\n\
+                 command_group(\"bare\", \"Bare\", \"Bare.\")\n\
+                 x, y = command_group(\"skipped\", \"S\", \"S.\")\n\
+                 z = other(\"ignored\")\nz = 1\npass\n";
+        let b = "img = ci.command_group(\"image\", \"Image\", \"Image.\")\n\
+                 kw = command_group(\"kw\", \"Kw\", \"Kw.\", parent=img)\n\
+                 lit = command_group(\"lit\", \"Lit\", \"Lit.\", parent=\"ci\")\n\
+                 dotted = command_group(\"ci.dot\", \"Dot\", \"Dot.\", parent=\"ignored\")\n\
+                 nested = bare.command_group(\"kid\", \"Kid\", \"Kid.\")\n\
+                 unknown = nope.command_group(\"orphan\", \"Orphan\", \"Orphan.\")\n\
+                 call = make().command_group(\"deep\", \"Deep\", \"Deep.\", parent=\"ci\")\n\
+                 command_group(NAME, \"Name\", \"Name.\")\n";
+        let (groups, _) = redeclared(&[
+            ("tools/a.py", a),
+            ("tools/b.py", b),
+            (
+                "tools/pkg/__init__.py",
+                "command_group(\"pkg\", \"Pkg\", \"Pkg.\")\n",
+            ),
+            (
+                "tools/.hidden/m.py",
+                "command_group(\"hidden\", \"H\", \"H.\")\n",
+            ),
+        ]);
+        let paths: Vec<&str> = groups.iter().map(|g| g.0.as_str()).collect();
+        assert_eq!(
+            paths,
+            [
+                "ci",
+                "bare",
+                "ci.image",
+                "ci.image.kw",
+                "ci.lit",
+                "ci.dot",
+                "bare.kid",
+                "orphan",
+                "ci.deep",
+                "pkg"
+            ]
+        );
+    }
+
+    /// Reported before anything else, as the runtime raises at import.
+    #[test]
+    fn contradictory_arguments_are_reported_first() {
+        let src = format!(
+            "\"\"\"Doc.\"\"\"\n{GROUP_IMPORT}\
+             g = command_group(\"ci.lint\", description=\"L.\", docstring=__doc__)\n\
+             command_group(\"bare\", \"Bare\")\n\
+             @command(group=\"nope\")\ndef f(ctx):\n    \"\"\"F.\"\"\"\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with contradictory arguments (1):\n  \
+             - `ci.lint` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both."
+        );
     }
 
     /// `@command(group="…")` in one file referring to a
@@ -1291,7 +2203,9 @@ def check_run_build(ctx):
     pass
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         assert_eq!(m.commands.len(), 1);
         assert_eq!(m.commands[0].group, "ci");
         assert_eq!(m.commands[0].name, "check-run-build");
@@ -1441,7 +2355,9 @@ def dup(ctx):
         for (name, contents) in files {
             write(tmp.path(), name, contents);
         }
-        let m = build_static_manifest(&tmp.path().join("tools")).expect("expected a build");
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .expect("expected a build")
+            .manifest;
         let mut out: Vec<_> = m.commands.into_iter().map(|c| (c.group, c.name)).collect();
         out.sort();
         out
@@ -1808,7 +2724,9 @@ def other():
             "tools/o.py",
             "from toolr import *\n\n\n@command(group=\"grp\")\ndef star(ctx):\n    \"\"\"Star.\"\"\"\n",
         );
-        let manifest = build_static_manifest_inner(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest_inner(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let names: Vec<_> = manifest
             .commands
             .iter()
@@ -1848,7 +2766,9 @@ def other():
         for (name, contents) in &files {
             write(tmp.path(), name, contents);
         }
-        let manifest = build_static_manifest_inner(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest_inner(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let names: Vec<_> = manifest
             .commands
             .iter()
@@ -1930,7 +2850,7 @@ def second(ctx):
             tmp.path(),
             "tools/dispatcher.py",
             r#""""Django dispatcher."""
-group = command_group("django", "Django")
+group = command_group("django", "Django", "Django.")
 
 @group.command
 def django(ctx):
@@ -1955,7 +2875,9 @@ parent = "django"
 "#,
         );
 
-        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let names: std::collections::BTreeSet<_> =
             manifest.commands.iter().map(|c| c.name.as_str()).collect();
         assert!(names.contains("django"), "names: {names:?}");
@@ -1993,7 +2915,7 @@ parent = "django"
             r#""""Django dispatcher."""
 from toolr.sources import DispatchCommand
 
-group = command_group("django", "Django")
+group = command_group("django", "Django", "Django.")
 
 @group.command
 def django(ctx, *, cpu: str = "1", dispatched: DispatchCommand) -> int:
@@ -2001,7 +2923,9 @@ def django(ctx, *, cpu: str = "1", dispatched: DispatchCommand) -> int:
     return 0
 "#,
         );
-        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let django = manifest
             .commands
             .iter()
@@ -2059,7 +2983,9 @@ def bump(ctx, new_version: str | None) -> None:
     """
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let bump = m.commands.iter().find(|c| c.name == "bump").unwrap();
         assert_eq!(bump.arguments.len(), 1);
         assert_eq!(bump.arguments[0].kind, ArgumentKind::Positional);
@@ -2192,7 +3118,9 @@ def f(ctx, name: str, alias: str | None = None) -> None:
     """
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let f = m.commands.iter().find(|c| c.name == "f").unwrap();
         // `alias` should be Optional (flag), not a positional.
         let kinds: Vec<ArgumentKind> = f.arguments.iter().map(|a| a.kind).collect();
@@ -2244,7 +3172,9 @@ def cmd_b(ctx, *, database: Database = Database.REPLICA) -> None:
 "#,
         );
 
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let cmd_a = m.commands.iter().find(|c| c.name == "cmd-a").unwrap();
         let cmd_b = m.commands.iter().find(|c| c.name == "cmd-b").unwrap();
         let arg_a = cmd_a
@@ -2341,7 +3271,9 @@ def analyse(ctx, *, env: Environment | None = None) -> None:
 "#,
         );
 
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let analyse = m.commands.iter().find(|c| c.name == "analyse").unwrap();
         let arg = analyse.arguments.iter().find(|a| a.name == "env").unwrap();
         assert_eq!(
@@ -2394,7 +3326,9 @@ def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
 "#,
         );
 
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let cmd_c = m.commands.iter().find(|c| c.name == "cmd-c").unwrap();
         let arg = cmd_c
             .arguments
@@ -2527,7 +3461,9 @@ def run(
     """
 "#,
         );
-        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let cmd = manifest.commands.iter().find(|c| c.name == "run").unwrap();
         let ty = |name: &str| {
             cmd.arguments
@@ -3183,7 +4119,9 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
     """
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let wrap = m.commands.iter().find(|c| c.name == "wrap").unwrap();
         let help = |n: &str| &wrap.arguments.iter().find(|a| a.name == n).unwrap().help;
         assert_eq!(
@@ -3338,7 +4276,9 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
                 "verbose: Verbose = False",
             ),
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let read = m.commands.iter().find(|c| c.name == "read").unwrap();
         let arg = read.arguments.iter().find(|a| a.name == "verbose").unwrap();
         assert_eq!(arg.kind, ArgumentKind::Flag);
@@ -3357,7 +4297,9 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
                 "verbose: bool = False, *, dry_run: bool = False",
             ),
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let read = m.commands.iter().find(|c| c.name == "read").unwrap();
         for name in ["verbose", "dry_run"] {
             let arg = read.arguments.iter().find(|a| a.name == name).unwrap();
@@ -3373,7 +4315,7 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
             tmp.path(),
             "tools/dispatcher.py",
             r#""""Django dispatcher."""
-group = command_group("django", "Django")
+group = command_group("django", "Django", "Django.")
 
 @group.command
 def django(ctx):
@@ -3398,7 +4340,9 @@ parent = "django"
 "#,
         );
 
-        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let runserver = manifest
             .commands
             .iter()

@@ -100,4 +100,57 @@ Read [*Scaling command groups across files*](across-files.md) for
 the full picture, including the typo-safety guarantees the
 string-keyed form gives you.
 
+## Declaring a group more than once
+
+A group belongs to its first declaration. Calling `command_group` again
+with the same name and parent returns that group, so several modules can
+each declare `command_group("ci", "CI", "CI commands.")` and share it. A
+later call that passes only the title, `command_group("ci", "CI")`, fetches
+the group without repeating its description.
+
+A later declaration fills a title, description or long description the
+group still has empty, so the call that describes the group needn't come
+first. One with a different title, description or long description doesn't
+change the group. `toolr` keeps the value it has and warns, naming the
+module each kept value came from:
+
+```text
+toolr: warning: group `ci` is declared more than once; keeping the title from tools.ci and ignoring the different title in tools.release
+```
+
+The warning prints on the run that rebuilds the manifest, and `-q`
+suppresses it. `toolr self build-manifest` prints it for a plugin too.
+
+Declare each group's title and description once, and fetch it by title
+everywhere else. A group none of whose declarations passes a description or
+docstring fails the build:
+
+```text
+toolr: command groups with no description (1):
+  - `ci` (declared in tools.ci.build, tools.ci.lint): give one declaration a description or docstring.
+```
+
+Only a string literal, or the module docstring through `__doc__`, shows in
+`toolr <group> --help`. Any other expression, such as a constant, a call
+or an attribute, counts as a description but shows empty, and `__doc__`
+does too in a module that assigns `__doc__`. A later declaration doesn't
+fill a field such an expression gives, and the build doesn't report
+conflicts involving one. A description passed through `**options`, or as
+the `__doc__` of a module without a docstring, doesn't count, and the
+error says so.
+
+A single call can't pass both `docstring=` and `description=` (or
+`long_description=`); the build refuses that too. It reports this only
+when both are a literal or the `__doc__` of a module with a docstring,
+since any other expression may be `None` when the call runs.
+
+"First" means first in file order to `toolr`, which reads `tools/` in
+sorted path order. Python declares in import order instead, so a module
+that imports a later-sorted one can see a different winner in tests. The
+warning names the module of the kept value and of the ignored one, so you
+can tell which declaration to remove.
+
+A plugin can declare a group your `tools/` also declares. Your
+declaration wins, without a warning.
+
 Next: [Arguments →](arguments.md)

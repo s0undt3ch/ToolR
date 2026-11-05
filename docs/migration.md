@@ -5,7 +5,7 @@ Toolr originally let you declare a subgroup by calling
 
 ```python
 docker = command_group("docker", "Docker", "Container utilities")
-docker_image = docker.command_group("image", "Image")
+docker_image = docker.command_group("image", "Image", "Image subcommands")
 ```
 
 That form is **deprecated** and will be removed in **toolr 1.0**.
@@ -38,7 +38,7 @@ Before:
 
 ```python
 docker = command_group("docker", "Docker", "Container utilities")
-docker_image = docker.command_group("image", "Image")
+docker_image = docker.command_group("image", "Image", "Image subcommands")
 
 
 @docker_image.command
@@ -49,7 +49,7 @@ After:
 
 ```python
 docker = command_group("docker", "Docker", "Container utilities")
-docker_image = command_group("docker.image", "Image")
+docker_image = command_group("docker.image", "Image", "Image subcommands")
 
 
 @docker_image.command

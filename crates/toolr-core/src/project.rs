@@ -372,7 +372,7 @@ mod tests {
         std::fs::create_dir_all(&tools).unwrap();
         std::fs::write(
             tools.join("ci.py"),
-            "\"\"\"CI.\"\"\"\ngroup = command_group(\"ci\", \"CI\")\n@group.command\ndef hello(ctx):\n    \"\"\"Hi.\"\"\"\n",
+            "\"\"\"CI.\"\"\"\ngroup = command_group(\"ci\", \"CI\", \"CI.\")\n@group.command\ndef hello(ctx):\n    \"\"\"Hi.\"\"\"\n",
         )
         .unwrap();
 
@@ -417,7 +417,7 @@ mod tests {
         std::fs::create_dir_all(&tools).unwrap();
         std::fs::write(
             tools.join("ci.py"),
-            "\"\"\"CI.\"\"\"\ngroup = command_group(\"ci\", \"CI\")\n",
+            "\"\"\"CI.\"\"\"\ngroup = command_group(\"ci\", \"CI\", \"CI.\")\n",
         )
         .unwrap();
 

@@ -304,7 +304,7 @@ fn returns_static_drift_when_scanned_file_changed_without_a_venv() {
             ),
             (
                 "dispatcher.py",
-                "from toolr import Context, command_group\nfrom toolr.sources import DispatchCommand\n\ngroup = command_group(\"django\", \"Django\")\n\n\n@group.command\ndef django(ctx: Context, *, dispatched: DispatchCommand) -> int:\n    \"\"\"Dispatch.\"\"\"\n",
+                "from toolr import Context, command_group\nfrom toolr.sources import DispatchCommand\n\ngroup = command_group(\"django\", \"Django\", \"Django.\")\n\n\n@group.command\ndef django(ctx: Context, *, dispatched: DispatchCommand) -> int:\n    \"\"\"Dispatch.\"\"\"\n",
             ),
         ],
     );
@@ -317,7 +317,9 @@ fn returns_static_drift_when_scanned_file_changed_without_a_venv() {
     )
     .unwrap();
     let tools = tmp.path().join("tools");
-    let cached = crate::parser::build_static_manifest(&tools).unwrap();
+    let cached = crate::parser::build_static_manifest(&tools)
+        .unwrap()
+        .manifest;
     assert!(cached.commands.iter().any(|c| c.name == "migrate"));
     assert_eq!(
         compare(Some(&cached), &tools, None).unwrap(),

@@ -9,7 +9,7 @@ use tempfile::TempDir;
 const EXAMPLE_PY: &str = r#"
 from toolr import Context, command_group
 
-example = command_group("example", "Example commands")
+example = command_group("example", "Example commands", "Example commands.")
 
 @example.command
 def hello(ctx: Context, name: str = "world") -> None:
@@ -351,7 +351,7 @@ class Environment(enum.StrEnum):
 from toolr import Context, command_group
 from ._common import Environment
 
-group = command_group("metrics", "Metrics")
+group = command_group("metrics", "Metrics", "Metrics.")
 
 @group.command
 def analyse(ctx: Context, *, env: Environment = Environment.PRODUCTION) -> None:
@@ -368,7 +368,7 @@ def analyse(ctx: Context, *, env: Environment = Environment.PRODUCTION) -> None:
 import enum
 from toolr import Context, command_group
 
-group = command_group("job", "Job")
+group = command_group("job", "Job", "Job.")
 
 class Environment(enum.StrEnum):
     PRODUCTION = "production"

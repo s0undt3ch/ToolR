@@ -32,7 +32,7 @@ impl Project {
 from toolr import Context, arg, command_group
 from toolr.types import FilePath
 
-group = command_group("demo", "Demo")
+group = command_group("demo", "Demo", "Demo.")
 
 @group.command
 def hello(ctx: Context, *, cfg: FilePath = "{default}") -> None:  # type: ignore[assignment]

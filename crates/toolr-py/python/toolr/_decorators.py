@@ -24,6 +24,7 @@ from typing import overload
 
 from msgspec import Struct
 from msgspec import field
+from msgspec.structs import force_setattr
 
 from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._docstrings import Docstring
@@ -401,21 +402,29 @@ def _record_standalone_command(
         _get_pending_command_storage().append(PendingCommand(group or "", cli_name, func))
 
 
+class _GroupFields(NamedTuple):
+    """The fields a ``command_group`` call gives its group, in the order they're compared."""
+
+    title: str
+    description: str
+    long_description: str | None
+
+
 def _resolve_group_fields(
     title: str,
     description: str | None,
     long_description: str | None,
     docstring: str | None,
-    *,
-    exists: bool = False,
-) -> tuple[str, str, str | None]:
+) -> _GroupFields:
     """Validate ``command_group`` arguments and resolve the final group fields.
 
-    A description is only required to create a group. For an ``exists`` group a
-    missing one is a re-fetch, so the returned description is empty.
+    A missing description is not an error at runtime: the runner imports only
+    the target command's module chain, so a title-only call may be the first
+    declaration it meets. The manifest build enforces that some declaration
+    describes each group.
 
     Returns:
-        The ``(title, description, long_description)`` the group is created with
+        The fields the group is created with
     """
     if docstring is None and description is None:
         _reject_stripped_docstrings()
@@ -432,11 +441,8 @@ def _resolve_group_fields(
         parsed_docstring = Docstring.parse(docstring)
         if not title:
             title = parsed_docstring.short_description
-        return title, parsed_docstring.full_description, None
-    if description is None and not exists:
-        err_msg = "You must at least pass either the 'docstring' or 'description' argument"
-        raise ValueError(err_msg)
-    return title, description or "", long_description
+        return _GroupFields(title, parsed_docstring.full_description, None)
+    return _GroupFields(title, description or "", long_description)
 
 
 def command_group(
@@ -498,24 +504,21 @@ def command_group(
     collector = _get_command_group_storage()
     group: CommandGroup | None = collector.get(f"{parent}.{name}")
 
-    # Contradictory arguments raise whether or not the group exists; a missing
-    # description only raises when this call would have to create the group.
-    title, description, long_description = _resolve_group_fields(
-        title, description, long_description, docstring, exists=group is not None
-    )
+    # Contradictory arguments raise whether or not the group exists.
+    fields = _resolve_group_fields(title, description, long_description, docstring)
 
     if group is not None:
-        # The first declaration wins; flag a later one that disagrees with it
-        # on a field it actually provided.
-        differing = [
-            field
-            for field, wanted in (
-                ("title", title),
-                ("description", description),
-                ("long_description", long_description),
-            )
-            if wanted and getattr(group, field) != wanted
-        ]
+        # An empty field has no opinion: a later declaration fills it. Of two
+        # non-empty values the first wins, and the later one is logged.
+        differing = []
+        for field, wanted in fields._asdict().items():
+            current = getattr(group, field)
+            if not wanted or current == wanted:
+                continue
+            if current:
+                differing.append(field)
+            else:
+                force_setattr(group, field, wanted)
         if differing:
             log.debug(
                 "Command group '%s' is already declared; ignoring the different %s of this declaration",
@@ -530,11 +533,7 @@ def command_group(
 
     # Create the command group
     collector[f"{parent}.{name}"] = group = CommandGroup(
-        name=name,
-        title=title,
-        description=description,
-        parent=parent,
-        long_description=long_description,
+        name=name, parent=parent, **fields._asdict()
     )
     pending = _get_pending_command_storage()
     waiting = [entry for entry in pending if _group_full_name(entry.group) == group.full_name]

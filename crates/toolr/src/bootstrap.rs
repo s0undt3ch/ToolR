@@ -19,7 +19,9 @@ use toolr_core::manifest::{
     Manifest, ManifestError, Origin, load_manifest, rebuild_if_stale, write_manifest,
 };
 use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
-use toolr_core::parser::{BuildError, build_static_manifest, build_static_manifest_with_venv};
+use toolr_core::parser::{
+    BuildError, BuiltManifest, build_static_manifest, build_static_manifest_with_venv,
+};
 use toolr_core::venv::resolve_venv_path;
 
 /// Bootstrap step that runs before clap parses the user's command.
@@ -35,6 +37,9 @@ use toolr_core::venv::resolve_venv_path;
 /// Does nothing unless `persist`; [`ensure_manifest_fresh`] then builds
 /// the manifest in memory.
 ///
+/// Returns the build's warnings, which the written manifest doesn't keep, or
+/// `None` when it built nothing.
+///
 /// Errors propagate so `main.rs` can print them and exit non-zero — we
 /// intentionally do NOT fall through to an empty manifest, since that's
 /// the buggy old behaviour this task fixes.
@@ -42,19 +47,19 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
     cwd: &Path,
     argv: &[String],
     persist: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<Vec<String>>> {
     let Ok(root) = discover_project_root(cwd) else {
-        return Ok(());
+        return Ok(None);
     };
     let tools = root.join("tools");
     if tools.join(".toolr-manifest.json").is_file() {
-        return Ok(());
+        return Ok(None);
     }
     if should_skip_auto_rebuild(argv) {
-        return Ok(());
+        return Ok(None);
     }
     if !persist {
-        return Ok(());
+        return Ok(None);
     }
 
     let manifest_path = tools.join(".toolr-manifest.json");
@@ -65,16 +70,16 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
         // First-party is always available (pure AST). Add third-party only when
         // a venv already exists — globbing site-packages JSON executes nothing.
         let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
-        let manifest = build_to_persist(&tools, || match venv_dir.as_deref() {
+        let built = build_to_persist(&tools, || match venv_dir.as_deref() {
             Some(v) if v.join("pyvenv.cfg").is_file() => {
                 build_static_manifest_with_venv(&tools, v).map_err(BuildError::into_anyhow)
             }
             _ => build_static_manifest(&tools),
         })?;
-        write_manifest(&manifest_path, &manifest)
-            .with_context(|| format!("writing {}", manifest_path.display()))
-    })?;
-    Ok(())
+        write_manifest(&manifest_path, &built.manifest)
+            .with_context(|| format!("writing {}", manifest_path.display()))?;
+        Ok(built.warnings)
+    })
 }
 
 /// Top-level subcommands toolr itself provides.
@@ -155,7 +160,8 @@ fn first_positional(argv: &[String]) -> Option<&str> {
 ///
 /// Returns the manifest this step validated or rebuilt, so the caller
 /// dispatches against it instead of re-reading a file another toolr
-/// process may be rewriting (#542). `Ok(None)` means the step didn't
+/// process may be rewriting (#542), with the warnings of a build this step
+/// ran; a cached manifest has none. `Ok(None)` means the step didn't
 /// apply (no project, skip-list argv) or the rebuild failed with no
 /// usable cache; the caller then reads the file itself. Errors propagate
 /// from writing the freshly rebuilt manifest and for symlinked modules
@@ -164,7 +170,7 @@ pub(crate) fn ensure_manifest_fresh(
     cwd: &Path,
     argv: &[String],
     persist: bool,
-) -> anyhow::Result<Option<Manifest>> {
+) -> anyhow::Result<Option<BuiltManifest>> {
     let Ok(root) = discover_project_root(cwd) else {
         return Ok(None);
     };
@@ -215,7 +221,7 @@ pub(crate) fn ensure_manifest_fresh(
         match built {
             Ok(fresh) => {
                 if persist {
-                    write_manifest(&manifest_path, &fresh)
+                    write_manifest(&manifest_path, &fresh.manifest)
                         .with_context(|| format!("writing {}", manifest_path.display()))?;
                 }
                 Ok(Some(fresh))
@@ -225,7 +231,7 @@ pub(crate) fn ensure_manifest_fresh(
             Err(e) if is_symlinked_modules(&e) => Err(e),
             Err(e) => {
                 warn_and_keep_cache(&e, cached.is_some());
-                Ok(cached)
+                Ok(cached.map(unwarned))
             }
         }
     };
@@ -238,7 +244,15 @@ pub(crate) fn ensure_manifest_fresh(
             None => None,
         }
     };
-    Ok(outcome.unwrap_or(fresh_cache))
+    Ok(outcome.unwrap_or(fresh_cache.map(unwarned)))
+}
+
+/// A manifest read from disk, whose build's warnings were printed then.
+fn unwarned(manifest: Manifest) -> BuiltManifest {
+    BuiltManifest {
+        manifest,
+        warnings: Vec::new(),
+    }
 }
 
 /// Whether the bootstrap steps should write the manifest for this run:
@@ -254,7 +268,7 @@ fn try_rebuild(
     tools: &Path,
     venv: Option<&Path>,
     cached: Option<&Manifest>,
-) -> anyhow::Result<Manifest> {
+) -> anyhow::Result<BuiltManifest> {
     // `build_static_manifest_inner` already stamps `static_hash` on the
     // returned manifest, so no re-hashing here.
     let mut fresh = match verdict {
@@ -268,10 +282,10 @@ fn try_rebuild(
         FreshnessVerdict::Fresh => unreachable!("Fresh handled by caller"),
     };
     if let Some(cached) = cached {
-        carry_forward_cached_entries(&mut fresh, cached, verdict);
+        carry_forward_cached_entries(&mut fresh.manifest, cached, verdict);
     }
     // Stamp third_party_hash according to the drift axis.
-    fresh.third_party_hash = match verdict {
+    fresh.manifest.third_party_hash = match verdict {
         FreshnessVerdict::StaticDrift => cached
             .map(|c| c.third_party_hash.clone())
             .unwrap_or_else(empty_third_party_hash),

@@ -33,6 +33,11 @@ from attrs import field
 
 from toolr._exc import ToolrError
 from toolr.testing._duplicates import _format_duplicate_commands
+from toolr.testing._groups import _format_contradictory_groups
+from toolr.testing._groups import _format_undescribed_groups
+from toolr.testing._groups import _group_declarations
+from toolr.testing._groups import _is_pruned_dir
+from toolr.testing._groups import _undescribed_groups
 from toolr.testing._shapes import _format_unsupported_commands
 from toolr.testing._shapes import _unsupported_commands
 from toolr.testing._unknown_groups import _escape_control_chars
@@ -41,15 +46,6 @@ from toolr.testing._unknown_groups import _format_unknown_groups
 if TYPE_CHECKING:
     from toolr._decorators import DuplicateCommand
     from toolr._decorators import PendingCommand
-
-
-def _is_pruned_dir(name: str) -> bool:
-    """Whether the ``tools/`` walks skip a directory called ``name``.
-
-    Mirrors ``is_pruned_dir`` in ``crates/toolr-core/src/hash.rs``; change
-    both together.
-    """
-    return name.startswith(".") or name == "__pycache__"
 
 
 def _reject_symlinked_modules(tools_dir: Path) -> None:
@@ -324,10 +320,11 @@ class CommandsTester:
             ValueError: A command under ``tools/`` decorates a nested
                 ``def`` or passes a non-literal ``group=`` or name; a
                 standalone ``@command(group=...)`` names a group that no
-                ``command_group(...)`` declares, or passes ``group=""``; or
-                two functions define the same command in a group. The
-                message is the one the manifest build gives, which fails
-                the same way.
+                ``command_group(...)`` declares, or passes ``group=""``;
+                two functions define the same command in a group; or no
+                ``command_group(...)`` call for a group passes a description
+                or docstring. The message is the one the manifest build
+                gives, which fails the same way.
         """
         tools_dir = self.search_path / "tools"
         # Checked first, as the manifest build does: these hide what the others report.
@@ -348,6 +345,11 @@ class CommandsTester:
                     self.duplicate_command_collector, self.search_path / "tools"
                 )
             )
+        undescribed = _format_undescribed_groups(
+            _undescribed_groups(_group_declarations(tools_dir))
+        )
+        if undescribed is not None:
+            raise ValueError(undescribed)
         return {**self.command_group_collector}
 
     def discover(self) -> None:
@@ -360,11 +362,21 @@ class CommandsTester:
         Raises:
             ToolrError: A ``*.py`` under ``tools/`` is a symlink, which
                 ``toolr`` refuses too. Raised before anything is imported.
+            ValueError: A ``command_group(...)`` call under ``tools/`` passes
+                ``docstring=`` with ``description=`` or ``long_description=``,
+                with the message ``toolr`` gives. Raised before anything is
+                imported.
             ExceptionGroup: One or more ``tools`` modules failed to import,
                 for example because a command has no docstring. Every
                 module is imported first; the group holds each failure.
         """
         _reject_symlinked_modules(self.search_path / "tools")
+        # `command_group` raises these at import; report them all, as `toolr` does.
+        contradictory = _format_contradictory_groups(
+            _group_declarations(self.search_path / "tools")
+        )
+        if contradictory is not None:
+            raise ValueError(contradictory)
         errors = _import_tools_modules(self.search_path / "tools")
         if errors:
             msg = (

@@ -311,7 +311,9 @@ When multiple sources contribute commands with the same name:
 - **Group augmentation:** to add commands to a group of the host repo,
   the plugin declares that group itself (`command_group("ci", ...)`, with
   the same full path). A command in a group the plugin doesn't declare
-  fails the build. The host's title and description win over the
+  fails the build. The plugin's declaration must give the group a
+  description or docstring too, since its own `self build-manifest` reads
+  only the plugin's sources. The host's title and description win over the
   plugin's. Groups are matched by their full path, so a plugin's
   `docker.image` and a local `ci.image` stay separate.
 

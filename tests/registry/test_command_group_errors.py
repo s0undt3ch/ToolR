@@ -15,12 +15,15 @@ from toolr import command_group
 from toolr._decorators import _get_command_group_storage
 
 
-def test_command_group_without_description_or_docstring():
-    """Test command_group error when neither description nor docstring provided."""
-    with pytest.raises(
-        ValueError, match="You must at least pass either the 'docstring' or 'description' argument"
-    ):
-        command_group("test", "Test Group")
+def test_command_group_without_description_or_docstring_creates_the_group():
+    """A missing description is the manifest build's concern, not the runtime's."""
+    group = command_group("test", "Test Group")
+
+    assert group.title == "Test Group"
+    assert group.description == ""
+    assert group.long_description is None
+    assert _get_command_group_storage()["tools.test"] is group
+    assert command_group("test", "Test Group") is group
 
 
 def test_command_group_with_both_docstring_and_description():
@@ -155,11 +158,17 @@ def test_package_init_declares_and_submodule_refetches_by_title(make_package):
     assert _get_command_group_storage()["tools.ci"] is declared.group
 
 
-def test_submodule_imported_first_cannot_create_the_group_from_a_title(make_package):
+def test_title_only_submodule_imports_alone_when_a_sibling_creates_the_group(make_package):
     make_package(
         {
             "pkgtools/__init__.py": "",
-            "pkgtools/lint.py": """
+            "pkgtools/ci/__init__.py": "",
+            "pkgtools/ci/a.py": """
+                from toolr import command_group
+
+                group = command_group("ci", "CI", "Continuous integration.")
+            """,
+            "pkgtools/ci/lint.py": """
                 from toolr import command_group
 
                 group = command_group("ci", "CI")
@@ -167,8 +176,11 @@ def test_submodule_imported_first_cannot_create_the_group_from_a_title(make_pack
         }
     )
 
-    with pytest.raises(ValueError, match="You must at least pass"):
-        importlib.import_module("pkgtools.lint")
+    lint = importlib.import_module("pkgtools.ci.lint")
+
+    assert "pkgtools.ci.a" not in sys.modules
+    assert lint.group is _get_command_group_storage()["tools.ci"]
+    assert lint.group.description == ""
 
 
 def test_identical_redeclaration_returns_the_group_without_a_conflict_record(
@@ -214,3 +226,44 @@ def test_conflicting_redeclaration_names_every_differing_field(caplog: pytest.Lo
     assert "title" in message
     assert "description" in message
     assert "long_description" in message
+
+
+def test_later_description_fills_an_empty_one(caplog: pytest.LogCaptureFixture):
+    """An empty description has no opinion, so a later one fills it."""
+    first = command_group("ci", "CI")
+    explicit = command_group("cd", "CD", "")
+
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
+        again = command_group("ci", "CI", "Continuous integration.")
+        command_group("cd", "CD", "Continuous delivery.")
+        command_group("ci", "CI", "Something else.")
+
+    assert again is first
+    assert first.description == "Continuous integration."
+    assert explicit.description == "Continuous delivery."
+    conflicts = [r.getMessage() for r in caplog.records if "ignoring" in r.getMessage()]
+    expected = (
+        "Command group 'tools.ci' is already declared; ignoring the different description "
+        "of this declaration"
+    )
+    assert conflicts == [expected]
+
+
+def test_later_title_and_long_description_fill_empty_ones(caplog: pytest.LogCaptureFixture):
+    first = command_group("ci", description="d")
+
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
+        command_group("ci", "CI", "d", long_description="More.")
+
+    assert first.title == "CI"
+    assert first.long_description == "More."
+    assert not [r for r in caplog.records if "ignoring" in r.getMessage()]
+
+
+def test_later_docstring_fills_an_empty_description():
+    first = command_group("ci", "CI")
+
+    command_group("ci", docstring="CI\n\nContinuous integration.")
+
+    assert first.title == "CI"
+    assert first.description == "CI\n\nContinuous integration."

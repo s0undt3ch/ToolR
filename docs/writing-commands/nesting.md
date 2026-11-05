@@ -34,7 +34,7 @@ No fixed depth limit — `command_group("a.b.c.d")` works just as well.
 When the dotted name reads awkwardly, spell the parent out explicitly:
 
 ```python
-command_group("docker", title="Docker")
+command_group("docker", title="Docker", description="Container utilities")
 image = command_group("image", parent="docker", description="Image subcommands")
 
 

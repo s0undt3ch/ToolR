@@ -57,4 +57,6 @@ pub use command::{
 pub use docstrings::{Docstring, Example, ParseError, SimpleDocstringParser};
 
 #[cfg(feature = "full")]
-pub use build_fragment::{BuildFragmentError, build_third_party_fragment, serialise_fragment};
+pub use build_fragment::{
+    BuildFragmentError, BuiltFragment, build_third_party_fragment, serialise_fragment,
+};

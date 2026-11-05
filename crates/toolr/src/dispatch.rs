@@ -469,10 +469,17 @@ fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCod
 
     let output_path = resolve_output_path(matches, &resolved.source_dir);
 
-    let fragment = toolr_core::build_fragment::build_third_party_fragment(
+    let built = toolr_core::build_fragment::build_third_party_fragment(
         &resolved.source_dir,
         &resolved.package_name,
     )?;
+    let fragment = built.fragment;
+    for warning in &built.warnings {
+        eprintln!(
+            "toolr: warning: {}",
+            toolr_core::text::strip_control_chars(warning)
+        );
+    }
     let serialised = toolr_core::build_fragment::serialise_fragment(&fragment)?;
 
     if matches.get_flag("check") {
@@ -736,10 +743,17 @@ fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
     let tools = root.join("tools");
     let path = tools.join(".toolr-manifest.json");
     let _lock = toolr_core::manifest::acquire_rebuild_lock(&path);
-    let manifest = toolr_core::hash::build_to_persist(&tools, || {
+    let built = toolr_core::hash::build_to_persist(&tools, || {
         toolr_core::parser::build_static_manifest(&tools)
     })?;
+    let manifest = built.manifest;
     toolr_core::manifest::write_manifest(&path, &manifest)?;
+    for warning in &built.warnings {
+        eprintln!(
+            "toolr: warning: {}",
+            toolr_core::text::strip_control_chars(warning)
+        );
+    }
     println!(
         "toolr: wrote {} groups / {} commands to {}",
         manifest.groups.len(),

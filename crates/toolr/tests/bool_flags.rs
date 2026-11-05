@@ -28,7 +28,7 @@ fn bool_true_default_fails_help_with_rewrite() {
     let tmp = project_with(
         r#"from toolr import Context, command_group
 
-group = command_group("example", "Example")
+group = command_group("example", "Example", "Example.")
 
 @group.command
 def run(ctx: Context, *, colour: bool = True) -> None:
@@ -53,7 +53,7 @@ fn no_prefixed_flag_shows_in_help() {
     let tmp = project_with(
         r#"from toolr import Context, command_group
 
-group = command_group("example", "Example")
+group = command_group("example", "Example", "Example.")
 
 @group.command
 def run(ctx: Context, *, no_colour: bool = False) -> None:
@@ -73,7 +73,7 @@ fn bool_alias_is_a_flag_in_help() {
 
 from toolr import Context, arg, command_group
 
-group = command_group("example", "Example")
+group = command_group("example", "Example", "Example.")
 
 Verbose = Annotated[bool, arg(env="V")]
 
@@ -119,7 +119,7 @@ fn bool_alias_flag_reads_its_env_var() {
 
 from toolr import Context, arg, command_group
 
-group = command_group("example", "Example")
+group = command_group("example", "Example", "Example.")
 
 Verbose = Annotated[bool, arg(env="V")]
 

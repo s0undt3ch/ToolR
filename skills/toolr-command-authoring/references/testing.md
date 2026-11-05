@@ -64,10 +64,11 @@ Raises:
     ValueError: A command under ``tools/`` decorates a nested
         ``def`` or passes a non-literal ``group=`` or name; a
         standalone ``@command(group=...)`` names a group that no
-        ``command_group(...)`` declares, or passes ``group=""``; or
-        two functions define the same command in a group. The
-        message is the one the manifest build gives, which fails
-        the same way.
+        ``command_group(...)`` declares, or passes ``group=""``;
+        two functions define the same command in a group; or no
+        ``command_group(...)`` call for a group passes a description
+        or docstring. The message is the one the manifest build
+        gives, which fails the same way.
 
 ```
 
@@ -87,6 +88,10 @@ register commands at module import time.
 Raises:
     ToolrError: A ``*.py`` under ``tools/`` is a symlink, which
         ``toolr`` refuses too. Raised before anything is imported.
+    ValueError: A ``command_group(...)`` call under ``tools/`` passes
+        ``docstring=`` with ``description=`` or ``long_description=``,
+        with the message ``toolr`` gives. Raised before anything is
+        imported.
     ExceptionGroup: One or more ``tools`` modules failed to import,
         for example because a command has no docstring. Every
         module is imported first; the group holds each failure.

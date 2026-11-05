@@ -45,7 +45,7 @@ fn help_works_with_no_venv_and_shows_first_party_commands() {
     .unwrap();
     std::fs::write(
         tools.join("greet.py"),
-        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\", \"Greetings.\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
     )
     .unwrap();
 
@@ -73,7 +73,7 @@ fn help_builds_statically_with_an_existing_in_tree_venv() {
     .unwrap();
     std::fs::write(
         tools.join("greet.py"),
-        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\", \"Greetings.\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
     )
     .unwrap();
     // An existing venv (only `pyvenv.cfg` needed) so bootstrap takes the
@@ -106,7 +106,7 @@ fn manifest_rebuilds_when_a_venv_appears() {
     .unwrap();
     std::fs::write(
         tools.join("greet.py"),
-        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\", \"Greetings.\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
     )
     .unwrap();
 
@@ -172,7 +172,7 @@ fn v1_plugin_is_skipped_with_a_warning() {
     .unwrap();
     std::fs::write(
         tools.join("greet.py"),
-        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\", \"Greetings.\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
     )
     .unwrap();
     let venv = tools.join(".venv");

@@ -17,7 +17,7 @@ const COMMAND_COUNT: usize = 300;
 fn fixtures_py() -> String {
     let mut src = String::from(
         "from toolr import Context, command_group\n\n\
-         fixtures = command_group(\"fixtures\", \"Fixture commands\")\n",
+         fixtures = command_group(\"fixtures\", \"Fixture commands\", \"Fixture commands.\")\n",
     );
     for i in 0..COMMAND_COUNT {
         src.push_str(&format!(

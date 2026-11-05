@@ -22,7 +22,8 @@ use toolr_core::parser::build_static_manifest;
 fn examples_manifest_matches_committed_snapshot() {
     let examples = examples_dir();
     let manifest = build_static_manifest(&examples.join("tools"))
-        .expect("building the example tools/ manifest");
+        .expect("building the example tools/ manifest")
+        .manifest;
     let actual = serialise(&manifest);
     let snapshot_path = examples.join("toolr-manifest.json");
     let expected = fs::read_to_string(&snapshot_path)
@@ -43,7 +44,8 @@ fn examples_manifest_matches_committed_snapshot() {
 fn regenerate() {
     let examples = examples_dir();
     let manifest = build_static_manifest(&examples.join("tools"))
-        .expect("building the example tools/ manifest");
+        .expect("building the example tools/ manifest")
+        .manifest;
     let snapshot_path = examples.join("toolr-manifest.json");
     let body = format!("{}\n", serialise(&manifest));
     fs::write(&snapshot_path, body)

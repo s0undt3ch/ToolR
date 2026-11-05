@@ -27,12 +27,21 @@ pub enum BuildFragmentError {
     Build(#[from] BuildError),
 }
 
+/// A plugin's fragment and its build's warnings, which the fragment doesn't
+/// keep.
+#[derive(Debug)]
+pub struct BuiltFragment {
+    pub fragment: ManifestFragment,
+    pub warnings: Vec<String>,
+}
+
 /// Build a `ManifestFragment` for `package_name` by AST-walking
-/// `source_dir`. See spec `specs/archive/2026/2026-05-22-rust-build-manifest-design.md`.
+/// `source_dir`.
+/// See spec `specs/archive/2026/2026-05-22-rust-build-manifest-design.md`.
 pub fn build_third_party_fragment(
     source_dir: &Path,
     package_name: &str,
-) -> Result<ManifestFragment, BuildFragmentError> {
+) -> Result<BuiltFragment, BuildFragmentError> {
     // Reject missing dirs and namespace packages up front.
     if !source_dir.is_dir() {
         return Err(BuildFragmentError::MissingSourceDir {
@@ -45,7 +54,8 @@ pub fn build_third_party_fragment(
         });
     }
 
-    let (mut all_groups, mut all_commands) = build_commands(source_dir, package_name)?;
+    let built = build_commands(source_dir, package_name)?;
+    let (mut all_groups, mut all_commands) = (built.groups, built.commands);
 
     if all_commands.is_empty() {
         return Err(BuildFragmentError::EmptyPackage {
@@ -73,7 +83,10 @@ pub fn build_third_party_fragment(
         commands: all_commands,
     };
     fragment.toolr_schema_version = fragment.min_schema();
-    Ok(fragment)
+    Ok(BuiltFragment {
+        fragment,
+        warnings: built.warnings,
+    })
 }
 
 /// Serialise a fragment to the canonical on-disk form: 2-space indent,
@@ -241,7 +254,7 @@ def hello_command(ctx: Context, name: str = "World") -> None:
 "#,
         );
 
-        let fragment = build_third_party_fragment(&pkg, "mypkg").unwrap();
+        let fragment = build_third_party_fragment(&pkg, "mypkg").unwrap().fragment;
         assert_eq!(
             fragment.toolr_schema_version,
             crate::manifest::FRAGMENT_SHAPE_SCHEMA
@@ -295,7 +308,9 @@ def hello_command(ctx: Context, name: str = "World") -> None:
             include_str!("../../../examples/plugin-package/src/toolr_example_plugin/commands.py"),
         );
 
-        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin").unwrap();
+        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin")
+            .unwrap()
+            .fragment;
 
         // Load the committed reference fragment.
         let reference_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -330,7 +345,7 @@ def hello_command(ctx: Context, name: str = "World") -> None:
             "own.py",
             r#""""Own."""
 from toolr import command_group
-g = command_group("own", "Own")
+g = command_group("own", "Own", "Own.")
 
 @g.command
 def ours(ctx):
@@ -345,7 +360,7 @@ def ours(ctx):
             "sub/__init__.py",
             r#""""Sub."""
 from toolr import command_group
-g = command_group("subg", "Sub Group")
+g = command_group("subg", "Sub Group", "Sub Group.")
 
 @g.command
 def subcmd(ctx):
@@ -354,7 +369,7 @@ def subcmd(ctx):
 "#,
         );
 
-        let fragment = build_third_party_fragment(&pkg, "mypkg").unwrap();
+        let fragment = build_third_party_fragment(&pkg, "mypkg").unwrap().fragment;
         let group_names: Vec<&str> = fragment.groups.iter().map(|g| g.name.as_str()).collect();
         assert!(
             group_names.contains(&"own"),
@@ -414,7 +429,7 @@ def subcmd(ctx):
         write(
             &pkg,
             "cmds.py",
-            r#"group = command_group("grp", "Grp")
+            r#"group = command_group("grp", "Grp", "Grp.")
 
 @group.command("positional", name="keyword")
 def do_thing(ctx):
@@ -460,7 +475,9 @@ def do_thing(ctx):
             include_str!("../../../examples/plugin-package/src/toolr_example_plugin/commands.py"),
         );
 
-        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin").unwrap();
+        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin")
+            .unwrap()
+            .fragment;
         let serialised = serialise_fragment(&fragment).expect("serialise");
 
         let reference = std::fs::read_to_string(
@@ -503,7 +520,7 @@ from toolr import command_group
 
 from .types import Mode
 
-group = command_group("cf", "Cross-file")
+group = command_group("cf", "Cross-file", "Cross-file.")
 
 @group.command
 def run(ctx: Context, mode: Mode = "fast") -> None:
@@ -517,7 +534,7 @@ def run(ctx: Context, mode: Mode = "fast") -> None:
 "#,
         );
 
-        let fragment = build_third_party_fragment(&pkg, "xpkg").unwrap();
+        let fragment = build_third_party_fragment(&pkg, "xpkg").unwrap().fragment;
         let cmd = fragment
             .commands
             .iter()

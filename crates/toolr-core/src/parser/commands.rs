@@ -98,7 +98,7 @@ pub fn extract_commands(
 pub fn binding_vars(bindings: &[GroupBinding], global_vars: &GlobalVars) -> GlobalVars {
     let mut by_var = global_vars.clone();
     for b in bindings {
-        by_var.insert(b.var.clone(), b.group.full_path());
+        by_var.insert(b.var.clone(), b.full_path());
     }
     by_var
 }
@@ -751,7 +751,7 @@ def generate_build_matrix(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -807,7 +807,7 @@ def bare_function(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -835,7 +835,7 @@ def hello(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -864,7 +864,7 @@ def check_run_build(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -895,7 +895,7 @@ def check_snippets(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -927,7 +927,7 @@ def check_snippets(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -965,7 +965,7 @@ def go(ctx, items: list[str] | None = None):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.repro",
@@ -1005,7 +1005,7 @@ def go(ctx, name: str, /, count: int, *rest: int):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.repro",
@@ -1054,7 +1054,7 @@ def go(ctx, pair: tuple[str, int] | None = None):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.repro",
@@ -1165,7 +1165,7 @@ def hello(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1193,7 +1193,7 @@ def do_thing(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1243,7 +1243,7 @@ def do_thing(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1293,7 +1293,7 @@ def collect_data(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1344,7 +1344,7 @@ def do_thing(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1398,7 +1398,7 @@ def hello(ctx, name="world"):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "", &HashMap::new());
+        let bindings = extract_groups(&m, None, &HashMap::new());
         let commands = extract_commands(
             &m,
             "tools.ci",

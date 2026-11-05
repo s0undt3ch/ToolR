@@ -121,7 +121,7 @@ impl VenvFixture {
     }
 }
 
-pub const GREET: &str = "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n";
+pub const GREET: &str = "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\", \"Greetings.\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n";
 
 /// A toolr project with one local group and an in-tree venv for plugin fragments.
 pub struct Project {
@@ -232,7 +232,7 @@ pub fn hostile_repo(sentinel: &Path) -> TempDir {
         tools.join("hello.py"),
         format!(
             "\"\"\"Hi.\"\"\"\nopen({sentinel_str:?}, \"w\").write(\"pwned\")\n\
-             from toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n\
+             from toolr import command_group\ngroup = command_group(\"hello\", \"Hi\", \"Hi.\")\n\
              @group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n"
         ),
     )
