@@ -14,6 +14,10 @@ first, because the parity corpus from #674 is not in this stack yet.
   user-facing signal. The parity test only requires that both sides report the same group and fields.
 - A re-declaration without a description (`command_group("ci", "CI")`) fetches the group and has no
   opinion on the description, on both sides. Corpus case `ok_group_title_only_refetch`.
+- Amended with #678: an empty title or description, passed or not, has no opinion either, so a later
+  declaration fills it on both sides (Python fills `long_description` too). Only two non-empty values
+  that differ conflict. Corpus cases `ok_group_described_after_title_only` and
+  `ok_group_titled_after_description_only`.
 - Plugin fragment builds (`build_commands`) drop the warnings: they are for the local `tools/` build.
 - The first run can build twice (bootstrap, then the freshness step); `main.rs` prints a warning both
   builds give once.

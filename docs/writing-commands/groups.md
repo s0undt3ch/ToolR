@@ -108,19 +108,18 @@ each declare `command_group("ci", "CI", "CI commands.")` and share it. A
 later call that passes only the title, `command_group("ci", "CI")`, fetches
 the group without repeating its description.
 
-A later declaration with a different title or description doesn't change
-the group. `toolr` keeps the first one and warns when it rebuilds the
-manifest:
+A later declaration fills a title or description the group still has
+empty, so the call that describes the group needn't come first. One with a
+different title or description doesn't change the group. `toolr` keeps the
+first one and warns when it rebuilds the manifest:
 
 ```text
 toolr: warning: group `ci` is declared more than once; keeping the one in tools.ci and ignoring the different title in tools.release
 ```
 
 Declare each group's title and description once, and fetch it by title
-everywhere else. The title-only calls can come before the one that
-describes the group: `toolr` takes the description from whichever
-declaration gives it. A group none of whose declarations passes a
-description or docstring fails the build:
+everywhere else. A group none of whose declarations passes a description or
+docstring fails the build:
 
 ```text
 toolr: command groups with no description (1):
