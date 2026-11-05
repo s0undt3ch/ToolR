@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from toolr.utils._console import ConsoleVerbosity
@@ -36,7 +37,7 @@ def test_setup_logging_normal_level():
 
 def test_setup_logging_with_timestamps():
     """Test setup_logging with timestamps enabled."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(3)]
+    mock_handlers = [MagicMock() for _ in range(3)]
 
     with (
         patch("logging.root.handlers", mock_handlers),
@@ -54,7 +55,7 @@ def test_setup_logging_with_timestamps():
 
 def test_setup_logging_without_timestamps():
     """Test setup_logging with timestamps disabled."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(3)]
+    mock_handlers = [MagicMock() for _ in range(3)]
 
     with (
         patch("logging.root.handlers", mock_handlers),
@@ -72,7 +73,7 @@ def test_setup_logging_without_timestamps():
 
 def test_setup_logging_default_timestamps():
     """Test setup_logging with default timestamps parameter."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(3)]
+    mock_handlers = [MagicMock() for _ in range(3)]
 
     with (
         patch("logging.root.handlers", mock_handlers),
@@ -90,7 +91,7 @@ def test_setup_logging_default_timestamps():
 
 def test_setup_logging_handles_all_handlers():
     """Test that setup_logging affects all root handlers."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(5)]
+    mock_handlers = [MagicMock() for _ in range(5)]
 
     with (
         patch("logging.root.handlers", mock_handlers),
@@ -115,7 +116,7 @@ def test_setup_logging_verbosity_override():
 
 def test_setup_logging_formatter_override():
     """Test that setup_logging properly overrides previous formatter settings."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(3)]
+    mock_handlers = [MagicMock() for _ in range(3)]
 
     with (
         patch("logging.root.handlers", mock_handlers),

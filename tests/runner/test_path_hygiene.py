@@ -19,8 +19,6 @@ So ``run()`` no longer chdirs or warns; this module only covers the append.
 from __future__ import annotations
 
 import contextvars
-import os
-import sys
 import textwrap
 from pathlib import Path
 
@@ -92,22 +90,14 @@ def test_run_imports_tools_from_a_subdirectory(
     # only the append; it does not assert cwd.
     repo = _make_repo(tmp_path)
     sub = repo / "tools"
-    saved_path = sys.path[:]
-    saved_cwd = os.getcwd()
-    try:
-        monkeypatch.chdir(sub)
-        spec = _spec(repo, "tools.probe", "record")
-        # copy_context() keeps `run()`'s `_current_ctx.set()` out of the test
-        # session's own context, where it would leak into later tests.
-        rc = contextvars.copy_context().run(run, spec)
-        assert rc == 0
-        # Deferred import is intentional: the `tools` package is created at
-        # runtime and only becomes importable after `run()` appends repo_root.
-        import tools.probe  # noqa: PLC0415 — created at runtime
+    monkeypatch.chdir(sub)
+    spec = _spec(repo, "tools.probe", "record")
+    # copy_context() keeps `run()`'s `_current_ctx.set()` out of the test
+    # session's own context, where it would leak into later tests.
+    rc = contextvars.copy_context().run(run, spec)
+    assert rc == 0
+    # Deferred import is intentional: the `tools` package is created at
+    # runtime and only becomes importable after `run()` appends repo_root.
+    import tools.probe  # noqa: PLC0415 — created at runtime
 
-        assert tools.probe.RAN.get("ok") is True
-    finally:
-        sys.path[:] = saved_path
-        os.chdir(saved_cwd)
-        sys.modules.pop("tools.probe", None)
-        sys.modules.pop("tools", None)
+    assert tools.probe.RAN.get("ok") is True

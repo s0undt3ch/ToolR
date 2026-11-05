@@ -42,6 +42,14 @@ def _clean_registry() -> Iterator[None]:
     storage.update(saved)
 
 
+@pytest.fixture(autouse=True)
+def _restore_cwd() -> Iterator[None]:
+    """Put the process back in its starting directory after every test."""
+    original = os.getcwd()
+    yield
+    os.chdir(original)
+
+
 @pytest.fixture(scope="session")
 def _uv_cache_dir() -> str | None:
     """The real uv cache to pin, resolved before any test moves `XDG_CACHE_HOME`.
