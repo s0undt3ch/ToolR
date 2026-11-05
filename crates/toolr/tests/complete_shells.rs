@@ -667,7 +667,7 @@ fn bash_path_under_an_unset_variable_offers_nothing() {
 fn bash_path_variable_named_like_a_script_local_reads_the_users_value() {
     for bash in bashes() {
         let fx = fixture();
-        for name in ["value", "name", "cur", "var", "mode"] {
+        for name in ["value", "name", "cur", "var", "mode", "raw_cur", "breaks"] {
             let script = format!("{name}=$PWD\n{}", print_script("bash"));
             let cur = format!("${name}/fi");
             let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, Split::Whole);
@@ -693,6 +693,55 @@ fn bash_path_variable_holding_a_tilde_is_not_tilde_expanded() {
         assert_eq!(got, vec!["$XX/lit.txt", "$XX/sub/"], "{bash}");
         let run = run_bash_path_split(&bash, &script, &fx, "--out", "$XX/", Split::Whole);
         assert_eq!(run.reply, vec!["$XX/sub/"], "{bash}");
+    }
+}
+
+/// A value starting `~user`-style stays a literal directory, not a home lookup.
+#[test]
+fn bash_path_variable_holding_a_tilde_user_name_is_a_literal_directory() {
+    for bash in bashes() {
+        let fx = fixture();
+        let literal = fx.tmp.path().join("~u");
+        std::fs::create_dir_all(literal.join("sub")).unwrap();
+        std::fs::write(literal.join("lit.txt"), "").unwrap();
+        let script = format!("XX='~u'\n{}", print_script("bash"));
+        let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "$XX/", Split::Whole);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        let mut got = run.reply.clone();
+        got.sort();
+        assert_eq!(got, vec!["$XX/lit.txt", "$XX/sub/"], "{bash}");
+    }
+}
+
+/// A relative value resolves against the working directory.
+#[test]
+fn bash_path_variable_holding_a_relative_path_lists_it() {
+    for bash in bashes() {
+        let fx = fixture();
+        let rel = fx.tmp.path().join("rel");
+        std::fs::create_dir_all(rel.join("sub")).unwrap();
+        std::fs::write(rel.join("lit.txt"), "").unwrap();
+        let script = format!("R=rel\n{}", print_script("bash"));
+        let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "$R/", Split::Whole);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        let mut got = run.reply.clone();
+        got.sort();
+        assert_eq!(got, vec!["$R/lit.txt", "$R/sub/"], "{bash}");
+    }
+}
+
+/// Inside the completion function `$_` is its own last argument, not the user's, so `$_/` gets no
+/// variable treatment and must not list the filesystem root.
+#[test]
+fn bash_path_underscore_is_not_treated_as_a_variable() {
+    for bash in bashes() {
+        let fx = fixture();
+        let script = print_script("bash");
+        for cur in ["$_/", "${_}/"] {
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", cur, Split::Whole);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
+        }
     }
 }
 

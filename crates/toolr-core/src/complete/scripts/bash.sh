@@ -123,10 +123,12 @@ _toolr_complete_paths() {
     COMPREPLY=()
     # A leading `$NAME/` stays as typed, like native bash; only its value is listed and tested.
     # `${!_toolr_var}` reads a validated name, so nothing else in the word is expanded.
+    # `$_` is excluded: inside this function it is the last argument, not the user's.
     # Every local is `_toolr_`-prefixed: `${!...}` is dynamically scoped and would read a local
     # (here or in `_toolr_complete`) that shares the user's variable name.
     if [[ $_toolr_raw_cur =~ $_toolr_var_re \
-        && ( -z $_toolr_raw_prefix || $_toolr_raw_prefix == "${BASH_REMATCH[1]}"/* ) ]]; then
+        && ( -z $_toolr_raw_prefix || $_toolr_raw_prefix == "${BASH_REMATCH[1]}"/* ) \
+        && ${BASH_REMATCH[2]}${BASH_REMATCH[3]} != _ ]]; then
         _toolr_bare=${BASH_REMATCH[1]}
         _toolr_var=${BASH_REMATCH[2]}${BASH_REMATCH[3]}
         [[ -n ${!_toolr_var+set} ]] || return 0
