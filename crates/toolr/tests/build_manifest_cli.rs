@@ -344,3 +344,34 @@ fn package_positional_finds_package_in_either_venv_layout() {
         );
     }
 }
+
+/// A plugin build prints its group re-declaration warnings, and still
+/// succeeds, whether it writes the fragment or checks it.
+#[test]
+fn build_prints_group_conflict_warnings() {
+    let tmp = TempDir::new().unwrap();
+    let pkg = minimal_plugin(tmp.path(), "warnpkg");
+    write(
+        &pkg,
+        "other.py",
+        "from toolr import command_group\n\ncommand_group(\"g\", \"Other\")\n",
+    );
+    for check in [false, true] {
+        let output = common::toolr()
+            .args(["self", "build-manifest", "--source-dir"])
+            .arg(&pkg)
+            .args(["--package", "warnpkg"])
+            .args(check.then_some("--check"))
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.starts_with(
+                "toolr: warning: group `g` is declared more than once; keeping the title from \
+                 warnpkg.commands and ignoring the different title in warnpkg.other\n"
+            ),
+            "{stderr}"
+        );
+    }
+}
