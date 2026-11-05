@@ -44,7 +44,11 @@ def _clean_registry() -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def _restore_cwd() -> Iterator[None]:
-    """Put the process back in its starting directory after every test."""
+    """Put the process back in its starting directory after every test.
+
+    Guards against tests, and the code they call, that `os.chdir` without `monkeypatch`, so test
+    authors need no chdir cleanup of their own.
+    """
     original = os.getcwd()
     yield
     os.chdir(original)

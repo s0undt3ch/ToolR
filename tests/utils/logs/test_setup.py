@@ -16,18 +16,18 @@ from toolr.utils._logs import setup_logging
 
 LOGGER = logging.getLogger("toolr.tests.setup_logging")
 TIMESTAMPED_LINE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\] hello\n$")
-# The timestamp formatter blanks a timestamp repeating the previous record's.
+# The timestamp formatter is shared by every handler and blanks a timestamp repeating the previous
+# record's, so only the first handler to format a record stamps it.
 TIMESTAMPED_OR_BLANKED_LINE = re.compile(r"^(\[\d{2}:\d{2}:\d{2}\] | {11})hello\n$")
 
 
 @pytest.fixture(autouse=True)
-def restore_root_logging(monkeypatch):
-    """Undo what setup_logging changes on the root logger and its handlers."""
-    monkeypatch.setattr(logging.root, "level", logging.root.level)
-    for handler in logging.root.handlers:
-        monkeypatch.setattr(handler, "formatter", handler.formatter)
-    # A never-matching "previous timestamp": with None, the formatter's first
-    # record is always blanked, as format() primes _last_timestamp itself.
+def _reset_timestamp_formatter(monkeypatch):
+    """Stop DuplicateTimesFormatter.format blanking the first record's timestamp.
+
+    With `_last_timestamp` None, format() primes it itself and blanks that record; a
+    never-matching value makes the first record stamped whatever ran before.
+    """
     monkeypatch.setattr(TIMESTAMP_FORMATTER, "_last_timestamp", "[xx:xx:xx] ")
 
 
@@ -63,8 +63,7 @@ def test_setup_logging_verbosity_override():
 
 
 def test_setup_logging_with_timestamps(caplog, monkeypatch):
-    # The formatter is shared, so only the first handler to format a record
-    # stamps it; leave caplog's handler as the only one.
+    # Leave caplog's handler as the only one, so it is the first to stamp.
     monkeypatch.setattr(logging.root, "handlers", [caplog.handler])
     setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=True)
 
@@ -74,18 +73,13 @@ def test_setup_logging_with_timestamps(caplog, monkeypatch):
     assert TIMESTAMPED_LINE.match(caplog.text)
 
 
-def test_setup_logging_without_timestamps(caplog):
-    setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=False)
-
-    assert logging.root.level == logging.INFO
-    assert caplog.handler.formatter is NO_TIMESTAMP_FORMATTER
-    LOGGER.info("hello")
-    assert caplog.text == "hello\n"
-
-
-def test_setup_logging_default_timestamps(caplog):
-    """Timestamps default to off."""
-    setup_logging(verbosity=ConsoleVerbosity.NORMAL)
+@pytest.mark.parametrize(
+    "kwargs",
+    [pytest.param({"timestamps": False}, id="explicit-off"), pytest.param({}, id="default-off")],
+)
+def test_setup_logging_without_timestamps(caplog, kwargs):
+    """Timestamps are off when asked for and by default."""
+    setup_logging(verbosity=ConsoleVerbosity.NORMAL, **kwargs)
 
     assert logging.root.level == logging.INFO
     assert caplog.handler.formatter is NO_TIMESTAMP_FORMATTER
@@ -104,7 +98,6 @@ def test_setup_logging_handles_all_handlers(monkeypatch):
     for handler in logging.root.handlers:
         assert handler.formatter is TIMESTAMP_FORMATTER
     LOGGER.info("hello")
-    # All three share one formatter, so only the first stamps the record.
     assert TIMESTAMPED_LINE.match(streams[0].getvalue())
     for stream in streams[1:]:
         assert TIMESTAMPED_OR_BLANKED_LINE.match(stream.getvalue())
