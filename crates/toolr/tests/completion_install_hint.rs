@@ -30,8 +30,9 @@ impl Host {
         self.tmp.path().join(rel)
     }
 
-    fn plant_loader(&self, rel: &str) {
-        let path = self.path("sysroot").join(rel);
+    /// Plant a loader at `rel` under `root`, a directory below the tempdir.
+    fn plant_loader(&self, root: &str, rel: &str) {
+        let path = self.path(root).join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, "# loader\n").unwrap();
     }
@@ -65,12 +66,10 @@ fn succeeded(args: &[&str], out: &Output) -> (String, String) {
 }
 
 /// Quoted the way the binary quotes it: temp dirs can hold spaces (a
-/// `TMPDIR` with one) or backslashes (Windows).
+/// `TMPDIR` with one) or backslashes (Windows). The full sentence is
+/// checked by the unit tests in `dispatch.rs`.
 fn source_line(path: &Path) -> String {
-    format!(
-        "add `source {}` to your bash startup file (~/.bashrc).",
-        shell_quote(&path.display().to_string())
-    )
+    format!("`source {}`", shell_quote(&path.display().to_string()))
 }
 
 const BASH: &[&str] = &["self", "completion", "install", "bash"];
@@ -78,7 +77,7 @@ const BASH: &[&str] = &["self", "completion", "install", "bash"];
 #[test]
 fn hint_names_the_installed_path_without_bash_completion() {
     let host = Host::new();
-    let (stdout, stderr) = host.install(&["self", "completion", "install", "bash"]);
+    let (stdout, stderr) = host.install(BASH);
     assert!(stdout.contains(HINT), "{stdout}");
     assert!(
         stdout.contains(&source_line(&host.installed_bash_script())),
@@ -91,8 +90,8 @@ fn hint_names_the_installed_path_without_bash_completion() {
 #[test]
 fn hint_repeats_when_the_script_is_already_installed() {
     let host = Host::new();
-    host.install(&["self", "completion", "install", "bash"]);
-    let (stdout, _) = host.install(&["self", "completion", "install", "bash"]);
+    host.install(BASH);
+    let (stdout, _) = host.install(BASH);
     assert!(stdout.contains("already up to date"), "{stdout}");
     assert!(stdout.contains(HINT), "{stdout}");
 }
@@ -100,8 +99,8 @@ fn hint_repeats_when_the_script_is_already_installed() {
 #[test]
 fn no_hint_when_bash_completion_is_installed() {
     let host = Host::new();
-    host.plant_loader("usr/share/bash-completion/bash_completion");
-    let (stdout, _) = host.install(&["self", "completion", "install", "bash"]);
+    host.plant_loader("sysroot", "usr/share/bash-completion/bash_completion");
+    let (stdout, _) = host.install(BASH);
     assert!(stdout.contains("wrote bash completion script"), "{stdout}");
     assert!(!stdout.contains(HINT), "{stdout}");
 }
@@ -109,12 +108,8 @@ fn no_hint_when_bash_completion_is_installed() {
 #[test]
 fn no_hint_when_xdg_data_dirs_holds_bash_completion() {
     let host = Host::new();
-    let loader = host
-        .path("data-dirs")
-        .join("bash-completion/bash_completion");
-    std::fs::create_dir_all(loader.parent().unwrap()).unwrap();
-    std::fs::write(&loader, "# loader\n").unwrap();
-    let (stdout, _) = host.install(&["self", "completion", "install", "bash"]);
+    host.plant_loader("data-dirs", "bash-completion/bash_completion");
+    let (stdout, _) = host.install(BASH);
     assert!(!stdout.contains(HINT), "{stdout}");
 }
 
@@ -150,30 +145,18 @@ fn hint_quotes_a_home_with_a_space_and_a_quote() {
     let script = home.join(".local/share/bash-completion/completions/toolr");
     assert!(script.is_file());
     let quoted = format!("'{}'", script.display().to_string().replace('\'', r"'\''"));
-    assert!(
-        stdout.contains(&format!(
-            "add `source {quoted}` to your bash startup file (~/.bashrc)."
-        )),
-        "{stdout}"
-    );
+    assert!(stdout.contains(HINT), "{stdout}");
+    assert!(stdout.contains(&format!("`source {quoted}`")), "{stdout}");
 }
 
 #[test]
 fn hint_prints_when_only_a_bash_completion_1x_loader_exists() {
-    // 1.x never reads ~/.local/share/bash-completion/completions/.
-    for rel in [
-        "usr/local/etc/bash_completion",
-        "opt/homebrew/etc/bash_completion",
-        // Homebrew's 1.x formula installs the profile.d loader as well.
-        "usr/local/etc/profile.d/bash_completion.sh",
-        "opt/homebrew/etc/profile.d/bash_completion.sh",
-        "home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh",
-    ] {
-        let host = Host::new();
-        host.plant_loader(rel);
-        let (stdout, _) = host.install(BASH);
-        assert!(stdout.contains(HINT), "{rel}: {stdout}");
-    }
+    // Homebrew's 1.x layout; the unit tests cover every 1.x path.
+    let host = Host::new();
+    host.plant_loader("sysroot", "opt/homebrew/etc/bash_completion");
+    host.plant_loader("sysroot", "opt/homebrew/etc/profile.d/bash_completion.sh");
+    let (stdout, _) = host.install(BASH);
+    assert!(stdout.contains(HINT), "{stdout}");
 }
 
 #[test]
@@ -194,13 +177,10 @@ fn no_hint_when_the_install_is_refused_without_force() {
 #[test]
 fn no_hint_when_homebrew_prefix_holds_bash_completion() {
     let host = Host::new();
-    let prefix = host.path("brew");
-    let loader = prefix.join("share/bash-completion/bash_completion");
-    std::fs::create_dir_all(loader.parent().unwrap()).unwrap();
-    std::fs::write(&loader, "# loader\n").unwrap();
+    host.plant_loader("brew", "share/bash-completion/bash_completion");
     let out = host
         .command(BASH)
-        .env("HOMEBREW_PREFIX", &prefix)
+        .env("HOMEBREW_PREFIX", host.path("brew"))
         .output()
         .unwrap();
     let (stdout, _) = succeeded(BASH, &out);
@@ -212,45 +192,68 @@ fn no_hint_when_homebrew_prefix_holds_bash_completion() {
 fn force_reinstall_prints_the_hint() {
     let host = Host::new();
     host.install(BASH);
-    let args = &["self", "completion", "install", "bash", "--force"];
+    let args = &[BASH, &["--force"]].concat();
     let (stdout, _) = host.install(args);
     assert!(stdout.contains("content unchanged"), "{stdout}");
+    assert!(stdout.contains(HINT), "{stdout}");
     assert!(
         stdout.contains(&source_line(&host.installed_bash_script())),
         "{stdout}"
     );
 }
 
-#[test]
-fn empty_xdg_homes_read_as_unset() {
-    let host = Host::new();
+/// Runs `args` with empty XDG homes from a fresh cwd, and checks nothing
+/// lands in that cwd.
+fn install_with_empty_xdg_homes(host: &Host, args: &[&str]) -> String {
     let cwd = host.path("cwd");
     std::fs::create_dir_all(&cwd).unwrap();
-    for shell in ["bash", "fish"] {
-        let args = &["self", "completion", "install", shell];
-        let out = host
-            .command(args)
-            .env("XDG_DATA_HOME", "")
-            .env("XDG_CONFIG_HOME", "")
-            .current_dir(&cwd)
-            .output()
-            .unwrap();
-        let (stdout, _) = succeeded(args, &out);
-        if shell == "bash" {
-            let script = host
-                .path("home")
-                .join(".local/share/bash-completion/completions/toolr");
-            assert!(script.is_file());
-            assert!(stdout.contains(&source_line(&script)), "{stdout}");
-        } else {
-            assert!(
-                host.path("home")
-                    .join(".config/fish/completions/toolr.fish")
-                    .is_file()
-            );
-        }
-    }
+    let out = host
+        .command(args)
+        .env("XDG_DATA_HOME", "")
+        .env("XDG_CONFIG_HOME", "")
+        .current_dir(&cwd)
+        .output()
+        .unwrap();
+    let (stdout, _) = succeeded(args, &out);
     assert_eq!(std::fs::read_dir(&cwd).unwrap().count(), 0);
+    stdout
+}
+
+#[test]
+fn empty_xdg_data_home_reads_as_unset_for_bash() {
+    let host = Host::new();
+    let stdout = install_with_empty_xdg_homes(&host, BASH);
+    let script = host
+        .path("home")
+        .join(".local/share/bash-completion/completions/toolr");
+    assert!(script.is_file());
+    assert!(stdout.contains(HINT), "{stdout}");
+    assert!(stdout.contains(&source_line(&script)), "{stdout}");
+}
+
+#[test]
+fn empty_xdg_config_home_reads_as_unset_for_fish() {
+    let host = Host::new();
+    install_with_empty_xdg_homes(&host, &["self", "completion", "install", "fish"]);
+    assert!(
+        host.path("home")
+            .join(".config/fish/completions/toolr.fish")
+            .is_file()
+    );
+}
+
+#[test]
+fn empty_homebrew_prefix_does_not_probe_the_cwd() {
+    let host = Host::new();
+    host.plant_loader("cwd", "share/bash-completion/bash_completion");
+    let out = host
+        .command(BASH)
+        .env("HOMEBREW_PREFIX", "")
+        .current_dir(host.path("cwd"))
+        .output()
+        .unwrap();
+    let (stdout, _) = succeeded(BASH, &out);
+    assert!(stdout.contains(HINT), "{stdout}");
 }
 
 /// APFS rejects non-UTF-8 file names, so this runs on Linux only.
@@ -279,10 +282,6 @@ fn hint_names_no_path_when_home_is_not_utf8() {
         .lines()
         .find(|line| line.contains(HINT))
         .unwrap_or_else(|| panic!("no hint: {stdout}"));
-    assert!(
-        hint.ends_with(
-            "add a `source` line for the installed script to your bash startup file (~/.bashrc)."
-        ),
-        "{hint}"
-    );
+    assert!(hint.contains("a `source` line"), "{hint}");
+    assert!(!hint.contains("`source /"), "{hint}");
 }
