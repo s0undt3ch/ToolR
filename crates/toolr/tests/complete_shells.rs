@@ -164,12 +164,14 @@ enum Split {
 
 const SPLITS: [Split; 2] = [Split::Whole, Split::AtBreaks];
 
-/// The non-blank characters of readline's default `COMP_WORDBREAKS` a test word can hold.
-const BREAKS: &str = ":=@";
+/// Bash 5's default `COMP_WORDBREAKS`: the driver sets it and [`comp_pieces`] splits at it.
+const WORDBREAKS: &str = " \t\n\"'@><=;|&(:";
 
 /// `a:b` becomes `a`, `:`, `b`, and a run of breaks stays one piece, as bash 5 splits them.
+/// Blanks and quotes in `breaks` don't split: test words hold none outside an escape or quote.
+/// The pty end-to-end test is the oracle for how real readline splits.
 fn comp_pieces(word: &str, split: Split, breaks: &str) -> Vec<String> {
-    let is_break = |c: char| breaks.contains(c);
+    let is_break = |c: char| breaks.contains(c) && !c.is_whitespace() && !matches!(c, '\'' | '"');
     if matches!(split, Split::Whole) || word.is_empty() {
         return vec![word.to_string()];
     }
@@ -196,8 +198,9 @@ struct Drive<'a> {
     quote: Vec<String>,
     split: Split,
     /// The break characters [`comp_pieces`] splits at; the script must set the same.
-    breaks: &'static str,
-    /// Define bash-completion's `_init_completion`, which only the old script calls.
+    breaks: String,
+    /// Define bash-completion's `_init_completion`, which only the old script calls: a new
+    /// binary must stay harmless to an old installed script, so don't delete this as dead.
     legacy: bool,
 }
 
@@ -210,7 +213,7 @@ impl<'a> Drive<'a> {
             tail: Vec::new(),
             quote: Vec::new(),
             split: Split::Whole,
-            breaks: BREAKS,
+            breaks: WORDBREAKS.to_string(),
             legacy: false,
         }
     }
@@ -220,8 +223,8 @@ impl<'a> Drive<'a> {
         self
     }
 
-    fn breaks(mut self, breaks: &'static str) -> Self {
-        self.breaks = breaks;
+    fn breaks(mut self, breaks: &str) -> Self {
+        self.breaks = breaks.to_string();
         self
     }
 
@@ -249,7 +252,8 @@ shift 6
 COMP_WORDS=("${@:1:k}")
 shift "$k"
 # Bash only sets this in an interactive shell; this is readline's default.
-COMP_WORDBREAKS=$' \t\n"\'@><=;|&(:'
+COMP_WORDBREAKS=$WORDBREAKS
+# Only the frozen old script calls this; it keeps `OLD_BASH_SCRIPT` runnable.
 if [ "$legacy" = 1 ]; then
     _init_completion() { words=("${COMP_WORDS[@]}"); cword=$COMP_CWORD; cur=${words[cword]}; prev=${words[cword-1]}; }
 fi
@@ -273,11 +277,11 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
             .join(" ");
         let mut comp_words = Vec::new();
         for w in &head {
-            comp_words.extend(comp_pieces(w, self.split, self.breaks));
+            comp_words.extend(comp_pieces(w, self.split, &self.breaks));
         }
         let cword = comp_words.len() - 1;
         for w in &self.tail {
-            comp_words.extend(comp_pieces(w, self.split, self.breaks));
+            comp_words.extend(comp_pieces(w, self.split, &self.breaks));
         }
         let out = StdCommand::new(bash)
             .arg("-c")
@@ -292,6 +296,7 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
             .args(&comp_words)
             .args(&self.quote)
             .current_dir(fx.tmp.path())
+            .env("WORDBREAKS", WORDBREAKS)
             .env("PATH", path_with_toolr())
             // `~/` completes inside the fixture.
             .env("HOME", fx.tmp.path())
@@ -325,10 +330,6 @@ fn run_bash(bash: &str, fx: &Fixture, cur: &str) -> BashRun {
 
 /// Complete `cur` as the value of a path flag; [`BashRun::quoted`] holds the
 /// `%q` forms of [`PATH_FILES`].
-fn run_bash_path(bash: &str, script: &str, fx: &Fixture, flag: &str, cur: &str) -> BashRun {
-    run_bash_path_split(bash, script, fx, flag, cur, Split::Whole)
-}
-
 fn run_bash_path_split(
     bash: &str,
     script: &str,
@@ -500,7 +501,14 @@ fn bash_completes_the_cursor_word_when_it_is_not_last() {
 fn bash_path_flag_completes_files_quoted_and_inert() {
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "files/");
+        let run = run_bash_path_split(
+            &bash,
+            &print_script("bash"),
+            &fx,
+            "--cfg",
+            "files/",
+            Split::Whole,
+        );
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.stderr, "", "{bash}");
         let mut want = run.quoted.clone();
@@ -519,7 +527,14 @@ fn bash_path_flag_completes_files_quoted_and_inert() {
 fn bash_directory_flag_completes_only_directories() {
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--out", "files/");
+        let run = run_bash_path_split(
+            &bash,
+            &print_script("bash"),
+            &fx,
+            "--out",
+            "files/",
+            Split::Whole,
+        );
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
         assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{bash}");
@@ -530,10 +545,24 @@ fn bash_directory_flag_completes_only_directories() {
 fn bash_single_directory_match_on_a_path_flag_drops_the_space() {
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "files/s");
+        let run = run_bash_path_split(
+            &bash,
+            &print_script("bash"),
+            &fx,
+            "--cfg",
+            "files/s",
+            Split::Whole,
+        );
         assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
         assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{bash}");
-        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "files/w");
+        let run = run_bash_path_split(
+            &bash,
+            &print_script("bash"),
+            &fx,
+            "--cfg",
+            "files/w",
+            Split::Whole,
+        );
         assert_eq!(
             run.reply,
             vec!["files/with\\ space.txt".to_string()],
@@ -547,7 +576,14 @@ fn bash_single_directory_match_on_a_path_flag_drops_the_space() {
 fn bash_path_keeps_a_typed_leading_tilde() {
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "~/files/");
+        let run = run_bash_path_split(
+            &bash,
+            &print_script("bash"),
+            &fx,
+            "--cfg",
+            "~/files/",
+            Split::Whole,
+        );
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert!(
             run.reply.contains(&"~/files/sub/".to_string()),
@@ -578,17 +614,17 @@ fn bash_completion_survives_errexit() {
     {
         let fx = fixture();
         let script = format!("set {opts}\n{}", print_script("bash"));
-        let run = run_bash_path(&bash, &script, &fx, "--out", "files/");
+        let run = run_bash_path_split(&bash, &script, &fx, "--out", "files/", Split::Whole);
         assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
         assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash} {opts}");
-        let run = run_bash_path(&bash, &script, &fx, "--cfg", "files/s");
+        let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "files/s", Split::Whole);
         assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
         assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash} {opts}");
         // No directory matches, so the directory probe itself exits non-zero.
-        let run = run_bash_path(&bash, &script, &fx, "--cfg", "files/w");
+        let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "files/w", Split::Whole);
         assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
         assert_eq!(run.reply, vec![run.quoted[0].clone()], "{bash} {opts}");
-        let run = run_bash_path(&bash, &script, &fx, "--cfg", "nomatch");
+        let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "nomatch", Split::Whole);
         assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
         assert!(run.reply.is_empty(), "{bash} {opts}: {:?}", run.reply);
         let run = Drive::new(&script, &["--mode"], "fa").run(&bash, &fx);
@@ -707,7 +743,7 @@ fn bash_special_prefix_break_stays_in_the_reply() {
             let dollar = format!("COMP_WORDBREAKS+='$'\n{script}");
             let run = Drive::new(&dollar, &["--mode"], "a$")
                 .split(split)
-                .breaks(":=@$")
+                .breaks(&format!("{WORDBREAKS}$"))
                 .run(&bash, &fx);
             assert_eq!(run.rc, "0", "{bash} {split:?}: {}", run.stderr);
             assert_eq!(run.reply, vec!["\\$b".to_string()], "{bash} {split:?}");
@@ -736,10 +772,9 @@ fn bash_earlier_word_with_a_colon_stays_one_word() {
 }
 
 /// Marking directories must not rescan the whole listing for every name. Wall-clock
-/// bounds flake under load, so compare 16x the entries against 1x in the same run: linear
-/// work grows about 16x, a per-name rescan about 256x. A wide span keeps the fixed cost of
-/// starting bash and toolr small next to the listing, and the 64x bound between the two
-/// leaves room for a loaded runner without letting a quadratic through.
+/// bounds flake under load, so compare 16x the entries against 1x in the same run. 64x is the
+/// pass threshold: linear work grows about 16x, a per-name rescan about 256x. The wide span keeps
+/// the fixed cost of starting bash and toolr small next to the listing.
 #[test]
 fn bash_path_completion_scales_linearly_with_the_listing() {
     const SMALL: usize = 1000;
@@ -831,7 +866,14 @@ fn bash_path_marks_a_tilde_user_directory() {
     let want = format!("~{user}/{dir}/");
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", &cur);
+        let run = run_bash_path_split(
+            &bash,
+            &print_script("bash"),
+            &fx,
+            "--cfg",
+            &cur,
+            Split::Whole,
+        );
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.reply, vec![want.clone()], "{bash}");
         assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{bash}");
@@ -843,21 +885,30 @@ fn bash_path_marks_a_tilde_user_directory() {
 fn bash_path_unescapes_a_typed_backslash() {
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(
+        let run = run_bash_path_split(
             &bash,
             &print_script("bash"),
             &fx,
             "--cfg",
             "files/back\\\\s",
+            Split::Whole,
         );
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.reply, vec![run.quoted[2].clone()], "{bash}");
-        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "files/with\\ s");
+        let run = run_bash_path_split(
+            &bash,
+            &print_script("bash"),
+            &fx,
+            "--cfg",
+            "files/with\\ s",
+            Split::Whole,
+        );
         assert_eq!(run.reply, vec![run.quoted[0].clone()], "{bash}");
     }
 }
 
 /// The bash script shipped before path completion, as an installed copy would hold it.
+/// Frozen on purpose: the next test checks a new binary is harmless to an old installed script.
 const OLD_BASH_SCRIPT: &str = r#"# shellcheck shell=bash
 # toolr bash completion - delegates to `toolr __complete`.
 #
@@ -904,6 +955,7 @@ _toolr_complete() {
 complete -F _toolr_complete toolr
 "#;
 
+/// A new binary must stay harmless to an old installed script (frozen as `OLD_BASH_SCRIPT`).
 #[test]
 fn old_bash_script_offers_nothing_on_a_path_slot() {
     for bash in bashes() {
