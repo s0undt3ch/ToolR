@@ -604,6 +604,262 @@ fn bash_path_keeps_a_typed_leading_tilde() {
     }
 }
 
+/// Native bash keeps a typed `$HOME/` as typed; escaping it would insert a literal `\$HOME`.
+#[test]
+fn bash_path_keeps_a_typed_leading_variable() {
+    for bash in bashes() {
+        for (var, split) in ["$HOME", "${HOME}"]
+            .into_iter()
+            .flat_map(|v| SPLITS.map(|s| (v, s)))
+        {
+            let fx = fixture();
+            let script = print_script("bash");
+            // A single matching directory completes to it, with a trailing slash.
+            let cur = format!("{var}/files/s");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, split);
+            assert_eq!(run.rc, "0", "{bash} {var} {split:?}: {}", run.stderr);
+            assert_eq!(
+                run.reply,
+                vec![format!("{var}/files/sub/")],
+                "{bash} {var} {split:?}"
+            );
+            assert_eq!(
+                run.compopt,
+                vec!["-o nospace".to_string()],
+                "{bash} {var} {split:?}"
+            );
+            // A full listing keeps the typed variable on every entry.
+            let cur = format!("{var}/files/");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, split);
+            let mut want: Vec<String> = run.quoted.iter().map(|q| format!("{var}/{q}")).collect();
+            want.push(format!("{var}/files/sub/"));
+            want.sort();
+            let mut got = run.reply.clone();
+            got.sort();
+            assert_eq!(got, want, "{bash} {var} {split:?}");
+            // `:` is a word break: readline replaces only the text after it, so the reply is bare.
+            let cur = format!("{var}/files/host:p");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, split);
+            assert_eq!(
+                run.reply,
+                vec!["port.txt".to_string()],
+                "{bash} {var} {split:?}"
+            );
+            // A directory-only slot lists directories alone.
+            let cur = format!("{var}/fil");
+            let run = run_bash_path_split(&bash, &script, &fx, "--out", &cur, split);
+            assert_eq!(
+                run.reply,
+                vec![format!("{var}/files/")],
+                "{bash} {var} {split:?}"
+            );
+            assert!(!fx.sentinel3.exists(), "{bash} {var}: file name executed");
+        }
+    }
+}
+
+/// Like native bash, an unset variable lists nothing, and under `set -u` doesn't error.
+#[test]
+fn bash_path_under_an_unset_variable_offers_nothing() {
+    for bash in bashes() {
+        let fx = fixture();
+        let script = format!("set -eu\n{}", print_script("bash"));
+        for cur in ["$TOOLR_TEST_UNSET_VAR/f", "${TOOLR_TEST_UNSET_VAR}/f"] {
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", cur, Split::Whole);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert_eq!(run.stderr, "", "{bash} {cur}");
+            assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
+        }
+    }
+}
+
+/// `${!name}` sees the script's own locals, so a user variable sharing a former local's name
+/// must still read the user's value.
+#[test]
+fn bash_path_variable_named_like_a_script_local_reads_the_users_value() {
+    for bash in bashes() {
+        let fx = fixture();
+        for name in ["value", "name", "cur", "var", "mode", "raw_cur", "breaks"] {
+            let script = format!("{name}=$PWD\n{}", print_script("bash"));
+            let cur = format!("${name}/fi");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, Split::Whole);
+            assert_eq!(run.rc, "0", "{bash} {name}: {}", run.stderr);
+            assert_eq!(run.reply, vec![format!("${name}/files/")], "{bash} {name}");
+        }
+    }
+}
+
+/// Bash doesn't tilde-expand an expanded value, so a variable holding `~`, `~u` or a relative
+/// path names a literal directory under the working directory.
+#[test]
+fn bash_path_variable_value_is_a_literal_directory() {
+    for bash in bashes() {
+        for (value, dir) in [("~", "XX"), ("~u", "XX"), ("rel", "R")] {
+            let fx = fixture();
+            let literal = fx.tmp.path().join(value);
+            std::fs::create_dir_all(literal.join("sub")).unwrap();
+            std::fs::write(literal.join("lit.txt"), "").unwrap();
+            let script = format!("{dir}='{value}'\n{}", print_script("bash"));
+            let cur = format!("${dir}/");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, Split::Whole);
+            assert_eq!(run.rc, "0", "{bash} {value}: {}", run.stderr);
+            let mut got = run.reply.clone();
+            got.sort();
+            assert_eq!(
+                got,
+                vec![format!("${dir}/lit.txt"), format!("${dir}/sub/")],
+                "{bash} {value}"
+            );
+            if value == "~" {
+                let run = run_bash_path_split(&bash, &script, &fx, "--out", &cur, Split::Whole);
+                assert_eq!(run.reply, vec![format!("${dir}/sub/")], "{bash}");
+            }
+        }
+    }
+}
+
+/// `${!name}` reads through dynamic scope, so every name the script declares must be
+/// `_toolr_`-prefixed or it can shadow the user's variable.
+#[test]
+fn bash_script_names_its_variables_with_the_toolr_prefix() {
+    let script = print_script("bash");
+    let mut names: Vec<(String, &str)> = Vec::new();
+    for line in script
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.starts_with('#'))
+    {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        if words.first() == Some(&"local") {
+            for w in &words[1..] {
+                if w.starts_with('-') {
+                    continue;
+                }
+                let name = w.split('=').next().unwrap();
+                // Skips the tail of a value that contains a space, e.g. `${a[n - 1]}`.
+                if name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    names.push((name.to_string(), line));
+                }
+            }
+        }
+        if words.first() == Some(&"for") {
+            let target = words[1].trim_start_matches("((");
+            let target = if target.is_empty() { words[2] } else { target };
+            names.push((target.to_string(), line));
+        }
+        if let Some(at) = words.iter().position(|w| *w == "read") {
+            for w in &words[at + 1..] {
+                if w.starts_with('-') {
+                    continue;
+                }
+                let name = w.trim_end_matches(';');
+                if name != "_" {
+                    names.push((name.to_string(), line));
+                }
+                break;
+            }
+        }
+    }
+    assert!(names.len() > 20, "parsed too few declarations: {names:?}");
+    for (name, line) in &names {
+        assert!(name.starts_with("_toolr_"), "`{name}` in `{line}`");
+    }
+}
+
+/// Creates `name` under the fixture root as a literal directory holding a file, so a word
+/// handed to a `compgen` that doesn't expand it (bash < 5.3) still lists something.
+fn literal_dir(fx: &Fixture, name: &str) {
+    let dir = fx.tmp.path().join(name);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("inside"), "").unwrap();
+}
+
+/// Inside the completion function `$_` is its own last argument, not the user's, so `$_/` gets no
+/// variable treatment. Bash 5.3 `compgen` would expand it, and older bash would list a directory
+/// literally named `$_`; either way the word must offer nothing.
+#[test]
+fn bash_path_underscore_is_not_treated_as_a_variable() {
+    for bash in bashes() {
+        let fx = fixture();
+        let script = print_script("bash");
+        for cur in ["$_/", "${_}/"] {
+            literal_dir(&fx, cur.trim_end_matches('/'));
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", cur, Split::Whole);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
+        }
+    }
+}
+
+/// Only a plain `$NAME` or `${NAME}` is expanded. Bash 5.3 `compgen` runs a `$(...)` or backtick
+/// inside `${...}` whose default is taken, so any other `$` or backtick form offers nothing.
+/// Each word also names a literal directory, so older bash, which doesn't expand, would list it.
+#[test]
+fn bash_path_never_runs_a_typed_substitution() {
+    const SUB: &str = "$(touch sentinel-one)";
+    const TICK: &str = "`touch sentinel-one`";
+    let unset_default = format!("${{TOOLR_TEST_UNSET_VAR:-{SUB}}}");
+    let home_default = format!("${{HOME:-{SUB}}}");
+    let script = print_script("bash");
+    let unset_home = format!("unset HOME\n{script}");
+    // The value of a plain `$NAME` is read, never expanded again by `compgen`.
+    let evil_value = format!("TOOLR_TEST_EVIL='{unset_default}'\n{script}");
+    // (script, literal directory, typed word)
+    let cases: Vec<(&str, String, String)> = vec![
+        (&script, SUB.to_string(), format!("{SUB}/")),
+        (&script, TICK.to_string(), format!("{TICK}/")),
+        (&script, unset_default.clone(), format!("{unset_default}/")),
+        (
+            &script,
+            format!("${{TOOLR_TEST_UNSET_VAR:-{TICK}}}"),
+            format!("${{TOOLR_TEST_UNSET_VAR:-{TICK}}}/"),
+        ),
+        (&script, home_default.clone(), format!("{home_default}/")),
+        (
+            &unset_home,
+            home_default.clone(),
+            format!("{home_default}/"),
+        ),
+        (&unset_home, SUB.to_string(), format!("{SUB}/")),
+        (
+            &script,
+            format!("files/{unset_default}"),
+            format!("files/{unset_default}/"),
+        ),
+        (
+            &script,
+            unset_default.clone(),
+            format!("$HOME/{unset_default}/"),
+        ),
+        (
+            &evil_value,
+            unset_default.clone(),
+            "$TOOLR_TEST_EVIL/".to_string(),
+        ),
+        (&script, "$1".to_string(), "$1/".to_string()),
+    ];
+    for bash in bashes() {
+        let fx = fixture();
+        for (script, dir, cur) in &cases {
+            literal_dir(&fx, dir);
+            let run = run_bash_path_split(&bash, script, &fx, "--cfg", cur, Split::Whole);
+            let home = if script.starts_with("unset HOME") {
+                " (HOME unset)"
+            } else {
+                ""
+            };
+            // Checked first: a command that ran is the finding, whatever the reply.
+            assert!(
+                !fx.sentinel.exists(),
+                "{bash} {cur}{home}: typed substitution ran; reply {:?}",
+                run.reply
+            );
+            assert_eq!(run.rc, "0", "{bash} {cur}{home}: {}", run.stderr);
+            assert!(run.reply.is_empty(), "{bash} {cur}{home}: {:?}", run.reply);
+        }
+    }
+}
+
 /// A user's `set -e` or `set -u` must not leak into Tab: a non-zero
 /// `__complete` exit or an unset array would otherwise close their shell.
 #[test]
