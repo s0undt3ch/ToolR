@@ -203,7 +203,8 @@ fn build_commands_inner(
         // Dedup groups by *full_path* (not just leaf name), so nested
         // groups in different branches with the same leaf name (e.g.
         // `ci.image` + `docker.image`) both survive. The first declaration
-        // wins, as in Python; a later one that disagrees is warned about.
+        // wins, as in Python: a later one fills a field the first left
+        // empty, and is warned about where both are set and differ.
         for binding in bindings {
             let path = binding.group.full_path();
             if binding.contradictory {
@@ -219,18 +220,13 @@ fn build_commands_inner(
                     }
                     seen.describes |= binding.describes;
                     let first = &mut all_groups[seen.index];
-                    if !seen.has_description && binding.has_description {
-                        // Earlier declarations only fetched the group; this
-                        // one gives its description.
-                        first.description = binding.group.description.clone();
-                        seen.has_description = true;
-                    }
                     warnings.extend(redeclaration_warning(
                         first,
                         &seen.modules[0],
-                        &binding,
+                        &binding.group,
                         &module_path,
                     ));
+                    fill_empty_fields(first, binding.group);
                 }
                 None => {
                     seen_groups.insert(
@@ -239,7 +235,6 @@ fn build_commands_inner(
                             index: all_groups.len(),
                             modules: vec![module_path.clone()],
                             describes: binding.describes,
-                            has_description: binding.has_description,
                         },
                     );
                     all_groups.push(binding.group);
@@ -349,8 +344,6 @@ struct SeenGroup {
     modules: Vec<String>,
     /// Whether any declaration passes a description or docstring.
     describes: bool,
-    /// Whether the kept group holds a declaration's description.
-    has_description: bool,
 }
 
 /// A `command_group` call passing a docstring with a description.
@@ -424,14 +417,16 @@ pub(crate) struct BuiltTree {
 fn redeclaration_warning(
     first: &Group,
     first_module: &str,
-    later: &crate::parser::GroupBinding,
+    later: &Group,
     later_module: &str,
 ) -> Option<String> {
+    // An empty value has no opinion, so only two non-empty ones can differ.
+    let differs = |kept: &str, other: &str| !kept.is_empty() && !other.is_empty() && kept != other;
     let mut differing = Vec::new();
-    if later.group.title != first.title {
+    if differs(&first.title, &later.title) {
         differing.push("title");
     }
-    if later.has_description && later.group.description != first.description {
+    if differs(&first.description, &later.description) {
         differing.push("description");
     }
     (!differing.is_empty()).then(|| {
@@ -442,6 +437,17 @@ fn redeclaration_warning(
             differing.join(", ")
         )
     })
+}
+
+/// Give the kept group a later declaration's title and description where its
+/// own are empty, as Python's `command_group` does.
+fn fill_empty_fields(first: &mut Group, later: Group) {
+    if first.title.is_empty() {
+        first.title = later.title;
+    }
+    if first.description.is_empty() {
+        first.description = later.description;
+    }
 }
 
 /// A `(group, name)` pair more than one function in one source tree defines.
@@ -1627,6 +1633,30 @@ def hello(ctx):
                  ignoring the different description in tools.c"
             ]
         );
+    }
+
+    /// An empty title or description has no opinion, whether passed or not,
+    /// so a later declaration fills it without a warning.
+    #[test]
+    fn empty_title_and_description_take_later_ones() {
+        let first = format!(
+            "{GROUP_IMPORT}a = command_group(\"ci\", \"CI\", \"\")\n\
+             b = command_group(\"cd\", description=\"CD.\")\n"
+        );
+        let second = format!(
+            "{GROUP_IMPORT}a = command_group(\"ci\", \"CI\", \"CI commands.\")\n\
+             b = command_group(\"cd\", \"CD\", \"CD.\")\n\
+             c = command_group(\"cd\", description=\"CD.\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/a.py", &first), ("tools/b.py", &second)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("ci", "CI", "CI commands."),
+                group_row("cd", "CD", "CD.")
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
     }
 
     /// A description held in a variable can't be read, but the group has one.
