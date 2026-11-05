@@ -413,6 +413,10 @@ The exit code tells the script what to do:
 A script installed by an older toolr doesn't know these codes and offers
 nothing for path slots, as it always did.
 
+A `--name=partial` word completes as the value of `--name`, with
+`partial` as the prefix. Candidates are bare values, without `--name=`;
+each script puts that part back the way its shell needs.
+
 ### `toolr __build-static-manifest` {#__build-static-manifest}
 
 Regenerate only the static layer of the manifest (no Python

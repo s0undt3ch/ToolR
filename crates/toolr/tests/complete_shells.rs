@@ -92,6 +92,7 @@ def lint(
     mode: Literal[{literal}] = "fast",
     cfg: pathlib.Path | None = None,
     out: DirectoryPath | None = None,
+    verbose: bool = False,
 ):
     """Lint things.
 
@@ -99,6 +100,7 @@ def lint(
         mode: Lint mode.
         cfg: Config path.
         out: Output directory.
+        verbose: Say more.
     """
     pass
 "#
@@ -889,6 +891,18 @@ fn bash_completion_survives_errexit() {
         let run = Drive::new(&script, &["--mode"], "zz").run(&bash, &fx);
         assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
         assert!(run.reply.is_empty(), "{bash} {opts}: {:?}", run.reply);
+        for (cur, want) in [
+            ("--mode=fa", &["fast"][..]),
+            ("--mode=zz", &[]),
+            ("--cfg=files/s", &["files/sub/"]),
+            ("--out=nomatch", &[]),
+            ("--verbose=", &[]),
+        ] {
+            let run = Drive::new(&script, &[], cur).run(&bash, &fx);
+            assert_eq!(run.rc, "0", "{bash} {opts} {cur}: {}", run.stderr);
+            assert_eq!(run.stderr, "", "{bash} {opts} {cur}");
+            assert_eq!(run.reply, want, "{bash} {opts} {cur}");
+        }
         for split in SPLITS {
             let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "files/host:p", split);
             assert_eq!(run.rc, "0", "{bash} {opts} {split:?}: {}", run.stderr);
@@ -1222,6 +1236,16 @@ fn old_bash_script_offers_nothing_on_a_path_slot() {
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.stderr, "", "{bash}");
         assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+        // The new binary's bare values don't start with the typed `--mode=`, so nothing matches.
+        for split in SPLITS {
+            let run = Drive::new(OLD_BASH_SCRIPT, &[], "--mode=dr")
+                .split(split)
+                .legacy()
+                .run(&bash, &fx);
+            assert_eq!(run.rc, "0", "{bash} {split:?}: {}", run.stderr);
+            assert_eq!(run.stderr, "", "{bash} {split:?}");
+            assert!(run.reply.is_empty(), "{bash} {split:?}: {:?}", run.reply);
+        }
     }
 }
 
@@ -1303,6 +1327,13 @@ fn bash_tab_completes_words_with_a_colon_end_to_end() {
             format!("{rc}COMP_WORDBREAKS=$' \\t\\n\"\\'@><=;|&(:$'\n"),
         )
         .unwrap();
+        // Without `=`, readline replaces the whole `--opt=…` word.
+        let no_equals_rcfile = fx.tmp.path().join("bashrc-no-equals");
+        std::fs::write(
+            &no_equals_rcfile,
+            format!("{rc}COMP_WORDBREAKS=$' \\t\\n\"\\'@><;|&(:'\n"),
+        )
+        .unwrap();
         for (rcfile, typed, want) in [
             (
                 &rcfile,
@@ -1329,6 +1360,31 @@ fn bash_tab_completes_words_with_a_colon_end_to_end() {
                 &dollar_rcfile,
                 "toolr ci lint --mode a$",
                 "LINE:ci lint --mode a$b",
+            ),
+            (
+                &rcfile,
+                "toolr ci lint --mode=fa",
+                "LINE:ci lint --mode=fast",
+            ),
+            (
+                &rcfile,
+                "toolr ci lint --mode=x=~r",
+                "LINE:ci lint --mode=x=~root",
+            ),
+            (
+                &rcfile,
+                "toolr ci lint --cfg=files/host:p",
+                "LINE:ci lint --cfg=files/host:port.txt",
+            ),
+            (
+                &no_equals_rcfile,
+                "toolr ci lint --mode=fa",
+                "LINE:ci lint --mode=fast",
+            ),
+            (
+                &no_equals_rcfile,
+                "toolr ci lint --cfg=files/w",
+                "LINE:ci lint --cfg=files/with space.txt",
             ),
         ] {
             let mut cmd = StdCommand::new(&bash);
@@ -1461,6 +1517,7 @@ fn zsh_complete(fx: &Fixture, words: &[&str]) -> Vec<String> {
 compdef() { :; }
 _files() { print -r -- "FILES:$*"; }
 compadd() { print -r -- "COMPADD:$*"; }
+compset() { print -r -- "COMPSET:$*"; }
 eval "$1"; shift
 words=("$@"); CURRENT=$#
 _toolr
@@ -1501,4 +1558,254 @@ fn zsh_path_slots_use_native_file_completion() {
     assert_eq!(calls, vec!["FILES:-/".to_string()]);
     let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--mode", "fa"]);
     assert_eq!(calls, vec!["COMPADD:-d descriptions -a values".to_string()]);
+}
+
+/// The bash script with `=` taken out of `COMP_WORDBREAKS`, and the breaks the driver splits at.
+fn no_equals_wordbreaks() -> (String, String) {
+    (
+        format!(
+            "COMP_WORDBREAKS=${{COMP_WORDBREAKS//=/}}\n{}",
+            print_script("bash")
+        ),
+        WORDBREAKS.replace('=', ""),
+    )
+}
+
+/// Completes the attached `--opt=value` word `cur` on its own after `toolr ci lint`;
+/// [`BashRun::quoted`] holds the `%q` forms of `quote`.
+fn run_attached(
+    bash: &str,
+    fx: &Fixture,
+    (script, breaks): (&str, &str),
+    cur: &str,
+    split: Split,
+    quote: Vec<String>,
+) -> BashRun {
+    Drive::new(script, &[], cur)
+        .split(split)
+        .breaks(breaks)
+        .quote(quote)
+        .run(bash, fx)
+}
+
+/// `%q` forms with every `~` escaped, as the script quotes on any bash.
+fn tilde_escaped(quoted: &[String]) -> Vec<String> {
+    quoted
+        .iter()
+        .map(|q| q.replace("\\~", "~").replace('~', "\\~"))
+        .collect()
+}
+
+/// Readline replaces only the text after the `=`, so the reply is the bare value; without `=` in
+/// `COMP_WORDBREAKS` it replaces the whole word, so the reply carries `--mode=` again.
+#[test]
+fn bash_attached_value_offers_the_choices() {
+    let script = print_script("bash");
+    let (no_eq_script, no_eq_breaks) = no_equals_wordbreaks();
+    for bash in bashes() {
+        for split in SPLITS {
+            let fx = fixture();
+            let with_eq = (script.as_str(), WORDBREAKS);
+            let run = run_attached(&bash, &fx, with_eq, "--mode=", split, fx.choices());
+            assert_eq!(run.rc, "0", "{bash} {split:?}: {}", run.stderr);
+            assert_eq!(run.stderr, "", "{bash} {split:?}");
+            let mut want = tilde_escaped(&run.quoted);
+            want.sort();
+            let mut got = run.reply.clone();
+            got.sort();
+            assert_eq!(got, want, "{bash} {split:?}");
+            assert!(
+                !fx.sentinel.exists(),
+                "{bash} {split:?}: $(...) value executed"
+            );
+            assert!(
+                !fx.sentinel2.exists(),
+                "{bash} {split:?}: backtick value executed"
+            );
+
+            let quote = vec!["dry run".to_string(), "dry walk".to_string()];
+            let run = run_attached(&bash, &fx, with_eq, "--mode=dr", split, quote.clone());
+            assert_eq!(run.reply, run.quoted, "{bash} {split:?}");
+            let run = run_attached(&bash, &fx, with_eq, "--mode=x=", split, vec![]);
+            assert_eq!(run.reply, vec!["\\~root".to_string()], "{bash} {split:?}");
+            let run = run_attached(&bash, &fx, with_eq, "--verbose=", split, vec![]);
+            assert_eq!(run.rc, "0", "{bash} {split:?}: {}", run.stderr);
+            assert!(run.reply.is_empty(), "{bash} {split:?}: {:?}", run.reply);
+
+            let no_eq = (no_eq_script.as_str(), no_eq_breaks.as_str());
+            let run = run_attached(&bash, &fx, no_eq, "--mode=fa", split, vec![]);
+            assert_eq!(run.rc, "0", "{bash} {split:?}: {}", run.stderr);
+            assert_eq!(
+                run.reply,
+                vec!["--mode=fast".to_string()],
+                "{bash} {split:?}"
+            );
+            let run = run_attached(&bash, &fx, no_eq, "--mode=dr", split, quote);
+            let want: Vec<String> = run.quoted.iter().map(|q| format!("--mode={q}")).collect();
+            assert_eq!(run.reply, want, "{bash} {split:?}");
+            let run = run_attached(&bash, &fx, no_eq, "--mode=x=", split, vec![]);
+            assert_eq!(
+                run.reply,
+                vec!["--mode=x=\\~root".to_string()],
+                "{bash} {split:?}"
+            );
+        }
+    }
+}
+
+/// Path slots complete the part after `--cfg=`, keeping a typed `~` or `$NAME/` as typed; the
+/// prefix comes back on every reply when readline replaces the whole word.
+#[test]
+fn bash_attached_path_completes_the_part_after_the_equals() {
+    let script = print_script("bash");
+    let (no_eq_script, no_eq_breaks) = no_equals_wordbreaks();
+    let path_files: Vec<String> = PATH_FILES.iter().map(|f| (*f).to_string()).collect();
+    for bash in bashes() {
+        for split in SPLITS {
+            for (lead, ctx) in [
+                ("", (script.as_str(), WORDBREAKS)),
+                ("--cfg=", (no_eq_script.as_str(), no_eq_breaks.as_str())),
+            ] {
+                let out_lead = lead.replace("cfg", "out");
+                let fx = fixture();
+                let at = format!("{bash} {split:?} {lead:?}");
+                let run = run_attached(&bash, &fx, ctx, "--cfg=files/", split, path_files.clone());
+                assert_eq!(run.rc, "0", "{at}: {}", run.stderr);
+                assert_eq!(run.stderr, "", "{at}");
+                let mut want: Vec<String> =
+                    run.quoted.iter().map(|q| format!("{lead}{q}")).collect();
+                want.push(format!("{lead}files/sub/"));
+                want.sort();
+                let mut got = run.reply.clone();
+                got.sort();
+                assert_eq!(got, want, "{at}");
+                assert!(!fx.sentinel3.exists(), "{at}: file name executed");
+
+                let run = run_attached(&bash, &fx, ctx, "--out=files/", split, vec![]);
+                assert_eq!(run.reply, vec![format!("{out_lead}files/sub/")], "{at}");
+                assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{at}");
+                let run = run_attached(&bash, &fx, ctx, "--cfg=files/w", split, vec![]);
+                assert_eq!(
+                    run.reply,
+                    vec![format!("{lead}files/with\\ space.txt")],
+                    "{at}"
+                );
+                // `:` is still a break, so readline keeps `--cfg=files/host:` either way.
+                let run = run_attached(&bash, &fx, ctx, "--cfg=files/host:p", split, vec![]);
+                assert_eq!(run.reply, vec!["port.txt".to_string()], "{at}");
+                let run = run_attached(&bash, &fx, ctx, "--cfg=~/files/s", split, vec![]);
+                assert_eq!(run.reply, vec![format!("{lead}~/files/sub/")], "{at}");
+                for var in ["$HOME", "${HOME}"] {
+                    let cur = format!("--cfg={var}/files/s");
+                    let run = run_attached(&bash, &fx, ctx, &cur, split, vec![]);
+                    assert_eq!(run.rc, "0", "{at} {var}: {}", run.stderr);
+                    assert_eq!(
+                        run.reply,
+                        vec![format!("{lead}{var}/files/sub/")],
+                        "{at} {var}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// A `$(...)` or backtick after `--cfg=` is never handed to `compgen`, which would run it.
+#[test]
+fn bash_attached_path_never_runs_a_typed_substitution() {
+    let script = print_script("bash");
+    let (no_eq_script, no_eq_breaks) = no_equals_wordbreaks();
+    for bash in bashes() {
+        for split in SPLITS {
+            for ctx in [
+                (script.as_str(), WORDBREAKS),
+                (no_eq_script.as_str(), no_eq_breaks.as_str()),
+            ] {
+                let fx = fixture();
+                for dir in ["$(touch sentinel-one)", "`touch sentinel-one`"] {
+                    literal_dir(&fx, dir);
+                    let cur = format!("--cfg={dir}/");
+                    let run = run_attached(&bash, &fx, ctx, &cur, split, vec![]);
+                    assert!(
+                        !fx.sentinel.exists(),
+                        "{bash} {split:?} {cur}: substitution ran"
+                    );
+                    assert_eq!(run.rc, "0", "{bash} {split:?} {cur}: {}", run.stderr);
+                    assert!(
+                        run.reply.is_empty(),
+                        "{bash} {split:?} {cur}: {:?}",
+                        run.reply
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// `compset -P 1 '*='` moves `--opt=` into `IPREFIX` so zsh matches and inserts the bare values.
+#[test]
+fn zsh_attached_value_moves_the_option_into_the_prefix() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    fn with(cur: &str) -> [&str; 4] {
+        ["toolr", "ci", "lint", cur]
+    }
+    let compset = "COMPSET:-P 1 *=".to_string();
+    assert_eq!(
+        zsh_complete(&fx, &with("--mode=fa")),
+        vec![
+            compset.clone(),
+            "COMPADD:-d descriptions -a values".to_string()
+        ]
+    );
+    assert_eq!(
+        zsh_complete(&fx, &with("--cfg=files/")),
+        vec![compset.clone(), "FILES:".to_string()]
+    );
+    assert_eq!(
+        zsh_complete(&fx, &with("--out=")),
+        vec![compset, "FILES:-/".to_string()]
+    );
+    // No values: neither `compset` nor a blank `compadd` runs.
+    for cur in ["--verbose=", "--mode=zz", "--nope="] {
+        assert_eq!(zsh_complete(&fx, &with(cur)), Vec::<String>::new(), "{cur}");
+    }
+    let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--mode", "fa"]);
+    assert_eq!(calls, vec!["COMPADD:-d descriptions -a values".to_string()]);
+}
+
+/// The first word of each candidate line `complete -C` printed.
+fn fish_names(stdout: &str) -> Vec<&str> {
+    stdout
+        .lines()
+        .map(|l| l.split('\t').next().unwrap())
+        .collect()
+}
+
+#[test]
+fn fish_attached_value_keeps_the_option_prefix() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    let stdout = fish_complete(&fx, "toolr ci lint --mode=dr");
+    assert_eq!(
+        fish_names(&stdout),
+        vec!["--mode=dry run", "--mode=dry walk"]
+    );
+    let stdout = fish_complete(&fx, "toolr ci lint --mode=");
+    assert!(fish_names(&stdout).contains(&"--mode=x=~root"), "{stdout}");
+    assert!(!fx.sentinel.exists());
+    assert!(!fx.sentinel2.exists());
+
+    let stdout = fish_complete(&fx, "toolr ci lint --cfg=files/");
+    let names = fish_names(&stdout);
+    for want in ["--cfg=files/with space.txt", "--cfg=files/sub/"] {
+        assert!(names.contains(&want), "{want:?} not in {names:?}");
+    }
+    assert!(!fx.sentinel3.exists(), "fish executed a file name");
+    let stdout = fish_complete(&fx, "toolr ci lint --out=files/");
+    assert_eq!(fish_names(&stdout), vec!["--out=files/sub/"]);
 }

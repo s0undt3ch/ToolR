@@ -236,6 +236,9 @@ fn classify<'a>(manifest: &'a Manifest, tokens: &[String]) -> Slot<'a> {
 /// Factored out so the dispatcher branch can reuse it after recursing
 /// into a chosen grafted child.
 fn classify_leaf_args<'a>(command: &'a Command, arg_tokens: &[String], prefix: String) -> Slot<'a> {
+    if let Some(slot) = attached_value(command, &prefix) {
+        return slot;
+    }
     if let Some(argument) = pending_flag_value(command, arg_tokens) {
         return Slot::FlagValue { argument, prefix };
     }
@@ -320,7 +323,10 @@ fn classify_dispatcher<'a>(
     }
 
     // No child chosen yet — completion targets the dispatcher's own
-    // surface (`--flag <TAB>`, `--<TAB>`) or the child-name slot.
+    // surface (`--flag <TAB>`, `--flag=<TAB>`, `--<TAB>`) or the child-name slot.
+    if let Some(slot) = attached_value(command, &prefix) {
+        return slot;
+    }
     if let Some(argument) = pending_flag_value(command, arg_tokens) {
         return Slot::FlagValue { argument, prefix };
     }
@@ -378,6 +384,23 @@ fn pending_flag_value<'a>(command: &'a Command, arg_tokens: &[String]) -> Option
         .last()
         .and_then(|t| find_flag(command, t))
         .filter(|a| takes_value(a))
+}
+
+/// `--name=partial`: the value slot of `--name`, with `partial` as the prefix. Splits at the
+/// first `=`, since a value may itself contain one. A boolean or unknown name gets
+/// [`Slot::None`], never flag names.
+fn attached_value<'a>(command: &'a Command, word: &str) -> Option<Slot<'a>> {
+    let (name, partial) = word.split_once('=')?;
+    if !name.starts_with("--") {
+        return None;
+    }
+    Some(match find_flag(command, name).filter(|a| takes_value(a)) {
+        Some(argument) => Slot::FlagValue {
+            argument,
+            prefix: partial.to_string(),
+        },
+        None => Slot::None,
+    })
 }
 
 /// Indices of the positional values in `arg_tokens`, skipping each known

@@ -23,11 +23,18 @@ _toolr() {
     # its candidate.
     local -a lines values descriptions
     lines=("${(@f)$(toolr __complete "$PWD" "${passthrough[@]}" 2>/dev/null)}")
+    # Saved first: the filter below would overwrite it.
+    local rc=$?
+    # `(@f)` turns empty output into one empty line; drop it, or `compadd` adds a blank match.
+    lines=("${(@)lines:#}")
+    # `--opt=value`: complete the part after the first `=`, keeping `--opt=` in the line.
+    local attached=0
+    [[ $cur == --?*=* ]] && attached=1
     # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
-    case $? in
+    case $rc in
         0) ;;
-        10) _files; return ;;
-        11) _files -/; return ;;
+        10) (( attached )) && compset -P 1 '*='; _files; return ;;
+        11) (( attached )) && compset -P 1 '*='; _files -/; return ;;
         *) return ;;
     esac
     # `compadd -d` uses the description array as the *displayed* text for
@@ -43,6 +50,9 @@ _toolr() {
 
     if (( ${#values} == 0 )); then
         return
+    fi
+    if (( attached )); then
+        compset -P 1 '*='
     fi
 
     # One-per-line descriptions only pay off for a small, scannable
