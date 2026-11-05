@@ -4,9 +4,13 @@ Platform-specific pytest fixtures for cross-platform command testing.
 
 from __future__ import annotations
 
+import concurrent.futures
+import os
 import sys
 
 import pytest
+
+from toolr.utils.command import run_command_impl
 
 # Detect platform
 IS_WINDOWS = sys.platform.startswith("win")
@@ -39,6 +43,37 @@ def echo_command():
         return [sys.executable, "-c", py_script]
 
     return _echo_cmd
+
+
+@pytest.fixture
+def run_streaming():
+    """Return a runner that streams argv through pipes and returns (returncode, stdout_text, stderr_text)."""
+
+    def _run_streaming(argv, **kwargs):
+        r_stdout, w_stdout = os.pipe()
+        r_stderr, w_stderr = os.pipe()
+
+        def work():
+            try:
+                return run_command_impl(
+                    argv, sys_stdout_fd=w_stdout, sys_stderr_fd=w_stderr, **kwargs
+                )
+            finally:
+                # Closing here, not after submit(), keeps the fds open until run_command_impl dups them.
+                os.close(w_stdout)
+                os.close(w_stderr)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(work)
+            with (
+                os.fdopen(r_stdout, "r") as stdout_reader,
+                os.fdopen(r_stderr, "r") as stderr_reader,
+            ):
+                stdout_text = stdout_reader.read()
+                stderr_text = stderr_reader.read()
+            return future.result(timeout=2.0), stdout_text, stderr_text
+
+    return _run_streaming
 
 
 @pytest.fixture
