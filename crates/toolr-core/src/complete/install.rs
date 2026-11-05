@@ -114,18 +114,16 @@ pub fn install_script(opts: &InstallOptions) -> Result<InstallOutcome> {
 
 /// Well-known bash-completion 2.x loader scripts, relative to the sysroot.
 /// 1.x never reads `~/.local/share/bash-completion/completions/`, so its
-/// loaders are left out; `etc/bash_completion` is a 2.x shim on Debian.
+/// loaders are left out, and so is `etc/profile.d/bash_completion.sh`, which
+/// Homebrew's 1.x formula installs too. `etc/bash_completion` is a 2.x shim
+/// on Debian.
 const BASH_COMPLETION_SYSROOT_PATHS: &[&str] = &[
     "usr/share/bash-completion/bash_completion",
     "etc/bash_completion",
     "usr/local/share/bash-completion/bash_completion",
-    "usr/local/etc/profile.d/bash_completion.sh",
     "opt/homebrew/share/bash-completion/bash_completion",
-    "opt/homebrew/etc/profile.d/bash_completion.sh",
     "home/linuxbrew/.linuxbrew/share/bash-completion/bash_completion",
-    "home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh",
     "opt/local/share/bash-completion/bash_completion",
-    "opt/local/etc/profile.d/bash_completion.sh",
 ];
 
 /// Paths where bash-completion's loader script may live. Probes files, not
@@ -149,7 +147,6 @@ pub fn bash_completion_candidates(
     }
     if let Some(prefix) = homebrew_prefix {
         out.push(prefix.join("share/bash-completion/bash_completion"));
-        out.push(prefix.join("etc/profile.d/bash_completion.sh"));
     }
     out
 }
@@ -166,7 +163,9 @@ pub fn bash_completion_installed(
         .any(|p| p.is_file())
 }
 
-/// Single-quote `s` for bash unless every character is plainly safe.
+/// Quote `s` as a single word for POSIX shells: bare when every character
+/// is in a conservative safe set, single-quoted otherwise. It doesn't guard a
+/// leading `-`; callers pass absolute paths.
 pub fn shell_quote(s: &str) -> String {
     let safe = |c: char| c.is_ascii_alphanumeric() || "/._-+:,@%".contains(c);
     if !s.is_empty() && s.chars().all(safe) {

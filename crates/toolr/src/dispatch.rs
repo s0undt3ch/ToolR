@@ -545,8 +545,8 @@ fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Re
     let force = matches.get_flag("force");
 
     let home = dirs_home()?;
-    let xdg_data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
-    let xdg_config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let xdg_data_home = non_empty_env_path("XDG_DATA_HOME");
+    let xdg_config_home = non_empty_env_path("XDG_CONFIG_HOME");
     let opts = InstallOptions {
         shell,
         xdg_data_home,
@@ -632,12 +632,25 @@ fn bash_completion_sysroot(value: Option<std::ffi::OsString>) -> PathBuf {
         .map_or_else(|| PathBuf::from("/"), PathBuf::from)
 }
 
+/// A non-UTF-8 path can't be printed losslessly, so that hint names no path
+/// rather than a wrong one.
 fn bash_source_hint(path: &std::path::Path) -> String {
+    let action = match path.to_str() {
+        Some(path) => format!("add `source {}`", shell_quote(path)),
+        None => "add a `source` line for the installed script".to_string(),
+    };
     format!(
         "toolr: can't find bash-completion, so bash won't load this script by itself; \
-         add `source {}` to your bash startup file (~/.bashrc).",
-        shell_quote(&path.display().to_string())
+         {action} to your bash startup file (~/.bashrc)."
     )
+}
+
+/// The XDG base directory spec, and bash-completion with it, treats an empty
+/// value as unset; using it would install relative to the cwd.
+fn non_empty_env_path(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 fn dirs_home() -> anyhow::Result<PathBuf> {
@@ -867,6 +880,18 @@ mod tests {
             "toolr: can't find bash-completion, so bash won't load this script by itself; \
              add `source /home/u/.local/share/bash-completion/completions/toolr` \
              to your bash startup file (~/.bashrc)."
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bash_source_hint_names_no_path_when_it_is_not_utf8() {
+        use std::os::unix::ffi::OsStrExt;
+        let path = std::path::Path::new(std::ffi::OsStr::from_bytes(b"/home/\xff/toolr"));
+        assert_eq!(
+            bash_source_hint(path),
+            "toolr: can't find bash-completion, so bash won't load this script by itself; \
+             add a `source` line for the installed script to your bash startup file (~/.bashrc)."
         );
     }
 

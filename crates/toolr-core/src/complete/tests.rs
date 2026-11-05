@@ -1602,13 +1602,9 @@ mod bash_completion_probe {
             "usr/share/bash-completion/bash_completion",
             "etc/bash_completion",
             "usr/local/share/bash-completion/bash_completion",
-            "usr/local/etc/profile.d/bash_completion.sh",
             "opt/homebrew/share/bash-completion/bash_completion",
-            "opt/homebrew/etc/profile.d/bash_completion.sh",
             "home/linuxbrew/.linuxbrew/share/bash-completion/bash_completion",
-            "home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh",
             "opt/local/share/bash-completion/bash_completion",
-            "opt/local/etc/profile.d/bash_completion.sh",
         ] {
             let tmp = TempDir::new().unwrap();
             plant(tmp.path(), rel);
@@ -1622,11 +1618,28 @@ mod bash_completion_probe {
         for rel in [
             "usr/local/etc/bash_completion",
             "opt/homebrew/etc/bash_completion",
+            // Homebrew's 1.x formula installs the profile.d loader as well.
+            "usr/local/etc/profile.d/bash_completion.sh",
+            "opt/homebrew/etc/profile.d/bash_completion.sh",
+            "home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh",
+            "opt/local/etc/profile.d/bash_completion.sh",
         ] {
             let tmp = TempDir::new().unwrap();
             plant(tmp.path(), rel);
             assert!(!bash_completion_installed(tmp.path(), None, None), "{rel}");
         }
+    }
+
+    #[test]
+    fn homebrew_prefix_profile_d_loader_is_not_detected() {
+        let sysroot = TempDir::new().unwrap();
+        let prefix = TempDir::new().unwrap();
+        plant(prefix.path(), "etc/profile.d/bash_completion.sh");
+        assert!(!bash_completion_installed(
+            sysroot.path(),
+            None,
+            Some(prefix.path())
+        ));
     }
 
     #[test]
@@ -1697,23 +1710,19 @@ mod bash_completion_probe {
     }
 
     #[test]
-    fn homebrew_prefix_share_and_profile_d_are_probed() {
-        for rel in [
-            "share/bash-completion/bash_completion",
-            "etc/profile.d/bash_completion.sh",
-        ] {
-            let sysroot = TempDir::new().unwrap();
-            let prefix = TempDir::new().unwrap();
-            assert!(!bash_completion_installed(
-                sysroot.path(),
-                None,
-                Some(prefix.path())
-            ));
-            plant(prefix.path(), rel);
-            assert!(
-                bash_completion_installed(sysroot.path(), None, Some(prefix.path())),
-                "{rel}"
-            );
-        }
+    fn homebrew_prefix_share_loader_is_probed() {
+        let sysroot = TempDir::new().unwrap();
+        let prefix = TempDir::new().unwrap();
+        assert!(!bash_completion_installed(
+            sysroot.path(),
+            None,
+            Some(prefix.path())
+        ));
+        plant(prefix.path(), "share/bash-completion/bash_completion");
+        assert!(bash_completion_installed(
+            sysroot.path(),
+            None,
+            Some(prefix.path())
+        ));
     }
 }

@@ -164,6 +164,10 @@ fn hint_prints_when_only_a_bash_completion_1x_loader_exists() {
     for rel in [
         "usr/local/etc/bash_completion",
         "opt/homebrew/etc/bash_completion",
+        // Homebrew's 1.x formula installs the profile.d loader as well.
+        "usr/local/etc/profile.d/bash_completion.sh",
+        "opt/homebrew/etc/profile.d/bash_completion.sh",
+        "home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh",
     ] {
         let host = Host::new();
         host.plant_loader(rel);
@@ -202,4 +206,83 @@ fn no_hint_when_homebrew_prefix_holds_bash_completion() {
     let (stdout, _) = succeeded(BASH, &out);
     assert!(stdout.contains("wrote bash completion script"), "{stdout}");
     assert!(!stdout.contains(HINT), "{stdout}");
+}
+
+#[test]
+fn force_reinstall_prints_the_hint() {
+    let host = Host::new();
+    host.install(BASH);
+    let args = &["self", "completion", "install", "bash", "--force"];
+    let (stdout, _) = host.install(args);
+    assert!(stdout.contains("content unchanged"), "{stdout}");
+    assert!(
+        stdout.contains(&source_line(&host.installed_bash_script())),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn empty_xdg_homes_read_as_unset() {
+    let host = Host::new();
+    let cwd = host.path("cwd");
+    std::fs::create_dir_all(&cwd).unwrap();
+    for shell in ["bash", "fish"] {
+        let args = &["self", "completion", "install", shell];
+        let out = host
+            .command(args)
+            .env("XDG_DATA_HOME", "")
+            .env("XDG_CONFIG_HOME", "")
+            .current_dir(&cwd)
+            .output()
+            .unwrap();
+        let (stdout, _) = succeeded(args, &out);
+        if shell == "bash" {
+            let script = host
+                .path("home")
+                .join(".local/share/bash-completion/completions/toolr");
+            assert!(script.is_file());
+            assert!(stdout.contains(&source_line(&script)), "{stdout}");
+        } else {
+            assert!(
+                host.path("home")
+                    .join(".config/fish/completions/toolr.fish")
+                    .is_file()
+            );
+        }
+    }
+    assert_eq!(std::fs::read_dir(&cwd).unwrap().count(), 0);
+}
+
+/// APFS rejects non-UTF-8 file names, so this runs on Linux only.
+#[cfg(target_os = "linux")]
+#[test]
+fn hint_names_no_path_when_home_is_not_utf8() {
+    use std::os::unix::ffi::OsStrExt;
+    let host = Host::new();
+    let home = host
+        .tmp
+        .path()
+        .join(std::ffi::OsStr::from_bytes(b"home-\xff"));
+    std::fs::create_dir_all(&home).unwrap();
+    let out = host
+        .command(BASH)
+        .env("HOME", &home)
+        .env_remove("XDG_DATA_HOME")
+        .output()
+        .unwrap();
+    let (stdout, _) = succeeded(BASH, &out);
+    assert!(
+        home.join(".local/share/bash-completion/completions/toolr")
+            .is_file()
+    );
+    let hint = stdout
+        .lines()
+        .find(|line| line.contains(HINT))
+        .unwrap_or_else(|| panic!("no hint: {stdout}"));
+    assert!(
+        hint.ends_with(
+            "add a `source` line for the installed script to your bash startup file (~/.bashrc)."
+        ),
+        "{hint}"
+    );
 }
