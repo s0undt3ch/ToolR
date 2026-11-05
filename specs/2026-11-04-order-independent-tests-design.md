@@ -69,8 +69,8 @@ foreground run, including under random order. Not a finding.
 - **xdist:** not used, so no interaction. If added, `pytest-randomly` is xdist-aware and shares one seed.
 - **`distribution` suite and `tests/e2e`:** `_test_distribution.yml` and `install-smoke.yml` also run pytest
   with the dev group, so randomising applies there too. Verified in the plan (e2e in the full runs; the
-  `distribution` suite once with a seed). If a distribution test proves order-dependent, fix it, or pass
-  `-p no:randomly` in that one workflow with a comment.
+  `distribution` suite once with a seed). If a distribution test proves order-dependent, fix the test; it is not exempted
+  with `-p no:randomly` (decided).
 - **Docs:** `CONTRIBUTING.md` Tests section gains "Reproducing a failure": copy the seed from the header and
   run `uv run pytest -p randomly --randomly-seed=N`; `-p no:randomly` restores the default order. It also
   documents the reverse-order recipe as a debugging aid.

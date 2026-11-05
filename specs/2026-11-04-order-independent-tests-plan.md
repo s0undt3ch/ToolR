@@ -64,9 +64,8 @@ Every commit carries the `Release-Notes: skip` trailer. Stage by path, never `gi
 
 ## Task 4: Distribution suite
 
-- [ ] `uv run pytest -m distribution -p randomly --randomly-seed=1`. Green: done. Order-dependent: fix at the
-  source; only as a last resort add `-p no:randomly` with a comment to that one workflow command in
-  `_test_distribution.yml` or `install-smoke.yml`.
+- [ ] `uv run pytest -m distribution -p randomly --randomly-seed=1`. Green: done. Order-dependent: fix the test at
+  the source; no `-p no:randomly` exemption (decided).
 
 ## Task 5: Verify
 
