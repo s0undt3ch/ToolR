@@ -352,7 +352,7 @@ fn demo_repo() -> TempDir {
     fs::write(
         tools.join("demo.py"),
         "\"\"\"Demo.\"\"\"\nfrom toolr import command_group\n\
-         group = command_group(\"demo\", \"Demo commands\")\n\n\
+         group = command_group(\"demo\", \"Demo commands\", \"Demo commands.\")\n\n\
          @group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
     )
     .unwrap();

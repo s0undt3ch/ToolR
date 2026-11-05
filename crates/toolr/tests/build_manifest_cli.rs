@@ -28,7 +28,7 @@ fn minimal_plugin(tmp: &Path, name: &str) -> PathBuf {
 from toolr import Context
 from toolr import command_group
 
-g = command_group("g", "G")
+g = command_group("g", "G", "G.")
 
 @g.command
 def hi(ctx: Context) -> None:

@@ -14,7 +14,7 @@ mod common;
 use common::VenvFixture;
 use toolr_core::venv::SYNC_INPUTS_DESCRIPTION;
 
-const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
+const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\", \"Hi.\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
 
 struct Project {
     fx: VenvFixture,

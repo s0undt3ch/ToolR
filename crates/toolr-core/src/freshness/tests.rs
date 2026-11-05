@@ -307,7 +307,7 @@ fn returns_static_drift_when_scanned_file_changed_without_a_venv() {
             ),
             (
                 "dispatcher.py",
-                "from toolr import Context, command_group\nfrom toolr.sources import DispatchCommand\n\ngroup = command_group(\"django\", \"Django\")\n\n\n@group.command\ndef django(ctx: Context, *, dispatched: DispatchCommand) -> int:\n    \"\"\"Dispatch.\"\"\"\n",
+                "from toolr import Context, command_group\nfrom toolr.sources import DispatchCommand\n\ngroup = command_group(\"django\", \"Django\", \"Django.\")\n\n\n@group.command\ndef django(ctx: Context, *, dispatched: DispatchCommand) -> int:\n    \"\"\"Dispatch.\"\"\"\n",
             ),
         ],
     );

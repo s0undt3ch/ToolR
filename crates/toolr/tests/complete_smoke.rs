@@ -80,7 +80,7 @@ fn description_newline_does_not_forge_candidates() {
     let tools = common::write_project(tmp.path());
     std::fs::write(
         tools.join("ci.py"),
-        "\"\"\"CI.\"\"\"\nfrom toolr import command_group\n\ngroup = command_group(\"ci\", \"x\\nevil\\tdesc\\x1b[2J\")\n",
+        "\"\"\"CI.\"\"\"\nfrom toolr import command_group\n\ngroup = command_group(\"ci\", \"x\\nevil\\tdesc\\x1b[2J\", \"CI.\")\n",
     )
     .unwrap();
     common::toolr()
@@ -156,7 +156,7 @@ fn reparses_when_tools_change_after_manifest_was_written() {
     // Add a new command after the cached manifest was built.
     std::fs::write(
         tmp.path().join("tools/extra.py"),
-        r#"group = command_group("extra", "Extra utilities")
+        r#"group = command_group("extra", "Extra utilities", "Extra utilities.")
 
 @group.command
 def shiny(ctx):

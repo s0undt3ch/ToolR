@@ -155,11 +155,12 @@ fn build_commands_inner(
     // (alphabetical) which matches the conventional `_common.py` →
     // `gh_actions.py` etc. layout where the parent group lives in an
     // underscore-prefixed module.
-    let mut all_groups = Vec::new();
+    let mut all_groups: Vec<Group> = Vec::new();
     let mut all_commands = Vec::new();
-    // Group full path → (declaring module, index in `all_groups`).
-    let mut seen_groups: std::collections::HashMap<String, (String, usize)> =
+    // Group full path → its declarations so far.
+    let mut seen_groups: std::collections::HashMap<String, SeenGroup> =
         std::collections::HashMap::new();
+    let mut contradictory: Vec<ContradictoryGroup> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     let mut global_vars: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
@@ -205,20 +206,52 @@ fn build_commands_inner(
         // wins, as in Python; a later one that disagrees is warned about.
         for binding in bindings {
             let path = binding.group.full_path();
-            match seen_groups.get(&path) {
-                Some((first_module, index)) => warnings.extend(redeclaration_warning(
-                    &all_groups[*index],
-                    first_module,
-                    &binding,
-                    &module_path,
-                )),
+            if binding.contradictory {
+                contradictory.push(ContradictoryGroup {
+                    group: path.clone(),
+                    module: module_path.clone(),
+                });
+            }
+            match seen_groups.get_mut(&path) {
+                Some(seen) => {
+                    if !seen.modules.contains(&module_path) {
+                        seen.modules.push(module_path.clone());
+                    }
+                    seen.describes |= binding.describes;
+                    let first = &mut all_groups[seen.index];
+                    if !seen.has_description && binding.has_description {
+                        // Earlier declarations only fetched the group; this
+                        // one gives its description.
+                        first.description = binding.group.description.clone();
+                        seen.has_description = true;
+                    }
+                    warnings.extend(redeclaration_warning(
+                        first,
+                        &seen.modules[0],
+                        &binding,
+                        &module_path,
+                    ));
+                }
                 None => {
-                    seen_groups.insert(path, (module_path.clone(), all_groups.len()));
+                    seen_groups.insert(
+                        path,
+                        SeenGroup {
+                            index: all_groups.len(),
+                            modules: vec![module_path.clone()],
+                            describes: binding.describes,
+                            has_description: binding.has_description,
+                        },
+                    );
                     all_groups.push(binding.group);
                 }
             }
         }
         all_commands.extend(commands);
+    }
+
+    // First, as Python's `command_group` raises these when the module imports.
+    if !contradictory.is_empty() {
+        return Err(BuildError::ContradictoryGroups(contradictory));
     }
 
     if !name_conflicts.is_empty() {
@@ -288,11 +321,93 @@ fn build_commands_inner(
         return Err(BuildError::DuplicateCommands(duplicates));
     }
 
+    let undescribed: Vec<UndescribedGroup> = all_groups
+        .iter()
+        .map(|g| &seen_groups[&g.full_path()])
+        .filter(|seen| !seen.describes)
+        .map(|seen| UndescribedGroup {
+            group: all_groups[seen.index].full_path(),
+            modules: seen.modules.clone(),
+        })
+        .collect();
+    if !undescribed.is_empty() {
+        return Err(BuildError::UndescribedGroups(undescribed));
+    }
+
     Ok(BuiltTree {
         groups: all_groups,
         commands: all_commands,
         warnings,
     })
+}
+
+/// The declarations of one group seen so far by `build_commands_inner`.
+struct SeenGroup {
+    /// Index of the group in `all_groups`.
+    index: usize,
+    /// Every declaring module, first declaration first.
+    modules: Vec<String>,
+    /// Whether any declaration passes a description or docstring.
+    describes: bool,
+    /// Whether the kept group holds a declaration's description.
+    has_description: bool,
+}
+
+/// A `command_group` call passing a docstring with a description.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContradictoryGroup {
+    /// Dotted group path.
+    pub group: String,
+    /// The module making the call.
+    pub module: String,
+}
+
+/// A group none of whose declarations passes a description or docstring.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndescribedGroup {
+    /// Dotted group path.
+    pub group: String,
+    /// Every declaring module, in build order.
+    pub modules: Vec<String>,
+}
+
+/// `toolr.testing._groups._format_contradictory_groups` mirrors this in
+/// Python; change both together.
+fn format_contradictory_groups(groups: &[ContradictoryGroup]) -> String {
+    use crate::text::escape_control_chars;
+    groups
+        .iter()
+        .map(|g| {
+            format!(
+                "  - `{}` in {}: pass `docstring=` or `description=`/`long_description=`, not both.",
+                escape_control_chars(&g.group),
+                escape_control_chars(&g.module)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `toolr.testing._groups._format_undescribed_groups` mirrors this in
+/// Python; change both together.
+fn format_undescribed_groups(groups: &[UndescribedGroup]) -> String {
+    use crate::text::escape_control_chars;
+    groups
+        .iter()
+        .map(|g| {
+            let modules = g
+                .modules
+                .iter()
+                .map(|m| escape_control_chars(m))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "  - `{}` (declared in {modules}): give one declaration a description or docstring.",
+                escape_control_chars(&g.group)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The groups and commands of one source tree, plus its build warnings.
@@ -461,6 +576,14 @@ pub enum BuildError {
     /// message in Python; change both together.
     #[error("duplicate commands ({count}):\n{details}", count = .0.len(), details = format_duplicate_commands(.0))]
     DuplicateCommands(Vec<DuplicateCommand>),
+    /// `toolr.testing._groups._format_contradictory_groups` mirrors this
+    /// message in Python; change both together.
+    #[error("command groups with contradictory arguments ({count}):\n{details}", count = .0.len(), details = format_contradictory_groups(.0))]
+    ContradictoryGroups(Vec<ContradictoryGroup>),
+    /// `toolr.testing._groups._format_undescribed_groups` mirrors this
+    /// message in Python; change both together.
+    #[error("command groups with no description ({count}):\n{details}", count = .0.len(), details = format_undescribed_groups(.0))]
+    UndescribedGroups(Vec<UndescribedGroup>),
     #[error("argparse scanner error: {0}")]
     Argparse(#[from] crate::argparse::ArgparseError),
     #[error(transparent)]
@@ -1084,7 +1207,7 @@ def hello(ctx):
             (
                 "tools/dispatcher.py",
                 format!(
-                    "group = command_group(\"{group}\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n"
+                    "group = command_group(\"{group}\", \"Django\", \"Django.\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n"
                 ),
             ),
             (
@@ -1450,6 +1573,164 @@ def hello(ctx):
             ]
         );
         assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn group_without_a_description_anywhere_fails() {
+        let lint = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\")\n");
+        let build = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\")\n");
+        let other = format!(
+            "{GROUP_IMPORT}command_group(\"other\", \"Other\")\ncommand_group(\"other\", \"Other\")\n"
+        );
+        assert_eq!(
+            build_error_for(&[
+                ("tools/ci/__init__.py", ""),
+                ("tools/ci/lint.py", &lint),
+                ("tools/ci/build.py", &build),
+                ("tools/other.py", &other),
+            ]),
+            "command groups with no description (2):\n  \
+             - `ci` (declared in tools.ci.build, tools.ci.lint): give one declaration a \
+             description or docstring.\n  \
+             - `other` (declared in tools.other): give one declaration a description or docstring."
+        );
+    }
+
+    /// `__doc__` describes a group only when the module has a docstring.
+    #[test]
+    fn module_without_a_docstring_does_not_describe_its_group() {
+        let src = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", docstring=__doc__)\n");
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with no description (1):\n  \
+             - `ci` (declared in tools.m): give one declaration a description or docstring."
+        );
+    }
+
+    /// Any declaration may describe the group; title-only ones before it
+    /// only fetch it, so the description it gives is the group's.
+    #[test]
+    fn title_only_declarations_take_a_later_description() {
+        let first = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\")\n");
+        let second = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", \"CI commands.\")\n");
+        let third = format!("{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", \"Else.\")\n");
+        let (groups, warnings) = redeclared(&[
+            ("tools/a.py", &first),
+            ("tools/b.py", &second),
+            ("tools/c.py", &third),
+        ]);
+        assert_eq!(groups, [group_row("ci", "CI", "CI commands.")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `ci` is declared more than once; keeping the one in tools.a and \
+                 ignoring the different description in tools.c"
+            ]
+        );
+    }
+
+    /// A description held in a variable can't be read, but the group has one.
+    #[test]
+    fn non_literal_description_describes_the_group() {
+        let src = format!(
+            "{GROUP_IMPORT}DESC = \"CI.\"\ng = command_group(\"ci\", \"CI\", description=DESC)\n"
+        );
+        let (groups, _) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("ci", "CI", "")]);
+    }
+
+    /// `d` and `e` pass `None`, which is no argument at all.
+    #[test]
+    fn description_and_docstring_together_fail() {
+        let src = format!(
+            "\"\"\"Doc.\"\"\"\n{GROUP_IMPORT}\
+             a = command_group(\"a\", \"A\", description=\"A.\", docstring=__doc__)\n\
+             b = command_group(\"b\", \"B\", \"B.\", docstring=\"B.\")\n\
+             c = command_group(\"c\", long_description=\"C.\", docstring=__doc__)\n\
+             d = command_group(\"d\", \"D\", None, None, \"D.\")\n\
+             e = command_group(\"e\", \"E\", description=None, docstring=__doc__)\n\
+             f = a.command_group(\"f\", \"F\", \"F.\", None, \"F.\")\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with contradictory arguments (4):\n  \
+             - `a` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both.\n  \
+             - `b` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both.\n  \
+             - `c` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both.\n  \
+             - `a.f` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both."
+        );
+    }
+
+    /// Without a module docstring, `__doc__` is `None`: no contradiction.
+    #[test]
+    fn doc_reference_without_a_module_docstring_is_no_contradiction() {
+        let src = format!(
+            "{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", description=\"CI.\", docstring=__doc__)\n"
+        );
+        let (groups, _) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("ci", "CI", "CI.")]);
+    }
+
+    /// The tree `tests/testing/test_groups.py::test_paths_follow_the_parsers_resolution`
+    /// reads with `toolr.testing._groups`; both must give these paths.
+    #[test]
+    fn group_paths_match_the_testers_port() {
+        let a = "ci = command_group(\"ci\", \"CI\", \"CI.\")\n\
+                 command_group(\"bare\", \"Bare\", \"Bare.\")\n\
+                 x, y = command_group(\"skipped\", \"S\", \"S.\")\n\
+                 z = other(\"ignored\")\nz = 1\npass\n";
+        let b = "img = ci.command_group(\"image\", \"Image\", \"Image.\")\n\
+                 kw = command_group(\"kw\", \"Kw\", \"Kw.\", parent=img)\n\
+                 lit = command_group(\"lit\", \"Lit\", \"Lit.\", parent=\"ci\")\n\
+                 dotted = command_group(\"ci.dot\", \"Dot\", \"Dot.\", parent=\"ignored\")\n\
+                 nested = bare.command_group(\"kid\", \"Kid\", \"Kid.\")\n\
+                 unknown = nope.command_group(\"orphan\", \"Orphan\", \"Orphan.\")\n\
+                 call = make().command_group(\"deep\", \"Deep\", \"Deep.\", parent=\"ci\")\n\
+                 command_group(NAME, \"Name\", \"Name.\")\n";
+        let (groups, _) = redeclared(&[
+            ("tools/a.py", a),
+            ("tools/b.py", b),
+            (
+                "tools/pkg/__init__.py",
+                "command_group(\"pkg\", \"Pkg\", \"Pkg.\")\n",
+            ),
+            (
+                "tools/.hidden/m.py",
+                "command_group(\"hidden\", \"H\", \"H.\")\n",
+            ),
+        ]);
+        let paths: Vec<&str> = groups.iter().map(|g| g.0.as_str()).collect();
+        assert_eq!(
+            paths,
+            [
+                "ci",
+                "bare",
+                "ci.image",
+                "ci.image.kw",
+                "ci.lit",
+                "ci.dot",
+                "bare.kid",
+                "orphan",
+                "ci.deep",
+                "pkg"
+            ]
+        );
+    }
+
+    /// Reported before anything else, as the runtime raises at import.
+    #[test]
+    fn contradictory_arguments_are_reported_first() {
+        let src = format!(
+            "\"\"\"Doc.\"\"\"\n{GROUP_IMPORT}\
+             g = command_group(\"ci.lint\", description=\"L.\", docstring=__doc__)\n\
+             command_group(\"bare\", \"Bare\")\n\
+             @command(group=\"nope\")\ndef f(ctx):\n    \"\"\"F.\"\"\"\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with contradictory arguments (1):\n  \
+             - `ci.lint` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both."
+        );
     }
 
     /// `@command(group="…")` in one file referring to a
@@ -2119,7 +2400,7 @@ def second(ctx):
             tmp.path(),
             "tools/dispatcher.py",
             r#""""Django dispatcher."""
-group = command_group("django", "Django")
+group = command_group("django", "Django", "Django.")
 
 @group.command
 def django(ctx):
@@ -2182,7 +2463,7 @@ parent = "django"
             r#""""Django dispatcher."""
 from toolr.sources import DispatchCommand
 
-group = command_group("django", "Django")
+group = command_group("django", "Django", "Django.")
 
 @group.command
 def django(ctx, *, cpu: str = "1", dispatched: DispatchCommand) -> int:
@@ -3562,7 +3843,7 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
             tmp.path(),
             "tools/dispatcher.py",
             r#""""Django dispatcher."""
-group = command_group("django", "Django")
+group = command_group("django", "Django", "Django.")
 
 @group.command
 def django(ctx):

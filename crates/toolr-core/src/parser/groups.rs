@@ -13,9 +13,16 @@ use crate::manifest::{Group, Origin};
 pub struct GroupBinding {
     pub var: String,
     pub group: Group,
-    /// Whether the call passed a description (or a docstring). A re-declaration
-    /// without one only fetches the group, so it can't disagree on it.
+    /// Whether `group.description` holds a description the call passed. A
+    /// re-declaration without one only fetches the group, so it can't
+    /// disagree on it.
     pub has_description: bool,
+    /// Whether the call passes a description or docstring at all, readable
+    /// or not. A group no declaration describes fails the build.
+    pub describes: bool,
+    /// Whether the call passes a docstring together with a description or
+    /// long description, which Python's `command_group` refuses.
+    pub contradictory: bool,
 }
 
 /// Walk the module's top-level statements and collect group bindings.
@@ -182,6 +189,17 @@ fn parse_group_call(
         (raw_name, parent)
     };
     let positional_title = call.arguments.args.get(1).and_then(literal_str);
+    // `None` is no argument, and `__doc__` is `None` in a module without a
+    // docstring, as at runtime.
+    let passed = |keyword: &str, position: usize| {
+        argument(call, keyword, position).is_some_and(|e| match e {
+            Expr::NoneLiteral(_) => false,
+            Expr::Name(n) if n.id.as_str() == "__doc__" => !module_docstring.is_empty(),
+            _ => true,
+        })
+    };
+    let passes_docstring = passed("docstring", 4);
+    let passes_description = passed("description", 2);
     let explicit_description =
         description_kwarg(call).or_else(|| call.arguments.args.get(2).and_then(literal_str));
     // When `docstring=` is supplied, split it the same way `parser/commands.rs`
@@ -200,6 +218,8 @@ fn parse_group_call(
     Some(GroupBinding {
         var: var.to_string(),
         has_description: description.is_some(),
+        describes: passes_description || passes_docstring,
+        contradictory: passes_docstring && (passes_description || passed("long_description", 3)),
         group: Group {
             name,
             title,
@@ -219,18 +239,25 @@ fn description_kwarg(call: &ExprCall) -> Option<String> {
         .and_then(|k| literal_str(&k.value))
 }
 
-/// Extract the `docstring=` kwarg's value. A bare `__doc__` reference
-/// resolves to the supplied module docstring; otherwise it must be a
-/// string literal.
+/// Extract the `docstring` argument's value, by keyword or fifth position.
+/// A bare `__doc__` reference resolves to the supplied module docstring;
+/// otherwise it must be a string literal.
 fn docstring_kwarg(call: &ExprCall, module_docstring: &str) -> Option<String> {
+    argument(call, "docstring", 4).and_then(|e| match e {
+        Expr::Name(n) if n.id.as_str() == "__doc__" => Some(module_docstring.to_string()),
+        e => literal_str(e),
+    })
+}
+
+/// The argument `command_group` binds to `keyword`, passed by keyword or at
+/// `position`.
+fn argument<'a>(call: &'a ExprCall, keyword: &str, position: usize) -> Option<&'a Expr> {
     call.arguments
         .keywords
         .iter()
-        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("docstring"))
-        .and_then(|k| match &k.value {
-            Expr::Name(n) if n.id.as_str() == "__doc__" => Some(module_docstring.to_string()),
-            e => literal_str(e),
-        })
+        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some(keyword))
+        .map(|k| &k.value)
+        .or_else(|| call.arguments.args.get(position))
 }
 
 fn literal_str(expr: &Expr) -> Option<String> {
@@ -326,19 +353,21 @@ mod tests {
     }
 
     #[test]
-    fn explicit_description_kwarg_wins_over_docstring_full() {
-        // `description=` is the explicit-override slot — when both it
-        // and a docstring are present, the kwarg keeps `description`
-        // verbatim but the docstring's first line still fills `title`.
+    fn description_kwarg_with_docstring_is_contradictory() {
+        // Python's `command_group` refuses both; the build reports it.
         let src = r#"group = command_group("ci", description="kw-desc", docstring=__doc__)"#;
         let m = parse_src(src);
-        let groups = extract_groups(
-            &m,
-            "Short title from docstring.\n\nLong paragraph ignored.",
-            &HashMap::new(),
-        );
-        assert_eq!(groups[0].group.title, "Short title from docstring.");
-        assert_eq!(groups[0].group.description, "kw-desc");
+        let groups = extract_groups(&m, "Short title.\n\nLong paragraph.", &HashMap::new());
+        assert!(groups[0].contradictory);
+        assert!(groups[0].describes);
+    }
+
+    #[test]
+    fn title_only_call_does_not_describe() {
+        let m = parse_src(r#"group = command_group("ci", "CI")"#);
+        let groups = extract_groups(&m, "", &HashMap::new());
+        assert!(!groups[0].describes);
+        assert!(!groups[0].contradictory);
     }
 
     #[test]

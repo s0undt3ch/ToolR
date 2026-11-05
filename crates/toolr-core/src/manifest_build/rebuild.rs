@@ -72,7 +72,7 @@ mod tests {
         std::fs::create_dir(&tools).unwrap();
         std::fs::write(
             tools.join("ci.py"),
-            "\"\"\"CI utilities.\"\"\"\ngroup = command_group(\"ci\", \"CI utilities\")\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n    pass\n",
+            "\"\"\"CI utilities.\"\"\"\ngroup = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n    pass\n",
         )
         .unwrap();
         let venv = project.join("venv");

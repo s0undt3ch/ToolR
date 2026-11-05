@@ -18,7 +18,7 @@ const HINT: &str = "run `toolr project venv sync` when you're ready";
 const REFUSAL: &str = "refusing to run code from an untrusted repository";
 const UV_INSTALL_FAILED: &str = "HTTP error during uv install";
 const UNREACHABLE_PROXY: &str = "http://127.0.0.1:9";
-const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
+const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\", \"Hi.\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
 
 /// A repository with a never-synced tools venv (no sync stamp), a stub uv on
 /// `PATH` and a `hello world` command whose interpreter drops a sentinel.

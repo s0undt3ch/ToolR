@@ -656,13 +656,13 @@ fn symlinked_module_project(tmp: &TempDir) -> PathBuf {
     let tools = common::write_project(tmp.path());
     std::fs::write(
         tools.join("demo.py"),
-        "group = command_group(\"demo\", \"Demo commands\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
+        "group = command_group(\"demo\", \"Demo commands\", \"Demo commands.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
     )
     .unwrap();
     std::fs::create_dir(tmp.path().join("shared")).unwrap();
     std::fs::write(
         tmp.path().join("shared/linked.py"),
-        "group = command_group(\"linked\", \"Linked commands\")\n\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+        "group = command_group(\"linked\", \"Linked commands\", \"Linked commands.\")\n\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
     )
     .unwrap();
     std::os::unix::fs::symlink("../shared/linked.py", tools.join("linked.py")).unwrap();

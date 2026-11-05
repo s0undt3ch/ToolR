@@ -804,7 +804,7 @@ fn make_tree(py_files: &[(&str, &str)]) -> TempDir {
 fn returns_fresh_manifest_when_no_cache_exists() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
+        "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     let ResolvedManifest {
         manifest,
@@ -821,7 +821,7 @@ fn returns_fresh_manifest_when_no_cache_exists() {
 fn returns_cached_manifest_when_hash_matches() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
+        "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     // Build once and write to disk.  Stamp the third_party_hash with the
     // empty-venv sentinel so `freshness::compare` (venv_dir=None) sees a
@@ -842,7 +842,7 @@ fn returns_cached_manifest_when_hash_matches() {
 fn corrupt_manifest_at_tab_rebuilds_in_memory() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
+        "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");
     std::fs::write(&manifest_path, "{\"schema_ver").unwrap();
@@ -860,7 +860,7 @@ fn corrupt_manifest_at_tab_rebuilds_in_memory() {
 fn re_parses_when_cached_hash_is_stale() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
+        "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     // Write a stale manifest with a bogus hash.
     let mut stale = crate::parser::build_static_manifest(&tmp.path().join("tools")).unwrap();
@@ -877,7 +877,7 @@ fn re_parses_when_cached_hash_is_stale() {
 fn preserves_third_party_entries_from_cache_when_reparsing() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
+        "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     // Seed a manifest with a fake third-party command and a stale
     // static_hash so the re-parse path runs.
@@ -933,7 +933,7 @@ fn preserves_third_party_entries_from_cache_when_reparsing() {
 fn failed_rebuild_serves_the_cache() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
+        "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     let tools = tmp.path().join("tools");
     let mut built = crate::parser::build_static_manifest(&tools).unwrap();
@@ -962,7 +962,7 @@ fn failed_rebuild_serves_the_cache() {
 fn symlinked_module_fails_resolve_with_and_without_a_cache() {
     let tmp = make_tree(&[(
         "demo.py",
-        "group = command_group(\"demo\", \"Demo\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
+        "group = command_group(\"demo\", \"Demo\", \"Demo.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
     )]);
     let tools = tmp.path().join("tools");
     let manifest = resolve_manifest_at_tab(tmp.path()).unwrap().manifest;

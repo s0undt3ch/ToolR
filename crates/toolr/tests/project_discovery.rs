@@ -13,7 +13,7 @@ use predicates::str::contains;
 use tempfile::TempDir;
 
 const DEMO: &str = "\"\"\"Demo.\"\"\"\nfrom toolr import command_group\n\
-     group = command_group(\"demo\", \"Demo commands\")\n\
+     group = command_group(\"demo\", \"Demo commands\", \"Demo commands.\")\n\
      @group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n";
 
 /// `toolr` in `cwd` with a private cache.

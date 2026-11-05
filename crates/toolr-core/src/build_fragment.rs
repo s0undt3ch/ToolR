@@ -332,7 +332,7 @@ def hello_command(ctx: Context, name: str = "World") -> None:
             "own.py",
             r#""""Own."""
 from toolr import command_group
-g = command_group("own", "Own")
+g = command_group("own", "Own", "Own.")
 
 @g.command
 def ours(ctx):
@@ -347,7 +347,7 @@ def ours(ctx):
             "sub/__init__.py",
             r#""""Sub."""
 from toolr import command_group
-g = command_group("subg", "Sub Group")
+g = command_group("subg", "Sub Group", "Sub Group.")
 
 @g.command
 def subcmd(ctx):
@@ -416,7 +416,7 @@ def subcmd(ctx):
         write(
             &pkg,
             "cmds.py",
-            r#"group = command_group("grp", "Grp")
+            r#"group = command_group("grp", "Grp", "Grp.")
 
 @group.command("positional", name="keyword")
 def do_thing(ctx):
@@ -505,7 +505,7 @@ from toolr import command_group
 
 from .types import Mode
 
-group = command_group("cf", "Cross-file")
+group = command_group("cf", "Cross-file", "Cross-file.")
 
 @group.command
 def run(ctx: Context, mode: Mode = "fast") -> None:
