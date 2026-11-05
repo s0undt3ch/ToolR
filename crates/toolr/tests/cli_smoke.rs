@@ -839,7 +839,7 @@ fn conflicting_group_project(tmp: &TempDir) {
 }
 
 const GROUP_CONFLICT_WARNING: &str = "toolr: warning: group `grp` is declared more than once; \
-     keeping the one in tools.m1 and ignoring the different title in tools.m2\n";
+     keeping the title from tools.m1 and ignoring the different title in tools.m2\n";
 
 fn stderr_of(root: &std::path::Path, args: &[&str]) -> String {
     let output = common::toolr()
@@ -890,4 +890,29 @@ fn group_conflict_warns_on_every_untrusted_run() {
             GROUP_CONFLICT_WARNING
         );
     }
+}
+
+/// Identical warnings from separate re-declarations each print, whether the
+/// bootstrap or the freshness step built the manifest.
+#[test]
+fn identical_group_conflicts_each_warn() {
+    let tmp = TempDir::new().unwrap();
+    let tools = common::write_project(tmp.path());
+    std::fs::write(
+        tools.join("m1.py"),
+        "from toolr import command_group\n\ng = command_group(\"grp\", \"Grp\", \"Grp\")\n\n\n@g.command\ndef one(ctx):\n    \"\"\"Run.\"\"\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tools.join("m2.py"),
+        "from toolr import command_group\n\ncommand_group(\"grp\", \"Other\")\ncommand_group(\"grp\", \"Other\")\n",
+    )
+    .unwrap();
+    let root = tmp.path();
+    let twice = "toolr: warning: group `grp` is declared more than once; keeping the title from \
+                 tools.m1 and ignoring the different title in tools.m2\n"
+        .repeat(2);
+    assert_eq!(stderr_of(root, &["--help"]), twice);
+    std::fs::write(tools.join("m3.py"), "x = 1\n").unwrap();
+    assert_eq!(stderr_of(root, &["--help"]), twice);
 }

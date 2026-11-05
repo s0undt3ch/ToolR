@@ -35,7 +35,8 @@ use toolr_core::venv::resolve_venv_path;
 /// Does nothing unless `persist`; [`ensure_manifest_fresh`] then builds
 /// the manifest in memory.
 ///
-/// Returns the build's warnings, which the written manifest doesn't keep.
+/// Returns the build's warnings, which the written manifest doesn't keep, or
+/// `None` when it built nothing.
 ///
 /// Errors propagate so `main.rs` can print them and exit non-zero — we
 /// intentionally do NOT fall through to an empty manifest, since that's
@@ -44,26 +45,26 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
     cwd: &Path,
     argv: &[String],
     persist: bool,
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<Option<Vec<String>>> {
     let Ok(root) = discover_project_root(cwd) else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
     let tools = root.join("tools");
     if tools.join(".toolr-manifest.json").is_file() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
     if should_skip_auto_rebuild(argv) {
-        return Ok(Vec::new());
+        return Ok(None);
     }
     if !persist {
-        return Ok(Vec::new());
+        return Ok(None);
     }
 
     let manifest_path = tools.join(".toolr-manifest.json");
     // Concurrent processes on a fresh clone all see it missing; the
     // re-check under the lock lets only the first one build it.
     let missing = || Ok::<_, anyhow::Error>((!manifest_path.is_file()).then_some(()));
-    let warnings = rebuild_if_stale(&manifest_path, missing, |()| {
+    rebuild_if_stale(&manifest_path, missing, |()| {
         // First-party is always available (pure AST). Add third-party only when
         // a venv already exists — globbing site-packages JSON executes nothing.
         let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
@@ -76,8 +77,7 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
         write_manifest(&manifest_path, &manifest)
             .with_context(|| format!("writing {}", manifest_path.display()))?;
         Ok(manifest.build_warnings)
-    })?;
-    Ok(warnings.unwrap_or_default())
+    })
 }
 
 /// Top-level subcommands toolr itself provides.

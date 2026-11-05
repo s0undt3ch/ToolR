@@ -53,17 +53,14 @@ fn run() -> anyhow::Result<ExitCode> {
     // completion drops the same entries in `resolve_manifest_at_tab`.
     manifest.drop_unsafe_names();
     if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
-        // Build warnings come only from a manifest built on this run. The
-        // freshness step may rebuild what the bootstrap just wrote, so a
-        // warning both builds give prints once.
-        let mut built: Vec<&String> = bootstrap_warnings.iter().collect();
-        for warning in &manifest.build_warnings {
-            if !built.contains(&warning) {
-                built.push(warning);
-            }
-        }
+        // Build warnings come only from a manifest built on this run. When the
+        // bootstrap built it, the freshness step's rebuild of the same tree
+        // repeats them, so only the bootstrap's print.
+        let built = bootstrap_warnings
+            .as_ref()
+            .unwrap_or(&manifest.build_warnings);
         let plugin = manifest.plugin_warnings.iter().map(|w| &w.message);
-        for message in built.into_iter().chain(plugin) {
+        for message in built.iter().chain(plugin) {
             eprintln!(
                 "toolr: warning: {}",
                 toolr_core::text::strip_control_chars(message)
