@@ -172,7 +172,7 @@ fn build_commands_inner(
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
         name_conflicts.extend(detect_name_conflicts(&module, &module_path, &all_imports));
-        let bindings = extract_groups(&module, &module_doc, &global_vars);
+        let bindings = extract_groups(&module, module_doc.as_deref(), &global_vars);
         unsupported.extend(detect_unsupported_commands(
             &module,
             &module_path,
@@ -223,11 +223,16 @@ fn build_commands_inner(
                     warnings.extend(redeclaration_warning(
                         &path,
                         &seen.fields,
-                        &seen.modules[0],
+                        &seen.kept_from,
                         &binding.fields,
                         &module_path,
                     ));
-                    fill_empty_fields(&mut seen.fields, binding.fields);
+                    fill_empty_fields(
+                        &mut seen.fields,
+                        &mut seen.kept_from,
+                        binding.fields,
+                        &module_path,
+                    );
                     let first = &mut all_groups[seen.index];
                     first.title = seen.fields.title.text().to_string();
                     first.description = seen.fields.description.text().to_string();
@@ -241,6 +246,7 @@ fn build_commands_inner(
                             describes: binding.describes,
                             unreadable: binding.unreadable,
                             fields: binding.fields,
+                            kept_from: std::array::from_fn(|_| module_path.clone()),
                         },
                     );
                     all_groups.push(binding.group);
@@ -356,6 +362,8 @@ struct SeenGroup {
     /// The fields kept so far: the first declaration's, with empty ones
     /// filled by later declarations.
     fields: GroupFields,
+    /// The module each of `fields` came from, in `GroupFields` order.
+    kept_from: [String; 3],
 }
 
 /// A `command_group` call passing a docstring with a description.
@@ -411,8 +419,7 @@ fn format_undescribed_groups(groups: &[UndescribedGroup]) -> String {
                 .join(", ");
             let hint = if g.unreadable {
                 "give one declaration a description or docstring the static parser can read: \
-                 a string literal, a string constant assigned earlier in the module, or the \
-                 `__doc__` of a module with a docstring."
+                 a string literal, or the `__doc__` of a module with a docstring."
             } else {
                 "give one declaration a description or docstring."
             };
@@ -434,18 +441,54 @@ pub(crate) struct BuiltTree {
 }
 
 /// The warning for a group re-declaration that disagrees with the kept
-/// fields, worded like Python's `command_group`. `None` when they agree.
+/// fields, worded like Python's `command_group`, naming the module each kept
+/// value came from. `None` when they agree.
 fn redeclaration_warning(
     path: &str,
     kept: &GroupFields,
-    first_module: &str,
+    kept_from: &[String; 3],
     later: &GroupFields,
     later_module: &str,
 ) -> Option<String> {
     // Only two readable values can differ: an empty one has no opinion, and
     // an unreadable one can't be compared.
     let differs = |kept: &Field, other: &Field| matches!((kept, other), (Field::Text(a), Field::Text(b)) if a != b);
-    let differing: Vec<&str> = [
+    let differing: Vec<(&str, &str)> = field_pairs(kept, later)
+        .into_iter()
+        .zip(kept_from)
+        .filter(|((_, kept, later), _)| differs(kept, later))
+        .map(|((name, _, _), module)| (name, module.as_str()))
+        .collect();
+    if differing.is_empty() {
+        return None;
+    }
+    // `title, description from tools.a and long_description from tools.b`.
+    let mut sources: Vec<(Vec<&str>, &str)> = Vec::new();
+    for &(name, module) in &differing {
+        match sources.iter_mut().find(|(_, m)| *m == module) {
+            Some((names, _)) => names.push(name),
+            None => sources.push((vec![name], module)),
+        }
+    }
+    let kept_text = sources
+        .iter()
+        .map(|(names, module)| format!("the {} from {module}", names.join(", ")))
+        .collect::<Vec<_>>()
+        .join(" and ");
+    let names: Vec<&str> = differing.iter().map(|(name, _)| *name).collect();
+    Some(format!(
+        "group `{path}` is declared more than once; keeping {kept_text} and ignoring the \
+         different {} in {later_module}",
+        names.join(", ")
+    ))
+}
+
+/// `(name, kept, later)` for each field, in the order Python compares them.
+fn field_pairs<'a>(
+    kept: &'a GroupFields,
+    later: &'a GroupFields,
+) -> [(&'static str, &'a Field, &'a Field); 3] {
+    [
         ("title", &kept.title, &later.title),
         ("description", &kept.description, &later.description),
         (
@@ -454,29 +497,27 @@ fn redeclaration_warning(
             &later.long_description,
         ),
     ]
-    .into_iter()
-    .filter(|(_, kept, later)| differs(kept, later))
-    .map(|(name, _, _)| name)
-    .collect();
-    (!differing.is_empty()).then(|| {
-        format!(
-            "group `{path}` is declared more than once; keeping the one in {first_module} and \
-             ignoring the different {} in {later_module}",
-            differing.join(", ")
-        )
-    })
 }
 
 /// Fill the kept fields a later declaration gives where they're empty, as
-/// Python's `command_group` does.
-fn fill_empty_fields(kept: &mut GroupFields, later: GroupFields) {
-    for (kept, later) in [
+/// Python's `command_group` does, recording `module` as their source.
+fn fill_empty_fields(
+    kept: &mut GroupFields,
+    kept_from: &mut [String; 3],
+    later: GroupFields,
+    module: &str,
+) {
+    for ((kept, later), from) in [
         (&mut kept.title, later.title),
         (&mut kept.description, later.description),
         (&mut kept.long_description, later.long_description),
-    ] {
-        if *kept == Field::Empty {
+    ]
+    .into_iter()
+    .zip(kept_from.iter_mut())
+    {
+        if *kept == Field::Empty && later != Field::Empty {
             *kept = later;
+            *from = module.to_string();
         }
     }
 }
@@ -956,15 +997,16 @@ pub(crate) fn module_path_for_prefix(source_dir: &Path, file: &Path, prefix: &st
     out
 }
 
-fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
+/// The module's docstring, or `None` when it has none.
+fn module_docstring(module: &ruff_python_ast::ModModule) -> Option<String> {
     use ruff_python_ast::Stmt;
     let Some(Stmt::Expr(e)) = module.body.first() else {
-        return String::new();
+        return None;
     };
-    if let ruff_python_ast::Expr::StringLiteral(s) = e.value.as_ref() {
-        return s.value.to_str().to_string();
+    match e.value.as_ref() {
+        ruff_python_ast::Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
+        _ => None,
     }
-    String::new()
 }
 
 #[cfg(test)]
@@ -1517,7 +1559,7 @@ def hello(ctx):
         assert_eq!(
             warnings,
             [
-                "group `grp` is declared more than once; keeping the one in tools.m and \
+                "group `grp` is declared more than once; keeping the title, description from tools.m and \
               ignoring the different title, description in tools.m"
             ]
         );
@@ -1537,9 +1579,9 @@ def hello(ctx):
         assert_eq!(
             warnings,
             [
-                "group `grp` is declared more than once; keeping the one in tools.m1 and \
+                "group `grp` is declared more than once; keeping the title from tools.m1 and \
                  ignoring the different title in tools.m2",
-                "group `grp` is declared more than once; keeping the one in tools.m1 and \
+                "group `grp` is declared more than once; keeping the description from tools.m1 and \
                  ignoring the different description in tools.m3",
             ]
         );
@@ -1561,7 +1603,7 @@ def hello(ctx):
         assert_eq!(
             warnings,
             [
-                "group `grp` is declared more than once; keeping the one in tools.m1 and \
+                "group `grp` is declared more than once; keeping the title from tools.m1 and \
               ignoring the different title in tools.m3"
             ]
         );
@@ -1585,7 +1627,7 @@ def hello(ctx):
         assert_eq!(
             warnings,
             [
-                "group `p1.kid` is declared more than once; keeping the one in tools.m and \
+                "group `p1.kid` is declared more than once; keeping the title from tools.m and \
               ignoring the different title in tools.m"
             ]
         );
@@ -1651,8 +1693,7 @@ def hello(ctx):
              - `a` (declared in tools.m): give one declaration a description or docstring.\n  \
              - `b` (declared in tools.m): give one declaration a description or docstring.\n  \
              - `c` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
-             a string literal, a string constant assigned earlier in the module, or the \
-             `__doc__` of a module with a docstring."
+             a string literal, or the `__doc__` of a module with a docstring."
         );
     }
 
@@ -1667,11 +1708,9 @@ def hello(ctx):
             build_error_for(&[("tools/m.py", &src)]),
             "command groups with no description (2):\n  \
              - `ci` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
-             a string literal, a string constant assigned earlier in the module, or the \
-             `__doc__` of a module with a docstring.\n  \
+             a string literal, or the `__doc__` of a module with a docstring.\n  \
              - `cd` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
-             a string literal, a string constant assigned earlier in the module, or the \
-             `__doc__` of a module with a docstring."
+             a string literal, or the `__doc__` of a module with a docstring."
         );
     }
 
@@ -1688,11 +1727,9 @@ def hello(ctx):
             build_error_for(&[("tools/m.py", &src)]),
             "command groups with no description (2):\n  \
              - `ci` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
-             a string literal, a string constant assigned earlier in the module, or the \
-             `__doc__` of a module with a docstring.\n  \
+             a string literal, or the `__doc__` of a module with a docstring.\n  \
              - `cd` (declared in tools.m): give one declaration a description or docstring the static parser can read: \
-             a string literal, a string constant assigned earlier in the module, or the \
-             `__doc__` of a module with a docstring."
+             a string literal, or the `__doc__` of a module with a docstring."
         );
     }
 
@@ -1712,7 +1749,7 @@ def hello(ctx):
         assert_eq!(
             warnings,
             [
-                "group `ci` is declared more than once; keeping the one in tools.a and \
+                "group `ci` is declared more than once; keeping the description from tools.b and \
                  ignoring the different description in tools.c"
             ]
         );
@@ -1742,29 +1779,24 @@ def hello(ctx):
         assert!(warnings.is_empty(), "{warnings:?}");
     }
 
-    /// A string constant assigned earlier in the module reads as its value,
-    /// the one it holds when the call runs.
+    /// A name is unreadable even when the module assigns it a string: it
+    /// describes the group, shows empty, and a later literal neither fills it
+    /// nor warns.
     #[test]
-    fn string_constants_read_as_their_value() {
+    fn module_constants_are_unreadable() {
         let src = format!(
-            "\"\"\"Doc title.\n\nDoc body.\"\"\"\n{GROUP_IMPORT}\
-             TITLE = \"Old\"\nTITLE = \"CI\"\nDESC = \"CI.\"\nEMPTY = \"\"\n\
-             a = command_group(\"ci\", TITLE, description=DESC)\n\
-             b = command_group(\"cd\", docstring=\"CD.\")\n\
-             c = command_group(\"cd\", title=EMPTY, description=DESC)\n"
+            "{GROUP_IMPORT}DESC = \"\"\nDESC += \"CI.\"\n\
+             a = command_group(\"ci\", \"CI\", DESC)\n\
+             DESCRIPTION = \"CD commands.\"\n\
+             b = command_group(\"cd\", \"CD\", description=DESCRIPTION)\n\
+             c = command_group(\"cd\", \"CD\", \"Continuous delivery.\")\n"
         );
         let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
         assert_eq!(
             groups,
-            [group_row("ci", "CI", "CI."), group_row("cd", "CD.", "CD.")]
+            [group_row("ci", "CI", ""), group_row("cd", "CD", "")]
         );
-        assert_eq!(
-            warnings,
-            [
-                "group `cd` is declared more than once; keeping the one in tools.m and \
-                 ignoring the different description in tools.m"
-            ]
-        );
+        assert!(warnings.is_empty(), "{warnings:?}");
     }
 
     /// A value the static parser can't read has an opinion it can't compare:
@@ -1772,10 +1804,10 @@ def hello(ctx):
     #[test]
     fn unreadable_fields_are_kept_without_a_warning() {
         let src = format!(
-            "{GROUP_IMPORT}from elsewhere import DESC, TITLE\nNAME = \"x\"\nNAME = make()\n\
+            "{GROUP_IMPORT}from elsewhere import DESC, TITLE\n\
              a = command_group(\"ci\", TITLE, description=DESC)\n\
              b = command_group(\"ci\", \"CI\", description=\"CI.\")\n\
-             c = command_group(\"cd\", \"CD\", docstring=NAME)\n\
+             c = command_group(\"cd\", \"CD\", docstring=opts.doc)\n\
              d = command_group(\"cd\", \"CD\", \"CD.\")\n\
              e = command_group(\"ops\", docstring=make())\n\
              f = command_group(\"ops\", \"Ops\", \"Ops.\")\n"
@@ -1790,6 +1822,144 @@ def hello(ctx):
             ]
         );
         assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// An argument the parser can't read may be `None` at runtime, so it
+    /// contradicts nothing.
+    #[test]
+    fn unreadable_arguments_are_no_contradiction() {
+        let src = format!(
+            "\"\"\"Doc.\"\"\"\n{GROUP_IMPORT}LONG = None\n\
+             a = command_group(\"ci\", \"CI\", long_description=LONG, docstring=\"CI.\")\n\
+             b = command_group(\"cd\", \"CD\", description=make(), docstring=__doc__)\n\
+             c = command_group(\"ops\", \"Ops\", \"Ops.\", docstring=DOC)\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("ci", "CI", "CI."),
+                group_row("cd", "CD", ""),
+                group_row("ops", "Ops", "Ops.")
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// A docstring the parser can't read may be `None`, so a literal long
+    /// description beside it is unknown: kept, but never compared.
+    #[test]
+    fn long_description_beside_an_unreadable_docstring_is_unreadable() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"ci\", \"CI\", long_description=\"Long.\", docstring=DOC)\n\
+             b = command_group(\"ci\", \"CI\", \"CI.\", \"Else.\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("ci", "CI", "")]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// An empty module docstring is still a docstring: `__doc__` is `""`, not
+    /// `None`, so it contradicts a description, but doesn't describe a group.
+    #[test]
+    fn empty_module_docstring_is_passed_but_does_not_describe() {
+        let contradictory = format!(
+            "\"\"\"\"\"\"\n{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", description=\"X\", docstring=__doc__)\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &contradictory)]),
+            "command groups with contradictory arguments (1):\n  \
+             - `ci` in tools.m: pass `docstring=` or `description=`/`long_description=`, not both."
+        );
+        let undescribed = format!(
+            "\"\"\"\"\"\"\n{GROUP_IMPORT}g = command_group(\"ci\", \"CI\", docstring=__doc__)\n"
+        );
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &undescribed)]),
+            "command groups with no description (1):\n  \
+             - `ci` (declared in tools.m): give one declaration a description or docstring the \
+             static parser can read: a string literal, or the `__doc__` of a module with a docstring."
+        );
+    }
+
+    /// A module that binds `__doc__` outside a function or class makes
+    /// `__doc__` unreadable there, wherever the binding sits.
+    #[test]
+    fn rebinding_doc_makes_it_unreadable() {
+        let (groups, warnings) = redeclared(&[
+            (
+                "tools/a.py",
+                "__doc__ = \"A.\"\ng = command_group(\"a\", \"A\", docstring=__doc__)\n",
+            ),
+            (
+                "tools/b.py",
+                "\"\"\"B doc.\"\"\"\nfrom x import y as __doc__\n\
+                 g = command_group(\"b\", \"B\", description=\"B.\", docstring=__doc__)\n",
+            ),
+            (
+                "tools/c.py",
+                "try:\n    pass\nexcept E as __doc__:\n    pass\n\
+                 g = command_group(\"c\", \"C\", docstring=__doc__)\n",
+            ),
+            (
+                "tools/d.py",
+                "\"\"\"D doc.\"\"\"\nimport os\nclass K:\n    __doc__ = \"k\"\n\
+                 def f():\n    __doc__ = \"f\"\n\
+                 try:\n    pass\nexcept E:\n    pass\n\
+                 g = command_group(\"d\", docstring=__doc__)\n",
+            ),
+            (
+                "tools/e.py",
+                "g = command_group(\"e\", \"E\", docstring=__doc__)\n\
+                 if True:\n    for __doc__ in []:\n        pass\n",
+            ),
+        ]);
+        assert_eq!(
+            groups,
+            [
+                group_row("a", "A", ""),
+                group_row("b", "B", "B."),
+                group_row("c", "C", ""),
+                group_row("d", "D doc.", "D doc."),
+                group_row("e", "E", ""),
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// The warning names the module each kept value came from, which needn't
+    /// be the first declaration's.
+    #[test]
+    fn warning_names_the_module_of_each_kept_field() {
+        let (groups, warnings) = redeclared(&[
+            (
+                "tools/m1.py",
+                "g = command_group(\"ci\", description=\"CI.\")\n",
+            ),
+            ("tools/m2.py", "g = command_group(\"ci\", \"From m2\")\n"),
+            ("tools/m3.py", "g = command_group(\"ci\", \"From m3\")\n"),
+            (
+                "tools/m4.py",
+                "g = command_group(\"ci\", \"Other\", \"Else.\", \"Long.\")\n",
+            ),
+            (
+                "tools/m5.py",
+                "g = command_group(\"ci\", \"Other\", \"Else.\", \"Longer.\")\n",
+            ),
+        ]);
+        assert_eq!(groups, [group_row("ci", "From m2", "CI.")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `ci` is declared more than once; keeping the title from tools.m2 and \
+                 ignoring the different title in tools.m3",
+                "group `ci` is declared more than once; keeping the title from tools.m2 and the \
+                 description from tools.m1 and ignoring the different title, description in tools.m4",
+                "group `ci` is declared more than once; keeping the title from tools.m2 and the \
+                 description from tools.m1 and the long_description from tools.m4 and ignoring \
+                 the different title, description, long_description in tools.m5",
+            ]
+        );
     }
 
     /// An unreadable value fills an empty field, which a later readable value
@@ -1820,7 +1990,7 @@ def hello(ctx):
         assert_eq!(
             warnings,
             [
-                "group `ci` is declared more than once; keeping the one in tools.m and \
+                "group `ci` is declared more than once; keeping the title, long_description from tools.m and \
                  ignoring the different title, long_description in tools.m"
             ]
         );
@@ -1847,7 +2017,7 @@ def hello(ctx):
         assert_eq!(
             warnings,
             [
-                "group `p` is declared more than once; keeping the one in tools.m and \
+                "group `p` is declared more than once; keeping the title from tools.m and \
                  ignoring the different title in tools.m"
             ]
         );

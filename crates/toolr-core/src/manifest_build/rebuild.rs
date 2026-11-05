@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(
             outcome.warnings,
             [
-                "group `grp` is declared more than once; keeping the one in tools.m1 and \
+                "group `grp` is declared more than once; keeping the title from tools.m1 and \
               ignoring the different title in tools.m2"
             ]
         );
