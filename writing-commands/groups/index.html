@@ -603,6 +603,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#declaring-a-group-more-than-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Declaring a group more than once
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1629,6 +1640,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#declaring-a-group-more-than-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Declaring a group more than once
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1837,6 +1859,46 @@ and the file declaring the command don't need to share an import.
 Read <a href="../across-files/"><em>Scaling command groups across files</em></a> for
 the full picture, including the typo-safety guarantees the
 string-keyed form gives you.</p>
+<h2 id="declaring-a-group-more-than-once">Declaring a group more than once<a class="headerlink" href="#declaring-a-group-more-than-once" title="Permanent link">&para;</a></h2>
+<p>A group belongs to its first declaration. Calling <code>command_group</code> again
+with the same name and parent returns that group, so several modules can
+each declare <code>command_group("ci", "CI", "CI commands.")</code> and share it. A
+later call that passes only the title, <code>command_group("ci", "CI")</code>, fetches
+the group without repeating its description.</p>
+<p>A later declaration fills a title, description or long description the
+group still has empty, so the call that describes the group needn't come
+first. One with a different title, description or long description doesn't
+change the group. <code>toolr</code> keeps the value it has and warns, naming the
+module each kept value came from:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr: warning: group `ci` is declared more than once; keeping the title from tools.ci and ignoring the different title in tools.release
+</span></code></pre></div>
+<p>The warning prints on the run that rebuilds the manifest, and <code>-q</code>
+suppresses it. <code>toolr self build-manifest</code> prints it for a plugin too.</p>
+<p>Declare each group's title and description once, and fetch it by title
+everywhere else. A group none of whose declarations passes a description or
+docstring fails the build:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>toolr: command groups with no description (1):
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  - `ci` (declared in tools.ci.build, tools.ci.lint): give one declaration a description or docstring.
+</span></code></pre></div>
+<p>Only a string literal, or the module docstring through <code>__doc__</code>, shows in
+<code>toolr &lt;group&gt; --help</code>. Any other expression, such as a constant, a call
+or an attribute, counts as a description but shows empty, and <code>__doc__</code>
+does too in a module that assigns <code>__doc__</code>. A later declaration doesn't
+fill a field such an expression gives, and the build doesn't report
+conflicts involving one. A description passed through <code>**options</code>, or as
+the <code>__doc__</code> of a module without a docstring, doesn't count, and the
+error says so.</p>
+<p>A single call can't pass both <code>docstring=</code> and <code>description=</code> (or
+<code>long_description=</code>); the build refuses that too. It reports this only
+when both are a literal or the <code>__doc__</code> of a module with a docstring,
+since any other expression may be <code>None</code> when the call runs.</p>
+<p>"First" means first in file order to <code>toolr</code>, which reads <code>tools/</code> in
+sorted path order. Python declares in import order instead, so a module
+that imports a later-sorted one can see a different winner in tests. The
+warning names the module of the kept value and of the ignored one, so you
+can tell which declaration to remove.</p>
+<p>A plugin can declare a group your <code>tools/</code> also declares. Your
+declaration wins, without a warning.</p>
 <p>Next: <a href="../arguments/">Arguments →</a></p>
 
 

@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev734-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev772-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev734 - 2026-11-05
+        0.35.2-dev772 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev734 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev772 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev734-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev772-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev734 - 2026-11-05
+        0.35.2-dev772 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev734 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev772 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev734-2026-11-05">0.35.2-dev734 - 2026-11-05<a class="headerlink" href="#0352-dev734-2026-11-05" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev772-2026-11-05">0.35.2-dev772 - 2026-11-05<a class="headerlink" href="#0352-dev772-2026-11-05" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7591,6 +7591,7 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <p>The warning prints only in an interactive shell, so a bashrc sourced by scripts or <code>bash -c</code> stays quiet.</p>
 <p><strong>Breaking:</strong> <code>toolr</code> and <code>CommandsTester</code> now refuse several shapes they used to read differently. A command name defined twice in one group, in one file or across files of one <code>tools/</code> tree or plugin package, fails with "duplicate commands" listing every definition (it used to keep one silently); rename all but one, e.g. with <code>name="…"</code>. A command decorator on a nested <code>def</code> (inside another function, a class or an <code>if</code>) and a <code>group=</code> or command name that isn't a string literal fail with "unsupported command declarations"; move the <code>def</code> to module level and write the value as a literal. A local command shadowing a plugin's, or two plugins defining one command, still only warn.</p>
 <p>Both now also reject a command decorator inside <code>if TYPE_CHECKING:</code>, a platform guard or an uncalled factory, even when that code never runs, and a <code>def</code> carrying two command decorators; each command must be a top-level <code>def</code>, with platform checks inside its body. toolr recognises <code>command</code> imported from <code>toolr</code> or any <code>toolr.*</code> submodule, re-exported within <code>tools/</code>, or assigned from <code>toolr.command</code>; one imported from anywhere else, such as click, counts only when called with <code>group=</code>, and a module's own <code>def command</code> never does.</p>
+<p><strong>Breaking:</strong> the manifest build now fails when no <code>command_group</code> call for a group passes a description or docstring (an empty one counts as none, and an expression other than a string literal, such as a constant, counts as one), listing every module that declares it, and when one call passes <code>docstring=</code> together with <code>description=</code> or <code>long_description=</code>, each as a literal or the <code>__doc__</code> of a module with a docstring. Title-only calls such as <code>command_group("ci", "CI")</code> still work as long as one declaration describes the group, in any module and in any order. Before, <code>command_group</code> raised for these only when the call created the group as its module imported, so a group created in a module no command imports could build and run; such a tree now fails to build. <code>CommandsTester</code> reports both with the same text. A plugin that adds commands to a host's group must describe that group in its own declaration, or its <code>toolr self build-manifest</code> fails.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7713,7 +7714,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>The uv auto-install now checks the downloaded archive against the SHA-256 checksum published with the same uv release, and refuses to install it if the checksum is missing or doesn't match.</p>
 <p>Path-typed arguments (<code>pathlib.Path</code> and the <code>toolr.types</code> path types) now tab-complete files, or directories for <code>DirectoryPath</code>, <code>WritableDirectoryPath</code> and <code>NewPath</code>, in bash, zsh and fish. So do <code>toolr project trust</code>, <code>untrust</code> and <code>self build-manifest --source-dir</code> / <code>--output</code>. Re-run <code>toolr self completion install &lt;shell&gt; --force</code> to pick it up.</p>
 <p><code>@toolr.command(...)</code>, <code>@t.command(...)</code> after <code>import toolr as t</code>, and an alias from <code>from toolr import command as cmd</code> now register commands; <code>toolr</code> used to skip them while <code>CommandsTester</code> accepted them. A mistyped group equally close to several declared groups now always suggests the alphabetically first one.</p>
-<p><code>command_group()</code> now rejects contradictory arguments (such as passing both <code>docstring</code> and <code>description</code>) even when the group already exists, instead of silently returning the existing group. A title-only re-fetch of an existing group, <code>command_group("ci", "CI")</code>, still returns it. A conflicting re-declaration keeps the first group and is logged at debug level.</p>
+<p><code>command_group()</code> now raises for contradictory arguments (such as passing both <code>docstring</code> and <code>description</code>) even when the group already exists, instead of silently returning the existing group. It no longer raises at runtime for a missing description: a title-only call, <code>command_group("ci", "CI")</code>, returns the group if it exists and creates it otherwise, and the manifest build checks that some declaration describes the group instead.</p>
+<p>When several calls declare the same group, a later call fills a title, description or long description the group still has empty, so <code>toolr &lt;group&gt; --help</code> and <code>CommandsTester</code> show the description whichever module gives it. A conflicting re-declaration, with a different non-empty title, description or long description, keeps the first group: Python logs it at DEBUG level, and toolr warns when it rebuilds the manifest or <code>toolr self build-manifest</code> builds a plugin, naming the module each kept value came from and the module it ignores.</p>
+<p>The manifest build now reads a group's <code>title=</code> passed by keyword and <code>parent=</code> passed by position, as <code>command_group</code> does. Before, it ignored a keyword title, so <code>toolr --help</code> showed no title for <code>command_group("ci", title="CI", description="…")</code>. <code>toolr --help</code> shows a group's title and description only when they are string literals or the module docstring through <code>__doc__</code>; any other expression, such as a constant, counts as given but shows empty.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7891,6 +7894,20 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Bash completes words with colons, without bash-completion (<a href="https://github.com/s0undt3ch/ToolR/commit/e7cea51aed47768168d736e473884de075ac7a0b"><code>e7cea51</code></a>)</li>
 <li><em>(complete)</em> Keep a typed <code>@</code> or <code>$</code> in bash completion replies (<a href="https://github.com/s0undt3ch/ToolR/commit/11f0d6e30d004280df876dd5fd222b72112fc1fc"><code>11f0d6e</code></a>)</li>
 <li><em>(complete)</em> Warn about an old bash only in an interactive shell (<a href="https://github.com/s0undt3ch/ToolR/commit/35fc070d5a1bd784bee6e57d513564b56f93e408"><code>35fc070</code></a>)</li>
+<li><em>(decorators)</em> Make command_group lenient about a missing description at runtime (<a href="https://github.com/s0undt3ch/ToolR/commit/4b15ee6e474f23bc4e07679b575f4c94ca58051b"><code>4b15ee6</code></a>)</li>
+<li><em>(parser)</em> Warn when a group is re-declared with different fields (<a href="https://github.com/s0undt3ch/ToolR/commit/186879095c8a714bbf5a557dbc3bf1ed7b690a72"><code>1868790</code></a>)</li>
+<li><em>(parser)</em> Fail the build for undescribed or contradictory groups (<a href="https://github.com/s0undt3ch/ToolR/commit/504a87ef3443bbfcb9036cf92e01ab1f55589e99"><code>504a87e</code></a>)</li>
+<li><em>(testing)</em> Report undescribed and contradictory groups like the build (<a href="https://github.com/s0undt3ch/ToolR/commit/7a73518409b57d882c373f2fce81ad66ca0a2bce"><code>7a73518</code></a>)</li>
+<li><em>(decorators)</em> Let a later command_group fill an empty field (<a href="https://github.com/s0undt3ch/ToolR/commit/5121c1b5a1c27a493ab2dbbd7c5d11af9372a880"><code>5121c1b</code></a>)</li>
+<li><em>(parser)</em> Let a later group declaration fill an empty field (<a href="https://github.com/s0undt3ch/ToolR/commit/38381ef1e0b1f6d0e2fc340ca134030e986eaa88"><code>38381ef</code></a>)</li>
+<li><em>(testing)</em> Read tools sources as bytes for the group checks (<a href="https://github.com/s0undt3ch/ToolR/commit/b56df1795ef47caaced5d089cf00f0f37ab9c57c"><code>b56df17</code></a>)</li>
+<li><em>(parser)</em> Count an empty group description as none (<a href="https://github.com/s0undt3ch/ToolR/commit/92104d577b80f5a76f041819c2206a7531910246"><code>92104d5</code></a>)</li>
+<li><em>(parser)</em> Read group fields the way command_group binds them (<a href="https://github.com/s0undt3ch/ToolR/commit/ad68f587600d02967319e54d449db90c5d98ad25"><code>ad68f58</code></a>)</li>
+<li><em>(testing)</em> Read group constants and unreadable descriptions like the build (<a href="https://github.com/s0undt3ch/ToolR/commit/b4c364428211303d5c0a4a26ca31e95bb39a0d8f"><code>b4c3644</code></a>)</li>
+<li><em>(parser)</em> Read only literals and the module docstring in group fields (<a href="https://github.com/s0undt3ch/ToolR/commit/36f4cd3d0fc3f35d3c59079fa211e2350a4fbf4f"><code>36f4cd3</code></a>)</li>
+<li><em>(testing)</em> Read group fields like the build without constants (<a href="https://github.com/s0undt3ch/ToolR/commit/8445441ce69fe3457e03efff2328b52a7d67efb0"><code>8445441</code></a>)</li>
+<li><em>(cli)</em> Print every build warning of the run's first build (<a href="https://github.com/s0undt3ch/ToolR/commit/844c578efaf9e0246d8a3dba4d46386cddce28ed"><code>844c578</code></a>)</li>
+<li><em>(cli)</em> Print group warnings from toolr self build-manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/f3e8eef6bae6a620a5894b1672959d70132799d9"><code>f3e8eef</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7961,6 +7978,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(ci)</em> Rename check-test-layout to check-tests-layout and say what to fix (<a href="https://github.com/s0undt3ch/ToolR/commit/0e5eed598ed7e1d5eb8e50041cbfaa6e5933a937"><code>0e5eed5</code></a>)</li>
 <li><em>(parser)</em> Document the Binding contract and share the toolr member check (<a href="https://github.com/s0undt3ch/ToolR/commit/07b5f85374e2cf1fb3c21de2bc340b451ce1430c"><code>07b5f85</code></a>)</li>
 <li><em>(complete)</em> Share the strip-then-quote step in the bash script (<a href="https://github.com/s0undt3ch/ToolR/commit/d0226e19cd65fc16a8bae636f3139306a209c9fa"><code>d0226e1</code></a>)</li>
+<li><em>(parser)</em> Keep each group field once and name the doc states (<a href="https://github.com/s0undt3ch/ToolR/commit/4fbe57c1744d8a88de4833a1b1eba4fe00dc76c0"><code>4fbe57c</code></a>)</li>
+<li><em>(testing)</em> Mirror the parser's group-field model in the tester (<a href="https://github.com/s0undt3ch/ToolR/commit/ee063d66229ff60f9c9b40ca8c58da7649e69dcf"><code>ee063d6</code></a>)</li>
+<li><em>(build-fragment)</em> Return a named BuiltFragment (<a href="https://github.com/s0undt3ch/ToolR/commit/e604b077928118ad2f9a0b320ca9f73c72d2585d"><code>e604b07</code></a>)</li>
+<li><em>(manifest)</em> Return build warnings beside the manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/1e0b5d8513fff9fd56ca75722f7fc5c8181a068c"><code>1e0b5d8</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8168,6 +8189,13 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Archive the FU-21 order-independent tests design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/d2cc928c15a5586d4dcdddd71a028f19884efeb1"><code>d2cc928</code></a>)</li>
 <li><em>(contributing)</em> Drop the redundant -p randomly from the replay example (<a href="https://github.com/s0undt3ch/ToolR/commit/70e767e6fd39e0dcee12b2c579a25cfedc19f0b2"><code>70e767e</code></a>)</li>
 <li>Note random test order and the autouse fixture convention (<a href="https://github.com/s0undt3ch/ToolR/commit/169c66a5ce6a658e868186ee78acb486a19cfb71"><code>169c66a</code></a>)</li>
+<li><em>(writing-commands)</em> Describe every group a title-only example creates (<a href="https://github.com/s0undt3ch/ToolR/commit/a938c4b0c515e276966b57e676de4b7c47bc4e41"><code>a938c4b</code></a>)</li>
+<li><em>(specs)</em> Spec and plan FU-22 group re-declaration parity (<a href="https://github.com/s0undt3ch/ToolR/commit/46c835c7e38abd193d9a577a5ddfd69bde266e12"><code>46c835c</code></a>)</li>
+<li><em>(writing-commands)</em> Say every group needs one described declaration (<a href="https://github.com/s0undt3ch/ToolR/commit/5c169df3b65fbe9d62c3e9951adaaf53b23f1b98"><code>5c169df</code></a>)</li>
+<li><em>(writing-commands)</em> Say a later declaration fills an empty group field (<a href="https://github.com/s0undt3ch/ToolR/commit/8534e7a4421b337b1dca1a310181724b92067a5d"><code>8534e7a</code></a>)</li>
+<li><em>(specs)</em> Archive the FU-22 group re-declaration parity design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/de23cfcb3f8424b1dc21c638ab77a9a3fc4c1ac2"><code>de23cfc</code></a>)</li>
+<li><em>(writing-commands)</em> Say which group descriptions the build can read (<a href="https://github.com/s0undt3ch/ToolR/commit/89a3ad8a273ce11e56fbc6dfa38882993c9acc95"><code>89a3ad8</code></a>)</li>
+<li><em>(writing-commands)</em> Say which group values the build shows (<a href="https://github.com/s0undt3ch/ToolR/commit/5597005cb6766bfc37c817cbd387c0cff9380189"><code>5597005</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8281,6 +8309,12 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(logs)</em> Test setup_logging through caplog and real handlers, not mocks (<a href="https://github.com/s0undt3ch/ToolR/commit/efff996a1f1e1438526132a17f935e7b0ec332f9"><code>efff996</code></a>)</li>
 <li><em>(logs)</em> Name and document the autouse fixtures, parametrise the timestamp-off test (<a href="https://github.com/s0undt3ch/ToolR/commit/1893ef86cc40d89f797a9de3b0b4edc20fb85c41"><code>1893ef8</code></a>)</li>
 <li><em>(complete)</em> Unify the bash wordbreaks and document the legacy fixtures (<a href="https://github.com/s0undt3ch/ToolR/commit/5d0a10d3de188ee2fd39854e5356e0fd1a67d5ec"><code>5d0a10d</code></a>)</li>
+<li><em>(e2e)</em> Pin group re-declaration parity in the corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/c73b4a45e0cf35e8f075b9284e94b39a7a1cda22"><code>c73b4a4</code></a>)</li>
+<li><em>(e2e)</em> Pin a title-only group re-fetch in the corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/73617363781676c627e99ad0e511ecb6b6f36be0"><code>7361736</code></a>)</li>
+<li><em>(e2e)</em> Drop the lenient command_group xfails from the parity corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/e3d26d6eb817319a121fac40e21f19ed4fdd6e2c"><code>e3d26d6</code></a>)</li>
+<li><em>(e2e)</em> Pin later declarations filling empty group fields (<a href="https://github.com/s0undt3ch/ToolR/commit/00d42dd4ab2cdf11de7e1885340d16b1f12b54e4"><code>00d42dd</code></a>)</li>
+<li><em>(e2e)</em> Pin keyword titles, constants and long descriptions in the corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/814b17050ccdd6b07365e59ddccf391896b7ceab"><code>814b170</code></a>)</li>
+<li><em>(e2e)</em> Pin kept-field modules, empty docstrings and None constants (<a href="https://github.com/s0undt3ch/ToolR/commit/01e00a1b7c33b3a150cc7c3028004c59e81bc86a"><code>01e00a1</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>

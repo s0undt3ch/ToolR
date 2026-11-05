@@ -1590,7 +1590,7 @@
 <p>Toolr originally let you declare a subgroup by calling
 <code>.command_group(...)</code> on a captured parent binding:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">docker</span> <span class="o">=</span> <span class="n">command_group</span><span class="p">(</span><span class="s2">"docker"</span><span class="p">,</span> <span class="s2">"Docker"</span><span class="p">,</span> <span class="s2">"Container utilities"</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">docker_image</span> <span class="o">=</span> <span class="n">docker</span><span class="o">.</span><span class="n">command_group</span><span class="p">(</span><span class="s2">"image"</span><span class="p">,</span> <span class="s2">"Image"</span><span class="p">)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">docker_image</span> <span class="o">=</span> <span class="n">docker</span><span class="o">.</span><span class="n">command_group</span><span class="p">(</span><span class="s2">"image"</span><span class="p">,</span> <span class="s2">"Image"</span><span class="p">,</span> <span class="s2">"Image subcommands"</span><span class="p">)</span>
 </span></code></pre></div>
 <p>That form is <strong>deprecated</strong> and will be removed in <strong>toolr 1.0</strong>.
 Every call emits a <code>ToolrDeprecationWarning</code> at runtime, so the
@@ -1627,7 +1627,7 @@ work without warnings.</p>
 <code>command_group(...)</code> declaration. The child names its parent inline:</p>
 <p>Before:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">docker</span> <span class="o">=</span> <span class="n">command_group</span><span class="p">(</span><span class="s2">"docker"</span><span class="p">,</span> <span class="s2">"Docker"</span><span class="p">,</span> <span class="s2">"Container utilities"</span><span class="p">)</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">docker_image</span> <span class="o">=</span> <span class="n">docker</span><span class="o">.</span><span class="n">command_group</span><span class="p">(</span><span class="s2">"image"</span><span class="p">,</span> <span class="s2">"Image"</span><span class="p">)</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">docker_image</span> <span class="o">=</span> <span class="n">docker</span><span class="o">.</span><span class="n">command_group</span><span class="p">(</span><span class="s2">"image"</span><span class="p">,</span> <span class="s2">"Image"</span><span class="p">,</span> <span class="s2">"Image subcommands"</span><span class="p">)</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nd">@docker_image</span><span class="o">.</span><span class="n">command</span>
@@ -1635,7 +1635,7 @@ work without warnings.</p>
 </span></code></pre></div>
 <p>After:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">docker</span> <span class="o">=</span> <span class="n">command_group</span><span class="p">(</span><span class="s2">"docker"</span><span class="p">,</span> <span class="s2">"Docker"</span><span class="p">,</span> <span class="s2">"Container utilities"</span><span class="p">)</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">docker_image</span> <span class="o">=</span> <span class="n">command_group</span><span class="p">(</span><span class="s2">"docker.image"</span><span class="p">,</span> <span class="s2">"Image"</span><span class="p">)</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">docker_image</span> <span class="o">=</span> <span class="n">command_group</span><span class="p">(</span><span class="s2">"docker.image"</span><span class="p">,</span> <span class="s2">"Image"</span><span class="p">,</span> <span class="s2">"Image subcommands"</span><span class="p">)</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nd">@docker_image</span><span class="o">.</span><span class="n">command</span>

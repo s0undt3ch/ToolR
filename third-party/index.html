@@ -2148,7 +2148,9 @@ invocation — no project-side changes needed on their end.</p>
 <p><strong>Group augmentation:</strong> to add commands to a group of the host repo,
   the plugin declares that group itself (<code>command_group("ci", ...)</code>, with
   the same full path). A command in a group the plugin doesn't declare
-  fails the build. The host's title and description win over the
+  fails the build. The plugin's declaration must give the group a
+  description or docstring too, since its own <code>self build-manifest</code> reads
+  only the plugin's sources. The host's title and description win over the
   plugin's. Groups are matched by their full path, so a plugin's
   <code>docker.image</code> and a local <code>ci.image</code> stay separate.</p>
 </li>
