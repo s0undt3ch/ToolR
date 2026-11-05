@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev695-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev704-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev695 - 2026-11-05
+        0.35.2-dev704 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev695 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev704 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev695-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev704-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev695 - 2026-11-05
+        0.35.2-dev704 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev695 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev704 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev695-2026-11-05">0.35.2-dev695 - 2026-11-05<a class="headerlink" href="#0352-dev695-2026-11-05" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev704-2026-11-05">0.35.2-dev704 - 2026-11-05<a class="headerlink" href="#0352-dev704-2026-11-05" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7710,6 +7710,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>The uv auto-install now checks the downloaded archive against the SHA-256 checksum published with the same uv release, and refuses to install it if the checksum is missing or doesn't match.</p>
 <p>Path-typed arguments (<code>pathlib.Path</code> and the <code>toolr.types</code> path types) now tab-complete files, or directories for <code>DirectoryPath</code>, <code>WritableDirectoryPath</code> and <code>NewPath</code>, in bash, zsh and fish. So do <code>toolr project trust</code>, <code>untrust</code> and <code>self build-manifest --source-dir</code> / <code>--output</code>. Re-run <code>toolr self completion install &lt;shell&gt; --force</code> to pick it up.</p>
 <p><code>@toolr.command(...)</code>, <code>@t.command(...)</code> after <code>import toolr as t</code>, and an alias from <code>from toolr import command as cmd</code> now register commands; <code>toolr</code> used to skip them while <code>CommandsTester</code> accepted them. A mistyped group equally close to several declared groups now always suggests the alphabetically first one.</p>
+<p><code>command_group()</code> now rejects contradictory arguments (such as passing both <code>docstring</code> and <code>description</code>) even when the group already exists, instead of silently returning the existing group. A title-only re-fetch of an existing group, <code>command_group("ci", "CI")</code>, still returns it. A conflicting re-declaration keeps the first group and is logged at debug level.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7882,6 +7883,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> Suggest pytest tests/, not tools/, in venv run hints (<a href="https://github.com/s0undt3ch/ToolR/commit/37fa8bfc6c1e0bff474c1b5c2ae0601fc4d67208"><code>37fa8bf</code></a>)</li>
 <li><em>(parser)</em> Follow toolr's <code>command</code> through submodules, assignments and unread modules (<a href="https://github.com/s0undt3ch/ToolR/commit/3713ce163908d34b7236d82aaff1db90159f4e52"><code>3713ce1</code></a>)</li>
 <li><em>(testing)</em> Read tools sources as bytes for the shape check (<a href="https://github.com/s0undt3ch/ToolR/commit/ba80c4d350a3693ee343f540bbd9b9a0fb1ea7c5"><code>ba80c4d</code></a>)</li>
+<li><em>(decorators)</em> Validate command_group arguments before returning an existing group (<a href="https://github.com/s0undt3ch/ToolR/commit/e053ae1c72e3587bff9b91e82e28eb4eda7f79cf"><code>e053ae1</code></a>)</li>
+<li><em>(decorators)</em> Allow a title-only re-fetch of an existing command group (<a href="https://github.com/s0undt3ch/ToolR/commit/897f2e8cf0115d81451b93036231dc9523261182"><code>897f2e8</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8145,6 +8148,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Archive the FU-4/FU-5 Python versions design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/7d2715fbed5b11994901f76320b3247e719ef535"><code>7d2715f</code></a>)</li>
 <li><em>(writing-commands)</em> Commands must be top-level defs, with platform checks inside (<a href="https://github.com/s0undt3ch/ToolR/commit/50371235eae3d7887220a5505bb1d23794859fbd"><code>5037123</code></a>)</li>
 <li><em>(tests)</em> Describe the parity corpus layout (<a href="https://github.com/s0undt3ch/ToolR/commit/f796bc79731b1cbe5018868474d794968912318b"><code>f796bc7</code></a>)</li>
+<li><em>(specs)</em> Spec and plan FU-12 registry test isolation (<a href="https://github.com/s0undt3ch/ToolR/commit/55566005462d0d9c40c9040b871e61a361a76435"><code>5556600</code></a>)</li>
+<li><em>(specs)</em> Archive the FU-12 registry test isolation design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/0770bf192289a17f231518f8462a96b9b0edae1a"><code>0770bf1</code></a>)</li>
+<li><em>(writing-commands)</em> Give the command_group examples a description (<a href="https://github.com/s0undt3ch/ToolR/commit/0831ec8fa3e12d4f111532ee0745391e376aa404"><code>0831ec8</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8249,6 +8255,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(e2e)</em> Differential parser/tester corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/51771c148954db4e3168931e6be102d4122d718b"><code>51771c1</code></a>)</li>
 <li><em>(ci)</em> Move tool tests into tests/tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/f8e808cc5c668cc5de3a70021dbbe64eb07ede26"><code>f8e808c</code></a>)</li>
 <li><em>(parser)</em> A dotted <code>command = a.b.command</code> isn't followed (<a href="https://github.com/s0undt3ch/ToolR/commit/eba5376dd3aa277e4f783fe24af5be4b535bef7d"><code>eba5376</code></a>)</li>
+<li><em>(registry)</em> Isolate the command-group registry for every test (<a href="https://github.com/s0undt3ch/ToolR/commit/3939b6889b0b725d4a18970f42767c0e59e1ffbc"><code>3939b68</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
