@@ -316,10 +316,13 @@ def command(
     accepts ``@command``, ``@toolr.command`` (also after
     ``import toolr as t``) and an alias from
     ``from toolr import command as cmd``, on a top-level ``def`` with
-    ``group=`` and any name as string literals. A nested ``def`` (inside
-    another function, a class or an ``if``), ``group=SOME_CONSTANT`` or a
-    non-literal name fails the build with "unsupported command
-    declarations", and so does :class:`toolr.testing.CommandsTester`.
+    ``group=`` and any name as string literals. Each command must be a top-level
+    ``def``; put a platform check inside the command body. A nested
+    ``def`` (inside another function, a class or any ``if``, including
+    ``if TYPE_CHECKING:``), a ``def`` with two command decorators,
+    ``group=SOME_CONSTANT`` or a non-literal name fails the build with
+    "unsupported command declarations", and so does
+    :class:`toolr.testing.CommandsTester`, even when that code never runs.
     A group's command names must be unique within ``tools/``.
 
     Usage::

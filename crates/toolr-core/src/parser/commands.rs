@@ -9,6 +9,7 @@ use super::groups::GroupBinding;
 use super::parse_docstring;
 use super::signatures::extract_arguments;
 use super::symbols::ArgSectionTable;
+use super::symbols::Assigned;
 use super::symbols::ConstTable;
 use super::symbols::EnumTable;
 use super::symbols::ImportTable;
@@ -18,8 +19,10 @@ use crate::manifest::{Command, Origin};
 
 type GlobalVars = HashMap<String, String>;
 
-/// Walk module body for functions decorated with `@<var>.command`
-/// (group-binding style) or `@command(group="…")` (string-path style).
+/// Walk module body for functions decorated with `@<var>.command` or
+/// `@<var>.command("name")` (group-binding style), or `@command(group="…")`
+/// (string-path style). `command` may be aliased, reached as `toolr.command`,
+/// re-exported or assigned; stacked decorators are scanned for the first match.
 /// Emit one Command per match.
 #[allow(clippy::too_many_arguments)] // each context parameter is distinct; bundling would obscure call sites.
 pub fn extract_commands(
@@ -41,8 +44,7 @@ pub fn extract_commands(
     // over an inherited one; otherwise the global cross-file map
     // covers `from ._common import group; @group.command` style.
     let by_var = binding_vars(bindings, global_vars);
-    let empty = ImportTable::default();
-    let names = ToolrNames(all_imports.get(module_path).unwrap_or(&empty));
+    let names = ToolrNames::new(all_imports, module_path);
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
@@ -110,6 +112,8 @@ pub enum UnsupportedCommandKind {
     NonLiteralGroup,
     /// The positional name or `name=` isn't a string literal.
     NonLiteralName,
+    /// More than one toolr command decorator on the same `def`.
+    Stacked,
 }
 
 impl std::fmt::Display for UnsupportedCommandKind {
@@ -120,6 +124,7 @@ impl std::fmt::Display for UnsupportedCommandKind {
             }
             Self::NonLiteralGroup => "`group=` must be a string literal.",
             Self::NonLiteralName => "the command name must be a string literal.",
+            Self::Stacked => "a function can carry only one command decorator.",
         })
     }
 }
@@ -141,12 +146,12 @@ pub struct UnsupportedCommand {
 pub fn detect_unsupported_commands(
     module: &ModModule,
     module_path: &str,
-    imports: &ImportTable,
+    all_imports: &HashMap<String, ImportTable>,
     by_var: &GlobalVars,
 ) -> Vec<UnsupportedCommand> {
     let mut finder = UnsupportedFinder {
         module_path,
-        names: ToolrNames(imports),
+        names: ToolrNames::new(all_imports, module_path),
         by_var,
         depth: 0,
         out: Vec::new(),
@@ -168,13 +173,24 @@ struct UnsupportedFinder<'a> {
 
 impl UnsupportedFinder<'_> {
     fn check(&mut self, func: &StmtFunctionDef) {
-        let Some((decorator, target)) = matched_decorator(&func.decorator_list, self.names) else {
+        // `@<var>.command` counts only on a module-level group.
+        let matched: Vec<_> = func
+            .decorator_list
+            .iter()
+            .filter_map(|d| {
+                let target = parse_string_path_command(&d.expression, self.names)
+                    .or_else(|| parse_binding_command(&d.expression))?;
+                match target {
+                    CommandDecorator::Binding { var, .. } if !self.by_var.contains_key(&var) => {
+                        None
+                    }
+                    CommandDecorator::Binding { .. } => Some((d, false)),
+                    CommandDecorator::StringPath { .. } => Some((d, true)),
+                }
+            })
+            .collect();
+        let Some(&(decorator, string_path)) = matched.first() else {
             return;
-        };
-        let string_path = match target {
-            CommandDecorator::Binding { var, .. } if !self.by_var.contains_key(&var) => return,
-            CommandDecorator::Binding { .. } => false,
-            CommandDecorator::StringPath { .. } => true,
         };
         let mut push = |kind| {
             self.out.push(UnsupportedCommand {
@@ -185,6 +201,10 @@ impl UnsupportedFinder<'_> {
         };
         if self.depth > 0 {
             push(UnsupportedCommandKind::Nested);
+            return;
+        }
+        if matched.len() > 1 {
+            push(UnsupportedCommandKind::Stacked);
             return;
         }
         let Expr::Call(call) = &decorator.expression else {
@@ -320,9 +340,9 @@ fn resolve_explicit_name(args: &Arguments) -> (Option<String>, bool) {
 pub fn detect_name_conflicts(
     module: &ModModule,
     module_path: &str,
-    imports: &ImportTable,
+    all_imports: &HashMap<String, ImportTable>,
 ) -> Vec<CommandNameConflict> {
-    let names = ToolrNames(imports);
+    let names = ToolrNames::new(all_imports, module_path);
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
@@ -347,40 +367,131 @@ pub fn detect_name_conflicts(
 
 /// Which of a module's names are toolr's `command` or the `toolr` module.
 #[derive(Clone, Copy)]
-struct ToolrNames<'a>(&'a ImportTable);
+struct ToolrNames<'a> {
+    all_imports: &'a HashMap<String, ImportTable>,
+    module: &'a str,
+}
 
-impl ToolrNames<'_> {
+impl<'a> ToolrNames<'a> {
+    fn new(all_imports: &'a HashMap<String, ImportTable>, module: &'a str) -> Self {
+        Self {
+            all_imports,
+            module,
+        }
+    }
+
     /// `import toolr [as t]`; `import toolr.types` binds `toolr` too.
     fn is_toolr_module(self, name: &str) -> bool {
-        self.0
-            .resolve_module_binding(name)
+        self.all_imports
+            .get(self.module)
+            .and_then(|imports| imports.resolve_module_binding(name))
             .is_some_and(|m| m == "toolr" || (name == "toolr" && m.starts_with("toolr.")))
     }
 
-    /// `command`, or a name `from toolr import command as …` binds.
-    fn is_command(self, name: &str) -> bool {
-        name == "command"
-            || self
-                .0
-                .candidates(name)
-                .iter()
-                .any(|c| c.module == "toolr" && c.original_name == "command")
+    /// Whether `name` is toolr's `command`, imported from `toolr` or a `toolr.*`
+    /// submodule, re-exported by other scanned modules or assigned from one.
+    /// A click `command` or a local `def` isn't.
+    fn command(self, name: &str) -> Binding {
+        binds_toolr_command(self.all_imports, self.module, name, 0)
     }
 }
 
-fn command_decorator(decorators: &[Decorator], names: ToolrNames) -> Option<CommandDecorator> {
-    matched_decorator(decorators, names).map(|(_, target)| target)
+/// Whether a name is toolr's `command`, as far as the parser can see.
+/// Keep in step with `_command_decorators` in `toolr/testing/_shapes.py`,
+/// which resolves it by runtime identity: change both together.
+// Variants run weakest to strongest: callers take `.max()` over candidates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Binding {
+    /// A local `def`, another name, or a cycle.
+    Other,
+    /// A module the parser can't read (outside `tools/`), or a star import
+    /// from a `toolr.*` submodule; the `group=` rule in `parse_string_path_command`
+    /// decides.
+    Unknown,
+    /// toolr's `command`.
+    Toolr,
+}
+
+fn is_toolr_path(module: &str) -> bool {
+    module == "toolr" || module.starts_with("toolr.")
+}
+
+/// What `attr` is when read from a `toolr` module: only `command` is toolr's.
+fn toolr_member(attr: &str) -> Binding {
+    if attr == "command" {
+        Binding::Toolr
+    } else {
+        Binding::Other
+    }
+}
+
+/// Re-export chains deeper than this are treated as cycles.
+const MAX_REEXPORT_DEPTH: usize = 8;
+
+/// Follow `name` in `module` through imports, re-exports and assignments to
+/// decide whether it is toolr's `command`. `depth` counts hops followed so far.
+fn binds_toolr_command(
+    all_imports: &HashMap<String, ImportTable>,
+    module: &str,
+    name: &str,
+    depth: usize,
+) -> Binding {
+    // A re-export cycle can't bind toolr's `command`; the cap stops the walk.
+    if depth > MAX_REEXPORT_DEPTH {
+        return Binding::Other;
+    }
+    let Some(imports) = all_imports.get(module) else {
+        return Binding::Unknown;
+    };
+    if imports.local_binding_wins(name) {
+        return match imports.assigned(name) {
+            Some(Assigned::Name(other)) => {
+                binds_toolr_command(all_imports, module, other, depth + 1)
+            }
+            Some(Assigned::Attribute { base, attr }) => {
+                match imports.resolve_module_binding(base) {
+                    // `import toolr.types` binds `toolr`, not `toolr.types`.
+                    Some(m) if is_toolr_path(m) => toolr_member(attr),
+                    Some(m) => binds_toolr_command(all_imports, m, attr, depth + 1),
+                    None => Binding::Other,
+                }
+            }
+            None => Binding::Other,
+        };
+    }
+    let follows = |from: &str, original: &str| {
+        if is_toolr_path(from) {
+            toolr_member(original)
+        } else {
+            binds_toolr_command(all_imports, from, original, depth + 1)
+        }
+    };
+    let candidates = imports.candidates(name);
+    if candidates.is_empty() {
+        // `from toolr.x import *` may or may not carry `command`.
+        return imports
+            .star_import_modules()
+            .iter()
+            .map(|from| match from.as_str() {
+                "toolr" => follows(from, name),
+                f if is_toolr_path(f) => Binding::Unknown,
+                f => binds_toolr_command(all_imports, f, name, depth + 1),
+            })
+            .max()
+            .unwrap_or(Binding::Other);
+    }
+    candidates
+        .iter()
+        .map(|c| follows(&c.module, &c.original_name))
+        .max()
+        .unwrap_or(Binding::Other)
 }
 
 /// The first decorator toolr reads as a command, and what it read.
-fn matched_decorator<'d>(
-    decorators: &'d [Decorator],
-    names: ToolrNames,
-) -> Option<(&'d Decorator, CommandDecorator)> {
+fn command_decorator(decorators: &[Decorator], names: ToolrNames) -> Option<CommandDecorator> {
     decorators.iter().find_map(|d| {
         parse_string_path_command(&d.expression, names)
             .or_else(|| parse_binding_command(&d.expression))
-            .map(|target| (d, target))
     })
 }
 
@@ -451,16 +562,18 @@ fn keyword_str(args: &Arguments, name: &str) -> Option<String> {
 /// Recognise the string-path `@command` / `@command("name", group="…")` shape,
 /// also spelt `@toolr.command`, `@t.command` or an alias of `command`.
 fn parse_string_path_command(expr: &Expr, names: ToolrNames) -> Option<CommandDecorator> {
-    let is_toolr_command = |callee: &Expr| match callee {
-        Expr::Name(n) => names.is_command(n.id.as_str()),
-        Expr::Attribute(attr) => {
-            attr.attr.as_str() == "command"
-                && matches!(attr.value.as_ref(), Expr::Name(n) if names.is_toolr_module(n.id.as_str()))
+    let binding = |callee: &Expr| match callee {
+        Expr::Name(n) => names.command(n.id.as_str()),
+        Expr::Attribute(attr)
+            if attr.attr.as_str() == "command"
+                && matches!(attr.value.as_ref(), Expr::Name(n) if names.is_toolr_module(n.id.as_str())) =>
+        {
+            Binding::Toolr
         }
-        _ => false,
+        _ => Binding::Other,
     };
     // Bare `@command` / `@toolr.command`.
-    if is_toolr_command(expr) {
+    if binding(expr) == Binding::Toolr {
         return Some(CommandDecorator::StringPath {
             explicit_name: None,
             group: None,
@@ -470,8 +583,17 @@ fn parse_string_path_command(expr: &Expr, names: ToolrNames) -> Option<CommandDe
     let Expr::Call(call) = expr else {
         return None;
     };
-    if !is_toolr_command(&call.func) {
-        return None;
+    // `group=` is required by toolr's `command` and not accepted by click's, so
+    // an unreadable `command` called with it is taken as toolr's.
+    let has_group = call
+        .arguments
+        .keywords
+        .iter()
+        .any(|k| k.arg.as_ref().is_some_and(|a| a.as_str() == "group"));
+    match binding(&call.func) {
+        Binding::Toolr => {}
+        Binding::Unknown if has_group => {}
+        _ => return None,
     }
     // The explicit name may be the first positional string literal
     // (`@command("name", group=…)`) or the `name=` keyword
@@ -612,6 +734,14 @@ mod tests {
         parse_python_file(f.path()).unwrap()
     }
 
+    /// `all_imports` for a module parsed as `tools.ci`, so `from toolr import command` counts.
+    fn imports_of(m: &ModModule) -> HashMap<String, ImportTable> {
+        ["tools.ci", "tools.repro", "tools.x"]
+            .into_iter()
+            .map(|path| (path.to_string(), ImportTable::from_module(m, path, false)))
+            .collect()
+    }
+
     #[test]
     fn extracts_decorated_function_as_command() {
         let src = r#"group = command_group("ci", "CI utilities")
@@ -627,7 +757,7 @@ def generate_build_matrix(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -657,7 +787,7 @@ def x(ctx):
             "tools.x",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -683,7 +813,7 @@ def bare_function(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -711,7 +841,7 @@ def hello(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -725,7 +855,8 @@ def hello(ctx):
 
     #[test]
     fn string_path_decorator_attaches_to_named_group() {
-        let src = r#"command_group("ci", "CI utilities")
+        let src = r#"from toolr import command
+command_group("ci", "CI utilities")
 
 @command(group="ci")
 def check_run_build(ctx):
@@ -739,7 +870,7 @@ def check_run_build(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -755,7 +886,8 @@ def check_run_build(ctx):
 
     #[test]
     fn string_path_decorator_supports_explicit_name() {
-        let src = r#"command_group("ci.helm-diff-pr-comment", "Helm diff")
+        let src = r#"from toolr import command
+command_group("ci.helm-diff-pr-comment", "Helm diff")
 
 @command("snippet-checker", group="ci.helm-diff-pr-comment")
 def check_snippets(ctx):
@@ -769,7 +901,7 @@ def check_snippets(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -786,7 +918,8 @@ def check_snippets(ctx):
 
     #[test]
     fn string_path_decorator_supports_name_keyword() {
-        let src = r#"command_group("ci.helm-diff-pr-comment", "Helm diff")
+        let src = r#"from toolr import command
+command_group("ci.helm-diff-pr-comment", "Helm diff")
 
 @command(name="snippet-checker", group="ci.helm-diff-pr-comment")
 def check_snippets(ctx):
@@ -800,7 +933,7 @@ def check_snippets(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -809,7 +942,7 @@ def check_snippets(ctx):
             &HashMap::new(),
             &mut Vec::new(),
         );
-        assert!(detect_name_conflicts(&m, "tools.ci", &ImportTable::default()).is_empty());
+        assert!(detect_name_conflicts(&m, "tools.ci", &imports_of(&m)).is_empty());
         assert_eq!(commands.len(), 1);
         // The `name=` keyword wins over the `check-snippets` function name.
         assert_eq!(commands[0].name, "snippet-checker");
@@ -823,7 +956,8 @@ def check_snippets(ctx):
         // `Optional` (single-value) by the syntactic pass, since it
         // can't see through the `| None` union — only the post-resolution
         // override in `resolve_arguments` catches it.
-        let src = r#"command_group("repro", "Repro")
+        let src = r#"from toolr import command
+command_group("repro", "Repro")
 
 @command(group="repro")
 def go(ctx, items: list[str] | None = None):
@@ -837,7 +971,7 @@ def go(ctx, items: list[str] | None = None):
             "tools.repro",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -862,7 +996,8 @@ def go(ctx, items: list[str] | None = None):
 
     #[test]
     fn positional_only_params_resolve_in_lockstep() {
-        let src = r#"command_group("repro", "Repro")
+        let src = r#"from toolr import command
+command_group("repro", "Repro")
 
 @command(group="repro")
 def go(ctx, name: str, /, count: int, *rest: int):
@@ -876,7 +1011,7 @@ def go(ctx, name: str, /, count: int, *rest: int):
             "tools.repro",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -910,7 +1045,8 @@ def go(ctx, name: str, /, count: int, *rest: int):
     fn optional_tuple_keyword_resolves_to_repeated() {
         // Same fix as `optional_list_keyword_resolves_to_repeated`, for
         // the other collection shape `is_list_like_annotation` accepts.
-        let src = r#"command_group("repro", "Repro")
+        let src = r#"from toolr import command
+command_group("repro", "Repro")
 
 @command(group="repro")
 def go(ctx, pair: tuple[str, int] | None = None):
@@ -924,7 +1060,7 @@ def go(ctx, pair: tuple[str, int] | None = None):
             "tools.repro",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -967,14 +1103,18 @@ def do_thing(ctx):
             .unwrap();
         // The decorator resolves to no explicit name, flagged as a conflict.
         assert_eq!(
-            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
+            command_decorator(
+                &func.decorator_list,
+                ToolrNames::new(&imports_of(&m), "tools.ci")
+            )
+            .unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,
                 name_conflict: true,
             }
         );
-        let conflicts = detect_name_conflicts(&m, "tools.ci", &ImportTable::default());
+        let conflicts = detect_name_conflicts(&m, "tools.ci", &imports_of(&m));
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].module, "tools.ci");
         assert_eq!(conflicts[0].function, "do_thing");
@@ -982,7 +1122,8 @@ def do_thing(ctx):
 
     #[test]
     fn string_path_decorator_rejects_positional_and_name_keyword() {
-        let src = r#"command_group("ci", "CI")
+        let src = r#"from toolr import command
+command_group("ci", "CI")
 
 @command("positional", name="keyword", group="ci")
 def do_thing(ctx):
@@ -998,14 +1139,18 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
+            command_decorator(
+                &func.decorator_list,
+                ToolrNames::new(&imports_of(&m), "tools.ci")
+            )
+            .unwrap(),
             CommandDecorator::StringPath {
                 explicit_name: None,
                 group: Some("ci".to_string()),
                 name_conflict: true,
             }
         );
-        let conflicts = detect_name_conflicts(&m, "tools.ci", &ImportTable::default());
+        let conflicts = detect_name_conflicts(&m, "tools.ci", &imports_of(&m));
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].function, "do_thing");
     }
@@ -1026,7 +1171,7 @@ def hello(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -1054,7 +1199,7 @@ def do_thing(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -1073,7 +1218,11 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
+            command_decorator(
+                &func.decorator_list,
+                ToolrNames::new(&imports_of(&m), "tools.ci")
+            )
+            .unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,
@@ -1100,7 +1249,7 @@ def do_thing(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -1118,7 +1267,11 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
+            command_decorator(
+                &func.decorator_list,
+                ToolrNames::new(&imports_of(&m), "tools.ci")
+            )
+            .unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: Some("hello".to_string()),
@@ -1146,7 +1299,7 @@ def collect_data(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -1164,7 +1317,11 @@ def collect_data(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
+            command_decorator(
+                &func.decorator_list,
+                ToolrNames::new(&imports_of(&m), "tools.ci")
+            )
+            .unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: Some("collect".to_string()),
@@ -1193,7 +1350,7 @@ def do_thing(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -1211,7 +1368,11 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
+            command_decorator(
+                &func.decorator_list,
+                ToolrNames::new(&imports_of(&m), "tools.ci")
+            )
+            .unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,
@@ -1243,7 +1404,7 @@ def hello(ctx, name="world"):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
-            &HashMap::new(),
+            &imports_of(&m),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),

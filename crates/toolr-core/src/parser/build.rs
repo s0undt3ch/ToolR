@@ -166,16 +166,12 @@ fn build_commands_inner(
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
-        name_conflicts.extend(detect_name_conflicts(
-            &module,
-            &module_path,
-            &all_imports[&module_path],
-        ));
+        name_conflicts.extend(detect_name_conflicts(&module, &module_path, &all_imports));
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         unsupported.extend(detect_unsupported_commands(
             &module,
             &module_path,
-            &all_imports[&module_path],
+            &all_imports,
             &binding_vars(&bindings, &global_vars),
         ));
         let type_imports = TypeImports::from_module(&module);
@@ -1106,7 +1102,7 @@ def hello(ctx):
         assert_eq!(errs[0].value, "--bad flag");
     }
 
-    const DIRTY_GROUP_REF_SRC: &str = "group = command_group(\"g\", \"T\", \"D\")\n\n@command(group=\"no\\x1b]0;PWN\\x07pe\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n";
+    const DIRTY_GROUP_REF_SRC: &str = "from toolr import command\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@command(group=\"no\\x1b]0;PWN\\x07pe\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n";
 
     #[test]
     fn command_group_ref_with_esc_rejected() {
@@ -1144,7 +1140,7 @@ def hello(ctx):
         write(
             tmp.path(),
             "tools/g.py",
-            "@command(name=\"x\\x1b]0;PWN\\x07\", group=\"nope\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+            "from toolr import command\n@command(name=\"x\\x1b]0;PWN\\x07\", group=\"nope\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
         );
         let msg = build_static_manifest_inner(&tmp.path().join("tools"))
             .unwrap_err()
@@ -1183,7 +1179,7 @@ def hello(ctx):
         write(
             tmp.path(),
             "tools/g.py",
-            "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"a\\nb\")\ndef named(ctx):\n    \"\"\"Hi.\"\"\"\n\n@command(group=\"no\\x1b[2Jpe\")\ndef orphan(ctx):\n    \"\"\"Hi.\"\"\"\n\n@group.command\ndef pick(ctx, mode: Literal[\"ok\", \"bad\\x1b[2J\"]):\n    \"\"\"Hi.\"\"\"\n",
+            "from typing import Literal\nfrom toolr import command\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"a\\nb\")\ndef named(ctx):\n    \"\"\"Hi.\"\"\"\n\n@command(group=\"no\\x1b[2Jpe\")\ndef orphan(ctx):\n    \"\"\"Hi.\"\"\"\n\n@group.command\ndef pick(ctx, mode: Literal[\"ok\", \"bad\\x1b[2J\"]):\n    \"\"\"Hi.\"\"\"\n",
         );
         let msg = BuildError::InvalidNames(expect_invalid_names(
             build_commands(&tmp.path().join("tools"), "tools").unwrap_err(),
@@ -1288,6 +1284,7 @@ command_group("ci", docstring=__doc__)
             tmp.path(),
             "tools/gh_actions.py",
             r#""""GH Actions helpers."""
+from toolr import command
 @command(group="ci")
 def check_run_build(ctx):
     """Check."""
@@ -1309,6 +1306,7 @@ def check_run_build(ctx):
             tmp.path(),
             "tools/c.py",
             r#""""CI utilities."""
+from toolr import command
 command_group("ci.helm-diff-pr-comment", docstring=__doc__)
 
 @command(group="ci.helm-diff-pre-comment")
@@ -1559,11 +1557,159 @@ def aliased(ctx):
     }
 
     /// `@other.command` where `other` is neither a group nor `toolr`, and an
-    /// alias of some other library's `command`, stay ignored.
+    /// alias of some other library's `command` called without `group=`, stay ignored.
     #[test]
     fn foreign_command_decorators_stay_ignored() {
-        let src = "import click as other\nfrom click import command as cmd\nfrom toolr import command_group\n\ng = command_group(\"grp\", \"Grp\", \"Grp\")\n\n\n@other.command(group=\"grp\")\ndef a(ctx):\n    pass\n\n\n@cmd(group=\"grp\")\ndef b(ctx):\n    pass\n\n\n@g.command\ndef kept(ctx):\n    \"\"\"Kept.\"\"\"\n";
+        let src = "import click as other\nfrom click import command as cmd\nfrom toolr import command_group\n\ng = command_group(\"grp\", \"Grp\", \"Grp\")\n\n\n@other.command(group=\"grp\")\ndef a(ctx):\n    pass\n\n\n@cmd(name=\"b\")\ndef b(ctx):\n    pass\n\n\n@cmd\ndef c(ctx):\n    pass\n\n\n@g.command\ndef kept(ctx):\n    \"\"\"Kept.\"\"\"\n";
         assert_eq!(built_commands(&[("tools/m.py", src)]), grp(&["kept"]));
+    }
+
+    /// `command` from a `toolr.*` submodule, or assigned from toolr's, is toolr's;
+    /// one from a module toolr can't read counts only when called with `group=`.
+    #[test]
+    fn command_bindings_toolr_can_follow() {
+        let common = "from toolr import command, command_group\n\ncommand_group(\"grp\", \"Grp\", \"Grp\")\n";
+        let doc = "    \"\"\"Doc.\"\"\"\n";
+        let module = |imports: &str, decorator: &str| {
+            format!("{imports}\n\n\n@{decorator}\ndef f(ctx):\n{doc}")
+        };
+        let files = [
+            ("tools/_common.py", common.to_string()),
+            (
+                "tools/_reexport.py",
+                "from mylib import command\n".to_string(),
+            ),
+            (
+                "tools/a.py",
+                module(
+                    "from toolr._decorators import command",
+                    "command(\"a\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/b.py",
+                module(
+                    "import toolr as t\ncommand = t.command\ncmd = command",
+                    "cmd(\"b\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/c.py",
+                module(
+                    "import toolr.types\ncommand = toolr.command",
+                    "command(\"c\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/d.py",
+                module(
+                    "import tools._common as common\ncommand = common.command",
+                    "command(\"d\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/e.py",
+                module("from mylib import command", "command(\"e\", group=\"grp\")"),
+            ),
+            (
+                "tools/f.py",
+                module("from mylib import *", "command(\"f\", group=\"grp\")"),
+            ),
+            (
+                "tools/g.py",
+                module("from toolr.types import *", "command(\"g\", group=\"grp\")"),
+            ),
+            (
+                "tools/h.py",
+                module(
+                    "from tools._reexport import command",
+                    "command(\"h\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/i.py",
+                module(
+                    "import mylib\ncommand = mylib.command",
+                    "command(\"i\", group=\"grp\")",
+                ),
+            ),
+            // Not toolr's, whatever the call.
+            (
+                "tools/n1.py",
+                module(
+                    "import toolr\ncommand = toolr.arg",
+                    "command(\"n1\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/n2.py",
+                module(
+                    "from toolr import arg as command",
+                    "command(\"n2\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/n3.py",
+                module("command = undefined", "command(\"n3\", group=\"grp\")"),
+            ),
+            (
+                "tools/n4.py",
+                module(
+                    "command = helpers.command",
+                    "command(\"n4\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/n5.py",
+                module("command = make()", "command(\"n5\", group=\"grp\")"),
+            ),
+            (
+                "tools/n10.py",
+                module(
+                    "import toolr.types\ncommand = toolr.types.command",
+                    "command(\"n10\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/n6.py",
+                module(
+                    "a = b\nb = a\ncommand = a",
+                    "command(\"n6\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/n7.py",
+                module(
+                    "import toolr\ncommand = toolr.command\n\n\ndef command(f):\n    return f",
+                    "command(\"n7\", group=\"grp\")",
+                ),
+            ),
+            (
+                "tools/n8.py",
+                module("from mylib import command", "command(\"n8\")"),
+            ),
+            (
+                "tools/n9.py",
+                module("from mylib import command", "command"),
+            ),
+        ];
+        let files: Vec<_> = files.iter().map(|(n, c)| (*n, c.as_str())).collect();
+        assert_eq!(
+            built_commands(&files),
+            grp(&["a", "b", "c", "d", "e", "f", "g", "h", "i"])
+        );
+    }
+
+    /// A nested `def` under a `command` from a module toolr can't read fails
+    /// like toolr's own when called with `group=`.
+    #[test]
+    fn nested_command_from_an_unread_module_is_reported() {
+        let src = "from mylib import command\nfrom toolr import command_group\n\ncommand_group(\"grp\", \"Grp\", \"Grp\")\n\n\ndef register():\n    @command(group=\"grp\")\n    def nested(ctx):\n        \"\"\"Nested.\"\"\"\n\n    @command()\n    def other(ctx):\n        \"\"\"Other.\"\"\"\n";
+        assert_eq!(
+            build_error_for(&[("tools/m.py", src)]),
+            "unsupported command declarations (1):\n\
+             \x20 - tools.m::nested: `@command` must decorate a top-level `def`, which toolr reads without running it."
+        );
     }
 
     /// Every shape toolr can't read without running it: nested `def`s
@@ -1632,6 +1778,85 @@ def other():
         );
     }
 
+    #[test]
+    fn stacked_command_decorators_fail_the_build() {
+        let src = "import functools\nimport toolr\nfrom toolr import command as cmd\n\ng1 = toolr.command_group(\"g1\", \"G\", \"G\")\ng2 = toolr.command_group(\"g2\", \"G\", \"G\")\n\n\n@g1.command\n@g2.command\ndef both(ctx):\n    \"\"\"Both.\"\"\"\n\n\n@g1.command\n@cmd(group=\"g2\")\ndef mixed(ctx):\n    \"\"\"Mixed.\"\"\"\n\n\n@functools.lru_cache\n@g1.command\ndef cached(ctx):\n    \"\"\"Cached.\"\"\"\n";
+        assert_eq!(
+            build_error_for(&[("tools/m.py", src)]),
+            "unsupported command declarations (2):\n\
+             \x20 - tools.m::both: a function can carry only one command decorator.\n\
+             \x20 - tools.m::mixed: a function can carry only one command decorator."
+        );
+    }
+
+    /// A click `command` without `group=` and a local `def command` aren't toolr's.
+    #[test]
+    fn foreign_command_decorators_are_ignored() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/m.py",
+            "from click import command\nfrom toolr import command_group\n\ng = command_group(\"grp\", \"G\", \"G\")\n\n\ndef make():\n    @command()\n    def cli():\n        \"\"\"Click.\"\"\"\n",
+        );
+        write(
+            tmp.path(),
+            "tools/n.py",
+            "from toolr import *\n\n\ndef command(f):\n    return f\n\n\nclass Helper:\n    @command\n    def method(self):\n        \"\"\"Local.\"\"\"\n",
+        );
+        write(
+            tmp.path(),
+            "tools/o.py",
+            "from toolr import *\n\n\n@command(group=\"grp\")\ndef star(ctx):\n    \"\"\"Star.\"\"\"\n",
+        );
+        let manifest = build_static_manifest_inner(&tmp.path().join("tools")).unwrap();
+        let names: Vec<_> = manifest
+            .commands
+            .iter()
+            .map(|c| c.function.as_str())
+            .collect();
+        assert_eq!(names, ["star"]);
+    }
+
+    /// A `command` re-exported through other `tools` modules is still toolr's.
+    #[test]
+    fn reexported_command_is_followed() {
+        let tmp = TempDir::new().unwrap();
+        let doc = "    \"\"\"Doc.\"\"\"\n";
+        let files = [
+            (
+                "tools/_common.py",
+                "from toolr import command, command_group\n\ncommand_group(\"grp\", \"G\", \"G\")\n".to_string(),
+            ),
+            (
+                "tools/a.py",
+                format!("from ._common import command\n\n\n@command(group=\"grp\")\ndef relative(ctx):\n{doc}"),
+            ),
+            (
+                "tools/b.py",
+                format!("from tools._common import *\n\n\n@command(group=\"grp\")\ndef star(ctx):\n{doc}"),
+            ),
+            (
+                "tools/c.py",
+                format!("from toolr import *\nfrom click import command\n\n\ndef make():\n    @command()\n    def cli():\n    {doc}"),
+            ),
+            (
+                "tools/d.py",
+                format!("from tools.e import command\n\n\ndef make():\n    @command\n    def cycle():\n    {doc}"),
+            ),
+            ("tools/e.py", "from tools.d import command\n".to_string()),
+        ];
+        for (name, contents) in &files {
+            write(tmp.path(), name, contents);
+        }
+        let manifest = build_static_manifest_inner(&tmp.path().join("tools")).unwrap();
+        let names: Vec<_> = manifest
+            .commands
+            .iter()
+            .map(|c| c.function.as_str())
+            .collect();
+        assert_eq!(names, ["relative", "star"]);
+    }
+
     /// A group binding from an earlier file counts in a nested `def`, and the
     /// check runs before the unknown-group one.
     #[test]
@@ -1669,6 +1894,7 @@ def other():
             tmp.path(),
             "tools/c.py",
             r#""""CI utilities."""
+from toolr import command
 @command(group="nope")
 def first(ctx):
     """First."""
@@ -1798,6 +2024,7 @@ def django(ctx, *, cpu: str = "1", dispatched: DispatchCommand) -> int:
             tmp.path(),
             "tools/c.py",
             r#""""CI utilities."""
+from toolr import command
 command_group("ci", docstring=__doc__)
 
 @command
@@ -2938,6 +3165,7 @@ def read(ctx: Context, {signature}) -> None:
             tmp.path(),
             "tools/demo.py",
             r#""""Demo commands."""
+from toolr import command
 
 from toolr import Context, command, command_group
 

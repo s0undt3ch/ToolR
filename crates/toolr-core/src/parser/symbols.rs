@@ -228,6 +228,32 @@ impl EnumTable {
     }
 }
 
+/// The right-hand side of a top-level `name = <value>` assignment, kept only
+/// when it's a plain name or `module.attr`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Assigned {
+    /// `name = other`.
+    Name(String),
+    /// `name = base.attr`.
+    Attribute { base: String, attr: String },
+}
+
+impl Assigned {
+    fn from_expr(expr: &Expr) -> Option<Self> {
+        match expr {
+            Expr::Name(n) => Some(Self::Name(n.id.to_string())),
+            Expr::Attribute(a) => match a.value.as_ref() {
+                Expr::Name(base) => Some(Self::Attribute {
+                    base: base.id.to_string(),
+                    attr: a.attr.to_string(),
+                }),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
 /// One module-level import statement that bound a name into scope,
 /// resolved to the absolute module it actually names.
 #[derive(Debug, Clone)]
@@ -266,6 +292,9 @@ pub struct ImportTable {
     import_positions: HashMap<String, usize>,
     /// Source modules of `from X import *`.
     star_modules: Vec<String>,
+    /// Top-level `name = other` or `name = module.attr` assignments still in
+    /// force, so `command = toolr.command` can be followed back to toolr.
+    assigned: HashMap<String, Assigned>,
     /// Source-order counter shared by imports and local bindings.
     seq: usize,
 }
@@ -321,6 +350,9 @@ impl ImportTable {
                 for target in &assign.targets {
                     if let Expr::Name(n) = target {
                         self.bind_local(n.id.to_string());
+                        if let Some(value) = Assigned::from_expr(&assign.value) {
+                            self.assigned.insert(n.id.to_string(), value);
+                        }
                     }
                 }
             }
@@ -429,7 +461,16 @@ impl ImportTable {
 
     fn bind_local(&mut self, name: String) {
         self.seq += 1;
+        self.assigned.remove(&name);
         self.local_names.insert(name, self.seq);
+    }
+
+    /// What the module's last top-level binding of `name` copied, when that
+    /// binding is a `name = other` or `name = module.attr` assignment.
+    pub fn assigned(&self, name: &str) -> Option<&Assigned> {
+        self.assigned
+            .get(name)
+            .filter(|_| self.local_binding_wins(name))
     }
 
     /// Whether the module's last top-level binding of `name` is its own

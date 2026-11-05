@@ -7,65 +7,69 @@ Each helper names the Rust function it mirrors; change both together so
 from __future__ import annotations
 
 import ast
-import inspect
 import sys
-import types
-from collections.abc import Callable
-from collections.abc import Iterable
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import toolr
 from toolr._decorators import CommandGroup
 from toolr.testing._unknown_groups import _escape_control_chars
-from toolr.testing._unknown_groups import _source_order_key
 
 # Mirrors `UnsupportedCommandKind`'s `Display` in `crates/toolr-core/src/parser/commands.rs`.
 NESTED = "`@command` must decorate a top-level `def`, which toolr reads without running it."
 NON_LITERAL_GROUP = "`group=` must be a string literal."
 NON_LITERAL_NAME = "the command name must be a string literal."
+STACKED = "a function can carry only one command decorator."
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
+
+# (module, function, problem)
+Unsupported = tuple[str, str, str]
 
 
 def _is_str_literal(node: ast.expr) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
-def _command_decorator(
+def _command_decorators(
     node: FunctionNode, namespace: dict[str, Any]
-) -> tuple[ast.expr, bool] | None:
-    """The first decorator naming toolr's ``command`` or a group's, and whether it's standalone.
+) -> list[tuple[ast.expr, bool]]:
+    """Each decorator naming toolr's ``command`` or a group's, and whether it's standalone.
 
     Resolved against the module's globals, which is what the static parser's
-    import tables approximate.
+    import tables approximate. Rust resolves it by import chain (`Binding` in
+    `toolr-core/src/parser/commands.rs`): change both together.
     """
+    found = []
     for decorator in node.decorator_list:
         target = decorator.func if isinstance(decorator, ast.Call) else decorator
         if isinstance(target, ast.Name) and namespace.get(target.id) is toolr.command:
-            return decorator, True
-        if (
+            found.append((decorator, True))
+        elif (
             isinstance(target, ast.Attribute)
             and target.attr == "command"
             and isinstance(target.value, ast.Name)
         ):
             owner = namespace.get(target.value.id)
             if owner is toolr:
-                return decorator, True
-            if isinstance(owner, CommandGroup):
-                return decorator, False
-    return None
+                found.append((decorator, True))
+            elif isinstance(owner, CommandGroup):
+                found.append((decorator, False))
+    return found
 
 
 def _problems(node: FunctionNode, top_level: bool, namespace: dict[str, Any]) -> list[str]:
     """What's wrong with one command's declaration, in the order Rust reports it."""
-    found = _command_decorator(node, namespace)
-    if found is None:
+    found = _command_decorators(node, namespace)
+    if not found:
         # Like the parser, a nested `@g.command` counts only on a module-level group.
         return []
     if not top_level:
         return [NESTED]
-    call, standalone = found
+    if len(found) > 1:
+        return [STACKED]
+    call, standalone = found[0]
     if not isinstance(call, ast.Call):
         return []
     keywords = {keyword.arg: keyword.value for keyword in call.keywords if keyword.arg}
@@ -78,60 +82,48 @@ def _problems(node: FunctionNode, top_level: bool, namespace: dict[str, Any]) ->
     return problems
 
 
-def _find_def(tree: ast.Module, func: Callable[..., Any]) -> tuple[FunctionNode, bool] | None:
-    """The ``def`` that made ``func``, and whether it sits directly in the module body."""
-    code = func.__code__
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, FunctionNode)
-            and node.name == func.__name__
-            and min([node.lineno, *(d.lineno for d in node.decorator_list)]) == code.co_firstlineno
-        ):
-            return node, node in tree.body
-    return None
+def _function_defs(node: ast.AST, top_level: bool) -> Iterator[tuple[FunctionNode, bool]]:
+    """Every ``def`` under ``node`` in source order, and whether it sits in the module body."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, FunctionNode):
+            yield child, top_level
+        yield from _function_defs(child, top_level=False)
 
 
-def _unsupported_commands(
-    funcs: Iterable[Callable[..., Any]], tools_dir: Path
-) -> list[tuple[Callable[..., Any], str]]:
+def _unsupported_commands(tools_dir: Path) -> list[Unsupported]:
     """Every problem with the commands ``tools_dir`` declares, in build order.
 
     Mirrors ``crates/toolr-core/src/parser/commands.rs::detect_unsupported_commands``.
-    Functions defined outside ``tools_dir`` (a test body, say) aren't checked.
+    Each imported ``tools`` module's source is read whether or not a ``def`` ran,
+    so a command behind ``if TYPE_CHECKING:`` or in an uncalled function counts.
     """
-    trees: dict[str, ast.Module] = {}
-    seen: set[types.CodeType] = set()
-    found: list[tuple[Callable[..., Any], str]] = []
-    for registered in funcs:
-        # A `functools.wraps` decorator under the command hides the `def` it wraps.
-        func = inspect.unwrap(registered)
-        code = func.__code__
-        if code in seen or not Path(code.co_filename).is_relative_to(tools_dir):
+    root = tools_dir.resolve()
+    files: dict[Path, tuple[str, dict[str, Any]]] = {}
+    for name, module in list(sys.modules.items()):
+        file = getattr(module, "__file__", None)
+        if file is None or (name != "tools" and not name.startswith("tools.")):
             continue
-        seen.add(code)
-        if code.co_filename not in trees:
-            trees[code.co_filename] = ast.parse(Path(code.co_filename).read_text())
-        located = _find_def(trees[code.co_filename], func)
-        if located is None:
-            continue
-        module = sys.modules.get(func.__module__)
-        namespace = vars(module) if module is not None else {}
-        found.extend((func, problem) for problem in _problems(*located, namespace))
-    found.sort(
-        key=lambda item: (*_source_order_key(item[0], tools_dir), item[0].__code__.co_firstlineno)
-    )
+        path = Path(file).resolve()
+        if path.is_relative_to(root):
+            files.setdefault(path, (name, vars(module)))
+    found: list[Unsupported] = []
+    for path in sorted(files, key=lambda path: path.relative_to(root).parts):
+        name, namespace = files[path]
+        for node, top_level in _function_defs(ast.parse(path.read_bytes()), top_level=True):
+            found.extend(
+                (name, node.name, problem) for problem in _problems(node, top_level, namespace)
+            )
     return found
 
 
-def _format_unsupported_commands(found: list[tuple[Callable[..., Any], str]]) -> str:
+def _format_unsupported_commands(found: list[Unsupported]) -> str:
     """The whole error for ``found``.
 
     Mirrors ``crates/toolr-core/src/parser/build.rs::format_unsupported_commands``
     and the ``BuildError::UnsupportedCommands`` header.
     """
     lines = [
-        f"  - {_escape_control_chars(func.__module__)}::{_escape_control_chars(func.__name__)}: "
-        f"{problem}"
-        for func, problem in found
+        f"  - {_escape_control_chars(module)}::{_escape_control_chars(function)}: {problem}"
+        for module, function, problem in found
     ]
     return "\n".join([f"unsupported command declarations ({len(lines)}):", *lines])

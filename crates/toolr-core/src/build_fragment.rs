@@ -151,7 +151,7 @@ def hello(ctx: Context) -> None:
         write(
             &pkg,
             "commands.py",
-            r#"from toolr import command_group
+            r#"from toolr import command, command_group
 
 grp = command_group("plug", "Plugin", "Plugin commands.")
 
