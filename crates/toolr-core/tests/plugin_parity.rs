@@ -108,7 +108,7 @@ fn a_command_behaves_the_same_built_locally_and_as_a_plugin() {
 
     let local = build_static_manifest(&tools).unwrap();
 
-    let (fragment, _) = build_third_party_fragment(&pkg, "parpkg").unwrap();
+    let fragment = build_third_party_fragment(&pkg, "parpkg").unwrap().fragment;
     let paths: Vec<(String, Option<String>)> = fragment
         .groups
         .iter()

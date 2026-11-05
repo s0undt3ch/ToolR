@@ -469,11 +469,12 @@ fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCod
 
     let output_path = resolve_output_path(matches, &resolved.source_dir);
 
-    let (fragment, warnings) = toolr_core::build_fragment::build_third_party_fragment(
+    let built = toolr_core::build_fragment::build_third_party_fragment(
         &resolved.source_dir,
         &resolved.package_name,
     )?;
-    for warning in &warnings {
+    let fragment = built.fragment;
+    for warning in &built.warnings {
         eprintln!(
             "toolr: warning: {}",
             toolr_core::text::strip_control_chars(warning)
