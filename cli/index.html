@@ -2497,9 +2497,20 @@ without prompting.</p>
 <p>Bash completion needs bash 4.4 or newer; on an older bash, sourcing the
 script prints one warning and registers nothing. The script itself doesn't
 need the bash-completion package, but only that package loads the install
-directory. Without it, source the script from <code>~/.bashrc</code> instead:
-<code>source &lt;(toolr self completion print bash)</code>. A word with an unclosed
-quote (<code>--cfg 'a:b</code>) completes nothing.</p>
+directory. For bash:</p>
+<ul>
+<li>If bash-completion is missing or isn't enabled, add
+  <code>source &lt;installed path&gt;</code> to your bash startup file.</li>
+<li>The installer prints that line when it can't find the package;
+  <code>toolr --quiet</code> drops the hint.</li>
+<li>Interactive shells read <code>~/.bashrc</code>, but login shells, such as the ones
+  macOS Terminal opens, read <code>~/.bash_profile</code> instead.</li>
+<li>Sourcing <code>&lt;(toolr self completion print bash)</code> from the startup file
+  works too, without installing anything.</li>
+<li>toolr installs to <code>$XDG_DATA_HOME/bash-completion/completions</code> and
+  doesn't honour <code>BASH_COMPLETION_USER_DIR</code>.</li>
+</ul>
+<p>A word with an unclosed quote (<code>--cfg 'a:b</code>) completes nothing.</p>
 <p>An aliased toolr (<code>alias t=toolr</code>) gets no completion by default; run
 <code>complete -F _toolr_complete t</code> to register it.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>install<span class="w"> </span>--help
