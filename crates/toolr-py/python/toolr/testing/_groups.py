@@ -155,7 +155,7 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
     declarations: list[GroupDeclaration] = []
     global_vars: dict[str, str] = {}
     for file in _python_files(tools_dir):
-        tree = ast.parse(file.read_text())
+        tree = ast.parse(file.read_bytes())
         module = _module_path(tools_dir, file)
         docstring = _module_docstring(tree)
         local: list[tuple[str, str]] = []
