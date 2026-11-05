@@ -4,6 +4,9 @@
 # Install via `toolr self completion install bash`, or source this file
 # directly. Re-source on every shell start; manifest contents are read
 # at Tab time, not when this script is sourced.
+#
+# Every local is `_toolr_`-prefixed: `${!name}` is dynamically scoped, so it would read a
+# local of any function up the call stack that shares the user's variable name.
 
 # Sets the caller's `_toolr_q` to `$1` quoted as one inert word, with no `eval`.
 _toolr_quote() {
@@ -115,7 +118,7 @@ _toolr_complete() {
 _toolr_complete_paths() {
     local _toolr_mode=$1 _toolr_raw_cur=$2 _toolr_raw_prefix=${3-}
     local _toolr_name _toolr_rest _toolr_q _toolr_keep _toolr_is_dir _toolr_dirs=0
-    local _toolr_bare='' _toolr_var _toolr_value=''
+    local _toolr_bare='' _toolr_var='' _toolr_value=''
     local -A _toolr_tilde_dirs=()
     # shellcheck disable=SC2016 # The `$` is literal: a typed variable, not one to expand here.
     local _toolr_var_re='^(\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\})/'
@@ -124,13 +127,13 @@ _toolr_complete_paths() {
     # A leading `$NAME/` stays as typed, like native bash; only its value is listed and tested.
     # `${!_toolr_var}` reads a validated name, so nothing else in the word is expanded.
     # `$_` is excluded: inside this function it is the last argument, not the user's.
-    # Every local is `_toolr_`-prefixed: `${!...}` is dynamically scoped and would read a local
-    # (here or in `_toolr_complete`) that shares the user's variable name.
-    if [[ $_toolr_raw_cur =~ $_toolr_var_re \
-        && ( -z $_toolr_raw_prefix || $_toolr_raw_prefix == "${BASH_REMATCH[1]}"/* ) \
-        && ${BASH_REMATCH[2]}${BASH_REMATCH[3]} != _ ]]; then
+    if [[ $_toolr_raw_cur =~ $_toolr_var_re ]]; then
         _toolr_bare=${BASH_REMATCH[1]}
         _toolr_var=${BASH_REMATCH[2]}${BASH_REMATCH[3]}
+    fi
+    # Readline keeps no text, or text starting at `$NAME/`; otherwise the word isn't ours to rewrite.
+    if [[ -n $_toolr_var && $_toolr_var != _ \
+        && ( -z $_toolr_raw_prefix || $_toolr_raw_prefix == "$_toolr_bare"/* ) ]]; then
         [[ -n ${!_toolr_var+set} ]] || return 0
         _toolr_value=${!_toolr_var}
         # Bash doesn't tilde-expand an expanded value but `compgen` would, so `./` keeps it literal.
@@ -139,6 +142,8 @@ _toolr_complete_paths() {
         if [[ -n $_toolr_raw_prefix ]]; then
             _toolr_raw_prefix=$_toolr_value${_toolr_raw_prefix#"$_toolr_bare"}
         fi
+    else
+        _toolr_bare=
     fi
     # `[[ -d ]]` can't test `~user/...` without expanding it, but `compgen -d` resolves it.
     if [[ $_toolr_mode == -f && $_toolr_raw_cur == '~'* ]]; then
@@ -157,10 +162,11 @@ _toolr_complete_paths() {
         else
             _toolr_rest=$_toolr_name
             if [[ -n $_toolr_bare ]]; then
+                # Put the typed `$NAME` back in place of the value `compgen` listed under.
                 _toolr_keep=$_toolr_bare
                 _toolr_rest=${_toolr_name#"$_toolr_value"}
-            # `compgen` echoes a typed leading `~`; it must stay bare to expand.
             elif [[ $_toolr_raw_cur == '~'* && $_toolr_name == '~'* ]]; then
+                # `compgen` echoes a typed leading `~`; it must stay bare to expand.
                 _toolr_keep='~'
                 _toolr_rest=${_toolr_name#\~}
             fi
