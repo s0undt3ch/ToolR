@@ -87,11 +87,31 @@ _toolr_complete() {
     # `|| _toolr_rc=$?` keeps a non-zero exit from tripping the user's `set -e`.
     local _toolr_raw _toolr_rc=0
     _toolr_raw=$(toolr __complete "$PWD" "${_toolr_args[@]}" 2>/dev/null) || _toolr_rc=$?
+
+    # `--opt=value`: the engine completes the part after the first `=`; `--opt=` is put back here.
+    local _toolr_opt_prefix=''
+    if [[ $_toolr_raw_cur == --?*=* ]]; then
+        _toolr_opt_prefix=${_toolr_raw_cur%%=*}=
+    fi
     # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
     case $_toolr_rc in
         0) ;;
-        10) _toolr_complete_paths -f "$_toolr_raw_cur" "$_toolr_raw_prefix"; return 0 ;;
-        11) _toolr_complete_paths -d "$_toolr_raw_cur" "$_toolr_raw_prefix"; return 0 ;;
+        10 | 11)
+            # Paths complete the part after `--opt=`. With `=` not in COMP_WORDBREAKS readline
+            # replaces the whole word, so each reply must start with the option prefix again.
+            local _toolr_path_cur=${_toolr_raw_cur#"$_toolr_opt_prefix"}
+            local _toolr_path_prefix=$_toolr_raw_prefix _toolr_lead=''
+            if [[ $_toolr_raw_prefix == "$_toolr_opt_prefix"* ]]; then
+                _toolr_path_prefix=${_toolr_raw_prefix#"$_toolr_opt_prefix"}
+            else
+                _toolr_lead=${_toolr_opt_prefix#"$_toolr_raw_prefix"}
+                _toolr_path_prefix=
+            fi
+            local _toolr_mode=-f
+            ((_toolr_rc == 11)) && _toolr_mode=-d
+            _toolr_complete_paths "$_toolr_mode" "$_toolr_path_cur" "$_toolr_path_prefix" "$_toolr_lead"
+            return 0
+            ;;
         *) return 0 ;;
     esac
     [[ -z "$_toolr_raw" ]] && return 0
@@ -100,12 +120,13 @@ _toolr_complete() {
     # description support, so drop everything from the tab onward.
     # Candidates are repo-derived data: `compgen -W` would expand `$(...)`
     # inside a value, so compare literally and quote with `printf %q`.
-    local _toolr_value _toolr_q
+    local _toolr_value _toolr_q _toolr_full
     while IFS=$'\t' read -r _toolr_value _; do
-        _toolr_quote "$_toolr_value"
+        _toolr_full=$_toolr_opt_prefix$_toolr_value
+        _toolr_quote "$_toolr_full"
         # `_toolr_cur` may already hold the quoted form from an earlier insertion.
-        if [[ $_toolr_value == "$_toolr_raw_cur"* || $_toolr_q == "$_toolr_cur"* ]]; then
-            [[ -n $_toolr_raw_prefix ]] && _toolr_quote_after "$_toolr_raw_prefix" "$_toolr_value"
+        if [[ $_toolr_full == "$_toolr_raw_cur"* || $_toolr_q == "$_toolr_cur"* ]]; then
+            [[ -n $_toolr_raw_prefix ]] && _toolr_quote_after "$_toolr_raw_prefix" "$_toolr_full"
             COMPREPLY+=("$_toolr_q")
         fi
     done <<< "$_toolr_raw"
@@ -113,10 +134,11 @@ _toolr_complete() {
 
 # File names are data too: `compgen` only lists them, and each is quoted with
 # `%q` like a candidate value.
-# Usage: _toolr_complete_paths MODE RAW_CUR [RAW_PREFIX], where MODE is `-f` or `-d`,
-# RAW_CUR the unescaped typed word and RAW_PREFIX the part of it readline keeps.
+# Usage: _toolr_complete_paths MODE RAW_CUR [RAW_PREFIX [LEAD]], where MODE is `-f` or `-d`,
+# RAW_CUR the unescaped typed path, RAW_PREFIX the part of it readline keeps, and LEAD text
+# readline replaces in front of the path (`--opt=`), which every reply starts with.
 _toolr_complete_paths() {
-    local _toolr_mode=$1 _toolr_raw_cur=$2 _toolr_raw_prefix=${3-}
+    local _toolr_mode=$1 _toolr_raw_cur=$2 _toolr_raw_prefix=${3-} _toolr_lead=${4-}
     local _toolr_name _toolr_rest _toolr_q _toolr_keep _toolr_is_dir _toolr_dirs=0
     local _toolr_bare='' _toolr_var='' _toolr_value=''
     local -A _toolr_tilde_dirs=()
@@ -176,7 +198,7 @@ _toolr_complete_paths() {
             fi
             [[ -n $_toolr_rest ]] && _toolr_quote "$_toolr_rest"
         fi
-        _toolr_q=$_toolr_keep$_toolr_q
+        _toolr_q=$_toolr_lead$_toolr_keep$_toolr_q
         _toolr_is_dir=0
         if [[ $_toolr_mode == -d ]]; then
             _toolr_is_dir=1

@@ -17,11 +17,15 @@ function __toolr_complete
     # `--` token into the call and trip clap's option-terminator logic.
     set -a args $current
     set -l out (toolr __complete "$PWD" $args 2>/dev/null)
+    set -l rc $status
+    # `--opt=value`: the engine returns bare values, but fish matches them against the
+    # whole word, so put `--opt=` back. Quoted, so an empty word is still one argument.
+    set -l opt_prefix (string match -r -- '^--[^=]+=' "$current")
     # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
-    switch $status
+    switch $rc
         case 0
             for line in $out
-                printf '%s\n' $line
+                printf '%s\n' "$opt_prefix$line"
             end
         case 10
             __fish_complete_path "$current"
