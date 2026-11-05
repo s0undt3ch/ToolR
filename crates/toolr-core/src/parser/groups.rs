@@ -13,7 +13,7 @@ use crate::manifest::{Group, Origin};
 pub struct GroupBinding {
     pub var: String,
     pub group: Group,
-    /// Whether the call passes a description or docstring at all, readable
+    /// Whether the call passes a non-empty description or docstring, readable
     /// or not. A group no declaration describes fails the build.
     pub describes: bool,
     /// Whether the call passes a docstring together with a description or
@@ -196,6 +196,21 @@ fn parse_group_call(
     };
     let passes_docstring = passed("docstring", 4);
     let passes_description = passed("description", 2);
+    // An empty description, or an empty or whitespace-only docstring, has no
+    // opinion: it leaves the group undescribed.
+    let says_something = |keyword: &str, position: usize| {
+        passed(keyword, position)
+            && argument(call, keyword, position).is_none_or(|e| match e {
+                Expr::Name(n) if n.id.as_str() == "__doc__" => !module_docstring.trim().is_empty(),
+                e => literal_str(e).is_none_or(|text| {
+                    if keyword == "docstring" {
+                        !text.trim().is_empty()
+                    } else {
+                        !text.is_empty()
+                    }
+                }),
+            })
+    };
     let explicit_description =
         description_kwarg(call).or_else(|| call.arguments.args.get(2).and_then(literal_str));
     // When `docstring=` is supplied, split it the same way `parser/commands.rs`
@@ -214,7 +229,7 @@ fn parse_group_call(
         .unwrap_or_default();
     Some(GroupBinding {
         var: var.to_string(),
-        describes: passes_description || passes_docstring,
+        describes: says_something("description", 2) || says_something("docstring", 4),
         contradictory: passes_docstring && (passes_description || passed("long_description", 3)),
         group: Group {
             name,

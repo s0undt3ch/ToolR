@@ -1602,6 +1602,27 @@ def hello(ctx):
         );
     }
 
+    /// An empty description, or an empty or whitespace-only docstring, leaves a
+    /// group undescribed; a later declaration with real text still describes it.
+    #[test]
+    fn empty_description_or_docstring_does_not_describe_a_group() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"a\", \"A\", description=\"\")\n\
+             b = command_group(\"b\", \"B\", docstring=\"  \\n \")\n\
+             c = command_group(\"c\", \"C\", docstring=__doc__)\n\
+             d = command_group(\"d\", \"D\", description=\"\")\n\
+             d = command_group(\"d\", \"D\", description=\"D.\")\n"
+        );
+        let src = format!("\"\"\"  \"\"\"\n{src}");
+        assert_eq!(
+            build_error_for(&[("tools/m.py", &src)]),
+            "command groups with no description (3):\n  \
+             - `a` (declared in tools.m): give one declaration a description or docstring.\n  \
+             - `b` (declared in tools.m): give one declaration a description or docstring.\n  \
+             - `c` (declared in tools.m): give one declaration a description or docstring."
+        );
+    }
+
     /// `__doc__` describes a group only when the module has a docstring.
     #[test]
     fn module_without_a_docstring_does_not_describe_its_group() {

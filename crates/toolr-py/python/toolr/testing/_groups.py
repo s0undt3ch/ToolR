@@ -34,7 +34,7 @@ class GroupDeclaration(NamedTuple):
     module: str
     """The module making the call."""
     describes: bool
-    """Whether the call passes a description or docstring."""
+    """Whether the call passes a non-empty description or docstring."""
     contradictory: bool
     """Whether the call passes a docstring with a description or long description."""
 
@@ -117,6 +117,23 @@ def _passed(node: ast.expr | None, module_docstring: str) -> bool:
     return True
 
 
+def _says_something(node: ast.expr | None, module_docstring: str, *, docstring: bool) -> bool:
+    """Whether ``node`` is a non-empty description or docstring.
+
+    An empty description, or an empty or whitespace-only docstring, leaves the
+    group undescribed. Mirrors ``says_something`` in
+    ``crates/toolr-core/src/parser/groups.rs::parse_group_call``.
+    """
+    if not _passed(node, module_docstring):
+        return False
+    if isinstance(node, ast.Name) and node.id == "__doc__":
+        return bool(module_docstring.strip())
+    text = _literal(node)
+    if text is None:
+        return True
+    return bool(text.strip()) if docstring else bool(text)
+
+
 def _group_calls(tree: ast.Module) -> list[tuple[str | None, ast.Call]]:
     """``(bound name, call)`` for each top-level ``command_group(...)`` call.
 
@@ -183,7 +200,12 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
                 GroupDeclaration(
                     path=path,
                     module=module,
-                    describes=docstring_arg or description_arg,
+                    describes=_says_something(
+                        _argument(call, "docstring", 4), docstring, docstring=True
+                    )
+                    or _says_something(
+                        _argument(call, "description", 2), docstring, docstring=False
+                    ),
                     contradictory=docstring_arg
                     and (
                         description_arg
