@@ -6,16 +6,16 @@ use ruff_python_ast::visitor::{Visitor, walk_except_handler, walk_expr, walk_stm
 use ruff_python_ast::{Alias, ExceptHandler, Expr, ExprCall, ModModule, Stmt, StmtAssign};
 
 use super::parse_docstring;
-use crate::manifest::{Group, Origin};
 
 /// A group binding extracted from source. The `var` is the Python local name
 /// that subsequent `@var.command` decorators reference.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupBinding {
     pub var: String,
-    /// The group, with `title` and `description` holding the readable text of
-    /// `fields`.
-    pub group: Group,
+    /// The group's leaf name.
+    pub name: String,
+    /// The parent group's dotted path, `None` at the top level.
+    pub parent: Option<String>,
     /// The group's fields as this declaration gives them.
     pub fields: GroupFields,
     /// Whether the call passes a non-empty description or docstring, readable
@@ -28,6 +28,16 @@ pub struct GroupBinding {
     /// can't see: through `*`/`**` unpacking, or as the `__doc__` of a module
     /// without a docstring.
     pub unreadable: bool,
+}
+
+impl GroupBinding {
+    /// The group's dotted path, built like `Group::full_path`.
+    pub fn full_path(&self) -> String {
+        match &self.parent {
+            Some(parent) => format!("{parent}.{}", self.name),
+            None => self.name.clone(),
+        }
+    }
 }
 
 /// One `command_group` field as the static parser reads it.
@@ -61,14 +71,78 @@ impl Field {
     }
 }
 
-/// The fields one declaration gives a group, in the order Python's
-/// `command_group` compares them.
+/// The fields one declaration gives a group, or, with another `T`, what the
+/// build keeps of each.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct GroupFields {
-    pub title: Field,
-    pub description: Field,
-    pub long_description: Field,
+pub struct GroupFields<T = Field> {
+    pub title: T,
+    pub description: T,
+    pub long_description: T,
 }
+
+impl<T> GroupFields<T> {
+    /// Each field with its `command_group` keyword, in the order Python's
+    /// `command_group` compares them.
+    pub fn named(&self) -> [(&'static str, &T); 3] {
+        [
+            (TITLE.keyword, &self.title),
+            (DESCRIPTION.keyword, &self.description),
+            (LONG_DESCRIPTION.keyword, &self.long_description),
+        ]
+    }
+
+    /// [`Self::named`], mutably.
+    pub fn named_mut(&mut self) -> [(&'static str, &mut T); 3] {
+        [
+            (TITLE.keyword, &mut self.title),
+            (DESCRIPTION.keyword, &mut self.description),
+            (LONG_DESCRIPTION.keyword, &mut self.long_description),
+        ]
+    }
+
+    /// The fields with `f` applied to each.
+    pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> GroupFields<U> {
+        GroupFields {
+            title: f(self.title),
+            description: f(self.description),
+            long_description: f(self.long_description),
+        }
+    }
+}
+
+/// A `command_group` parameter: its keyword, and its position in
+/// `command_group(name, title, description, long_description, docstring,
+/// parent)`, the signature of `command_group` in
+/// `crates/toolr-py/python/toolr/_decorators.py`.
+///
+/// `toolr.testing._groups._Param` mirrors these in Python; change both
+/// together.
+#[derive(Debug, Clone, Copy)]
+struct Param {
+    keyword: &'static str,
+    position: usize,
+}
+
+const TITLE: Param = Param {
+    keyword: "title",
+    position: 1,
+};
+const DESCRIPTION: Param = Param {
+    keyword: "description",
+    position: 2,
+};
+const LONG_DESCRIPTION: Param = Param {
+    keyword: "long_description",
+    position: 3,
+};
+const DOCSTRING: Param = Param {
+    keyword: "docstring",
+    position: 4,
+};
+const PARENT: Param = Param {
+    keyword: "parent",
+    position: 5,
+};
 
 /// Walk the module's top-level statements and collect group bindings.
 ///
@@ -85,10 +159,7 @@ pub fn extract_groups(
     module_docstring: Option<&str>,
     global_vars: &HashMap<String, String>,
 ) -> Vec<GroupBinding> {
-    let source = Source {
-        module_docstring,
-        doc_rebound: binds_doc(module),
-    };
+    let source = Source::new(module, module_docstring);
     let mut out: Vec<GroupBinding> = Vec::new();
     for stmt in &module.body {
         if let Some(binding) = group_binding(stmt, &source, &out, global_vars) {
@@ -137,46 +208,90 @@ impl<'a> Visitor<'a> for DocBinding {
     }
 }
 
-/// What a `command_group` call's arguments can refer to.
-struct Source<'a> {
-    module_docstring: Option<&'a str>,
-    /// Whether the module binds `__doc__`, which then reads as unknown.
-    doc_rebound: bool,
+/// What `__doc__` is when a `command_group` call reads it.
+///
+/// `toolr.testing._groups._DocState` mirrors this in Python; change both
+/// together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DocState<'a> {
+    /// The module binds `__doc__`, so it may not be the docstring.
+    Rebound,
+    /// The module has no docstring: `__doc__` is `None`.
+    Missing,
+    /// The module docstring is empty or whitespace-only.
+    Blank,
+    /// The module docstring.
+    Text(&'a str),
 }
 
-impl Source<'_> {
+/// Whether an argument is something other than `None` at runtime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Passes {
+    Never,
+    /// Unless an expression the parser can't read is `None`.
+    Maybe,
+    Surely,
+}
+
+/// What a `command_group` call's arguments can refer to.
+///
+/// `toolr.testing._groups._Source` mirrors this in Python; change both
+/// together.
+struct Source<'a> {
+    doc: DocState<'a>,
+}
+
+impl<'a> Source<'a> {
+    fn new(module: &ModModule, module_docstring: Option<&'a str>) -> Self {
+        let doc = match module_docstring {
+            _ if binds_doc(module) => DocState::Rebound,
+            None => DocState::Missing,
+            Some(doc) if doc.trim().is_empty() => DocState::Blank,
+            Some(doc) => DocState::Text(doc),
+        };
+        Source { doc }
+    }
+
     /// Read one argument. A `__doc__` reference is the module docstring, and
     /// one that is empty or whitespace-only has no opinion. Any expression
     /// but a string literal, `None` or `__doc__` is opaque.
+    ///
+    /// `toolr.testing._groups._read` mirrors this in Python; change both
+    /// together.
     fn read(&self, expr: Option<&Expr>) -> Field {
         match expr {
             None | Some(Expr::NoneLiteral(_)) => Field::Empty,
-            Some(e) if is_doc(e) => match self.module_docstring {
-                _ if self.doc_rebound => Field::Opaque,
-                Some(doc) if !doc.trim().is_empty() => Field::Text(doc.to_string()),
-                _ => Field::Empty,
+            Some(e) if is_doc(e) => match self.doc {
+                DocState::Rebound => Field::Opaque,
+                DocState::Missing | DocState::Blank => Field::Empty,
+                DocState::Text(doc) => Field::Text(doc.to_string()),
             },
             Some(e) => literal_str(e).map_or(Field::Opaque, Field::from_text),
         }
     }
 
-    /// Whether `expr` may be an argument other than `None` at runtime.
-    fn may_pass(&self, expr: Option<&Expr>) -> bool {
+    /// Whether `expr` is an argument other than `None` at runtime. A
+    /// literal surely is, and the `__doc__` of a module with a docstring.
+    ///
+    /// `toolr.testing._groups._passes` mirrors this in Python; change both
+    /// together.
+    fn passes(&self, expr: Option<&Expr>) -> Passes {
         match expr {
-            None | Some(Expr::NoneLiteral(_)) => false,
-            Some(e) if is_doc(e) => self.doc_rebound || self.module_docstring.is_some(),
-            Some(_) => true,
+            None | Some(Expr::NoneLiteral(_)) => Passes::Never,
+            Some(e) if is_doc(e) => match self.doc {
+                DocState::Missing => Passes::Never,
+                DocState::Rebound => Passes::Maybe,
+                DocState::Blank | DocState::Text(_) => Passes::Surely,
+            },
+            Some(e) if e.is_literal_expr() => Passes::Surely,
+            Some(_) => Passes::Maybe,
         }
     }
 
-    /// Whether `expr` is surely an argument other than `None` at runtime: a
-    /// literal, or the `__doc__` of a module with a docstring.
-    fn surely_passes(&self, expr: Option<&Expr>) -> bool {
-        match expr {
-            Some(e) if is_doc(e) => !self.doc_rebound && self.module_docstring.is_some(),
-            Some(e) => e.is_literal_expr() && !e.is_none_literal_expr(),
-            None => false,
-        }
+    /// Whether `expr` is the `__doc__` of a module whose docstring is
+    /// missing or blank.
+    fn is_blank_doc(&self, expr: Option<&Expr>) -> bool {
+        expr.is_some_and(is_doc) && matches!(self.doc, DocState::Missing | DocState::Blank)
     }
 }
 
@@ -239,7 +354,7 @@ fn group_binding(
     // resolve when authors mix the two styles. Skip when
     // there's a real binding name.
     if var_name.is_none() {
-        binding.var = binding.group.name.clone();
+        binding.var = binding.name.clone();
     }
     Some(binding)
 }
@@ -255,7 +370,7 @@ fn resolve_var(
     local
         .iter()
         .find(|b| b.var == var)
-        .map(|b| b.group.full_path())
+        .map(GroupBinding::full_path)
         .or_else(|| global_vars.get(var).cloned())
 }
 
@@ -272,17 +387,17 @@ fn parent_var_name(call: &ExprCall) -> Option<String> {
     }
 }
 
-/// If the call passes `parent="..."` (literal string), by keyword or sixth
+/// If the call passes `parent="..."` (literal string), by keyword or
 /// position, return that string.
 fn parent_kwarg_literal(call: &ExprCall) -> Option<String> {
-    argument(call, "parent", 5).and_then(literal_str)
+    argument(call, PARENT).and_then(literal_str)
 }
 
 /// If the call passes `parent=<var>` (variable reference), by keyword or
-/// sixth position, return the variable name so the caller can resolve it
+/// position, return the variable name so the caller can resolve it
 /// against the local + global binding tables.
 fn parent_kwarg_var(call: &ExprCall) -> Option<String> {
-    match argument(call, "parent", 5)? {
+    match argument(call, PARENT)? {
         Expr::Name(n) => Some(n.id.as_str().to_string()),
         _ => None,
     }
@@ -323,9 +438,7 @@ fn parse_group_call(
     } else {
         (raw_name, parent)
     };
-    let docstring_arg = argument(call, "docstring", 4);
-    let docstring = source.read(docstring_arg);
-    let explicit_description = source.read(argument(call, "description", 2));
+    let docstring = source.read(argument(call, DOCSTRING));
     // When `docstring=` is supplied, split it the same way `parser/commands.rs`
     // splits function docstrings: the first paragraph becomes the short
     // `title` (clap's `about`, shown in the parent's command listing) and
@@ -343,71 +456,89 @@ fn parse_group_call(
             .as_ref()
             .map_or(Field::Empty, |d| Field::from_text(part(d))),
     };
-    let title = match source.read(argument(call, "title", 1)) {
+    let title = match source.read(argument(call, TITLE)) {
         Field::Empty => from_docstring(|d| d.short_description.clone()),
         title => title,
     };
-    // An empty or whitespace-only docstring has no opinion: it leaves the
-    // group undescribed.
-    let describes = explicit_description != Field::Empty
-        || match &docstring {
-            Field::Text(raw) => !raw.trim().is_empty(),
-            Field::Opaque => true,
-            Field::Empty => false,
-        };
-    let description = match explicit_description {
+    let description = match source.read(argument(call, DESCRIPTION)) {
         Field::Empty => from_docstring(crate::Docstring::full_description),
         description => description,
     };
     // `command_group` drops the long description when a docstring is given,
     // and a docstring that may be `None` leaves it unknown.
-    let long_description = match source.read(argument(call, "long_description", 3)) {
-        _ if source.surely_passes(docstring_arg) => Field::Empty,
-        Field::Text(_) if source.may_pass(docstring_arg) => Field::Opaque,
+    let docstring_passes = source.passes(argument(call, DOCSTRING));
+    let long_description = match source.read(argument(call, LONG_DESCRIPTION)) {
+        _ if docstring_passes == Passes::Surely => Field::Empty,
+        Field::Text(_) if docstring_passes == Passes::Maybe => Field::Opaque,
         long => long,
     };
-    let blank_doc = |keyword: &str, position: usize| {
-        argument(call, keyword, position).is_some_and(is_doc)
-            && !source.doc_rebound
-            && source
-                .module_docstring
-                .is_none_or(|doc| doc.trim().is_empty())
-    };
-    let unpacks = call.arguments.args.iter().any(Expr::is_starred_expr)
-        || call.arguments.keywords.iter().any(|k| k.arg.is_none());
     Some(GroupBinding {
         var: var.to_string(),
-        describes,
-        // Only values surely passed contradict: one the parser can't read may
-        // be `None` at runtime.
-        contradictory: source.surely_passes(docstring_arg)
-            && (source.surely_passes(argument(call, "description", 2))
-                || source.surely_passes(argument(call, "long_description", 3))),
-        unreadable: unpacks || blank_doc("description", 2) || blank_doc("docstring", 4),
-        group: Group {
-            name,
-            title: title.text().to_string(),
-            description: description.text().to_string(),
-            parent,
-            origin: Origin::Static,
-        },
+        name,
+        parent,
         fields: GroupFields {
             title,
             description,
             long_description,
         },
+        describes: describes(call, source),
+        contradictory: contradictory(call, source),
+        unreadable: unreadable(call, source),
     })
 }
 
-/// The argument `command_group` binds to `keyword`, passed by keyword or at
-/// `position`.
-fn argument<'a>(call: &'a ExprCall, keyword: &str, position: usize) -> Option<&'a Expr> {
+/// Whether the call passes a non-empty description or docstring, readable or
+/// not. An empty description, or an empty or whitespace-only docstring,
+/// leaves the group undescribed.
+///
+/// `toolr.testing._groups._describes` mirrors this in Python; change both
+/// together.
+fn describes(call: &ExprCall, source: &Source<'_>) -> bool {
+    source.read(argument(call, DESCRIPTION)) != Field::Empty
+        || match source.read(argument(call, DOCSTRING)) {
+            Field::Text(raw) => !raw.trim().is_empty(),
+            Field::Opaque => true,
+            Field::Empty => false,
+        }
+}
+
+/// Whether the call surely passes a docstring with a description or long
+/// description. Only values surely passed contradict: one the parser can't
+/// read may be `None` at runtime.
+///
+/// `toolr.testing._groups._contradictory` mirrors this in Python; change both
+/// together.
+fn contradictory(call: &ExprCall, source: &Source<'_>) -> bool {
+    let surely = |param| source.passes(argument(call, param)) == Passes::Surely;
+    surely(DOCSTRING) && (surely(DESCRIPTION) || surely(LONG_DESCRIPTION))
+}
+
+/// Whether the call may pass a description or docstring the parser can't
+/// see: through `*`/`**` unpacking, or as the `__doc__` of a module without
+/// a docstring.
+///
+/// `toolr.testing._groups._unreadable` mirrors this in Python; change both
+/// together.
+fn unreadable(call: &ExprCall, source: &Source<'_>) -> bool {
+    let unpacks = call.arguments.args.iter().any(Expr::is_starred_expr)
+        || call.arguments.keywords.iter().any(|k| k.arg.is_none());
+    unpacks
+        || source.is_blank_doc(argument(call, DESCRIPTION))
+        || source.is_blank_doc(argument(call, DOCSTRING))
+}
+
+/// The argument `command_group` binds to `param`, passed by keyword or by
+/// position.
+///
+/// `toolr.testing._groups._argument` mirrors this in Python; change both
+/// together.
+fn argument(call: &ExprCall, param: Param) -> Option<&Expr> {
     call.arguments
         .keywords
         .iter()
-        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some(keyword))
+        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some(param.keyword))
         .map(|k| &k.value)
-        .or_else(|| call.arguments.args.get(position))
+        .or_else(|| call.arguments.args.get(param.position))
 }
 
 fn literal_str(expr: &Expr) -> Option<String> {
@@ -437,8 +568,8 @@ mod tests {
         let groups = extract_groups(&m, None, &HashMap::new());
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].var, "group");
-        assert_eq!(groups[0].group.name, "ci");
-        assert_eq!(groups[0].group.title, "CI utilities");
+        assert_eq!(groups[0].name, "ci");
+        assert_eq!(groups[0].fields.title.text(), "CI utilities");
     }
 
     #[test]
@@ -454,9 +585,9 @@ mod tests {
             Some("First paragraph short.\n\nLong paragraph body."),
             &HashMap::new(),
         );
-        assert_eq!(groups[0].group.title, "CI utilities");
+        assert_eq!(groups[0].fields.title.text(), "CI utilities");
         assert_eq!(
-            groups[0].group.description,
+            groups[0].fields.description.text(),
             "First paragraph short.\n\nLong paragraph body."
         );
     }
@@ -474,11 +605,11 @@ mod tests {
             &HashMap::new(),
         );
         assert_eq!(
-            groups[0].group.title,
+            groups[0].fields.title.text(),
             "Example single-line docstring for a group."
         );
         assert_eq!(
-            groups[0].group.description,
+            groups[0].fields.description.text(),
             "Example single-line docstring for a group."
         );
     }
@@ -495,9 +626,12 @@ mod tests {
             Some("Short blurb for parent listing.\n\nLonger prose shown by --help only."),
             &HashMap::new(),
         );
-        assert_eq!(groups[0].group.title, "Short blurb for parent listing.");
         assert_eq!(
-            groups[0].group.description,
+            groups[0].fields.title.text(),
+            "Short blurb for parent listing."
+        );
+        assert_eq!(
+            groups[0].fields.description.text(),
             "Short blurb for parent listing.\n\nLonger prose shown by --help only."
         );
     }
@@ -526,7 +660,7 @@ mod tests {
         let m = parse_src(src);
         let groups = extract_groups(&m, None, &HashMap::new());
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].group.description, "desc body");
+        assert_eq!(groups[0].fields.description.text(), "desc body");
     }
 
     #[test]
@@ -535,7 +669,7 @@ mod tests {
         let m = parse_src(src);
         let groups = extract_groups(&m, None, &HashMap::new());
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].group.description, "kw");
+        assert_eq!(groups[0].fields.description.text(), "kw");
     }
 
     #[test]
@@ -553,12 +687,12 @@ image = docker.command_group("image", "Image")
         let m = parse_src(src);
         let groups = extract_groups(&m, None, &HashMap::new());
         assert_eq!(groups.len(), 2);
-        assert_eq!(groups[0].group.name, "docker");
-        assert_eq!(groups[0].group.parent, None);
-        assert_eq!(groups[0].group.full_path(), "docker");
-        assert_eq!(groups[1].group.name, "image");
-        assert_eq!(groups[1].group.parent.as_deref(), Some("docker"));
-        assert_eq!(groups[1].group.full_path(), "docker.image");
+        assert_eq!(groups[0].name, "docker");
+        assert_eq!(groups[0].parent, None);
+        assert_eq!(groups[0].full_path(), "docker");
+        assert_eq!(groups[1].name, "image");
+        assert_eq!(groups[1].parent.as_deref(), Some("docker"));
+        assert_eq!(groups[1].full_path(), "docker.image");
     }
 
     #[test]
@@ -573,9 +707,9 @@ helm_diff = command_group("helm-diff-pr-comment", "Helm diff", parent="ci")
         let m = parse_src(src);
         let groups = extract_groups(&m, None, &HashMap::new());
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].group.name, "helm-diff-pr-comment");
-        assert_eq!(groups[0].group.parent.as_deref(), Some("ci"));
-        assert_eq!(groups[0].group.full_path(), "ci.helm-diff-pr-comment");
+        assert_eq!(groups[0].name, "helm-diff-pr-comment");
+        assert_eq!(groups[0].parent.as_deref(), Some("ci"));
+        assert_eq!(groups[0].full_path(), "ci.helm-diff-pr-comment");
     }
 
     #[test]
@@ -587,7 +721,7 @@ c = b.command_group("c", "C")
         let m = parse_src(src);
         let groups = extract_groups(&m, None, &HashMap::new());
         assert_eq!(groups.len(), 3);
-        assert_eq!(groups[2].group.full_path(), "a.b.c");
-        assert_eq!(groups[2].group.parent.as_deref(), Some("a.b"));
+        assert_eq!(groups[2].full_path(), "a.b.c");
+        assert_eq!(groups[2].parent.as_deref(), Some("a.b"));
     }
 }

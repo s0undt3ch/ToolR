@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use crate::hash::{SymlinkedModules, list_python_files, snapshot_from, static_hash_of};
-use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
+use crate::manifest::{ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
 use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
@@ -155,11 +155,11 @@ fn build_commands_inner(
     // (alphabetical) which matches the conventional `_common.py` →
     // `gh_actions.py` etc. layout where the parent group lives in an
     // underscore-prefixed module.
-    let mut all_groups: Vec<Group> = Vec::new();
     let mut all_commands = Vec::new();
-    // Group full path → its declarations so far.
-    let mut seen_groups: std::collections::HashMap<String, SeenGroup> =
-        std::collections::HashMap::new();
+    // Each group's declarations so far, in first-declaration order, and the
+    // index of each group's full path in it.
+    let mut seen_groups: Vec<SeenGroup> = Vec::new();
+    let mut seen_index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut contradictory: Vec<ContradictoryGroup> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     let mut global_vars: std::collections::HashMap<String, String> =
@@ -198,7 +198,7 @@ fn build_commands_inner(
         );
         // Make this file's bindings visible to subsequent files.
         for binding in &bindings {
-            global_vars.insert(binding.var.clone(), binding.group.full_path());
+            global_vars.insert(binding.var.clone(), binding.full_path());
         }
         // Dedup groups by *full_path* (not just leaf name), so nested
         // groups in different branches with the same leaf name (e.g.
@@ -206,15 +206,16 @@ fn build_commands_inner(
         // wins, as in Python: a later one fills a field the first left
         // empty, and is warned about where both are set and differ.
         for binding in bindings {
-            let path = binding.group.full_path();
+            let path = binding.full_path();
             if binding.contradictory {
                 contradictory.push(ContradictoryGroup {
                     group: path.clone(),
                     module: module_path.clone(),
                 });
             }
-            match seen_groups.get_mut(&path) {
-                Some(seen) => {
+            match seen_index.get(&path) {
+                Some(&index) => {
+                    let seen = &mut seen_groups[index];
                     if !seen.modules.contains(&module_path) {
                         seen.modules.push(module_path.clone());
                     }
@@ -223,38 +224,31 @@ fn build_commands_inner(
                     warnings.extend(redeclaration_warning(
                         &path,
                         &seen.fields,
-                        &seen.kept_from,
                         &binding.fields,
                         &module_path,
                     ));
-                    fill_empty_fields(
-                        &mut seen.fields,
-                        &mut seen.kept_from,
-                        binding.fields,
-                        &module_path,
-                    );
-                    let first = &mut all_groups[seen.index];
-                    first.title = seen.fields.title.text().to_string();
-                    first.description = seen.fields.description.text().to_string();
+                    fill_empty_fields(&mut seen.fields, &binding.fields, &module_path);
                 }
                 None => {
-                    seen_groups.insert(
+                    seen_index.insert(path.clone(), seen_groups.len());
+                    seen_groups.push(SeenGroup {
                         path,
-                        SeenGroup {
-                            index: all_groups.len(),
-                            modules: vec![module_path.clone()],
-                            describes: binding.describes,
-                            unreadable: binding.unreadable,
-                            fields: binding.fields,
-                            kept_from: std::array::from_fn(|_| module_path.clone()),
-                        },
-                    );
-                    all_groups.push(binding.group);
+                        name: binding.name,
+                        parent: binding.parent,
+                        modules: vec![module_path.clone()],
+                        describes: binding.describes,
+                        unreadable: binding.unreadable,
+                        fields: binding.fields.map(|field| Kept {
+                            field,
+                            from: module_path.clone(),
+                        }),
+                    });
                 }
             }
         }
         all_commands.extend(commands);
     }
+    let all_groups: Vec<Group> = seen_groups.iter().map(SeenGroup::group).collect();
 
     // First, as Python's `command_group` raises these when the module imports.
     if !contradictory.is_empty() {
@@ -328,16 +322,7 @@ fn build_commands_inner(
         return Err(BuildError::DuplicateCommands(duplicates));
     }
 
-    let undescribed: Vec<UndescribedGroup> = all_groups
-        .iter()
-        .map(|g| &seen_groups[&g.full_path()])
-        .filter(|seen| !seen.describes)
-        .map(|seen| UndescribedGroup {
-            group: all_groups[seen.index].full_path(),
-            modules: seen.modules.clone(),
-            unreadable: seen.unreadable,
-        })
-        .collect();
+    let undescribed = undescribed_groups(&seen_groups);
     if !undescribed.is_empty() {
         return Err(BuildError::UndescribedGroups(undescribed));
     }
@@ -351,8 +336,10 @@ fn build_commands_inner(
 
 /// The declarations of one group seen so far by `build_commands_inner`.
 struct SeenGroup {
-    /// Index of the group in `all_groups`.
-    index: usize,
+    /// Dotted group path.
+    path: String,
+    name: String,
+    parent: Option<String>,
     /// Every declaring module, first declaration first.
     modules: Vec<String>,
     /// Whether any declaration passes a description or docstring.
@@ -361,9 +348,41 @@ struct SeenGroup {
     unreadable: bool,
     /// The fields kept so far: the first declaration's, with empty ones
     /// filled by later declarations.
-    fields: GroupFields,
-    /// The module each of `fields` came from, in `GroupFields` order.
-    kept_from: [String; 3],
+    fields: GroupFields<Kept>,
+}
+
+impl SeenGroup {
+    /// The group the manifest gets, with the kept fields' readable text.
+    fn group(&self) -> Group {
+        Group {
+            name: self.name.clone(),
+            title: self.fields.title.field.text().to_string(),
+            description: self.fields.description.field.text().to_string(),
+            parent: self.parent.clone(),
+            origin: Origin::Static,
+        }
+    }
+}
+
+/// A kept group field and the module it came from.
+struct Kept {
+    field: Field,
+    from: String,
+}
+
+/// Every group no declaration describes, in first-declaration order.
+///
+/// `toolr.testing._groups._undescribed_groups` mirrors this in Python; change
+/// both together.
+fn undescribed_groups(seen: &[SeenGroup]) -> Vec<UndescribedGroup> {
+    seen.iter()
+        .filter(|g| !g.describes)
+        .map(|g| UndescribedGroup {
+            group: g.path.clone(),
+            modules: g.modules.clone(),
+            unreadable: g.unreadable,
+        })
+        .collect()
 }
 
 /// A `command_group` call passing a docstring with a description.
@@ -441,23 +460,25 @@ pub(crate) struct BuiltTree {
 }
 
 /// The warning for a group re-declaration that disagrees with the kept
-/// fields, worded like Python's `command_group`, naming the module each kept
-/// value came from. `None` when they agree.
+/// fields, naming the module each kept value came from. Python's
+/// `command_group` logs the same disagreement at debug level in its own
+/// words. `None` when they agree.
 fn redeclaration_warning(
     path: &str,
-    kept: &GroupFields,
-    kept_from: &[String; 3],
+    kept: &GroupFields<Kept>,
     later: &GroupFields,
     later_module: &str,
 ) -> Option<String> {
     // Only two readable values can differ: an empty one has no opinion, and
     // an unreadable one can't be compared.
-    let differs = |kept: &Field, other: &Field| matches!((kept, other), (Field::Text(a), Field::Text(b)) if a != b);
-    let differing: Vec<(&str, &str)> = field_pairs(kept, later)
+    let differing: Vec<(&str, &str)> = kept
+        .named()
         .into_iter()
-        .zip(kept_from)
-        .filter(|((_, kept, later), _)| differs(kept, later))
-        .map(|((name, _, _), module)| (name, module.as_str()))
+        .zip(later.named())
+        .filter(|((_, kept), (_, later))| {
+            matches!((&kept.field, later), (Field::Text(a), Field::Text(b)) if a != b)
+        })
+        .map(|((name, kept), _)| (name, kept.from.as_str()))
         .collect();
     if differing.is_empty() {
         return None;
@@ -483,41 +504,15 @@ fn redeclaration_warning(
     ))
 }
 
-/// `(name, kept, later)` for each field, in the order Python compares them.
-fn field_pairs<'a>(
-    kept: &'a GroupFields,
-    later: &'a GroupFields,
-) -> [(&'static str, &'a Field, &'a Field); 3] {
-    [
-        ("title", &kept.title, &later.title),
-        ("description", &kept.description, &later.description),
-        (
-            "long_description",
-            &kept.long_description,
-            &later.long_description,
-        ),
-    ]
-}
-
 /// Fill the kept fields a later declaration gives where they're empty, as
 /// Python's `command_group` does, recording `module` as their source.
-fn fill_empty_fields(
-    kept: &mut GroupFields,
-    kept_from: &mut [String; 3],
-    later: GroupFields,
-    module: &str,
-) {
-    for ((kept, later), from) in [
-        (&mut kept.title, later.title),
-        (&mut kept.description, later.description),
-        (&mut kept.long_description, later.long_description),
-    ]
-    .into_iter()
-    .zip(kept_from.iter_mut())
-    {
-        if *kept == Field::Empty && later != Field::Empty {
-            *kept = later;
-            *from = module.to_string();
+fn fill_empty_fields(kept: &mut GroupFields<Kept>, later: &GroupFields, module: &str) {
+    for ((_, kept), (_, later)) in kept.named_mut().into_iter().zip(later.named()) {
+        if kept.field == Field::Empty && *later != Field::Empty {
+            *kept = Kept {
+                field: later.clone(),
+                from: module.to_string(),
+            };
         }
     }
 }

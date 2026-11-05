@@ -98,7 +98,7 @@ pub fn extract_commands(
 pub fn binding_vars(bindings: &[GroupBinding], global_vars: &GlobalVars) -> GlobalVars {
     let mut by_var = global_vars.clone();
     for b in bindings {
-        by_var.insert(b.var.clone(), b.group.full_path());
+        by_var.insert(b.var.clone(), b.full_path());
     }
     by_var
 }
