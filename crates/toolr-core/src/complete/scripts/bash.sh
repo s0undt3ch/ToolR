@@ -16,6 +16,11 @@ _toolr_quote() {
     fi
 }
 
+# Sets the caller's `q` to `$2` with the leading `$1` stripped, quoted by `_toolr_quote`.
+_toolr_quote_after() {
+    _toolr_quote "${2#"$1"}"
+}
+
 _toolr_complete() {
     # Bash splits COMP_WORDS at COMP_WORDBREAKS (`a:b` is `a`, `:`, `b`): glue the
     # pieces back together where COMP_LINE has no whitespace between them.
@@ -37,6 +42,7 @@ _toolr_complete() {
             n=$((n + 1))
         fi
     done
+    # The word as bash shows it, backslash-escaped.
     local cur=${words[n - 1]}
 
     # A prefix bash inserted earlier arrives backslash-escaped (`dry\ `),
@@ -47,6 +53,7 @@ _toolr_complete() {
     # word is left untrimmed.
     local breaks=${COMP_WORDBREAKS-}
     breaks=${breaks//[$' \t\n\'"']/}
+    # `raw_cur` is `cur` unescaped; `raw_prefix` the part of it readline keeps (up to the last break).
     local raw_cur='' raw_prefix='' c
     for ((i = 0; i < ${#cur}; i++)); do
         c=${cur:i:1}
@@ -56,6 +63,7 @@ _toolr_complete() {
             continue
         fi
         raw_cur+=$c
+        # `-n $breaks` guards: an empty pattern `*""*` matches every character.
         if [[ -n $breaks && $breaks == *"$c"* ]]; then
             raw_prefix=$raw_cur
             if [[ $c == [\$@] ]]; then
@@ -92,14 +100,16 @@ _toolr_complete() {
         _toolr_quote "$value"
         # `cur` may already hold the quoted form from an earlier insertion.
         if [[ $value == "$raw_cur"* || $q == "$cur"* ]]; then
-            [[ -n $raw_prefix ]] && _toolr_quote "${value#"$raw_prefix"}"
+            [[ -n $raw_prefix ]] && _toolr_quote_after "$raw_prefix" "$value"
             COMPREPLY+=("$q")
         fi
     done <<< "$raw"
 }
 
 # File names are data too: `compgen` only lists them, and each is quoted with
-# `%q` like a candidate value. `$3` is the typed text readline keeps.
+# `%q` like a candidate value.
+# Usage: _toolr_complete_paths MODE RAW_CUR [RAW_PREFIX], where MODE is `-f` or `-d`,
+# RAW_CUR the unescaped typed word and RAW_PREFIX the part of it readline keeps.
 _toolr_complete_paths() {
     local mode=$1 raw_cur=$2 raw_prefix=${3-} name rest q tilde is_dir dirs=0
     local -A tilde_dirs=()
@@ -114,16 +124,18 @@ _toolr_complete_paths() {
     fi
     while IFS= read -r name; do
         tilde=
-        rest=$name
-        if [[ -n $raw_prefix ]]; then
-            rest=${name#"$raw_prefix"}
-        # `compgen` echoes a typed leading `~`; it must stay bare to expand.
-        elif [[ $raw_cur == '~'* && $name == '~'* ]]; then
-            tilde='~'
-            rest=${name#\~}
-        fi
         q=
-        [[ -n $rest ]] && _toolr_quote "$rest"
+        if [[ -n $raw_prefix ]]; then
+            [[ $name != "$raw_prefix" ]] && _toolr_quote_after "$raw_prefix" "$name"
+        else
+            rest=$name
+            # `compgen` echoes a typed leading `~`; it must stay bare to expand.
+            if [[ $raw_cur == '~'* && $name == '~'* ]]; then
+                tilde='~'
+                rest=${name#\~}
+            fi
+            [[ -n $rest ]] && _toolr_quote "$rest"
+        fi
         q=$tilde$q
         is_dir=0
         if [[ $mode == -d ]]; then
