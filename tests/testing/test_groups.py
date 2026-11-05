@@ -148,24 +148,19 @@ def test_parent_by_position(make_tools_dir: Callable[..., Path]) -> None:
     assert [d.path for d in _group_declarations(tools)] == ["p", "p.lit", "p.var"]
 
 
-def test_string_constants_and_unreadable_values(make_tools_dir: Callable[..., Path]) -> None:
+def test_unreadable_values(make_tools_dir: Callable[..., Path]) -> None:
     tools = make_tools_dir(
         {
             "m.py": """
                 from elsewhere import IMPORTED
-                DESC = "Desc."
-                EMPTY = ""
-                LATER = ""
-                REBOUND = "Rebound."
-                REBOUND = make()
+                DESC = ""
+                DESC += "Desc."
                 OPTS = {"description": "Opts."}
-                a = command_group("a", "A", description=DESC)
-                b = command_group("b", "B", description=EMPTY)
-                c = command_group("c", "C", docstring=LATER)
-                LATER = "Later."
-                d = command_group("d", "D", docstring=LATER)
-                e = command_group("e", "E", docstring=REBOUND)
-                f = command_group("f", "F", description=IMPORTED)
+                a = command_group("a", "A", DESC)
+                b = command_group("b", "B", description=IMPORTED)
+                c = command_group("c", "C", docstring=make())
+                d = command_group("d", "D", docstring=opts.doc)
+                e = command_group("e", "E", description="")
                 g = command_group("g", "G", **OPTS)
                 h = command_group("h", *OPTS)
                 i = command_group("i", "I", description=__doc__)
@@ -174,14 +169,109 @@ def test_string_constants_and_unreadable_values(make_tools_dir: Callable[..., Pa
     )
     assert [(d.path, d.describes, d.unreadable) for d in _group_declarations(tools)] == [
         ("a", True, False),
-        ("b", False, False),
-        ("c", False, False),
+        ("b", True, False),
+        ("c", True, False),
         ("d", True, False),
-        ("e", True, False),
-        ("f", True, False),
+        ("e", False, False),
         ("g", False, True),
         ("h", False, True),
         ("i", False, True),
+    ]
+
+
+def test_unreadable_arguments_are_no_contradiction(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": '''
+                """Doc."""
+                LONG = None
+                a = command_group("a", "A", long_description=LONG, docstring="A.")
+                b = command_group("b", "B", description=make(), docstring=__doc__)
+                c = command_group("c", "C", "C.", docstring=DOC)
+                d = command_group("d", "D", 1, docstring="D.")
+            ''',
+        }
+    )
+    assert [(d.path, d.contradictory) for d in _group_declarations(tools)] == [
+        ("a", False),
+        ("b", False),
+        ("c", False),
+        ("d", True),
+    ]
+
+
+def test_empty_module_docstring_is_passed_but_does_not_describe(
+    make_tools_dir: Callable[..., Path],
+) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": '''
+                """"""
+                a = command_group("a", "A", description="X", docstring=__doc__)
+                b = command_group("b", "B", docstring=__doc__)
+            ''',
+        }
+    )
+    assert [
+        (d.path, d.describes, d.contradictory, d.unreadable) for d in _group_declarations(tools)
+    ] == [
+        ("a", True, True, True),
+        ("b", False, False, True),
+    ]
+
+
+def test_rebinding_doc_makes_it_unreadable(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {
+            "a.py": """
+                __doc__ = "A."
+                g = command_group("a", "A", docstring=__doc__)
+            """,
+            "b.py": '''
+                """B doc."""
+                from x import y as __doc__
+                g = command_group("b", "B", description="B.", docstring=__doc__)
+            ''',
+            "c.py": """
+                try:
+                    pass
+                except E as __doc__:
+                    pass
+                g = command_group("c", "C", docstring=__doc__)
+            """,
+            "d.py": '''
+                """D doc."""
+                import os
+                class K:
+                    __doc__ = "k"
+                def f():
+                    __doc__ = "f"
+                async def h():
+                    __doc__ = "h"
+                try:
+                    pass
+                except E:
+                    pass
+                g = command_group("d", docstring=__doc__)
+                h = command_group("h", "H", description="H.", docstring=__doc__)
+            ''',
+            "e.py": """
+                g = command_group("e", "E", docstring=__doc__)
+                if True:
+                    for __doc__ in []:
+                        pass
+            """,
+        }
+    )
+    assert [
+        (d.path, d.describes, d.contradictory, d.unreadable) for d in _group_declarations(tools)
+    ] == [
+        ("a", True, False, False),
+        ("b", True, False, False),
+        ("c", True, False, False),
+        ("d", True, False, False),
+        ("h", True, True, False),
+        ("e", True, False, False),
     ]
 
 
@@ -193,6 +283,6 @@ def test_undescribed_groups_message_asks_for_a_readable_value() -> None:
     assert _format_undescribed_groups(declarations) == (
         "command groups with no description (1):\n"
         "  - `ci` (declared in tools.a, tools.b): give one declaration a description or "
-        "docstring the static parser can read: a string literal, a string constant assigned "
-        "earlier in the module, or the `__doc__` of a module with a docstring."
+        "docstring the static parser can read: a string literal, or the `__doc__` of a "
+        "module with a docstring."
     )

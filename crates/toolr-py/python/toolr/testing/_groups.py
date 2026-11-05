@@ -36,7 +36,7 @@ class GroupDeclaration(NamedTuple):
     describes: bool
     """Whether the call passes a non-empty description or docstring."""
     contradictory: bool
-    """Whether the call passes a docstring with a description or long description."""
+    """Whether the call surely passes a docstring with a description or long description."""
     unreadable: bool = False
     """Whether the call may pass a description or docstring the parser can't see."""
 
@@ -66,8 +66,11 @@ def _module_path(tools_dir: Path, file: Path) -> str:
     return ".".join([tools_dir.name, *parts])
 
 
-def _module_docstring(tree: ast.Module) -> str:
-    """Mirrors ``crates/toolr-core/src/parser/build.rs::module_docstring``."""
+def _module_docstring(tree: ast.Module) -> str | None:
+    """The module's docstring, or ``None`` when it has none.
+
+    Mirrors ``crates/toolr-core/src/parser/build.rs::module_docstring``.
+    """
     first = tree.body[0] if tree.body else None
     if (
         isinstance(first, ast.Expr)
@@ -75,7 +78,38 @@ def _module_docstring(tree: ast.Module) -> str:
         and isinstance(first.value.value, str)
     ):
         return first.value.value
-    return ""
+    return None
+
+
+def _binds_doc(node: ast.AST) -> bool:
+    """Whether ``node`` binds ``__doc__`` outside a function or class body.
+
+    Mirrors ``crates/toolr-core/src/parser/groups.rs::binds_doc``.
+    """
+    if isinstance(node, ast.Name):
+        return node.id == "__doc__" and not isinstance(node.ctx, ast.Load)
+    if isinstance(node, ast.alias):
+        return (node.asname or node.name).split(".")[0] == "__doc__"
+    if isinstance(node, ast.ExceptHandler) and node.name == "__doc__":
+        return True
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return False
+    return any(_binds_doc(child) for child in ast.iter_child_nodes(node))
+
+
+class _Module(NamedTuple):
+    """What a ``command_group`` call's arguments can refer to.
+
+    Mirrors ``Source`` in ``crates/toolr-core/src/parser/groups.rs``.
+    """
+
+    docstring: str | None
+    doc_rebound: bool
+    """Whether the module binds ``__doc__``, which then reads as unknown."""
+
+
+def _is_doc(node: ast.expr | None) -> bool:
+    return isinstance(node, ast.Name) and node.id == "__doc__"
 
 
 def _literal(node: ast.expr | None) -> str | None:
@@ -105,49 +139,59 @@ def _parent_var(call: ast.Call) -> str | None:
     return parent.id if isinstance(parent, ast.Name) else None
 
 
-def _passed(node: ast.expr | None, module_docstring: str) -> bool:
-    """Whether ``node`` is an argument at all, as ``command_group`` sees it.
+def _surely_passes(node: ast.expr | None, module: _Module) -> bool:
+    """Whether ``node`` is surely an argument other than ``None`` at runtime.
 
-    ``None`` is no argument, and ``__doc__`` is ``None`` in a module without a
-    docstring. Mirrors ``passed`` in
-    ``crates/toolr-core/src/parser/groups.rs::parse_group_call``.
+    A literal, or the ``__doc__`` of a module with a docstring. Mirrors
+    ``Source::surely_passes`` in ``crates/toolr-core/src/parser/groups.rs``.
     """
-    if node is None or (isinstance(node, ast.Constant) and node.value is None):
-        return False
-    if isinstance(node, ast.Name) and node.id == "__doc__":
-        return bool(module_docstring)
-    return True
+    if _is_doc(node):
+        return not module.doc_rebound and module.docstring is not None
+    return isinstance(node, ast.Constant) and node.value is not None
 
 
-def _read(node: ast.expr | None, module_docstring: str, consts: dict[str, str]) -> str | None:
+def _read(node: ast.expr | None, module: _Module) -> str | None:
     """The text of an argument, ``""`` for none, and ``None`` when unreadable.
 
     ``__doc__`` is the module docstring, and one that is empty or
-    whitespace-only has no opinion. Mirrors ``Source::read`` in
+    whitespace-only has no opinion. Any expression but a string literal,
+    ``None`` or ``__doc__`` is unreadable. Mirrors ``Source::read`` in
     ``crates/toolr-core/src/parser/groups.rs``.
     """
     if node is None or (isinstance(node, ast.Constant) and node.value is None):
         return ""
-    if isinstance(node, ast.Name):
-        if node.id == "__doc__":
-            return module_docstring if module_docstring.strip() else ""
-        return consts.get(node.id)
+    if _is_doc(node):
+        if module.doc_rebound:
+            return None
+        return module.docstring if module.docstring and module.docstring.strip() else ""
     return _literal(node)
 
 
-def _describes(call: ast.Call, module_docstring: str, consts: dict[str, str]) -> bool:
-    """Whether the call passes a non-empty description or docstring.
+def _describes(call: ast.Call, module: _Module) -> bool:
+    """Whether the call passes a non-empty description or docstring, readable or not.
 
     An empty description, or an empty or whitespace-only docstring, leaves the
     group undescribed. Mirrors ``describes`` in
     ``crates/toolr-core/src/parser/groups.rs::parse_group_call``.
     """
-    description = _read(_argument(call, "description", 2), module_docstring, consts)
-    docstring = _read(_argument(call, "docstring", 4), module_docstring, consts)
+    description = _read(_argument(call, "description", 2), module)
+    docstring = _read(_argument(call, "docstring", 4), module)
     return description != "" or docstring is None or bool(docstring.strip())
 
 
-def _unreadable(call: ast.Call, module_docstring: str) -> bool:
+def _contradictory(call: ast.Call, module: _Module) -> bool:
+    """Whether the call surely passes a docstring with a description or long description.
+
+    Mirrors ``contradictory`` in
+    ``crates/toolr-core/src/parser/groups.rs::parse_group_call``.
+    """
+    return _surely_passes(_argument(call, "docstring", 4), module) and (
+        _surely_passes(_argument(call, "description", 2), module)
+        or _surely_passes(_argument(call, "long_description", 3), module)
+    )
+
+
+def _unreadable(call: ast.Call, module: _Module) -> bool:
     """Whether the call may pass a description or docstring the parser can't see.
 
     Through ``*``/``**`` unpacking, or as the ``__doc__`` of a module without a
@@ -158,8 +202,9 @@ def _unreadable(call: ast.Call, module_docstring: str) -> bool:
         kw.arg is None for kw in call.keywords
     ):
         return True
-    return not module_docstring.strip() and any(
-        isinstance(node, ast.Name) and node.id == "__doc__"
+    blank = not module.doc_rebound and not (module.docstring or "").strip()
+    return blank and any(
+        _is_doc(node)
         for node in (_argument(call, "description", 2), _argument(call, "docstring", 4))
     )
 
@@ -167,8 +212,6 @@ def _unreadable(call: ast.Call, module_docstring: str) -> bool:
 class _GroupCall(NamedTuple):
     var: str | None
     call: ast.Call
-    consts: dict[str, str]
-    """The ``NAME = "text"`` assignments made before the call."""
 
 
 def _group_calls(tree: ast.Module) -> list[_GroupCall]:
@@ -179,7 +222,6 @@ def _group_calls(tree: ast.Module) -> list[_GroupCall]:
     ``group_binding``.
     """
     found: list[_GroupCall] = []
-    consts: dict[str, str] = {}
     for stmt in tree.body:
         var: str | None = None
         value: ast.expr | None = None
@@ -192,13 +234,7 @@ def _group_calls(tree: ast.Module) -> list[_GroupCall]:
             (isinstance(value.func, ast.Name) and value.func.id == "command_group")
             or (isinstance(value.func, ast.Attribute) and value.func.attr == "command_group")
         ):
-            found.append(_GroupCall(var, value, dict(consts)))
-        if isinstance(stmt, ast.Assign) and var is not None:
-            text = _literal(stmt.value)
-            if text is None:
-                consts.pop(var, None)
-            else:
-                consts[var] = text
+            found.append(_GroupCall(var, value))
     return found
 
 
@@ -215,9 +251,9 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
     for file in _python_files(tools_dir):
         tree = ast.parse(file.read_bytes())
         module = _module_path(tools_dir, file)
-        docstring = _module_docstring(tree)
+        source = _Module(_module_docstring(tree), _binds_doc(tree))
         local: list[tuple[str, str]] = []
-        for var, call, consts in _group_calls(tree):
+        for var, call in _group_calls(tree):
             parent_var = _parent_var(call)
             parent = None
             if parent_var is not None:
@@ -233,19 +269,13 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
                 parent, _, name = name.rpartition(".")
             path = f"{parent}.{name}" if parent else name
             local.append((var or name, path))
-            docstring_arg = _passed(_argument(call, "docstring", 4), docstring)
-            description_arg = _passed(_argument(call, "description", 2), docstring)
             declarations.append(
                 GroupDeclaration(
                     path=path,
                     module=module,
-                    describes=_describes(call, docstring, consts),
-                    contradictory=docstring_arg
-                    and (
-                        description_arg
-                        or _passed(_argument(call, "long_description", 3), docstring)
-                    ),
-                    unreadable=_unreadable(call, docstring),
+                    describes=_describes(call, source),
+                    contradictory=_contradictory(call, source),
+                    unreadable=_unreadable(call, source),
                 )
             )
         global_vars.update(local)
@@ -272,8 +302,7 @@ def _format_contradictory_groups(declarations: list[GroupDeclaration]) -> str | 
 _HINT = "give one declaration a description or docstring."
 _UNREADABLE_HINT = (
     "give one declaration a description or docstring the static parser can read: "
-    "a string literal, a string constant assigned earlier in the module, or the "
-    "`__doc__` of a module with a docstring."
+    "a string literal, or the `__doc__` of a module with a docstring."
 )
 
 
