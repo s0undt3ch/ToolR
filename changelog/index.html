@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev668-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev681-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev668 - 2026-11-04
+        0.35.2-dev681 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev668 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev681 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev668-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev681-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev668 - 2026-11-04
+        0.35.2-dev681 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev668 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev681 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev668-2026-11-04">0.35.2-dev668 - 2026-11-04<a class="headerlink" href="#0352-dev668-2026-11-04" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev681-2026-11-05">0.35.2-dev681 - 2026-11-05<a class="headerlink" href="#0352-dev681-2026-11-05" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7874,6 +7874,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(parser)</em> Break group-suggestion ties by the smallest name (<a href="https://github.com/s0undt3ch/ToolR/commit/3a558461c8cf81fd7a8df79740c4917c415e1ed1"><code>3a55846</code></a>)</li>
 <li><em>(parser)</em> [<strong>breaking</strong>] Reject duplicate commands in a group (<a href="https://github.com/s0undt3ch/ToolR/commit/a98eda6ee224d59b512a72816f55528a36760fcd"><code>a98eda6</code></a>)</li>
 <li><em>(parser)</em> [<strong>breaking</strong>] Reject nested and non-literal command declarations (<a href="https://github.com/s0undt3ch/ToolR/commit/5e6d7f2a92b4283c6cae612f77fb0a35f7f91678"><code>5e6d7f2</code></a>)</li>
+<li><em>(ci)</em> Print tests-layout paths with forward slashes (<a href="https://github.com/s0undt3ch/ToolR/commit/ef8df02bcc94e164be9f1718dc20ef331c21617c"><code>ef8df02</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7938,6 +7939,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Name ctx.run's output files by role (<a href="https://github.com/s0undt3ch/ToolR/commit/41a5b8580cabc7262477bfccc06a758d3f24ffb9"><code>41a5b85</code></a>)</li>
 <li><em>(uv)</em> Share the capped fetch and name install failures (<a href="https://github.com/s0undt3ch/ToolR/commit/cc2241c87438d7accdee19626281fa5349570ebc"><code>cc2241c</code></a>)</li>
 <li><em>(complete)</em> Share bash quoting and drop the bash 4 lookup branch (<a href="https://github.com/s0undt3ch/ToolR/commit/c69f5abdba07d4c14f53754aba250937abf89684"><code>c69f5ab</code></a>)</li>
+<li><em>(ci)</em> Derive ALL_CPYTHONS from requires-python (<a href="https://github.com/s0undt3ch/ToolR/commit/81a8367a908b5c4e3bcecca3887f62dfcbb4fd23"><code>81a8367</code></a>)</li>
+<li><em>(ci)</em> Check Python version lists from a toolr pre-commit command (<a href="https://github.com/s0undt3ch/ToolR/commit/91f016313ecb7b1577440bd6f2aaf3fc699fa5c0"><code>91f0163</code></a>)</li>
+<li><em>(tests)</em> Reuse tests/_git helpers in the release-notes tests (<a href="https://github.com/s0undt3ch/ToolR/commit/09b844fe32bf677a138b9d01ccf6102a39d1b29e"><code>09b844f</code></a>)</li>
+<li><em>(ci)</em> Rename check-test-layout to check-tests-layout and say what to fix (<a href="https://github.com/s0undt3ch/ToolR/commit/0e5eed598ed7e1d5eb8e50041cbfaa6e5933a937"><code>0e5eed5</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8128,6 +8133,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(writing-commands)</em> Document the accepted command forms and the new errors (<a href="https://github.com/s0undt3ch/ToolR/commit/d2c2be171bdc86f732e77397ab1cecf582a92667"><code>d2c2be1</code></a>)</li>
 <li><em>(concepts)</em> Keep command tests out of tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/edd6cbfebe7f17e9c8e794d09e93daadbb88114c"><code>edd6cbf</code></a>)</li>
 <li><em>(specs)</em> Archive the FU-1/2/3 parser and tester parity design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/26c60faa516c16703639839fa642813a84547d73"><code>26c60fa</code></a>)</li>
+<li><em>(specs)</em> Spec and plan FU-4/FU-5 derived Python versions and a fast hook (<a href="https://github.com/s0undt3ch/ToolR/commit/a28492e8e6165028a677bf2325418d99b90f0273"><code>a28492e</code></a>)</li>
+<li><em>(specs)</em> Archive the FU-4/FU-5 Python versions design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/7d2715fbed5b11994901f76320b3247e719ef535"><code>7d2715f</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8230,6 +8237,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Read the ~user directory from the home dir instead of writing one (<a href="https://github.com/s0undt3ch/ToolR/commit/6d643fa01f896a9e799f56dd7001774639643c9b"><code>6d643fa</code></a>)</li>
 <li><em>(complete)</em> Reuse the fish driver (<a href="https://github.com/s0undt3ch/ToolR/commit/2bb6cdde76501f9c15f347ec422d972868939d89"><code>2bb6cdd</code></a>)</li>
 <li><em>(e2e)</em> Differential parser/tester corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/51771c148954db4e3168931e6be102d4122d718b"><code>51771c1</code></a>)</li>
+<li><em>(ci)</em> Move tool tests into tests/tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/f8e808cc5c668cc5de3a70021dbbe64eb07ede26"><code>f8e808c</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8278,6 +8286,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(install-smoke)</em> Run install.ps1 under Windows PowerShell 5.1 too (<a href="https://github.com/s0undt3ch/ToolR/commit/aae88487892b3384f18735509a189310ca5e5d7c"><code>aae8848</code></a>)</li>
 <li><em>(test)</em> Install fish so the fish completion tests run (<a href="https://github.com/s0undt3ch/ToolR/commit/170515864e3356b80802623778ab226f13d93501"><code>1705158</code></a>)</li>
 <li><em>(coverage)</em> Measure subprocesses with coverage's own patch = subprocess (<a href="https://github.com/s0undt3ch/ToolR/commit/7dc87f098e5491ec437ebbc93b3ed08ce9fc8ac0"><code>7dc87f0</code></a>)</li>
+<li><em>(pre-commit)</em> Run the Python version checks as a prek hook (<a href="https://github.com/s0undt3ch/ToolR/commit/5d41e524e6b278d2fd0791bc6f12ad7c01270c47"><code>5d41e52</code></a>)</li>
+<li><em>(ruff)</em> Mark the repo's tools package as first-party (<a href="https://github.com/s0undt3ch/ToolR/commit/f6b6a6b548de7eedf045b78c9c3e6e426f06f0d5"><code>f6b6a6b</code></a>)</li>
+<li><em>(ci)</em> Drop the tests/support/coverage exemption (<a href="https://github.com/s0undt3ch/ToolR/commit/f836a90b58ed6a3ff5cb838d05c72dd281213e68"><code>f836a90</code></a>)</li>
+<li><em>(ruff)</em> Sort the tools package in its own import block (<a href="https://github.com/s0undt3ch/ToolR/commit/19013ee8fbb00f290b24a73d778a9de0c2332f51"><code>19013ee</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
