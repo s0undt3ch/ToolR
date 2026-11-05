@@ -1581,7 +1581,8 @@ mod bash_completion_probe {
     use tempfile::TempDir;
 
     use crate::complete::install::{
-        bash_completion_candidates, bash_completion_installed, shell_quote,
+        BASH_COMPLETION_SYSROOT_PATHS, bash_completion_candidates, bash_completion_installed,
+        shell_quote,
     };
 
     fn plant(root: &Path, rel: &str) {
@@ -1598,14 +1599,7 @@ mod bash_completion_probe {
 
     #[test]
     fn each_well_known_loader_is_detected() {
-        for rel in [
-            "usr/share/bash-completion/bash_completion",
-            "etc/bash_completion",
-            "usr/local/share/bash-completion/bash_completion",
-            "opt/homebrew/share/bash-completion/bash_completion",
-            "home/linuxbrew/.linuxbrew/share/bash-completion/bash_completion",
-            "opt/local/share/bash-completion/bash_completion",
-        ] {
+        for rel in BASH_COMPLETION_SYSROOT_PATHS {
             let tmp = TempDir::new().unwrap();
             plant(tmp.path(), rel);
             assert!(bash_completion_installed(tmp.path(), None, None), "{rel}");

@@ -10,11 +10,11 @@ use super::scripts::{Shell, completion_script};
 
 pub struct InstallOptions {
     pub shell: Shell,
-    /// Override for `$XDG_DATA_HOME`. `None` means read from environment
-    /// at call time (callers usually pass `None` in production).
+    /// `$XDG_DATA_HOME` for the bash script. `None` falls back to
+    /// `$HOME/.local/share`.
     pub xdg_data_home: Option<PathBuf>,
-    /// Override for `$XDG_CONFIG_HOME`. `None` means read from
-    /// environment at call time.
+    /// `$XDG_CONFIG_HOME` for the fish script. `None` falls back to
+    /// `$HOME/.config`.
     pub xdg_config_home: Option<PathBuf>,
     /// Path to use as the user's home directory.
     pub home: PathBuf,
@@ -117,7 +117,7 @@ pub fn install_script(opts: &InstallOptions) -> Result<InstallOutcome> {
 /// loaders are left out, and so is `etc/profile.d/bash_completion.sh`, which
 /// Homebrew's 1.x formula installs too. `etc/bash_completion` is a 2.x shim
 /// on Debian.
-const BASH_COMPLETION_SYSROOT_PATHS: &[&str] = &[
+pub(crate) const BASH_COMPLETION_SYSROOT_PATHS: &[&str] = &[
     "usr/share/bash-completion/bash_completion",
     "etc/bash_completion",
     "usr/local/share/bash-completion/bash_completion",
@@ -129,7 +129,7 @@ const BASH_COMPLETION_SYSROOT_PATHS: &[&str] = &[
 /// Paths where bash-completion's loader script may live. Probes files, not
 /// directories: other packages create `share/bash-completion/completions/`
 /// without installing the loader.
-pub fn bash_completion_candidates(
+pub(crate) fn bash_completion_candidates(
     sysroot: &Path,
     xdg_data_dirs: Option<&OsStr>,
     homebrew_prefix: Option<&Path>,
