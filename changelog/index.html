@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev779-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev783-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev779 - 2026-11-05
+        0.35.2-dev783 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev779 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev783 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev779-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev783-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev779 - 2026-11-05
+        0.35.2-dev783 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev779 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev783 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev779-2026-11-05">0.35.2-dev779 - 2026-11-05<a class="headerlink" href="#0352-dev779-2026-11-05" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev783-2026-11-05">0.35.2-dev783 - 2026-11-05<a class="headerlink" href="#0352-dev783-2026-11-05" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -8322,6 +8322,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(e2e)</em> Pin later declarations filling empty group fields (<a href="https://github.com/s0undt3ch/ToolR/commit/00d42dd4ab2cdf11de7e1885340d16b1f12b54e4"><code>00d42dd</code></a>)</li>
 <li><em>(e2e)</em> Pin keyword titles, constants and long descriptions in the corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/814b17050ccdd6b07365e59ddccf391896b7ceab"><code>814b170</code></a>)</li>
 <li><em>(e2e)</em> Pin kept-field modules, empty docstrings and None constants (<a href="https://github.com/s0undt3ch/ToolR/commit/01e00a1b7c33b3a150cc7c3028004c59e81bc86a"><code>01e00a1</code></a>)</li>
+<li><em>(command)</em> Close the pipe write ends in the worker, not after start() (<a href="https://github.com/s0undt3ch/ToolR/commit/be787de77e033a1c727bd1882b8db36d2afe2c03"><code>be787de</code></a>)</li>
+<li><em>(command)</em> Close the pipe readers in the fd streaming tests (<a href="https://github.com/s0undt3ch/ToolR/commit/af92ac73439b5fe03f20fb59ffada4019dee071f"><code>af92ac7</code></a>)</li>
+<li><em>(command)</em> Share the fd streaming plumbing in a run_streaming fixture (<a href="https://github.com/s0undt3ch/ToolR/commit/6e51504b05b5057ced70c58ba32e7d720b30bf30"><code>6e51504</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
