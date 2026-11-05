@@ -367,10 +367,19 @@ pub fn run_on_pty(mut cmd: std::process::Command, answers: &str) -> std::process
     // SAFETY: both fds are fresh from openpty and owned only here.
     let (mut master, slave) = unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) };
     master.write_all(answers.as_bytes()).unwrap();
+    // The pty echoes `answers` back to the master. On macOS, `tcsetattr(TCSADRAIN)` (readline
+    // switching modes) waits until that echo is read, so read it the way a terminal would.
+    let mut echo = master.try_clone().unwrap();
+    std::thread::spawn(move || {
+        let _ = std::io::copy(&mut echo, &mut std::io::sink());
+    });
     cmd.stdin(Stdio::from(slave))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let out = wait_or_kill(cmd.spawn().unwrap());
+    let child = cmd.spawn().unwrap();
+    // Close the parent's slave so the reader sees EOF once the child's side closes.
+    drop(cmd);
+    let out = wait_or_kill(child);
     drop(master);
     out
 }
