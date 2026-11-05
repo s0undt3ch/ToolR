@@ -661,6 +661,41 @@ fn bash_path_under_an_unset_variable_offers_nothing() {
     }
 }
 
+/// `${!name}` sees the script's own locals, so a user variable sharing a former local's name
+/// must still read the user's value.
+#[test]
+fn bash_path_variable_named_like_a_script_local_reads_the_users_value() {
+    for bash in bashes() {
+        let fx = fixture();
+        for name in ["value", "name", "cur", "var", "mode"] {
+            let script = format!("{name}=$PWD\n{}", print_script("bash"));
+            let cur = format!("${name}/fi");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, Split::Whole);
+            assert_eq!(run.rc, "0", "{bash} {name}: {}", run.stderr);
+            assert_eq!(run.reply, vec![format!("${name}/files/")], "{bash} {name}");
+        }
+    }
+}
+
+/// Bash doesn't tilde-expand an expanded value, so a variable holding `~` names a literal `~`.
+#[test]
+fn bash_path_variable_holding_a_tilde_is_not_tilde_expanded() {
+    for bash in bashes() {
+        let fx = fixture();
+        let literal = fx.tmp.path().join("~");
+        std::fs::create_dir_all(literal.join("sub")).unwrap();
+        std::fs::write(literal.join("lit.txt"), "").unwrap();
+        let script = format!("XX='~'\n{}", print_script("bash"));
+        let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "$XX/", Split::Whole);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        let mut got = run.reply.clone();
+        got.sort();
+        assert_eq!(got, vec!["$XX/lit.txt", "$XX/sub/"], "{bash}");
+        let run = run_bash_path_split(&bash, &script, &fx, "--out", "$XX/", Split::Whole);
+        assert_eq!(run.reply, vec!["$XX/sub/"], "{bash}");
+    }
+}
+
 /// Only a plain `$NAME` or `${NAME}` is expanded: substitutions and operators stay inert.
 #[test]
 fn bash_path_never_runs_a_typed_substitution() {

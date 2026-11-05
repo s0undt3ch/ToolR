@@ -5,18 +5,18 @@
 # directly. Re-source on every shell start; manifest contents are read
 # at Tab time, not when this script is sourced.
 
-# Sets the caller's `q` to `$1` quoted as one inert word, with no `eval`.
+# Sets the caller's `_toolr_q` to `$1` quoted as one inert word, with no `eval`.
 _toolr_quote() {
-    local bare_tilde
-    printf -v q '%q' "$1"
+    local _toolr_bare_tilde
+    printf -v _toolr_q '%q' "$1"
     # Bash < 5 `%q` leaves `~` bare, and bash tilde-expands it at a word start or after `=`.
-    printf -v bare_tilde '%q' '~'
-    if [[ $bare_tilde == '~' ]]; then
-        q=${q//\~/\\~}
+    printf -v _toolr_bare_tilde '%q' '~'
+    if [[ $_toolr_bare_tilde == '~' ]]; then
+        _toolr_q=${_toolr_q//\~/\\~}
     fi
 }
 
-# Sets the caller's `q` to `$2` with the leading `$1` stripped, quoted by `_toolr_quote`.
+# Sets the caller's `_toolr_q` to `$2` with the leading `$1` stripped, quoted by `_toolr_quote`.
 _toolr_quote_after() {
     _toolr_quote "${2#"$1"}"
 }
@@ -24,26 +24,27 @@ _toolr_quote_after() {
 _toolr_complete() {
     # Bash splits COMP_WORDS at COMP_WORDBREAKS (`a:b` is `a`, `:`, `b`): glue the
     # pieces back together where COMP_LINE has no whitespace between them.
-    local line=${COMP_LINE:0:COMP_POINT} words=() n=0 i w ws
-    for ((i = 0; i <= COMP_CWORD; i++)); do
-        ws=${line%%[![:space:]]*}
-        line=${line#"$ws"}
-        if ((i == COMP_CWORD)); then
+    local _toolr_line=${COMP_LINE:0:COMP_POINT} _toolr_words=() _toolr_n=0
+    local _toolr_i _toolr_w _toolr_ws
+    for ((_toolr_i = 0; _toolr_i <= COMP_CWORD; _toolr_i++)); do
+        _toolr_ws=${_toolr_line%%[![:space:]]*}
+        _toolr_line=${_toolr_line#"$_toolr_ws"}
+        if ((_toolr_i == COMP_CWORD)); then
             # A cursor inside a word completes only what precedes it.
-            w=$line
+            _toolr_w=$_toolr_line
         else
-            w=${COMP_WORDS[i]}
-            line=${line#"$w"}
+            _toolr_w=${COMP_WORDS[_toolr_i]}
+            _toolr_line=${_toolr_line#"$_toolr_w"}
         fi
-        if ((i > 0)) && [[ -z $ws ]]; then
-            words[n - 1]+=$w
+        if ((_toolr_i > 0)) && [[ -z $_toolr_ws ]]; then
+            _toolr_words[_toolr_n - 1]+=$_toolr_w
         else
-            words[n]=$w
-            n=$((n + 1))
+            _toolr_words[_toolr_n]=$_toolr_w
+            _toolr_n=$((_toolr_n + 1))
         fi
     done
     # The word as bash shows it, backslash-escaped.
-    local cur=${words[n - 1]}
+    local _toolr_cur=${_toolr_words[_toolr_n - 1]}
 
     # A prefix bash inserted earlier arrives backslash-escaped (`dry\ `),
     # while the engine matches raw values: `\x` stands for `x`. Readline replaces
@@ -51,59 +52,60 @@ _toolr_complete() {
     # `$` and `@` are bash's readline special prefixes: the replaced text starts at them,
     # so they stay in the reply. Readline doesn't break inside an open quote, so such a
     # word is left untrimmed.
-    local breaks=${COMP_WORDBREAKS-}
-    breaks=${breaks//[$' \t\n\'"']/}
-    # `raw_cur` is `cur` unescaped; `raw_prefix` the part of it readline keeps (up to the last break).
-    local raw_cur='' raw_prefix='' c
-    for ((i = 0; i < ${#cur}; i++)); do
-        c=${cur:i:1}
-        if [[ $c == \\ ]]; then
-            i=$((i + 1))
-            raw_cur+=${cur:i:1}
+    local _toolr_breaks=${COMP_WORDBREAKS-}
+    _toolr_breaks=${_toolr_breaks//[$' \t\n\'"']/}
+    # `_toolr_raw_cur` is `_toolr_cur` unescaped; `_toolr_raw_prefix` the part of it readline
+    # keeps (up to the last break).
+    local _toolr_raw_cur='' _toolr_raw_prefix='' _toolr_c
+    for ((_toolr_i = 0; _toolr_i < ${#_toolr_cur}; _toolr_i++)); do
+        _toolr_c=${_toolr_cur:_toolr_i:1}
+        if [[ $_toolr_c == \\ ]]; then
+            _toolr_i=$((_toolr_i + 1))
+            _toolr_raw_cur+=${_toolr_cur:_toolr_i:1}
             continue
         fi
-        raw_cur+=$c
-        # `-n $breaks` guards: an empty pattern `*""*` matches every character.
-        if [[ -n $breaks && $breaks == *"$c"* ]]; then
-            raw_prefix=$raw_cur
-            if [[ $c == [\$@] ]]; then
-                raw_prefix=${raw_cur%?}
+        _toolr_raw_cur+=$_toolr_c
+        # `-n $_toolr_breaks` guards: an empty pattern `*""*` matches every character.
+        if [[ -n $_toolr_breaks && $_toolr_breaks == *"$_toolr_c"* ]]; then
+            _toolr_raw_prefix=$_toolr_raw_cur
+            if [[ $_toolr_c == [\$@] ]]; then
+                _toolr_raw_prefix=${_toolr_raw_cur%?}
             fi
         fi
     done
 
-    # Words after the cursor are dropped; `raw_cur` stands in for the cursor's word.
-    local args=()
-    for ((i = 1; i < n - 1; i++)); do
-        args+=("${words[i]}")
+    # Words after the cursor are dropped; `_toolr_raw_cur` stands in for the cursor's word.
+    local _toolr_args=()
+    for ((_toolr_i = 1; _toolr_i < _toolr_n - 1; _toolr_i++)); do
+        _toolr_args+=("${_toolr_words[_toolr_i]}")
     done
-    args+=("$raw_cur")
+    _toolr_args+=("$_toolr_raw_cur")
 
-    # `|| rc=$?` keeps a non-zero exit from tripping the user's `set -e`.
-    local raw rc=0
-    raw=$(toolr __complete "$PWD" "${args[@]}" 2>/dev/null) || rc=$?
+    # `|| _toolr_rc=$?` keeps a non-zero exit from tripping the user's `set -e`.
+    local _toolr_raw _toolr_rc=0
+    _toolr_raw=$(toolr __complete "$PWD" "${_toolr_args[@]}" 2>/dev/null) || _toolr_rc=$?
     # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
-    case $rc in
+    case $_toolr_rc in
         0) ;;
-        10) _toolr_complete_paths -f "$raw_cur" "$raw_prefix"; return 0 ;;
-        11) _toolr_complete_paths -d "$raw_cur" "$raw_prefix"; return 0 ;;
+        10) _toolr_complete_paths -f "$_toolr_raw_cur" "$_toolr_raw_prefix"; return 0 ;;
+        11) _toolr_complete_paths -d "$_toolr_raw_cur" "$_toolr_raw_prefix"; return 0 ;;
         *) return 0 ;;
     esac
-    [[ -z "$raw" ]] && return 0
+    [[ -z "$_toolr_raw" ]] && return 0
 
     # Each line is `value<TAB>description` - bash has no per-candidate
     # description support, so drop everything from the tab onward.
     # Candidates are repo-derived data: `compgen -W` would expand `$(...)`
     # inside a value, so compare literally and quote with `printf %q`.
-    local value q
-    while IFS=$'\t' read -r value _; do
-        _toolr_quote "$value"
-        # `cur` may already hold the quoted form from an earlier insertion.
-        if [[ $value == "$raw_cur"* || $q == "$cur"* ]]; then
-            [[ -n $raw_prefix ]] && _toolr_quote_after "$raw_prefix" "$value"
-            COMPREPLY+=("$q")
+    local _toolr_value _toolr_q
+    while IFS=$'\t' read -r _toolr_value _; do
+        _toolr_quote "$_toolr_value"
+        # `_toolr_cur` may already hold the quoted form from an earlier insertion.
+        if [[ $_toolr_value == "$_toolr_raw_cur"* || $_toolr_q == "$_toolr_cur"* ]]; then
+            [[ -n $_toolr_raw_prefix ]] && _toolr_quote_after "$_toolr_raw_prefix" "$_toolr_value"
+            COMPREPLY+=("$_toolr_q")
         fi
-    done <<< "$raw"
+    done <<< "$_toolr_raw"
 }
 
 # File names are data too: `compgen` only lists them, and each is quoted with
@@ -111,63 +113,74 @@ _toolr_complete() {
 # Usage: _toolr_complete_paths MODE RAW_CUR [RAW_PREFIX], where MODE is `-f` or `-d`,
 # RAW_CUR the unescaped typed word and RAW_PREFIX the part of it readline keeps.
 _toolr_complete_paths() {
-    local mode=$1 raw_cur=$2 raw_prefix=${3-} name rest q keep is_dir dirs=0 bare='' var value=''
-    local -A tilde_dirs=()
+    local _toolr_mode=$1 _toolr_raw_cur=$2 _toolr_raw_prefix=${3-}
+    local _toolr_name _toolr_rest _toolr_q _toolr_keep _toolr_is_dir _toolr_dirs=0
+    local _toolr_bare='' _toolr_var _toolr_value=''
+    local -A _toolr_tilde_dirs=()
     # shellcheck disable=SC2016 # The `$` is literal: a typed variable, not one to expand here.
-    local var_re='^(\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\})/'
+    local _toolr_var_re='^(\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\})/'
     # `${#COMPREPLY[@]}` errors under `set -u` while the array is unset.
     COMPREPLY=()
     # A leading `$NAME/` stays as typed, like native bash; only its value is listed and tested.
-    # `${!name}` reads a validated name, so nothing else in the word is expanded.
-    if [[ $raw_cur =~ $var_re && ( -z $raw_prefix || $raw_prefix == "${BASH_REMATCH[1]}"/* ) ]]; then
-        bare=${BASH_REMATCH[1]}
-        var=${BASH_REMATCH[2]}${BASH_REMATCH[3]}
-        [[ -n ${!var+set} ]] || return 0
-        value=${!var}
-        raw_cur=$value${raw_cur#"$bare"}
-        [[ -n $raw_prefix ]] && raw_prefix=$value${raw_prefix#"$bare"}
+    # `${!_toolr_var}` reads a validated name, so nothing else in the word is expanded.
+    # Every local is `_toolr_`-prefixed: `${!...}` is dynamically scoped and would read a local
+    # (here or in `_toolr_complete`) that shares the user's variable name.
+    if [[ $_toolr_raw_cur =~ $_toolr_var_re \
+        && ( -z $_toolr_raw_prefix || $_toolr_raw_prefix == "${BASH_REMATCH[1]}"/* ) ]]; then
+        _toolr_bare=${BASH_REMATCH[1]}
+        _toolr_var=${BASH_REMATCH[2]}${BASH_REMATCH[3]}
+        [[ -n ${!_toolr_var+set} ]] || return 0
+        _toolr_value=${!_toolr_var}
+        # Bash doesn't tilde-expand an expanded value but `compgen` would, so `./` keeps it literal.
+        [[ $_toolr_value == '~'* ]] && _toolr_value=./$_toolr_value
+        _toolr_raw_cur=$_toolr_value${_toolr_raw_cur#"$_toolr_bare"}
+        if [[ -n $_toolr_raw_prefix ]]; then
+            _toolr_raw_prefix=$_toolr_value${_toolr_raw_prefix#"$_toolr_bare"}
+        fi
     fi
     # `[[ -d ]]` can't test `~user/...` without expanding it, but `compgen -d` resolves it.
-    if [[ $mode == -f && $raw_cur == '~'* ]]; then
+    if [[ $_toolr_mode == -f && $_toolr_raw_cur == '~'* ]]; then
         # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
-        while IFS= read -r name; do
-            tilde_dirs[$name]=1
-        done < <(compgen -d -- "$raw_cur" || :)
+        while IFS= read -r _toolr_name; do
+            _toolr_tilde_dirs[$_toolr_name]=1
+        done < <(compgen -d -- "$_toolr_raw_cur" || :)
     fi
-    while IFS= read -r name; do
-        keep=
-        q=
-        if [[ -n $raw_prefix ]]; then
-            [[ $name != "$raw_prefix" ]] && _toolr_quote_after "$raw_prefix" "$name"
-        else
-            rest=$name
-            if [[ -n $bare ]]; then
-                keep=$bare
-                rest=${name#"$value"}
-            # `compgen` echoes a typed leading `~`; it must stay bare to expand.
-            elif [[ $raw_cur == '~'* && $name == '~'* ]]; then
-                keep='~'
-                rest=${name#\~}
+    while IFS= read -r _toolr_name; do
+        _toolr_keep=
+        _toolr_q=
+        if [[ -n $_toolr_raw_prefix ]]; then
+            if [[ $_toolr_name != "$_toolr_raw_prefix" ]]; then
+                _toolr_quote_after "$_toolr_raw_prefix" "$_toolr_name"
             fi
-            [[ -n $rest ]] && _toolr_quote "$rest"
+        else
+            _toolr_rest=$_toolr_name
+            if [[ -n $_toolr_bare ]]; then
+                _toolr_keep=$_toolr_bare
+                _toolr_rest=${_toolr_name#"$_toolr_value"}
+            # `compgen` echoes a typed leading `~`; it must stay bare to expand.
+            elif [[ $_toolr_raw_cur == '~'* && $_toolr_name == '~'* ]]; then
+                _toolr_keep='~'
+                _toolr_rest=${_toolr_name#\~}
+            fi
+            [[ -n $_toolr_rest ]] && _toolr_quote "$_toolr_rest"
         fi
-        q=$keep$q
-        is_dir=0
-        if [[ $mode == -d ]]; then
-            is_dir=1
-        elif [[ $raw_cur == '~'* ]]; then
-            [[ -n ${tilde_dirs[$name]-} ]] && is_dir=1
+        _toolr_q=$_toolr_keep$_toolr_q
+        _toolr_is_dir=0
+        if [[ $_toolr_mode == -d ]]; then
+            _toolr_is_dir=1
+        elif [[ $_toolr_raw_cur == '~'* ]]; then
+            [[ -n ${_toolr_tilde_dirs[$_toolr_name]-} ]] && _toolr_is_dir=1
         else
             # A test on the name `compgen` produced, so nothing is expanded.
-            [[ -d $name ]] && is_dir=1
+            [[ -d $_toolr_name ]] && _toolr_is_dir=1
         fi
-        if ((is_dir)); then
-            q+=/
-            dirs=$((dirs + 1))
+        if ((_toolr_is_dir)); then
+            _toolr_q+=/
+            _toolr_dirs=$((_toolr_dirs + 1))
         fi
-        COMPREPLY+=("$q")
-    done < <(compgen "$mode" -- "$raw_cur")
-    if [[ $mode == -d ]] || ((${#COMPREPLY[@]} == 1 && dirs == 1)); then
+        COMPREPLY+=("$_toolr_q")
+    done < <(compgen "$_toolr_mode" -- "$_toolr_raw_cur")
+    if [[ $_toolr_mode == -d ]] || ((${#COMPREPLY[@]} == 1 && _toolr_dirs == 1)); then
         compopt -o nospace 2>/dev/null || :
     fi
 }
