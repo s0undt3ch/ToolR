@@ -1,6 +1,7 @@
 //! Install the embedded shell-completion script into the standard
 //! location for the target shell.
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
@@ -109,4 +110,58 @@ pub fn install_script(opts: &InstallOptions) -> Result<InstallOutcome> {
     }
     std::fs::write(&path, payload)?;
     Ok(InstallOutcome::Wrote { path, prior })
+}
+
+/// Well-known bash-completion loader scripts, relative to the sysroot.
+const BASH_COMPLETION_SYSROOT_PATHS: &[&str] = &[
+    "usr/share/bash-completion/bash_completion",
+    "etc/bash_completion",
+    "usr/local/share/bash-completion/bash_completion",
+    "usr/local/etc/profile.d/bash_completion.sh",
+    "usr/local/etc/bash_completion",
+    "opt/homebrew/share/bash-completion/bash_completion",
+    "opt/homebrew/etc/profile.d/bash_completion.sh",
+    "opt/homebrew/etc/bash_completion",
+    "home/linuxbrew/.linuxbrew/share/bash-completion/bash_completion",
+    "home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh",
+    "opt/local/share/bash-completion/bash_completion",
+    "opt/local/etc/profile.d/bash_completion.sh",
+];
+
+/// Paths where bash-completion's loader script may live. Probes files, not
+/// directories: other packages create `share/bash-completion/completions/`
+/// without installing the loader.
+pub fn bash_completion_candidates(
+    sysroot: &Path,
+    xdg_data_dirs: Option<&OsStr>,
+    homebrew_prefix: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = BASH_COMPLETION_SYSROOT_PATHS
+        .iter()
+        .map(|rel| sysroot.join(rel))
+        .collect();
+    if let Some(dirs) = xdg_data_dirs {
+        out.extend(
+            std::env::split_paths(dirs)
+                .filter(|dir| !dir.as_os_str().is_empty())
+                .map(|dir| dir.join("bash-completion/bash_completion")),
+        );
+    }
+    if let Some(prefix) = homebrew_prefix {
+        out.push(prefix.join("share/bash-completion/bash_completion"));
+        out.push(prefix.join("etc/profile.d/bash_completion.sh"));
+    }
+    out
+}
+
+/// Whether bash-completion looks installed. Unknown layouts read as "not
+/// installed", so the caller errs toward printing its hint.
+pub fn bash_completion_installed(
+    sysroot: &Path,
+    xdg_data_dirs: Option<&OsStr>,
+    homebrew_prefix: Option<&Path>,
+) -> bool {
+    bash_completion_candidates(sysroot, xdg_data_dirs, homebrew_prefix)
+        .iter()
+        .any(|p| p.is_file())
 }

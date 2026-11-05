@@ -287,9 +287,11 @@ without prompting.
 Bash completion needs bash 4.4 or newer; on an older bash, sourcing the
 script prints one warning and registers nothing. The script itself doesn't
 need the bash-completion package, but only that package loads the install
-directory. Without it, source the script from `~/.bashrc` instead:
-`source <(toolr self completion print bash)`. A word with an unclosed
-quote (`--cfg 'a:b`) completes nothing.
+directory. When the installer can't find bash-completion, it prints the line
+to add to `~/.bashrc`, `source <installed path>`; `toolr --quiet` drops
+that hint. Sourcing `<(toolr self completion print bash)` from `~/.bashrc`
+works too, without installing anything. A word with an unclosed quote
+(`--cfg 'a:b`) completes nothing.
 
 An aliased toolr (`alias t=toolr`) gets no completion by default; run
 `complete -F _toolr_complete t` to register it.
