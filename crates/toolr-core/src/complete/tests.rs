@@ -102,6 +102,7 @@ fn fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -303,6 +304,7 @@ fn nested_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -486,6 +488,7 @@ fn dispatcher_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -730,6 +733,7 @@ fn flags_only_child_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -1308,6 +1312,7 @@ fn manifest_with_leaf_args(arguments: Vec<Argument>) -> Manifest {
             is_dispatcher: false,
         }],
         plugin_warnings: Vec::new(),
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -1474,6 +1479,7 @@ fn path_fixture() -> Manifest {
             ),
         ],
         plugin_warnings: vec![],
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }

@@ -45,16 +45,17 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     // the build must leave a record that no longer matches it, not one
     // describing bytes the manifest doesn't reflect.
     let input_records = snapshot_from(tools_dir, &py_files, None).map_err(BuildError::Build)?;
-    let (all_groups, all_commands) = build_commands_inner(tools_dir, &py_files, "tools", false)?;
+    let built = build_commands_inner(tools_dir, &py_files, "tools", false)?;
 
     let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: static_hash_of(&input_records.files),
         third_party_hash: String::new(),
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
-        groups: all_groups,
-        commands: all_commands,
+        groups: built.groups,
+        commands: built.commands,
         plugin_warnings: Vec::new(),
+        build_warnings: built.warnings,
         input_records,
     };
 
@@ -111,7 +112,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
 pub(crate) fn build_commands(
     source_root: &Path,
     module_prefix: &str,
-) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
+) -> std::result::Result<BuiltTree, BuildError> {
     let py_files = list_python_files(source_root)?;
     build_commands_inner(source_root, &py_files, module_prefix, true)
 }
@@ -121,7 +122,7 @@ fn build_commands_inner(
     py_files: &[PathBuf],
     module_prefix: &str,
     check_names: bool,
-) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
+) -> std::result::Result<BuiltTree, BuildError> {
     // Pass 1: build cross-file enum + type-alias + arg-section tables
     // from every module so later passes can resolve symbols regardless
     // of which file they live in.
@@ -156,7 +157,10 @@ fn build_commands_inner(
     // underscore-prefixed module.
     let mut all_groups = Vec::new();
     let mut all_commands = Vec::new();
-    let mut seen_groups: HashSet<String> = HashSet::new();
+    // Group full path → (declaring module, index in `all_groups`).
+    let mut seen_groups: std::collections::HashMap<String, (String, usize)> =
+        std::collections::HashMap::new();
+    let mut warnings: Vec<String> = Vec::new();
     let mut global_vars: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
@@ -197,10 +201,21 @@ fn build_commands_inner(
         }
         // Dedup groups by *full_path* (not just leaf name), so nested
         // groups in different branches with the same leaf name (e.g.
-        // `ci.image` + `docker.image`) both survive.
+        // `ci.image` + `docker.image`) both survive. The first declaration
+        // wins, as in Python; a later one that disagrees is warned about.
         for binding in bindings {
-            if seen_groups.insert(binding.group.full_path()) {
-                all_groups.push(binding.group);
+            let path = binding.group.full_path();
+            match seen_groups.get(&path) {
+                Some((first_module, index)) => warnings.extend(redeclaration_warning(
+                    &all_groups[*index],
+                    first_module,
+                    &binding,
+                    &module_path,
+                )),
+                None => {
+                    seen_groups.insert(path, (module_path.clone(), all_groups.len()));
+                    all_groups.push(binding.group);
+                }
             }
         }
         all_commands.extend(commands);
@@ -273,7 +288,45 @@ fn build_commands_inner(
         return Err(BuildError::DuplicateCommands(duplicates));
     }
 
-    Ok((all_groups, all_commands))
+    Ok(BuiltTree {
+        groups: all_groups,
+        commands: all_commands,
+        warnings,
+    })
+}
+
+/// The groups and commands of one source tree, plus its build warnings.
+#[derive(Debug)]
+pub(crate) struct BuiltTree {
+    pub(crate) groups: Vec<Group>,
+    pub(crate) commands: Vec<Command>,
+    pub(crate) warnings: Vec<String>,
+}
+
+/// The warning for a group re-declaration that disagrees with the first one,
+/// worded like Python's `command_group`. `None` when they agree. A missing
+/// description only fetches the group, so it never disagrees.
+fn redeclaration_warning(
+    first: &Group,
+    first_module: &str,
+    later: &crate::parser::GroupBinding,
+    later_module: &str,
+) -> Option<String> {
+    let mut differing = Vec::new();
+    if later.group.title != first.title {
+        differing.push("title");
+    }
+    if later.has_description && later.group.description != first.description {
+        differing.push("description");
+    }
+    (!differing.is_empty()).then(|| {
+        format!(
+            "group `{}` is declared more than once; keeping the one in {first_module} and \
+             ignoring the different {} in {later_module}",
+            first.full_path(),
+            differing.join(", ")
+        )
+    })
 }
 
 /// A `(group, name)` pair more than one function in one source tree defines.
@@ -1261,6 +1314,142 @@ def hello(ctx):
         assert_eq!(m.commands.len(), 1);
         assert_eq!(m.commands[0].name, "hello");
         assert!(!m.static_hash.is_empty());
+    }
+
+    /// Build `files` and return `(group full paths with titles, build warnings)`.
+    fn redeclared(files: &[(&str, &str)]) -> (Vec<(String, String, String)>, Vec<String>) {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let groups = m
+            .groups
+            .iter()
+            .map(|g| (g.full_path(), g.title.clone(), g.description.clone()))
+            .collect();
+        (groups, m.build_warnings)
+    }
+
+    fn group_row(path: &str, title: &str, description: &str) -> (String, String, String) {
+        (path.into(), title.into(), description.into())
+    }
+
+    const GROUP_IMPORT: &str = "from toolr import command_group\n";
+
+    #[test]
+    fn identical_group_redeclaration_is_silent() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"grp\", \"Grp\", \"Desc\")\nb = command_group(\"grp\", \"Grp\", \"Desc\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("grp", "Grp", "Desc")]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn conflicting_group_redeclaration_in_one_module_warns() {
+        let src = format!(
+            "{GROUP_IMPORT}a = command_group(\"grp\", \"Grp\", \"Desc\")\nb = command_group(\"grp\", \"Other\", \"Else\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(groups, [group_row("grp", "Grp", "Desc")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `grp` is declared more than once; keeping the one in tools.m and \
+              ignoring the different title, description in tools.m"
+            ]
+        );
+    }
+
+    #[test]
+    fn conflicting_group_redeclaration_across_modules_names_both() {
+        let first = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Grp\", \"Desc\")\n");
+        let second = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Other\", \"Desc\")\n");
+        let third = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Grp\", \"Else\")\n");
+        let (groups, warnings) = redeclared(&[
+            ("tools/m1.py", &first),
+            ("tools/m2.py", &second),
+            ("tools/m3.py", &third),
+        ]);
+        assert_eq!(groups, [group_row("grp", "Grp", "Desc")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `grp` is declared more than once; keeping the one in tools.m1 and \
+                 ignoring the different title in tools.m2",
+                "group `grp` is declared more than once; keeping the one in tools.m1 and \
+                 ignoring the different description in tools.m3",
+            ]
+        );
+    }
+
+    /// A re-declaration without a description fetches the group; it has no
+    /// opinion on the description, so only a different title counts.
+    #[test]
+    fn group_redeclaration_without_description_has_no_opinion_on_it() {
+        let first = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Grp\", \"Desc\")\n");
+        let same = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Grp\")\n");
+        let other = format!("{GROUP_IMPORT}g = command_group(\"grp\", \"Other\")\n");
+        let (groups, warnings) = redeclared(&[
+            ("tools/m1.py", &first),
+            ("tools/m2.py", &same),
+            ("tools/m3.py", &other),
+        ]);
+        assert_eq!(groups, [group_row("grp", "Grp", "Desc")]);
+        assert_eq!(
+            warnings,
+            [
+                "group `grp` is declared more than once; keeping the one in tools.m1 and \
+              ignoring the different title in tools.m3"
+            ]
+        );
+    }
+
+    #[test]
+    fn dotted_and_parent_kwarg_declare_the_same_group() {
+        let src = format!(
+            "{GROUP_IMPORT}p1 = command_group(\"p1\", \"P1\", \"P1\")\n\
+             a = command_group(\"p1.kid\", \"Kid\", \"Kid\")\n\
+             b = command_group(\"kid\", \"Child\", \"Kid\", parent=\"p1\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("p1", "P1", "P1"),
+                group_row("p1.kid", "Kid", "Kid")
+            ]
+        );
+        assert_eq!(
+            warnings,
+            [
+                "group `p1.kid` is declared more than once; keeping the one in tools.m and \
+              ignoring the different title in tools.m"
+            ]
+        );
+    }
+
+    #[test]
+    fn same_leaf_under_two_parents_is_two_groups() {
+        let src = format!(
+            "{GROUP_IMPORT}p1 = command_group(\"p1\", \"P1\", \"P1\")\n\
+             p2 = command_group(\"p2\", \"P2\", \"P2\")\n\
+             a = command_group(\"kid\", \"Kid one\", \"One\", parent=\"p1\")\n\
+             b = command_group(\"kid\", \"Kid two\", \"Two\", parent=\"p2\")\n"
+        );
+        let (groups, warnings) = redeclared(&[("tools/m.py", &src)]);
+        assert_eq!(
+            groups,
+            [
+                group_row("p1", "P1", "P1"),
+                group_row("p2", "P2", "P2"),
+                group_row("p1.kid", "Kid one", "One"),
+                group_row("p2.kid", "Kid two", "Two"),
+            ]
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
     }
 
     /// `@command(group="…")` in one file referring to a

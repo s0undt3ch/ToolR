@@ -76,6 +76,7 @@ fn empty_base() -> Manifest {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }

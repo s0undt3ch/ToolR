@@ -1005,6 +1005,7 @@ mod cli_tree_tests {
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, runserver],
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         };
 
@@ -1034,6 +1035,7 @@ mod cli_tree_tests {
             groups: vec![group("docker")],
             commands: vec![build_cmd, image_cmd, build_child, image_child],
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         };
 
@@ -1061,6 +1063,7 @@ mod cli_tree_tests {
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, status],
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         };
 
@@ -1378,6 +1381,7 @@ mod cli_tree_tests {
             groups: vec![group("django")],
             commands: vec![dispatcher_cmd, migrate],
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         };
 
@@ -1400,6 +1404,7 @@ mod cli_tree_tests {
                 normal_leaf("hijack", "project"),
             ],
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         };
 

@@ -726,6 +726,7 @@ fn empty_manifest_for_completion() -> Manifest {
         groups: Vec::new(),
         commands: Vec::new(),
         plugin_warnings: Vec::new(),
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -740,6 +741,12 @@ fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
         toolr_core::parser::build_static_manifest(&tools)
     })?;
     toolr_core::manifest::write_manifest(&path, &manifest)?;
+    for warning in &manifest.build_warnings {
+        eprintln!(
+            "toolr: warning: {}",
+            toolr_core::text::strip_control_chars(warning)
+        );
+    }
     println!(
         "toolr: wrote {} groups / {} commands to {}",
         manifest.groups.len(),
@@ -831,6 +838,7 @@ mod tests {
             groups: Vec::new(),
             commands: Vec::new(),
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         }
     }
@@ -940,6 +948,7 @@ mod path_lookup_tests {
             groups: vec![],
             commands,
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         }
     }

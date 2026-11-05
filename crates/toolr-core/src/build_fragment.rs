@@ -45,7 +45,9 @@ pub fn build_third_party_fragment(
         });
     }
 
-    let (mut all_groups, mut all_commands) = build_commands(source_dir, package_name)?;
+    // Group re-declaration warnings are for the local `tools/` build only.
+    let built = build_commands(source_dir, package_name)?;
+    let (mut all_groups, mut all_commands) = (built.groups, built.commands);
 
     if all_commands.is_empty() {
         return Err(BuildFragmentError::EmptyPackage {

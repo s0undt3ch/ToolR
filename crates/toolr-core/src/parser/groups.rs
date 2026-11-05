@@ -13,6 +13,9 @@ use crate::manifest::{Group, Origin};
 pub struct GroupBinding {
     pub var: String,
     pub group: Group,
+    /// Whether the call passed a description (or a docstring). A re-declaration
+    /// without one only fetches the group, so it can't disagree on it.
+    pub has_description: bool,
 }
 
 /// Walk the module's top-level statements and collect group bindings.
@@ -192,15 +195,15 @@ fn parse_group_call(
     let title = positional_title
         .or_else(|| parsed_doc.as_ref().map(|d| d.short_description.clone()))
         .unwrap_or_default();
-    let description = explicit_description
-        .or_else(|| parsed_doc.as_ref().map(|d| d.full_description()))
-        .unwrap_or_default();
+    let description =
+        explicit_description.or_else(|| parsed_doc.as_ref().map(|d| d.full_description()));
     Some(GroupBinding {
         var: var.to_string(),
+        has_description: description.is_some(),
         group: Group {
             name,
             title,
-            description,
+            description: description.unwrap_or_default(),
             parent,
             origin: Origin::Static,
         },

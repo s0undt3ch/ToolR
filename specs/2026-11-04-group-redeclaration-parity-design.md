@@ -3,6 +3,21 @@
 Status: ready to implement. Stacked on `fix/registry-test-isolation` (FU-12); needs a restack onto `main`
 first, because the parity corpus from #674 is not in this stack yet.
 
+## Decisions (2026-11-04)
+
+- The Rust build warns on a conflicting group re-declaration through a non-persisted
+  `Manifest.build_warnings`, printed once per rebuild. No schema bump.
+- `long_description` isn't compared on the Rust side.
+- The change gets a release note.
+- Cross-tree behaviour (first-party wins silently) is pinned by a test.
+- Amended with #677: Python logs its re-declaration message at DEBUG, so the Rust build warning is the
+  user-facing signal. The parity test only requires that both sides report the same group and fields.
+- A re-declaration without a description (`command_group("ci", "CI")`) fetches the group and has no
+  opinion on the description, on both sides. Corpus case `ok_group_title_only_refetch`.
+- Plugin fragment builds (`build_commands`) drop the warnings: they are for the local `tools/` build.
+- The first run can build twice (bootstrap, then the freshness step); `main.rs` prints a warning both
+  builds give once.
+
 ## Problem
 
 FU-12 made Python's `command_group` return the first group for a re-declaration and log a warning when
@@ -72,10 +87,12 @@ New cases under `tests/e2e/files/parity_corpus/` (data only, no `__init__.py`):
 - `ok_warn_group_conflict_two_modules`
 - `ok_warn_group_conflict_dotted_vs_parent`
 - `ok_group_same_leaf_two_parents`
+- `ok_group_title_only_refetch`
 
 `test_parser_and_tester_agree` also compares per-group `title` and `description`, so first-wins is
-asserted. For `ok_warn_*` it asserts both sides warn (stderr contains `declared more than once`;
-`caplog` has the Python warning), and for other `ok_*` cases that neither does.
+asserted. For `ok_warn_*` it asserts both sides report the same (group, differing fields) pairs:
+the Rust warning on stderr, the Python message in `caplog` at any level. Other `ok_*` cases report
+none on either side.
 
 ## Testing
 

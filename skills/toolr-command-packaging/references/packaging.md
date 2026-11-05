@@ -111,6 +111,10 @@ pub struct Manifest {
     /// Plugins skipped, shadowed or in conflict at the last third-party merge, warned about on every run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugin_warnings: Vec<PluginWarning>,
+    /// Warnings from the build that produced this manifest, printed once when
+    /// it is built. Never written, so a manifest read from disk has none.
+    #[serde(skip)]
+    pub build_warnings: Vec<String>,
     /// What `static_hash` was computed from, so the freshness check rereads
     /// only the inputs whose stat changed. Empty on older manifests.
     #[serde(default, skip_serializing_if = "InputRecords::is_empty")]

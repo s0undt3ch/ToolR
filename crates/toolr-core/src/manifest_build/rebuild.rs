@@ -49,9 +49,10 @@ pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<Re
         group_count: manifest.groups.len(),
         command_count: manifest.commands.len(),
         warnings: manifest
-            .plugin_warnings
+            .build_warnings
             .iter()
-            .map(|w| crate::text::strip_control_chars(&w.message))
+            .chain(manifest.plugin_warnings.iter().map(|w| &w.message))
+            .map(|w| crate::text::strip_control_chars(w))
             .collect(),
     })
 }
@@ -105,6 +106,33 @@ mod tests {
             [
                 "skipping plugin demo: built with toolr schema 1, this toolr needs >= 2. \
               Rebuild the plugin with toolr >= 0.34.0."
+            ]
+        );
+    }
+
+    /// `project manifest rebuild` reports the local build's warnings too.
+    #[test]
+    fn full_rebuild_reports_build_warnings() {
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+        let tools = project.join("tools");
+        std::fs::create_dir(&tools).unwrap();
+        for (module, title) in [("m1", "Grp"), ("m2", "Other")] {
+            std::fs::write(
+                tools.join(format!("{module}.py")),
+                format!("g = command_group(\"grp\", \"{title}\", \"Grp\")\n"),
+            )
+            .unwrap();
+        }
+        let venv = project.join("venv");
+        std::fs::create_dir(&venv).unwrap();
+        let outcome = rebuild_manifest_full(project, &venv).unwrap();
+        assert_eq!(
+            outcome.warnings,
+            [
+                "group `grp` is declared more than once; keeping the one in tools.m1 and \
+              ignoring the different title in tools.m2"
             ]
         );
     }

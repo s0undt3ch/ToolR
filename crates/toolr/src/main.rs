@@ -41,7 +41,7 @@ fn run() -> anyhow::Result<ExitCode> {
     // and `--help` (which would otherwise exit inside clap) still see it.
     maybe_emit_cache_hint_from_argv();
     let persist = bootstrap::persist_manifest(&cwd, &argv);
-    bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv, persist)?;
+    let bootstrap_warnings = bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv, persist)?;
     let mut manifest = match bootstrap::ensure_manifest_fresh(&cwd, &argv, persist)? {
         Some(m) => m,
         // `__complete` resolves the manifest itself; loading it here too
@@ -53,10 +53,20 @@ fn run() -> anyhow::Result<ExitCode> {
     // completion drops the same entries in `resolve_manifest_at_tab`.
     manifest.drop_unsafe_names();
     if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
-        for w in &manifest.plugin_warnings {
+        // Build warnings come only from a manifest built on this run. The
+        // freshness step may rebuild what the bootstrap just wrote, so a
+        // warning both builds give prints once.
+        let mut built: Vec<&String> = bootstrap_warnings.iter().collect();
+        for warning in &manifest.build_warnings {
+            if !built.contains(&warning) {
+                built.push(warning);
+            }
+        }
+        let plugin = manifest.plugin_warnings.iter().map(|w| &w.message);
+        for message in built.into_iter().chain(plugin) {
             eprintln!(
                 "toolr: warning: {}",
-                toolr_core::text::strip_control_chars(&w.message)
+                toolr_core::text::strip_control_chars(message)
             );
         }
     }
@@ -202,6 +212,7 @@ fn empty_manifest() -> Manifest {
         groups: Vec::new(),
         commands: Vec::new(),
         plugin_warnings: Vec::new(),
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }

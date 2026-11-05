@@ -823,3 +823,71 @@ fn duplicate_command_across_modules_is_rejected() {
         );
     }
 }
+
+/// FU-22: two modules declaring `grp` with different titles.
+fn conflicting_group_project(tmp: &TempDir) {
+    let tools = common::write_project(tmp.path());
+    for (module, title, command) in [("m1", "Grp", "one"), ("m2", "Other", "two")] {
+        std::fs::write(
+            tools.join(format!("{module}.py")),
+            format!(
+                "from toolr import command_group\n\ng = command_group(\"grp\", \"{title}\", \"Grp\")\n\n\n@g.command\ndef {command}(ctx):\n    \"\"\"Run.\"\"\"\n"
+            ),
+        )
+        .unwrap();
+    }
+}
+
+const GROUP_CONFLICT_WARNING: &str = "toolr: warning: group `grp` is declared more than once; \
+     keeping the one in tools.m1 and ignoring the different title in tools.m2\n";
+
+fn stderr_of(root: &std::path::Path, args: &[&str]) -> String {
+    let output = common::toolr()
+        .current_dir(root)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{args:?}: {output:?}");
+    String::from_utf8(output.stderr).unwrap()
+}
+
+/// FU-22: a conflicting group re-declaration warns when the manifest is
+/// built, not on every run that reads it back.
+#[test]
+fn group_conflict_warns_once_per_build() {
+    let tmp = TempDir::new().unwrap();
+    conflicting_group_project(&tmp);
+    let root = tmp.path();
+    assert_eq!(stderr_of(root, &["--help"]), GROUP_CONFLICT_WARNING);
+    assert_eq!(stderr_of(root, &["--help"]), "");
+    assert_eq!(stderr_of(root, &["-q", "--help"]), "");
+
+    // A changed module rebuilds the manifest, which warns again, unless quiet.
+    std::fs::write(root.join("tools/m3.py"), "x = 1\n").unwrap();
+    assert_eq!(stderr_of(root, &["-q", "--help"]), "");
+    std::fs::write(root.join("tools/m3.py"), "x = 2\n").unwrap();
+    assert_eq!(stderr_of(root, &["--help"]), GROUP_CONFLICT_WARNING);
+
+    for args in [
+        &["project", "manifest", "rebuild"][..],
+        &["__build-static-manifest"][..],
+    ] {
+        assert_eq!(stderr_of(root, args), GROUP_CONFLICT_WARNING, "{args:?}");
+    }
+}
+
+/// An untrusted repository builds in memory on every run, so it warns on every run.
+#[test]
+fn group_conflict_warns_on_every_untrusted_run() {
+    let tmp = TempDir::new().unwrap();
+    conflicting_group_project(&tmp);
+    let env = common::TrustEnv::new();
+    for _ in 0..2 {
+        let output = env.toolr(tmp.path()).arg("--help").output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            GROUP_CONFLICT_WARNING
+        );
+    }
+}

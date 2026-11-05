@@ -1277,6 +1277,7 @@ parent = "django"
             groups: vec![],
             commands: vec![],
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records,
         };
         let path = project.path().join("tools/.toolr-manifest.json");

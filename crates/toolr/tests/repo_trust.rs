@@ -412,6 +412,7 @@ fn stale_manifest_in_untrusted_repo_is_not_rewritten() {
         groups: vec![],
         commands: vec![],
         plugin_warnings: vec![],
+        build_warnings: Vec::new(),
         input_records: Default::default(),
     };
     write_manifest(&path, &stale).unwrap();

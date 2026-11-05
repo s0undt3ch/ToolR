@@ -35,6 +35,8 @@ use toolr_core::venv::resolve_venv_path;
 /// Does nothing unless `persist`; [`ensure_manifest_fresh`] then builds
 /// the manifest in memory.
 ///
+/// Returns the build's warnings, which the written manifest doesn't keep.
+///
 /// Errors propagate so `main.rs` can print them and exit non-zero — we
 /// intentionally do NOT fall through to an empty manifest, since that's
 /// the buggy old behaviour this task fixes.
@@ -42,26 +44,26 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
     cwd: &Path,
     argv: &[String],
     persist: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<String>> {
     let Ok(root) = discover_project_root(cwd) else {
-        return Ok(());
+        return Ok(Vec::new());
     };
     let tools = root.join("tools");
     if tools.join(".toolr-manifest.json").is_file() {
-        return Ok(());
+        return Ok(Vec::new());
     }
     if should_skip_auto_rebuild(argv) {
-        return Ok(());
+        return Ok(Vec::new());
     }
     if !persist {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     let manifest_path = tools.join(".toolr-manifest.json");
     // Concurrent processes on a fresh clone all see it missing; the
     // re-check under the lock lets only the first one build it.
     let missing = || Ok::<_, anyhow::Error>((!manifest_path.is_file()).then_some(()));
-    rebuild_if_stale(&manifest_path, missing, |()| {
+    let warnings = rebuild_if_stale(&manifest_path, missing, |()| {
         // First-party is always available (pure AST). Add third-party only when
         // a venv already exists — globbing site-packages JSON executes nothing.
         let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
@@ -72,9 +74,10 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
             _ => build_static_manifest(&tools),
         })?;
         write_manifest(&manifest_path, &manifest)
-            .with_context(|| format!("writing {}", manifest_path.display()))
+            .with_context(|| format!("writing {}", manifest_path.display()))?;
+        Ok(manifest.build_warnings)
     })?;
-    Ok(())
+    Ok(warnings.unwrap_or_default())
 }
 
 /// Top-level subcommands toolr itself provides.
@@ -380,6 +383,7 @@ mod tests {
             groups,
             commands: vec![],
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         }
     }
@@ -422,6 +426,7 @@ mod tests {
             groups: Vec::new(),
             commands: Vec::new(),
             plugin_warnings: Vec::new(),
+            build_warnings: Vec::new(),
             input_records: Default::default(),
         });
         let mut from_cli: Vec<String> = command
