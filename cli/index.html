@@ -2664,6 +2664,9 @@ values, writes candidates to stdout. Never starts Python.</p>
 </table>
 <p>A script installed by an older toolr doesn't know these codes and offers
 nothing for path slots, as it always did.</p>
+<p>A <code>--name=partial</code> word completes as the value of <code>--name</code>, with
+<code>partial</code> as the prefix. Candidates are bare values, without <code>--name=</code>;
+each script puts that part back the way its shell needs.</p>
 <h3 id="__build-static-manifest"><code>toolr __build-static-manifest</code><a class="headerlink" href="#__build-static-manifest" title="Permanent link">&para;</a></h3>
 <p>Regenerate only the static layer of the manifest (no Python
 introspection). Faster than <code>toolr project manifest rebuild</code> but
