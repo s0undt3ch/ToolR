@@ -15,12 +15,15 @@ from toolr import command_group
 from toolr._decorators import _get_command_group_storage
 
 
-def test_command_group_without_description_or_docstring():
-    """Test command_group error when neither description nor docstring provided."""
-    with pytest.raises(
-        ValueError, match="You must at least pass either the 'docstring' or 'description' argument"
-    ):
-        command_group("test", "Test Group")
+def test_command_group_without_description_or_docstring_creates_the_group():
+    """A missing description is the manifest build's concern, not the runtime's."""
+    group = command_group("test", "Test Group")
+
+    assert group.title == "Test Group"
+    assert group.description == ""
+    assert group.long_description is None
+    assert _get_command_group_storage()["tools.test"] is group
+    assert command_group("test", "Test Group") is group
 
 
 def test_command_group_with_both_docstring_and_description():
@@ -155,11 +158,17 @@ def test_package_init_declares_and_submodule_refetches_by_title(make_package):
     assert _get_command_group_storage()["tools.ci"] is declared.group
 
 
-def test_submodule_imported_first_cannot_create_the_group_from_a_title(make_package):
+def test_title_only_submodule_imports_alone_when_a_sibling_creates_the_group(make_package):
     make_package(
         {
             "pkgtools/__init__.py": "",
-            "pkgtools/lint.py": """
+            "pkgtools/ci/__init__.py": "",
+            "pkgtools/ci/a.py": """
+                from toolr import command_group
+
+                group = command_group("ci", "CI", "Continuous integration.")
+            """,
+            "pkgtools/ci/lint.py": """
                 from toolr import command_group
 
                 group = command_group("ci", "CI")
@@ -167,8 +176,11 @@ def test_submodule_imported_first_cannot_create_the_group_from_a_title(make_pack
         }
     )
 
-    with pytest.raises(ValueError, match="You must at least pass"):
-        importlib.import_module("pkgtools.lint")
+    lint = importlib.import_module("pkgtools.ci.lint")
+
+    assert "pkgtools.ci.a" not in sys.modules
+    assert lint.group is _get_command_group_storage()["tools.ci"]
+    assert lint.group.description == ""
 
 
 def test_identical_redeclaration_returns_the_group_without_a_conflict_record(

@@ -406,13 +406,13 @@ def _resolve_group_fields(
     description: str | None,
     long_description: str | None,
     docstring: str | None,
-    *,
-    exists: bool = False,
 ) -> tuple[str, str, str | None]:
     """Validate ``command_group`` arguments and resolve the final group fields.
 
-    A description is only required to create a group. For an ``exists`` group a
-    missing one is a re-fetch, so the returned description is empty.
+    A missing description is not an error at runtime: the runner imports only
+    the target command's module chain, so a title-only call may be the first
+    declaration it meets. The manifest build enforces that some declaration
+    describes each group.
 
     Returns:
         The ``(title, description, long_description)`` the group is created with
@@ -433,9 +433,6 @@ def _resolve_group_fields(
         if not title:
             title = parsed_docstring.short_description
         return title, parsed_docstring.full_description, None
-    if description is None and not exists:
-        err_msg = "You must at least pass either the 'docstring' or 'description' argument"
-        raise ValueError(err_msg)
     return title, description or "", long_description
 
 
@@ -498,10 +495,9 @@ def command_group(
     collector = _get_command_group_storage()
     group: CommandGroup | None = collector.get(f"{parent}.{name}")
 
-    # Contradictory arguments raise whether or not the group exists; a missing
-    # description only raises when this call would have to create the group.
+    # Contradictory arguments raise whether or not the group exists.
     title, description, long_description = _resolve_group_fields(
-        title, description, long_description, docstring, exists=group is not None
+        title, description, long_description, docstring
     )
 
     if group is not None:
