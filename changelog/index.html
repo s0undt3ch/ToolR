@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev681-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev695-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev681 - 2026-11-05
+        0.35.2-dev695 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev681 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev695 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev681-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev695-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev681 - 2026-11-05
+        0.35.2-dev695 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev681 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev695 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev681-2026-11-05">0.35.2-dev681 - 2026-11-05<a class="headerlink" href="#0352-dev681-2026-11-05" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev695-2026-11-05">0.35.2-dev695 - 2026-11-05<a class="headerlink" href="#0352-dev695-2026-11-05" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7586,7 +7586,8 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <p>When a timeout fires, toolr now also kills the processes the command started, not just the command. It used to kill only the direct child, so <code>ctx.run("sh", "-c", "sleep 999; true", timeout_secs=1)</code> left <code>sleep</code> running. A process that detached itself first, such as a daemon that double-forks, can't be found and keeps running.</p>
 <p><strong>Breaking:</strong> <code>toolr project trust</code> now runs <code>uv sync</code> on the tools venv after trusting the repository, when the venv needs one and you accept on a terminal or <code>TOOLR_AUTO_INSTALL_UV=1</code> is set, and it exits non-zero if that sync fails. It used to only record the trust and always exit 0, so scripts and hooks that run it with <code>TOOLR_AUTO_INSTALL_UV=1</code> now sync too. Pass <code>--no-sync</code> to keep the old trust-only behaviour. The trust is kept either way.</p>
 <p>A fresh clone now needs one step before its commands run. On a terminal <code>toolr project trust</code> asks first (<code>Sync it now? [y/N]</code>); declining keeps the trust and points you at <code>toolr project venv sync</code>. Running a command in an untrusted repository works the same way: answer <code>y</code> to the trust prompt and, if the venv is missing, out of date or broken, toolr offers to sync it and then runs the command. The sync prompt replaces the uv install prompt for that sync, so you see at most two prompts. With <code>--quiet</code> or no terminal toolr doesn't ask and doesn't sync unless <code>TOOLR_AUTO_INSTALL_UV=1</code> is set.</p>
-<p><strong>Breaking:</strong> <code>toolr</code> and <code>CommandsTester</code> now refuse three shapes they used to read differently. A command name defined twice in one group, in one file or across files of one <code>tools/</code> tree or plugin package, fails with "duplicate commands" listing every definition (it used to keep one silently); rename all but one, e.g. with <code>name="…"</code>. A command decorator on a nested <code>def</code> (inside another function, a class or an <code>if</code>) and a <code>group=</code> or command name that isn't a string literal fail with "unsupported command declarations"; move the <code>def</code> to module level and write the value as a literal. A local command shadowing a plugin's, or two plugins defining one command, still only warn.</p>
+<p><strong>Breaking:</strong> <code>toolr</code> and <code>CommandsTester</code> now refuse several shapes they used to read differently. A command name defined twice in one group, in one file or across files of one <code>tools/</code> tree or plugin package, fails with "duplicate commands" listing every definition (it used to keep one silently); rename all but one, e.g. with <code>name="…"</code>. A command decorator on a nested <code>def</code> (inside another function, a class or an <code>if</code>) and a <code>group=</code> or command name that isn't a string literal fail with "unsupported command declarations"; move the <code>def</code> to module level and write the value as a literal. A local command shadowing a plugin's, or two plugins defining one command, still only warn.</p>
+<p>Both now also reject a command decorator inside <code>if TYPE_CHECKING:</code>, a platform guard or an uncalled factory, even when that code never runs, and a <code>def</code> carrying two command decorators; each command must be a top-level <code>def</code>, with platform checks inside its body. toolr recognises <code>command</code> imported from <code>toolr</code> or any <code>toolr.*</code> submodule, re-exported within <code>tools/</code>, or assigned from <code>toolr.command</code>; one imported from anywhere else, such as click, counts only when called with <code>group=</code>, and a module's own <code>def command</code> never does.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7875,6 +7876,12 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(parser)</em> [<strong>breaking</strong>] Reject duplicate commands in a group (<a href="https://github.com/s0undt3ch/ToolR/commit/a98eda6ee224d59b512a72816f55528a36760fcd"><code>a98eda6</code></a>)</li>
 <li><em>(parser)</em> [<strong>breaking</strong>] Reject nested and non-literal command declarations (<a href="https://github.com/s0undt3ch/ToolR/commit/5e6d7f2a92b4283c6cae612f77fb0a35f7f91678"><code>5e6d7f2</code></a>)</li>
 <li><em>(ci)</em> Print tests-layout paths with forward slashes (<a href="https://github.com/s0undt3ch/ToolR/commit/ef8df02bcc94e164be9f1718dc20ef331c21617c"><code>ef8df02</code></a>)</li>
+<li><em>(parser)</em> Ignore other libraries' <code>command</code> and reject stacked decorators (<a href="https://github.com/s0undt3ch/ToolR/commit/daebcc0f3eb82a689286fb691bf142f25ede8ddd"><code>daebcc0</code></a>)</li>
+<li><em>(testing)</em> Read every tools module's source for unsupported commands (<a href="https://github.com/s0undt3ch/ToolR/commit/3e8f833582e28f6c6540f518f9a80ee37ea2b11c"><code>3e8f833</code></a>)</li>
+<li><em>(parser)</em> Follow a re-exported <code>command</code> back to toolr (<a href="https://github.com/s0undt3ch/ToolR/commit/4948b173d858d278713bad23d4a16321a3de9596"><code>4948b17</code></a>)</li>
+<li><em>(cli)</em> Suggest pytest tests/, not tools/, in venv run hints (<a href="https://github.com/s0undt3ch/ToolR/commit/37fa8bfc6c1e0bff474c1b5c2ae0601fc4d67208"><code>37fa8bf</code></a>)</li>
+<li><em>(parser)</em> Follow toolr's <code>command</code> through submodules, assignments and unread modules (<a href="https://github.com/s0undt3ch/ToolR/commit/3713ce163908d34b7236d82aaff1db90159f4e52"><code>3713ce1</code></a>)</li>
+<li><em>(testing)</em> Read tools sources as bytes for the shape check (<a href="https://github.com/s0undt3ch/ToolR/commit/ba80c4d350a3693ee343f540bbd9b9a0fb1ea7c5"><code>ba80c4d</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7943,6 +7950,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(ci)</em> Check Python version lists from a toolr pre-commit command (<a href="https://github.com/s0undt3ch/ToolR/commit/91f016313ecb7b1577440bd6f2aaf3fc699fa5c0"><code>91f0163</code></a>)</li>
 <li><em>(tests)</em> Reuse tests/_git helpers in the release-notes tests (<a href="https://github.com/s0undt3ch/ToolR/commit/09b844fe32bf677a138b9d01ccf6102a39d1b29e"><code>09b844f</code></a>)</li>
 <li><em>(ci)</em> Rename check-test-layout to check-tests-layout and say what to fix (<a href="https://github.com/s0undt3ch/ToolR/commit/0e5eed598ed7e1d5eb8e50041cbfaa6e5933a937"><code>0e5eed5</code></a>)</li>
+<li><em>(parser)</em> Document the Binding contract and share the toolr member check (<a href="https://github.com/s0undt3ch/ToolR/commit/07b5f85374e2cf1fb3c21de2bc340b451ce1430c"><code>07b5f85</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8135,6 +8143,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Archive the FU-1/2/3 parser and tester parity design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/26c60faa516c16703639839fa642813a84547d73"><code>26c60fa</code></a>)</li>
 <li><em>(specs)</em> Spec and plan FU-4/FU-5 derived Python versions and a fast hook (<a href="https://github.com/s0undt3ch/ToolR/commit/a28492e8e6165028a677bf2325418d99b90f0273"><code>a28492e</code></a>)</li>
 <li><em>(specs)</em> Archive the FU-4/FU-5 Python versions design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/7d2715fbed5b11994901f76320b3247e719ef535"><code>7d2715f</code></a>)</li>
+<li><em>(writing-commands)</em> Commands must be top-level defs, with platform checks inside (<a href="https://github.com/s0undt3ch/ToolR/commit/50371235eae3d7887220a5505bb1d23794859fbd"><code>5037123</code></a>)</li>
+<li><em>(tests)</em> Describe the parity corpus layout (<a href="https://github.com/s0undt3ch/ToolR/commit/f796bc79731b1cbe5018868474d794968912318b"><code>f796bc7</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8238,6 +8248,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Reuse the fish driver (<a href="https://github.com/s0undt3ch/ToolR/commit/2bb6cdde76501f9c15f347ec422d972868939d89"><code>2bb6cdd</code></a>)</li>
 <li><em>(e2e)</em> Differential parser/tester corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/51771c148954db4e3168931e6be102d4122d718b"><code>51771c1</code></a>)</li>
 <li><em>(ci)</em> Move tool tests into tests/tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/f8e808cc5c668cc5de3a70021dbbe64eb07ede26"><code>f8e808c</code></a>)</li>
+<li><em>(parser)</em> A dotted <code>command = a.b.command</code> isn't followed (<a href="https://github.com/s0undt3ch/ToolR/commit/eba5376dd3aa277e4f783fe24af5be4b535bef7d"><code>eba5376</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>

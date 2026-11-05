@@ -1877,15 +1877,17 @@ declared group, or a standalone <code>@command</code> with no <code>group=</code
 </span></code></pre></div>
 <p><code>CommandsTester</code> runs your code, but <code>toolr</code> reads it without running it, so the tester checks the source for what
 <code>toolr</code> can't read. <code>@command(...)</code>, <code>@toolr.command(...)</code> (also after <code>import toolr as t</code>) and an alias from
-<code>from toolr import command as cmd</code> all work, on a top-level <code>def</code> with <code>group=</code> and any name as string literals. A
-command on a nested <code>def</code> (inside another function, a class or an <code>if</code>), a <code>group=SOME_CONSTANT</code> or a non-literal name
-fails both:</p>
+<code>from toolr import command as cmd</code> all work, on a top-level <code>def</code> with <code>group=</code> and any name as string literals.
+Commands must be top-level <code>def</code>s: put a platform check inside the command body, not around the <code>def</code>. A command on a
+nested <code>def</code> (inside another function, a class, an <code>if TYPE_CHECKING:</code> or any other <code>if</code>), a <code>def</code> carrying two command
+decorators, a <code>group=SOME_CONSTANT</code> or a non-literal name fails both:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>unsupported command declarations (2):
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  - tools.cmds::nested: `@command` must decorate a top-level `def`, which toolr reads without running it.
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  - tools.cmds::check: `group=` must be a string literal.
 </span></code></pre></div>
-<p>A command a test body defines isn't checked. A nested command whose outer function never runs fails <code>toolr</code> but is
-invisible to the tester.</p>
+<p>The tester reads the source of every <code>tools</code> module, so a nested command fails it even when the code around it never
+runs, such as a factory nobody calls or an <code>if</code> that's false on this platform. A command a test body defines isn't
+checked.</p>
 <p>Two functions that define the same command in a group fail both too, listing every definition:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>duplicate commands (1):
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  - `ci check` is defined more than once: tools.a::check, tools.b::check. Rename all but one, e.g. with `name="…"`.
