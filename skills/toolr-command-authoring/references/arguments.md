@@ -423,7 +423,7 @@ from toolr import Context, command_group
 if TYPE_CHECKING:
     from pathlib import Path
 
-files = command_group("files", title="File helpers")
+files = command_group("files", title="File helpers", description="Helpers for working with files")
 
 
 @files.command

@@ -98,7 +98,7 @@ LOGGING = arg_section(
     description="Control verbosity and output format.",
 )
 
-deploy = command_group("deploy", title="Deploy")
+deploy = command_group("deploy", title="Deploy", description="Deployment helpers")
 
 
 @deploy.command

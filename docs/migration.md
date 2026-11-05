@@ -49,7 +49,7 @@ After:
 
 ```python
 docker = command_group("docker", "Docker", "Container utilities")
-docker_image = command_group("docker.image", "Image")
+docker_image = command_group("docker.image", "Image", "Image subcommands")
 
 
 @docker_image.command
