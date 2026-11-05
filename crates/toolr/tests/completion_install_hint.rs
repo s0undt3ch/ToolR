@@ -4,10 +4,12 @@
 mod common;
 
 use std::path::{Path, PathBuf};
+use std::process::Output;
 
 use tempfile::TempDir;
+use toolr_core::complete::shell_quote;
 
-const HINT: &str = "bash-completion isn't installed";
+const HINT: &str = "can't find bash-completion";
 
 /// A HOME, XDG data home and probe sysroot, all under one tempdir, so the
 /// host's own bash-completion can't leak into the result.
@@ -34,21 +36,20 @@ impl Host {
         std::fs::write(path, "# loader\n").unwrap();
     }
 
-    fn install(&self, args: &[&str]) -> (String, String) {
-        let out = common::toolr()
-            .env("HOME", self.path("home"))
+    fn command(&self, args: &[&str]) -> assert_cmd::Command {
+        let mut cmd = common::toolr();
+        cmd.env("HOME", self.path("home"))
             .env("XDG_DATA_HOME", self.path("data"))
             .env("XDG_CONFIG_HOME", self.path("config"))
             .env("XDG_DATA_DIRS", self.path("data-dirs"))
             .env("TOOLR_BASH_COMPLETION_SYSROOT", self.path("sysroot"))
             .env_remove("HOMEBREW_PREFIX")
-            .args(args)
-            .output()
-            .unwrap();
-        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
-        assert!(out.status.success(), "{args:?} failed:\n{stdout}\n{stderr}");
-        (stdout, stderr)
+            .args(args);
+        cmd
+    }
+
+    fn install(&self, args: &[&str]) -> (String, String) {
+        succeeded(args, &self.command(args).output().unwrap())
     }
 
     fn installed_bash_script(&self) -> PathBuf {
@@ -56,9 +57,23 @@ impl Host {
     }
 }
 
-fn source_line(path: &Path) -> String {
-    format!("add `source {}` to your ~/.bashrc.", path.display())
+fn succeeded(args: &[&str], out: &Output) -> (String, String) {
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(out.status.success(), "{args:?} failed:\n{stdout}\n{stderr}");
+    (stdout, stderr)
 }
+
+/// Quoted the way the binary quotes it: temp dirs can hold spaces (a
+/// `TMPDIR` with one) or backslashes (Windows).
+fn source_line(path: &Path) -> String {
+    format!(
+        "add `source {}` to your bash startup file (~/.bashrc).",
+        shell_quote(&path.display().to_string())
+    )
+}
+
+const BASH: &[&str] = &["self", "completion", "install", "bash"];
 
 #[test]
 fn hint_names_the_installed_path_without_bash_completion() {
@@ -118,4 +133,73 @@ fn other_shells_get_no_bash_hint() {
         let (stdout, _) = host.install(&["self", "completion", "install", shell]);
         assert!(!stdout.contains(HINT), "{shell}: {stdout}");
     }
+}
+
+#[test]
+fn hint_quotes_a_home_with_a_space_and_a_quote() {
+    let host = Host::new();
+    let home = host.path("it's my home");
+    std::fs::create_dir_all(&home).unwrap();
+    let out = host
+        .command(BASH)
+        .env("HOME", &home)
+        .env_remove("XDG_DATA_HOME")
+        .output()
+        .unwrap();
+    let (stdout, _) = succeeded(BASH, &out);
+    let script = home.join(".local/share/bash-completion/completions/toolr");
+    assert!(script.is_file());
+    let quoted = format!("'{}'", script.display().to_string().replace('\'', r"'\''"));
+    assert!(
+        stdout.contains(&format!(
+            "add `source {quoted}` to your bash startup file (~/.bashrc)."
+        )),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn hint_prints_when_only_a_bash_completion_1x_loader_exists() {
+    // 1.x never reads ~/.local/share/bash-completion/completions/.
+    for rel in [
+        "usr/local/etc/bash_completion",
+        "opt/homebrew/etc/bash_completion",
+    ] {
+        let host = Host::new();
+        host.plant_loader(rel);
+        let (stdout, _) = host.install(BASH);
+        assert!(stdout.contains(HINT), "{rel}: {stdout}");
+    }
+}
+
+#[test]
+fn no_hint_when_the_install_is_refused_without_force() {
+    let host = Host::new();
+    let script = host.installed_bash_script();
+    std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+    std::fs::write(&script, "# edited by hand\n").unwrap();
+    let out = host.command(BASH).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stdout}\n{stderr}");
+    assert!(stderr.contains("refusing to overwrite"), "{stderr}");
+    assert!(!stdout.contains(HINT), "{stdout}");
+    assert!(!stderr.contains(HINT), "{stderr}");
+}
+
+#[test]
+fn no_hint_when_homebrew_prefix_holds_bash_completion() {
+    let host = Host::new();
+    let prefix = host.path("brew");
+    let loader = prefix.join("share/bash-completion/bash_completion");
+    std::fs::create_dir_all(loader.parent().unwrap()).unwrap();
+    std::fs::write(&loader, "# loader\n").unwrap();
+    let out = host
+        .command(BASH)
+        .env("HOMEBREW_PREFIX", &prefix)
+        .output()
+        .unwrap();
+    let (stdout, _) = succeeded(BASH, &out);
+    assert!(stdout.contains("wrote bash completion script"), "{stdout}");
+    assert!(!stdout.contains(HINT), "{stdout}");
 }

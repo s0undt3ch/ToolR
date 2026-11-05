@@ -22,7 +22,7 @@ pub use engine::{Candidate, Completion, complete, serve_completions, sort_and_de
 pub use freshness::{ResolvedManifest, resolve_manifest_at_tab};
 pub use install::{
     InstallOptions, InstallOutcome, PriorState, bash_completion_candidates,
-    bash_completion_installed, install_path_for, install_script,
+    bash_completion_installed, install_path_for, install_script, shell_quote,
 };
 pub use scripts::{Shell, completion_script};
 

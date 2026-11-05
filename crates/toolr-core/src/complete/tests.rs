@@ -1580,7 +1580,9 @@ mod bash_completion_probe {
 
     use tempfile::TempDir;
 
-    use crate::complete::install::{bash_completion_candidates, bash_completion_installed};
+    use crate::complete::install::{
+        bash_completion_candidates, bash_completion_installed, shell_quote,
+    };
 
     fn plant(root: &Path, rel: &str) {
         let path = root.join(rel);
@@ -1601,10 +1603,8 @@ mod bash_completion_probe {
             "etc/bash_completion",
             "usr/local/share/bash-completion/bash_completion",
             "usr/local/etc/profile.d/bash_completion.sh",
-            "usr/local/etc/bash_completion",
             "opt/homebrew/share/bash-completion/bash_completion",
             "opt/homebrew/etc/profile.d/bash_completion.sh",
-            "opt/homebrew/etc/bash_completion",
             "home/linuxbrew/.linuxbrew/share/bash-completion/bash_completion",
             "home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh",
             "opt/local/share/bash-completion/bash_completion",
@@ -1614,6 +1614,33 @@ mod bash_completion_probe {
             plant(tmp.path(), rel);
             assert!(bash_completion_installed(tmp.path(), None, None), "{rel}");
         }
+    }
+
+    #[test]
+    fn bash_completion_1x_loaders_are_not_detected() {
+        // 1.x never reads ~/.local/share/bash-completion/completions/.
+        for rel in [
+            "usr/local/etc/bash_completion",
+            "opt/homebrew/etc/bash_completion",
+        ] {
+            let tmp = TempDir::new().unwrap();
+            plant(tmp.path(), rel);
+            assert!(!bash_completion_installed(tmp.path(), None, None), "{rel}");
+        }
+    }
+
+    #[test]
+    fn shell_quote_leaves_safe_paths_bare() {
+        assert_eq!(shell_quote("/a/b-c_d.e/toolr"), "/a/b-c_d.e/toolr");
+    }
+
+    #[test]
+    fn shell_quote_single_quotes_unsafe_paths() {
+        assert_eq!(shell_quote("/My Data/toolr"), "'/My Data/toolr'");
+        assert_eq!(shell_quote("/a$b/toolr"), "'/a$b/toolr'");
+        assert_eq!(shell_quote("/it's/toolr"), r"'/it'\''s/toolr'");
+        assert_eq!(shell_quote(r"C:\Users\u\toolr"), r"'C:\Users\u\toolr'");
+        assert_eq!(shell_quote(""), "''");
     }
 
     #[test]

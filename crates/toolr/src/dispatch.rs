@@ -8,7 +8,7 @@ use crate::help::{self, HelpMode};
 use toolr_core::complete::{
     Candidate, Completion, InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell,
     bash_completion_installed, complete, completion_script, install_script,
-    resolve_manifest_at_tab, sort_and_dedup_by_value,
+    resolve_manifest_at_tab, shell_quote, sort_and_dedup_by_value,
 };
 use toolr_core::discovery::discover_project_root;
 use toolr_core::execute::{ExecutionSpec, spawn_runner, wait_with_signals, write_spec_to_tempfile};
@@ -612,8 +612,7 @@ fn print_bash_source_hint(shell: CompletionShell, path: &std::path::Path, quiet:
         return;
     }
     // Test seam: CI hosts ship bash-completion, so tests move the probe's root.
-    let sysroot = std::env::var_os("TOOLR_BASH_COMPLETION_SYSROOT")
-        .map_or_else(|| PathBuf::from("/"), PathBuf::from);
+    let sysroot = bash_completion_sysroot(std::env::var_os("TOOLR_BASH_COMPLETION_SYSROOT"));
     let xdg_data_dirs = std::env::var_os("XDG_DATA_DIRS");
     let homebrew_prefix = std::env::var_os("HOMEBREW_PREFIX").map(PathBuf::from);
     if !bash_completion_installed(
@@ -625,21 +624,20 @@ fn print_bash_source_hint(shell: CompletionShell, path: &std::path::Path, quiet:
     }
 }
 
-fn bash_source_hint(path: &std::path::Path) -> String {
-    format!(
-        "toolr: bash-completion isn't installed, so bash won't load this script by itself; \
-         add `source {}` to your ~/.bashrc.",
-        shell_quote(&path.display().to_string())
-    )
+/// An empty override reads as unset; probing relative to the cwd would be
+/// a silent misconfiguration.
+fn bash_completion_sysroot(value: Option<std::ffi::OsString>) -> PathBuf {
+    value
+        .filter(|v| !v.is_empty())
+        .map_or_else(|| PathBuf::from("/"), PathBuf::from)
 }
 
-/// Single-quote `s` for bash unless every character is plainly safe.
-fn shell_quote(s: &str) -> String {
-    let safe = |c: char| c.is_ascii_alphanumeric() || "/._-+:,@%".contains(c);
-    if !s.is_empty() && s.chars().all(safe) {
-        return s.to_string();
-    }
-    format!("'{}'", s.replace('\'', r#"'\''"#))
+fn bash_source_hint(path: &std::path::Path) -> String {
+    format!(
+        "toolr: can't find bash-completion, so bash won't load this script by itself; \
+         add `source {}` to your bash startup file (~/.bashrc).",
+        shell_quote(&path.display().to_string())
+    )
 }
 
 fn dirs_home() -> anyhow::Result<PathBuf> {
@@ -866,23 +864,23 @@ mod tests {
         ));
         assert_eq!(
             hint,
-            "toolr: bash-completion isn't installed, so bash won't load this script by itself; \
-             add `source /home/u/.local/share/bash-completion/completions/toolr` to your ~/.bashrc."
+            "toolr: can't find bash-completion, so bash won't load this script by itself; \
+             add `source /home/u/.local/share/bash-completion/completions/toolr` \
+             to your bash startup file (~/.bashrc)."
         );
     }
 
     #[test]
-    fn shell_quote_leaves_safe_paths_bare() {
-        assert_eq!(shell_quote("/a/b-c_d.e/toolr"), "/a/b-c_d.e/toolr");
-    }
-
-    #[test]
-    fn shell_quote_single_quotes_unsafe_paths() {
-        assert_eq!(shell_quote("/My Data/toolr"), "'/My Data/toolr'");
-        assert_eq!(shell_quote("/a$b/toolr"), "'/a$b/toolr'");
-        assert_eq!(shell_quote("/it's/toolr"), r"'/it'\''s/toolr'");
-        assert_eq!(shell_quote(r"C:\Users\u\toolr"), r"'C:\Users\u\toolr'");
-        assert_eq!(shell_quote(""), "''");
+    fn bash_completion_sysroot_defaults_to_root_when_unset_or_empty() {
+        assert_eq!(bash_completion_sysroot(None), PathBuf::from("/"));
+        assert_eq!(
+            bash_completion_sysroot(Some(std::ffi::OsString::new())),
+            PathBuf::from("/")
+        );
+        assert_eq!(
+            bash_completion_sysroot(Some("/tmp/sysroot".into())),
+            PathBuf::from("/tmp/sysroot")
+        );
     }
 
     // ----------------------------------------------------------------
