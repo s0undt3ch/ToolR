@@ -287,16 +287,20 @@ without prompting.
 Bash completion needs bash 4.4 or newer; on an older bash, sourcing the
 script prints one warning and registers nothing. The script itself doesn't
 need the bash-completion package, but only that package loads the install
-directory. If bash-completion is missing or isn't enabled, add
-`source <installed path>` to your bash startup file. The installer prints
-that line when it can't find the package; `toolr --quiet` drops the hint.
-Interactive shells read `~/.bashrc`, but login shells, such as the ones
-macOS Terminal opens, read `~/.bash_profile` instead. Sourcing
-`<(toolr self completion print bash)` from the startup file works too,
-without installing anything. toolr installs to
-`$XDG_DATA_HOME/bash-completion/completions` and doesn't honour
-`BASH_COMPLETION_USER_DIR`. A word with an unclosed quote (`--cfg 'a:b`)
-completes nothing.
+directory. For bash:
+
+- If bash-completion is missing or isn't enabled, add
+  `source <installed path>` to your bash startup file.
+- The installer prints that line when it can't find the package;
+  `toolr --quiet` drops the hint.
+- Interactive shells read `~/.bashrc`, but login shells, such as the ones
+  macOS Terminal opens, read `~/.bash_profile` instead.
+- Sourcing `<(toolr self completion print bash)` from the startup file
+  works too, without installing anything.
+- toolr installs to `$XDG_DATA_HOME/bash-completion/completions` and
+  doesn't honour `BASH_COMPLETION_USER_DIR`.
+
+A word with an unclosed quote (`--cfg 'a:b`) completes nothing.
 
 An aliased toolr (`alias t=toolr`) gets no completion by default; run
 `complete -F _toolr_complete t` to register it.
