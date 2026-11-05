@@ -766,14 +766,24 @@ fn bash_script_names_its_variables_with_the_toolr_prefix() {
     }
 }
 
+/// Creates `name` under the fixture root as a literal directory holding a file, so a word
+/// handed to a `compgen` that doesn't expand it (bash < 5.3) still lists something.
+fn literal_dir(fx: &Fixture, name: &str) {
+    let dir = fx.tmp.path().join(name);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("inside"), "").unwrap();
+}
+
 /// Inside the completion function `$_` is its own last argument, not the user's, so `$_/` gets no
-/// variable treatment and must not list the filesystem root.
+/// variable treatment. Bash 5.3 `compgen` would expand it, and older bash would list a directory
+/// literally named `$_`; either way the word must offer nothing.
 #[test]
 fn bash_path_underscore_is_not_treated_as_a_variable() {
     for bash in bashes() {
         let fx = fixture();
         let script = print_script("bash");
         for cur in ["$_/", "${_}/"] {
+            literal_dir(&fx, cur.trim_end_matches('/'));
             let run = run_bash_path_split(&bash, &script, &fx, "--cfg", cur, Split::Whole);
             assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
             assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
@@ -781,32 +791,71 @@ fn bash_path_underscore_is_not_treated_as_a_variable() {
     }
 }
 
-/// Only a plain `$NAME` or `${NAME}` is expanded: substitutions and operators stay inert.
+/// Only a plain `$NAME` or `${NAME}` is expanded. Bash 5.3 `compgen` runs a `$(...)` or backtick
+/// inside `${...}` whose default is taken, so any other `$` or backtick form offers nothing.
+/// Each word also names a literal directory, so older bash, which doesn't expand, would list it.
 #[test]
 fn bash_path_never_runs_a_typed_substitution() {
+    const SUB: &str = "$(touch sentinel-one)";
+    const TICK: &str = "`touch sentinel-one`";
+    let unset_default = format!("${{TOOLR_TEST_UNSET_VAR:-{SUB}}}");
+    let home_default = format!("${{HOME:-{SUB}}}");
+    let script = print_script("bash");
+    let unset_home = format!("unset HOME\n{script}");
+    // The value of a plain `$NAME` is read, never expanded again by `compgen`.
+    let evil_value = format!("TOOLR_TEST_EVIL='{unset_default}'\n{script}");
+    // (script, literal directory, typed word)
+    let cases: Vec<(&str, String, String)> = vec![
+        (&script, SUB.to_string(), format!("{SUB}/")),
+        (&script, TICK.to_string(), format!("{TICK}/")),
+        (&script, unset_default.clone(), format!("{unset_default}/")),
+        (
+            &script,
+            format!("${{TOOLR_TEST_UNSET_VAR:-{TICK}}}"),
+            format!("${{TOOLR_TEST_UNSET_VAR:-{TICK}}}/"),
+        ),
+        (&script, home_default.clone(), format!("{home_default}/")),
+        (
+            &unset_home,
+            home_default.clone(),
+            format!("{home_default}/"),
+        ),
+        (&unset_home, SUB.to_string(), format!("{SUB}/")),
+        (
+            &script,
+            format!("files/{unset_default}"),
+            format!("files/{unset_default}/"),
+        ),
+        (
+            &script,
+            unset_default.clone(),
+            format!("$HOME/{unset_default}/"),
+        ),
+        (
+            &evil_value,
+            unset_default.clone(),
+            "$TOOLR_TEST_EVIL/".to_string(),
+        ),
+        (&script, "$1".to_string(), "$1/".to_string()),
+    ];
     for bash in bashes() {
         let fx = fixture();
-        let sentinel = fx.sentinel.to_str().unwrap();
-        for cur in [
-            format!("$(touch {sentinel})/"),
-            format!("${{HOME:-$(touch {sentinel})}}/"),
-            format!("`touch {sentinel}`/"),
-            "$1/".to_string(),
-        ] {
-            let run = run_bash_path_split(
-                &bash,
-                &print_script("bash"),
-                &fx,
-                "--cfg",
-                &cur,
-                Split::Whole,
-            );
-            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
-            assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
+        for (script, dir, cur) in &cases {
+            literal_dir(&fx, dir);
+            let run = run_bash_path_split(&bash, script, &fx, "--cfg", cur, Split::Whole);
+            let home = if script.starts_with("unset HOME") {
+                " (HOME unset)"
+            } else {
+                ""
+            };
+            // Checked first: a command that ran is the finding, whatever the reply.
             assert!(
                 !fx.sentinel.exists(),
-                "{bash} {cur}: typed substitution ran"
+                "{bash} {cur}{home}: typed substitution ran; reply {:?}",
+                run.reply
             );
+            assert_eq!(run.rc, "0", "{bash} {cur}{home}: {}", run.stderr);
+            assert!(run.reply.is_empty(), "{bash} {cur}{home}: {:?}", run.reply);
         }
     }
 }

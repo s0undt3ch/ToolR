@@ -127,6 +127,7 @@ _toolr_complete_paths() {
     # A leading `$NAME/` stays as typed, like native bash; only its value is listed and tested.
     # `${!_toolr_var}` reads a validated name, so nothing else in the word is expanded.
     # `$_` is excluded: inside this function it is the last argument, not the user's.
+    # An excluded or unmatched `$` form falls through to the guard below, which drops it.
     if [[ $_toolr_raw_cur =~ $_toolr_var_re ]]; then
         _toolr_bare=${BASH_REMATCH[1]}
         _toolr_var=${BASH_REMATCH[2]}${BASH_REMATCH[3]}
@@ -145,6 +146,9 @@ _toolr_complete_paths() {
     else
         _toolr_bare=
     fi
+    # Bash 5.3 `compgen` expands a `$` in the word, running any `$(...)` or backtick inside
+    # `${...}`. So a word still holding either, typed or from the value, is never handed to it.
+    [[ $_toolr_raw_cur != *[\$\`]* ]] || return 0
     # `[[ -d ]]` can't test `~user/...` without expanding it, but `compgen -d` resolves it.
     if [[ $_toolr_mode == -f && $_toolr_raw_cur == '~'* ]]; then
         # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
