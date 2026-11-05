@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import logging
-import os
-from unittest.mock import patch
+import re
+
+import pytest
 
 from toolr.utils._console import ConsoleVerbosity
 from toolr.utils._logs import NO_TIMESTAMP_FORMATTER
@@ -12,142 +14,118 @@ from toolr.utils._logs import TIMESTAMP_FORMATTER
 from toolr.utils._logs import _get_default_formatter
 from toolr.utils._logs import setup_logging
 
+LOGGER = logging.getLogger("toolr.tests.setup_logging")
+TIMESTAMPED_LINE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\] hello\n$")
+# The timestamp formatter is shared by every handler and blanks a timestamp repeating the previous
+# record's, so only the first handler to format a record stamps it.
+TIMESTAMPED_OR_BLANKED_LINE = re.compile(r"^(\[\d{2}:\d{2}:\d{2}\] | {11})hello\n$")
+
+
+@pytest.fixture(autouse=True)
+def _reset_timestamp_formatter(monkeypatch):
+    """Stop DuplicateTimesFormatter.format blanking the first record's timestamp.
+
+    With `_last_timestamp` None, format() primes it itself and blanks that record; a
+    never-matching value makes the first record stamped whatever ran before.
+    """
+    monkeypatch.setattr(TIMESTAMP_FORMATTER, "_last_timestamp", "[xx:xx:xx] ")
+
 
 def test_setup_logging_verbose_level():
     """Test setup_logging with VERBOSE verbosity."""
-    with patch("logging.root.setLevel") as mock_set_level:
-        setup_logging(verbosity=ConsoleVerbosity.VERBOSE)
-        mock_set_level.assert_called_once_with(logging.DEBUG)
+    setup_logging(verbosity=ConsoleVerbosity.VERBOSE)
+    assert logging.root.level == logging.DEBUG
 
 
 def test_setup_logging_quiet_level():
     """Test setup_logging with QUIET verbosity."""
-    with patch("logging.root.setLevel") as mock_set_level:
-        setup_logging(verbosity=ConsoleVerbosity.QUIET)
-        mock_set_level.assert_called_once_with(logging.CRITICAL + 1)
+    setup_logging(verbosity=ConsoleVerbosity.QUIET)
+    assert logging.root.level == logging.CRITICAL + 1
 
 
 def test_setup_logging_normal_level():
     """Test setup_logging with NORMAL verbosity."""
-    with patch("logging.root.setLevel") as mock_set_level:
-        setup_logging(verbosity=ConsoleVerbosity.NORMAL)
-        mock_set_level.assert_called_once_with(logging.INFO)
-
-
-def test_setup_logging_with_timestamps():
-    """Test setup_logging with timestamps enabled."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(3)]
-
-    with (
-        patch("logging.root.handlers", mock_handlers),
-        patch("logging.root.setLevel") as mock_set_level,
-    ):
-        setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=True)
-
-        # Should set level
-        mock_set_level.assert_called_once_with(logging.INFO)
-
-        # Should set formatter on all handlers
-        for handler in mock_handlers:
-            handler.setFormatter.assert_called_once()
-
-
-def test_setup_logging_without_timestamps():
-    """Test setup_logging with timestamps disabled."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(3)]
-
-    with (
-        patch("logging.root.handlers", mock_handlers),
-        patch("logging.root.setLevel") as mock_set_level,
-    ):
-        setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=False)
-
-        # Should set level
-        mock_set_level.assert_called_once_with(logging.INFO)
-
-        # Should set formatter on all handlers
-        for handler in mock_handlers:
-            handler.setFormatter.assert_called_once()
-
-
-def test_setup_logging_default_timestamps():
-    """Test setup_logging with default timestamps parameter."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(3)]
-
-    with (
-        patch("logging.root.handlers", mock_handlers),
-        patch("logging.root.setLevel") as mock_set_level,
-    ):
-        setup_logging(verbosity=ConsoleVerbosity.NORMAL)
-
-        # Should set level
-        mock_set_level.assert_called_once_with(logging.INFO)
-
-        # Should set formatter on all handlers (default timestamps=False)
-        for handler in mock_handlers:
-            handler.setFormatter.assert_called_once()
-
-
-def test_setup_logging_handles_all_handlers():
-    """Test that setup_logging affects all root handlers."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(5)]
-
-    with (
-        patch("logging.root.handlers", mock_handlers),
-        patch("logging.root.setLevel") as mock_set_level,
-    ):
-        setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=True)
-
-        # Should set level
-        mock_set_level.assert_called_once_with(logging.INFO)
-
-        # Should set formatter on all handlers
-        for handler in mock_handlers:
-            handler.setFormatter.assert_called_once()
-
-
-def test_setup_logging_verbosity_override():
-    """Test that setup_logging properly overrides previous verbosity settings."""
-    with patch("logging.root.setLevel") as mock_set_level:
-        setup_logging(verbosity=ConsoleVerbosity.VERBOSE)
-        mock_set_level.assert_called_once_with(logging.DEBUG)
-
-
-def test_setup_logging_formatter_override():
-    """Test that setup_logging properly overrides previous formatter settings."""
-    mock_handlers = [patch("logging.StreamHandler").start() for _ in range(3)]
-
-    with (
-        patch("logging.root.handlers", mock_handlers),
-        patch("logging.root.setLevel") as mock_set_level,
-    ):
-        setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=True)
-
-        # Should set level
-        mock_set_level.assert_called_once_with(logging.INFO)
-
-        # Should set formatter on all handlers
-        for handler in mock_handlers:
-            handler.setFormatter.assert_called_once()
+    setup_logging(verbosity=ConsoleVerbosity.NORMAL)
+    assert logging.root.level == logging.INFO
 
 
 def test_setup_logging_with_invalid_verbosity():
     """Test setup_logging with invalid verbosity falls back to NORMAL."""
-    with patch("logging.root.setLevel") as mock_set_level:
-        # Use an invalid verbosity value (not a ConsoleVerbosity enum)
-        setup_logging(verbosity=999)
-
-        # Should fall back to NORMAL (INFO level)
-        mock_set_level.assert_called_once_with(logging.INFO)
+    setup_logging(verbosity=999)
+    assert logging.root.level == logging.INFO
 
 
-def test_ci_environment_formatter():
-    """Test that CI environment uses timestamp formatter."""
-    with patch.dict(os.environ, {"CI": "true"}):
-        assert _get_default_formatter() is TIMESTAMP_FORMATTER
+def test_setup_logging_verbosity_override():
+    """A later call replaces the level set by an earlier one."""
+    setup_logging(verbosity=ConsoleVerbosity.QUIET)
+    setup_logging(verbosity=ConsoleVerbosity.VERBOSE)
+    assert logging.root.level == logging.DEBUG
 
 
-def test_non_ci_environment_formatter():
-    """Test that non-CI environment uses no timestamp formatter."""
-    with patch.dict(os.environ, {}, clear=True):
-        assert _get_default_formatter() is NO_TIMESTAMP_FORMATTER
+def test_setup_logging_with_timestamps(caplog, monkeypatch):
+    # Leave caplog's handler as the only one, so it is the first to stamp.
+    monkeypatch.setattr(logging.root, "handlers", [caplog.handler])
+    setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=True)
+
+    assert logging.root.level == logging.INFO
+    assert caplog.handler.formatter is TIMESTAMP_FORMATTER
+    LOGGER.info("hello")
+    assert TIMESTAMPED_LINE.match(caplog.text)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [pytest.param({"timestamps": False}, id="explicit-off"), pytest.param({}, id="default-off")],
+)
+def test_setup_logging_without_timestamps(caplog, kwargs):
+    """Timestamps are off when asked for and by default."""
+    setup_logging(verbosity=ConsoleVerbosity.NORMAL, **kwargs)
+
+    assert logging.root.level == logging.INFO
+    assert caplog.handler.formatter is NO_TIMESTAMP_FORMATTER
+    LOGGER.info("hello")
+    assert caplog.text == "hello\n"
+
+
+def test_setup_logging_handles_all_handlers(monkeypatch):
+    streams = [io.StringIO() for _ in range(3)]
+    extra = [logging.StreamHandler(stream) for stream in streams]
+    monkeypatch.setattr(logging.root, "handlers", [*extra, *logging.root.handlers])
+
+    setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=True)
+
+    assert logging.root.level == logging.INFO
+    for handler in logging.root.handlers:
+        assert handler.formatter is TIMESTAMP_FORMATTER
+    LOGGER.info("hello")
+    assert TIMESTAMPED_LINE.match(streams[0].getvalue())
+    for stream in streams[1:]:
+        assert TIMESTAMPED_OR_BLANKED_LINE.match(stream.getvalue())
+
+
+def test_setup_logging_formatter_override(caplog, monkeypatch):
+    """A later call replaces the formatter set by an earlier one."""
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    monkeypatch.setattr(logging.root, "handlers", [*logging.root.handlers, handler])
+
+    setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=True)
+    setup_logging(verbosity=ConsoleVerbosity.NORMAL, timestamps=False)
+
+    assert caplog.handler.formatter is NO_TIMESTAMP_FORMATTER
+    assert handler.formatter is NO_TIMESTAMP_FORMATTER
+    LOGGER.info("hello")
+    assert stream.getvalue() == "hello\n"
+    assert caplog.text == "hello\n"
+
+
+def test_ci_environment_formatter(monkeypatch):
+    """CI environment uses timestamp formatter."""
+    monkeypatch.setenv("CI", "true")
+    assert _get_default_formatter() is TIMESTAMP_FORMATTER
+
+
+def test_non_ci_environment_formatter(monkeypatch):
+    """Non-CI environment uses no timestamp formatter."""
+    monkeypatch.delenv("CI", raising=False)
+    assert _get_default_formatter() is NO_TIMESTAMP_FORMATTER

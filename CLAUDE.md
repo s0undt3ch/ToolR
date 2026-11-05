@@ -159,6 +159,11 @@ to dodge the metric.
 - **No `--no-verify`** without a stated reason in the commit body. Pre-commit failures are signals.
 - **Python tests: factory fixtures over bare helpers** for `tmp_path`-based setup. Keep test
   imports top-of-file.
+- **Python tests run in random order** (pytest-randomly; replay with
+  `uv run pytest --randomly-seed=N`). The root conftest restores the working directory and the
+  command-group registry after each test, so tests must not depend on order. A fixture no test requests by name is
+  `autouse=True` and `_`-prefixed if it's needed, and deleted if it isn't; one tests request by name
+  has no prefix.
 - **Regression tests must reproduce the reported shape exactly, not a simplified stand-in.**
   If a fixture built to reproduce a bug report fails and the annotation/config shape looks
   incidental to fix, don't simplify the fixture to make the test pass — that can silently mask a

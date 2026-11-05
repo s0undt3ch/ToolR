@@ -1021,9 +1021,6 @@ def make_tools_package(
     (failing) import. The tmp package wins over the repo's own ``tools/`` only because that one
     is a namespace package, which a regular package later on ``sys.path`` takes precedence over.
     """
-    monkeypatch.setattr(sys, "path", sys.path[:])
-    for name in [m for m in sys.modules if _is_repo_tools_module(m)]:
-        monkeypatch.delitem(sys.modules, name)
     package = tmp_path / "tools"
 
     def _make(files: dict[str, str]) -> Path:

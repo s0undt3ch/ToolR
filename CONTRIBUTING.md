@@ -69,6 +69,26 @@ cargo build -p toolr --release
 The Rust integration tests spawn the built `toolr` binary via `assert_cmd`. Don't shadow them with
 Python-level subprocess tests unless the behaviour can't be exercised in Rust.
 
+### Reproducing a failure from its seed
+
+The Python suite runs in random order with `pytest-randomly`. Every run prints its seed in the header
+(`Using --randomly-seed=1234`), including in the CI log. To replay that order locally:
+
+```sh
+uv run pytest --randomly-seed=1234
+```
+
+`-p no:randomly` restores the default order. To replay the reverse of that order, which is a quick
+way to find a test that leaks state:
+
+```sh
+uv run pytest --co -q -p no:randomly | grep :: | tail -r > ids.txt   # `tac` on Linux
+uv run pytest -p no:cacheprovider -p no:randomly "@ids.txt"
+```
+
+Run it in the foreground: a backgrounded shell starts children with `SIGINT` ignored, which fails
+`tests/e2e/test_signals.py`.
+
 ## RUNNER_SCHEMA_VERSION ↔ SCHEMA_VERSION lock-step
 
 The Rust binary and the `toolr-py` Python runtime communicate over a versioned JSON spec. Two constants must stay in lock-step:

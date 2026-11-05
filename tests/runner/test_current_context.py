@@ -177,19 +177,13 @@ def test_run_sets_the_contextvar_to_the_context_it_builds(
         """
     )
     spec = msgspec.convert(spec_payload(command="record", function="record"), type=RunnerSpec)
-    saved_path = sys.path[:]
-    try:
-        # copy_context() keeps the runner's `.set()` out of the test session's
-        # own context, so later tests still see an unset var.
-        rc = contextvars.copy_context().run(run, spec)
-        assert rc == 0
-        # Deferred import is intentional: the `tools` package is created at
-        # runtime and only becomes importable after `run()` appends repo_root.
-        import tools.demo  # noqa: PLC0415 — created at runtime
+    # copy_context() keeps the runner's `.set()` out of the test session's
+    # own context, so later tests still see an unset var.
+    rc = contextvars.copy_context().run(run, spec)
+    assert rc == 0
+    # Deferred import is intentional: the `tools` package is created at
+    # runtime and only becomes importable after `run()` appends repo_root.
+    import tools.demo  # noqa: PLC0415 — created at runtime
 
-        assert tools.demo.SEEN == {"same": True}
-    finally:
-        sys.path[:] = saved_path
-        sys.modules.pop("tools.demo", None)
-        sys.modules.pop("tools", None)
+    assert tools.demo.SEEN == {"same": True}
     assert _current_ctx.get(None) is None
