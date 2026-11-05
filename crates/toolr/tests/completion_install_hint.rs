@@ -142,7 +142,10 @@ fn hint_quotes_a_home_with_a_space_and_a_quote() {
         .output()
         .unwrap();
     let (stdout, _) = succeeded(BASH, &out);
-    let script = home.join(".local/share/bash-completion/completions/toolr");
+    // Joined the way `install_path_for` joins it, so the separators match on Windows.
+    let script = home
+        .join(".local/share")
+        .join("bash-completion/completions/toolr");
     assert!(script.is_file());
     let quoted = format!("'{}'", script.display().to_string().replace('\'', r"'\''"));
     assert!(stdout.contains(HINT), "{stdout}");
@@ -225,7 +228,8 @@ fn empty_xdg_data_home_reads_as_unset_for_bash() {
     let stdout = install_with_empty_xdg_homes(&host, BASH);
     let script = host
         .path("home")
-        .join(".local/share/bash-completion/completions/toolr");
+        .join(".local/share")
+        .join("bash-completion/completions/toolr");
     assert!(script.is_file());
     assert!(stdout.contains(HINT), "{stdout}");
     assert!(stdout.contains(&source_line(&script)), "{stdout}");
