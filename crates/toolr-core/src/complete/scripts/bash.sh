@@ -99,8 +99,9 @@ _toolr_complete() {
         10 | 11)
             # Paths complete the part after `--opt=`. With `=` not in COMP_WORDBREAKS readline
             # replaces the whole word, so each reply must start with the option prefix again.
+            # Without `--opt=`, `_toolr_opt_prefix` is empty and the word passes through as is.
             local _toolr_path_cur=${_toolr_raw_cur#"$_toolr_opt_prefix"}
-            local _toolr_path_prefix=$_toolr_raw_prefix _toolr_lead=''
+            local _toolr_path_prefix='' _toolr_lead=''
             if [[ $_toolr_raw_prefix == "$_toolr_opt_prefix"* ]]; then
                 _toolr_path_prefix=${_toolr_raw_prefix#"$_toolr_opt_prefix"}
             else

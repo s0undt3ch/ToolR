@@ -21,6 +21,7 @@ function __toolr_complete
     # `--opt=value`: the engine returns bare values, but fish matches them against the
     # whole word, so put `--opt=` back. Quoted, so an empty word is still one argument.
     set -l opt_prefix (string match -r -- '^--[^=]+=' "$current")
+    set -l bare (string replace -r -- '^--[^=]+=' '' "$current")
     # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
     switch $rc
         case 0
@@ -29,11 +30,11 @@ function __toolr_complete
             end
         # fish < 3.7 globs the whole `--opt=` word, so complete the bare path instead.
         case 10
-            for line in (__fish_complete_path (string replace -r -- '^--[^=]+=' '' "$current"))
+            for line in (__fish_complete_path "$bare")
                 printf '%s\n' "$opt_prefix$line"
             end
         case 11
-            for line in (__fish_complete_directories (string replace -r -- '^--[^=]+=' '' "$current"))
+            for line in (__fish_complete_directories "$bare")
                 printf '%s\n' "$opt_prefix$line"
             end
     end

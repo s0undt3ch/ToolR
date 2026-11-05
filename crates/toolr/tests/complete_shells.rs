@@ -1561,7 +1561,7 @@ fn zsh_path_slots_use_native_file_completion() {
 }
 
 /// The bash script with `=` taken out of `COMP_WORDBREAKS`, and the breaks the driver splits at.
-fn no_equals_break() -> (String, String) {
+fn no_equals_wordbreaks() -> (String, String) {
     (
         format!(
             "COMP_WORDBREAKS=${{COMP_WORDBREAKS//=/}}\n{}",
@@ -1601,7 +1601,7 @@ fn tilde_escaped(quoted: &[String]) -> Vec<String> {
 #[test]
 fn bash_attached_value_offers_the_choices() {
     let script = print_script("bash");
-    let (no_eq_script, no_eq_breaks) = no_equals_break();
+    let (no_eq_script, no_eq_breaks) = no_equals_wordbreaks();
     for bash in bashes() {
         for split in SPLITS {
             let fx = fixture();
@@ -1658,24 +1658,23 @@ fn bash_attached_value_offers_the_choices() {
 #[test]
 fn bash_attached_path_completes_the_part_after_the_equals() {
     let script = print_script("bash");
-    let (no_eq_script, no_eq_breaks) = no_equals_break();
+    let (no_eq_script, no_eq_breaks) = no_equals_wordbreaks();
     let path_files: Vec<String> = PATH_FILES.iter().map(|f| (*f).to_string()).collect();
     for bash in bashes() {
         for split in SPLITS {
-            for (cfg, (script, breaks)) in [
+            for (lead, ctx) in [
                 ("", (script.as_str(), WORDBREAKS)),
                 ("--cfg=", (no_eq_script.as_str(), no_eq_breaks.as_str())),
             ] {
-                let out = cfg.replace("cfg", "out");
+                let out_lead = lead.replace("cfg", "out");
                 let fx = fixture();
-                let ctx = (script, breaks);
-                let at = format!("{bash} {split:?} {cfg:?}");
+                let at = format!("{bash} {split:?} {lead:?}");
                 let run = run_attached(&bash, &fx, ctx, "--cfg=files/", split, path_files.clone());
                 assert_eq!(run.rc, "0", "{at}: {}", run.stderr);
                 assert_eq!(run.stderr, "", "{at}");
                 let mut want: Vec<String> =
-                    run.quoted.iter().map(|q| format!("{cfg}{q}")).collect();
-                want.push(format!("{cfg}files/sub/"));
+                    run.quoted.iter().map(|q| format!("{lead}{q}")).collect();
+                want.push(format!("{lead}files/sub/"));
                 want.sort();
                 let mut got = run.reply.clone();
                 got.sort();
@@ -1683,26 +1682,26 @@ fn bash_attached_path_completes_the_part_after_the_equals() {
                 assert!(!fx.sentinel3.exists(), "{at}: file name executed");
 
                 let run = run_attached(&bash, &fx, ctx, "--out=files/", split, vec![]);
-                assert_eq!(run.reply, vec![format!("{out}files/sub/")], "{at}");
+                assert_eq!(run.reply, vec![format!("{out_lead}files/sub/")], "{at}");
                 assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{at}");
                 let run = run_attached(&bash, &fx, ctx, "--cfg=files/w", split, vec![]);
                 assert_eq!(
                     run.reply,
-                    vec![format!("{cfg}files/with\\ space.txt")],
+                    vec![format!("{lead}files/with\\ space.txt")],
                     "{at}"
                 );
                 // `:` is still a break, so readline keeps `--cfg=files/host:` either way.
                 let run = run_attached(&bash, &fx, ctx, "--cfg=files/host:p", split, vec![]);
                 assert_eq!(run.reply, vec!["port.txt".to_string()], "{at}");
                 let run = run_attached(&bash, &fx, ctx, "--cfg=~/files/s", split, vec![]);
-                assert_eq!(run.reply, vec![format!("{cfg}~/files/sub/")], "{at}");
+                assert_eq!(run.reply, vec![format!("{lead}~/files/sub/")], "{at}");
                 for var in ["$HOME", "${HOME}"] {
                     let cur = format!("--cfg={var}/files/s");
                     let run = run_attached(&bash, &fx, ctx, &cur, split, vec![]);
                     assert_eq!(run.rc, "0", "{at} {var}: {}", run.stderr);
                     assert_eq!(
                         run.reply,
-                        vec![format!("{cfg}{var}/files/sub/")],
+                        vec![format!("{lead}{var}/files/sub/")],
                         "{at} {var}"
                     );
                 }
@@ -1715,7 +1714,7 @@ fn bash_attached_path_completes_the_part_after_the_equals() {
 #[test]
 fn bash_attached_path_never_runs_a_typed_substitution() {
     let script = print_script("bash");
-    let (no_eq_script, no_eq_breaks) = no_equals_break();
+    let (no_eq_script, no_eq_breaks) = no_equals_wordbreaks();
     for bash in bashes() {
         for split in SPLITS {
             for ctx in [

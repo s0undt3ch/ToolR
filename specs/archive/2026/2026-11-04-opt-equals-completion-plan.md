@@ -16,7 +16,7 @@ the `--opt=` part the way its shell needs: bash trims to what readline replaces,
 **Tech Stack:** Rust 2024, bash `compgen`, zsh `compset`/`_files`, fish `__fish_complete_path`,
 assert_cmd.
 
-**Spec:** `specs/2026-11-04-opt-equals-completion-design.md`
+**Spec:** `specs/archive/2026/2026-11-04-opt-equals-completion-design.md`
 
 **Decisions (proposed 2026-11-04):** one engine word shape (`--name=partial`); prefix added in
 the scripts; short attached values and root flags out of scope. See the spec's "Decisions".
@@ -134,7 +134,8 @@ the scripts; short attached values and root flags out of scope. See the spec's "
       `compset -P 1 '*='` (when `$cur` matches `--?*=*`) before `_files` / `_files -/`, and
       before `compadd` only when there are values.
     - fish: `set -l opt_prefix (string match -r -- '^--[^=]+=' $current)`; case 0 prints
-      `"$opt_prefix$line"`. Cases 10 and 11 stay as they are.
+      `"$opt_prefix$line"`. Cases 10 and 11 strip `--opt=`, complete the bare path and
+      print `"$opt_prefix$line"` (fish 3.6 globs the whole word).
 - [ ] **Step 4:** Run `cargo test -p toolr --test complete_shells` and
       `shellcheck crates/toolr-core/src/complete/scripts/bash.sh`. Expected: PASS.
 - [ ] **Step 5:** Smoke-test by hand in an interactive zsh and a bash ≥ 4.4 in the scratch repo:

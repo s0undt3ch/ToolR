@@ -4,6 +4,7 @@ Follow-up FU-15, logged by the path completion work
 (`specs/archive/2026/2026-11-04-path-completion-design.md`, decision 4). Builds on FU-16 and
 FU-17, which have landed on `main`
 (`specs/archive/2026/2026-11-04-bash-completion-words-design.md`).
+Line references (`bash.sh:107` and so on) point at the scripts on `main` before this change.
 
 ## Problem
 
@@ -123,8 +124,9 @@ because they don't start with the typed `--mode=a` (`bash.sh:107`); on exit 10/1
 `compgen -f -- "--cfg=files/"` the whole word, which lists nothing. zsh calls `_files` on the
 whole word, as it does for any other path slot.
 
-The split condition is the same everywhere: the word matches `--?*=*`, the prefix is
-everything up to and including the first `=`, and the value is the rest. If the engine didn't
+The split condition is the same everywhere: the word matches `--?*=*` (fish: `^--[^=]+=`),
+the prefix is everything up to and including the first `=`, and the value is the rest. The
+spellings differ on odd words such as `--=x`, which no flag resolves. If the engine didn't
 resolve a value-taking flag it returns exit 0 with no candidates, so a script splitting a word
 the engine rejected adds nothing.
 
