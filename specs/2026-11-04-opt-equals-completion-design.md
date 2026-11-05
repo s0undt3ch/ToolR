@@ -1,8 +1,9 @@
 # `--opt=value` completion: design
 
 Follow-up FU-15, logged by the path completion work
-(`specs/archive/2026/2026-11-04-path-completion-design.md`, decision 4). Stacked on
-`fix/bash-completion-words` (FU-16 colons, FU-17 IFS).
+(`specs/archive/2026/2026-11-04-path-completion-design.md`, decision 4). Builds on FU-16 and
+FU-17, which have landed on `main`
+(`specs/archive/2026/2026-11-04-bash-completion-words-design.md`).
 
 ## Problem
 
@@ -13,7 +14,7 @@ name starts with `--mode=a`, so the result is empty.
 
 ### What `__complete` returns today
 
-Reproduced on `main` at `bf5648f6` with the dev binary and a scratch repo whose `tools/ci.py`
+Reproduced on `main` at `3013af73` with the dev binary and a scratch repo whose `tools/ci.py`
 declares `mode: Literal["alpha", "abc", "beta"]`, `cfg: pathlib.Path | None` and
 `out: DirectoryPath | None`:
 
@@ -25,20 +26,19 @@ declares `mode: Literal["alpha", "abc", "beta"]`, `cfg: pathlib.Path | None` and
 | `self build-manifest --output=` / `--source-dir=` | nothing, exit 0         |
 | `project init --venv-location=c`                 | nothing, exit 0 (`--venv-location c` gives `cache`) |
 | `ci lint --mode = a` (bash 4+ split shape)       | nothing, exit 0          |
-| `ci lint --mode = ""`                            | flag names, exit 0       |
 
 ### What each shell sends
 
 Measured with a logging `toolr` shim on `PATH`, driving each shell through a pty:
 
-- **bash 3.2** (`/bin/bash`, the only bash on the machine). `COMP_WORDBREAKS` contains `=`
-  and `:`, yet `COMP_WORDS` keeps `--mode=a` as one word (`cword=3`). Readline's own word,
-  passed to the completion function as `$2`, is `a`, and readline replaces only that part.
-  A prototype returning bare `alpha` turned `--mode=al` into `--mode=alpha`, and bare
-  `compgen -f` names turned `--cfg=files/w` into `--cfg=files/with space.txt`.
-- **bash 4+** splits `COMP_WORDS` at every `COMP_WORDBREAKS` character, so the words are
-  `--mode`, `=`, `a`. Not validated locally (no bash 4+ installed). CI's Linux bash 5 must
-  confirm it through the tests below.
+- **bash ≥ 4.4**, the only bash the script supports: it refuses older ones
+  (`bash.sh:2`, `:202-209`). Bash splits `COMP_WORDS` at every `COMP_WORDBREAKS` character,
+  so the words are `--mode`, `=`, `a`. The script rebuilds the in-progress word from
+  `COMP_LINE` / `COMP_POINT` (`bash.sh:30-50`), so `__complete` receives `--mode=a` whole.
+  The shell tests cover both shapes through the `Split::Whole` / `Split::AtBreaks` driver
+  variants (`SPLITS`, `complete_shells.rs:157-195`). The script never reads `$2`. Readline
+  replaces only the text after the last wordbreak, and the script works that part out itself
+  (`_toolr_raw_prefix`, `bash.sh:58-78`).
 - **zsh** passes the whole `--mode=a` word to `__complete`. A prototype that runs
   `compset -P 1 '*='` and then `compadd` bare values inserts `--mode=alpha`, and
   `compset` plus `_files` inserts `--cfg=files/with space.txt`. `compset -P 1` stops at the
@@ -59,7 +59,7 @@ on whether the `--opt=` part belongs in the candidate.
 - Built-in options get the same (`self build-manifest --output=`, `project init
   --venv-location=`).
 - Values and file names stay data: no `eval`, nothing executed, errexit- and nounset-safe on
-  bash 3.2.
+  bash ≥ 4.4.
 
 ## Non-goals
 
@@ -70,8 +70,8 @@ on whether the `--opt=` part belongs in the candidate.
 - Tilde expansion after `--opt=`. bash, zsh (without `MAGIC_EQUAL_SUBST`) and fish all leave
   `--cfg=~/x` unexpanded when the command runs. Completion keeps a typed `~` as typed and
   doesn't try to fix the shell's semantics.
-- Accepting bash 4's split shape (`--mode`, `=`, `a`) in the engine. FU-16 rebuilds the
-  shell word before calling `__complete`, so the engine sees one shape. See decision 1.
+- Accepting bash 4's split shape (`--mode`, `=`, `a`) in the engine. The bash script rebuilds
+  the word before calling `__complete`, so the engine sees one shape. See decision 1.
 
 ## Design
 
@@ -106,7 +106,7 @@ The engine returns bare values, and each script adds what its shell needs:
 
 | Shell | Values (exit 0)                                   | Paths (exit 10 / 11)                         |
 | ----- | ------------------------------------------------- | -------------------------------------------- |
-| bash  | bare value, trimmed to readline's word (`$2`)     | `compgen` on the part after `=`, trimmed the same way |
+| bash  | `--opt=` plus the value, trimmed to what readline replaces | path completion of the part after `=`, `--opt=` put back when readline replaces it |
 | zsh   | `compset -P 1 '*='`, then `compadd` bare values   | `compset -P 1 '*='`, then `_files` / `_files -/` |
 | fish  | print `$opt_prefix$value` for each line           | unchanged: `__fish_complete_path "$current"` handles `--opt=` |
 
@@ -115,11 +115,13 @@ Why not have the engine print `--mode=alpha`:
 - The path fallback can't carry a prefix: exit 10/11 keep stdout empty, because a zsh or fish
   script from before the path work inserts any stdout line as a candidate. So every script
   splits the word at the first `=` anyway, and doing it for values too keeps one rule.
-- An old bash script given `--mode=alpha` for the word `--mode=a` on bash 3.2 inserts it in
-  place of readline's `a`, leaving `--mode=--mode=alpha`. Bare values match nothing in an old
-  script, which is today's behaviour.
 - A format flag on `__complete` would make a new script fail against an old binary, which
   rejects the unknown option.
+
+Today's `main` scripts stay harmless against the new binary. bash filters bare values out,
+because they don't start with the typed `--mode=a` (`bash.sh:107`); on exit 10/11 it hands
+`compgen -f -- "--cfg=files/"` the whole word, which lists nothing. zsh calls `_files` on the
+whole word, as it does for any other path slot.
 
 The split condition is the same everywhere: the word matches `--?*=*`, the prefix is
 everything up to and including the first `=`, and the value is the rest. If the engine didn't
@@ -128,33 +130,42 @@ the engine rejected adds nothing.
 
 ### bash
 
-FU-16 rebuilds the in-progress word from `COMP_LINE` / `COMP_POINT` (so bash 4+'s `--mode`,
-`=`, `a` arrives as `--mode=a`, as on 3.2) and trims each candidate to what readline replaces,
-in the manner of bash-completion's `__ltrim_colon_completions`, for `:`. FU-15 reuses both:
+The script already rebuilds the in-progress word (`bash.sh:30-50`) and unescapes it into
+`_toolr_raw_cur`. `_toolr_raw_prefix` is the part of it readline keeps, up to the last
+wordbreak (`bash.sh:58-78`). With the default `COMP_WORDBREAKS`, which holds `=`, typing
+`--mode=a` gives `_toolr_raw_cur=--mode=a` and `_toolr_raw_prefix=--mode=`. `__complete`
+receives `_toolr_raw_cur` unchanged; the engine splits it.
 
-- `__complete` receives the rebuilt word unchanged; the engine splits it.
-- On exit 0, a candidate matches when it starts with the value part (`${raw_cur#*=}`). The full
-  text is `opt_prefix$value`. FU-16's trim strips the part of the word before readline's
-  word (`$2`), and the result is quoted with `_toolr_quote`. This also covers a value holding
-  `=` or `:`: for `--mode=x=~r`, readline's word is `~r`, so `~root` is inserted, escaped as
-  usual.
-- On exit 10/11, `_toolr_complete_paths` gains the option prefix as an argument. It runs
-  `compgen` on the value part, so a typed leading `~` keeps its current handling, and each
-  name gets the same prefix-then-trim step before quoting. The `/` suffix and `nospace` rules
-  are unchanged.
-- If `=` has been removed from `COMP_WORDBREAKS`, `$2` is the whole word, nothing is trimmed,
-  and `--mode=alpha` is inserted whole, which is correct.
+- **Values (exit 0).** When `_toolr_raw_cur` matches `--?*=*`, the script sets
+  `_toolr_opt_prefix=${_toolr_raw_cur%%=*}=`, otherwise it leaves it empty. Each value becomes
+  `_toolr_full=$_toolr_opt_prefix$_toolr_value`, and the existing filter, quote and
+  `_toolr_quote_after` trim (`bash.sh:105-109`) run on `_toolr_full`. With `=` a break, the
+  trim strips `--mode=` and `alpha` is inserted. A value holding `=` or `:` works the same way:
+  for `--mode=x=~r`, `_toolr_raw_prefix` is `--mode=x=`, so `\~root` is inserted.
+- **Paths (exit 10/11).** The script strips `_toolr_opt_prefix` from both `_toolr_raw_cur` and
+  `_toolr_raw_prefix` before calling `_toolr_complete_paths`. Otherwise the `^`-anchored
+  `$NAME/` regex (`bash.sh:124`, `:131`) and the `$`/backtick guard (`:151`) would see
+  `--cfg=$HOME/` and drop it. The `/` suffix and `nospace` rules are unchanged.
+- **`=` not in `COMP_WORDBREAKS`.** Readline then replaces the whole `--cfg=…` word, so every
+  reply needs the option prefix put back. For values, `_toolr_raw_prefix` is empty and the
+  whole `--mode=alpha` is inserted. For paths, `_toolr_complete_paths` takes a fourth argument,
+  the text readline replaces before the path and that each reply must start with: `--cfg=` when
+  `_toolr_raw_prefix` doesn't start with the option prefix, empty otherwise. It is prepended to
+  every reply, plain names, a bare `~` and a kept `$NAME/` alike.
 
-**Reconcile with FU-16.** This assumes FU-16 provides a rebuilt word and a readline-word trim.
-Its spec (`specs/2026-11-04-bash-completion-words-design.md` on `fix/bash-completion-words`)
-didn't exist when this was written. If it lands a different shape, Task 3 adapts to it and
-doesn't add a second word rebuilder or trim.
+Known limitation: the split is keyed on the word's shape, so `--mode --x=y` (an allowed value
+starting with `--`) splits on the wrong `=`.
 
 ### zsh
 
 When `${words[CURRENT]}` matches `--?*=*`, the script calls `compset -P 1 '*='` before
 `compadd` (exit 0) or `_files` (exit 10/11). `compset` moves `--mode=` into `IPREFIX`, so zsh
 matches and quotes the bare values itself. `-P 1` stops at the first `=`.
+
+It also fixes an empty-candidate bug. `lines=("${(@f)$(…)}")` turns empty output into one
+empty element, so the `${#values} == 0` check (`zsh.zsh:44`) never fires and `compadd ""`
+runs. After `compset -P 1 '*='` that could insert a stray space on `--verbose=<TAB>`. The
+script drops empty lines, and calls `compset` before `compadd` only when there are values.
 
 ### fish
 
@@ -190,16 +201,20 @@ result. Release note:
   exits 11 with empty stdout; `--mode=` exits 0 with bare `a` and `b`;
   `self build-manifest --output=` exits 10, `--source-dir=` exits 11;
   `project init --venv-location=c` gives `cache`.
-- **bash** (`complete_shells.rs`, every `bashes()` entry): the driver gains the readline word
-  `$2` and a 4+-shaped variant (`words=(… --mode = dr)`, `cword` on `dr`), so the bash 5 path
-  runs on CI. Cases: `--mode=` offers every choice quoted; `--mode=dr` filters;
-  `--mode=x=` inserts the trimmed, escaped `~root`; `--cfg=files/` gives the `%q` file names
-  with `/` on `files/sub/`; `--out=files/` gives only `files/sub/`; `--cfg=~/` keeps the bare
-  `~`; no sentinel file appears; `set -euo pipefail` callers see rc 0 and no stderr. The
-  old-script test gains a `--mode=dr` case: nothing offered.
+- **bash** (`complete_shells.rs`, every `bashes()` entry): every case runs on both `SPLITS`
+  (`Split::Whole`, `Split::AtBreaks`), plus a `.breaks()` variant with `=` taken out of
+  `COMP_WORDBREAKS` (in the script and in the driver's split). Cases: `--mode=` offers every
+  choice quoted; `--mode=dr` filters; `--mode=x=` inserts the trimmed, escaped `\~root`;
+  `--cfg=files/` gives the `%q` file names with `/` on `files/sub/`; `--out=files/` gives only
+  `files/sub/`; `--cfg=~/` keeps the bare `~`; `--cfg=$HOME/` keeps `$HOME/` bare;
+  `--cfg=$(touch …)/` and its backtick form offer nothing and leave no sentinel; with `=`
+  removed from `COMP_WORDBREAKS`, the whole `--mode=alpha` / `--cfg=files/…` reply comes back;
+  `set -euo pipefail` callers see rc 0 and no stderr. The old-script test gains a `--mode=dr`
+  case: nothing offered. The pty end-to-end test gains `--mode=` and `--cfg=` lines.
 - **zsh** (`zsh_complete` driver): stub `compset` to record its arguments. `--mode=a` records
   `COMPSET:-P 1 *=` then `COMPADD:…`; `--cfg=files/` records `COMPSET` then `FILES:`;
-  `--out=` records `FILES:-/`; `--mode a` (no `=`) records no `compset`.
+  `--out=` records `FILES:-/`; `--mode a` (no `=`) records no `compset`; `--verbose=` records
+  nothing at all.
 - **fish** (`complete -C`): `toolr ci lint --mode=dr` lists `--mode=dry run` and `--mode=dry walk`;
   `--cfg=files/` lists `--cfg=files/with space.txt` and `--cfg=files/sub/`; `--out=files/`
   lists only `--out=files/sub/`; the sentinel stays absent.
@@ -210,7 +225,7 @@ result. Release note:
 Proposed 2026-11-04, for confirmation:
 
 1. The engine accepts one word shape, `--name=partial`. It doesn't also accept bash 4's split
-   `--name`, `=`, `partial`: that would make a literal `=` positional ambiguous, and FU-16
-   already rebuilds the word. Old bash scripts on bash 4+ therefore keep offering nothing.
+   `--name`, `=`, `partial`: that would make a literal `=` positional ambiguous, and the bash
+   script already rebuilds the word.
 2. The `--opt=` prefix is added in the scripts. The engine returns bare values.
 3. Short attached values (`-c=value`, `-cvalue`) and root flags stay out of scope.

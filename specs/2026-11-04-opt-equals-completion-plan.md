@@ -10,7 +10,7 @@ fish, for user and built-in options (FU-15).
 **Architecture:** The engine treats an in-progress `--name=partial` as the `FlagValue` slot of
 `--name` with prefix `partial`, so values, path exit codes (10/11) and built-ins all reuse the
 existing paths. Candidates stay bare. Each script splits the word at the first `=` and adds
-the `--opt=` part the way its shell needs: bash trims to readline's word, zsh uses
+the `--opt=` part the way its shell needs: bash trims to what readline replaces, zsh uses
 `compset -P 1 '*='`, fish prints `$opt_prefix$value`.
 
 **Tech Stack:** Rust 2024, bash `compgen`, zsh `compset`/`_files`, fish `__fish_complete_path`,
@@ -23,23 +23,26 @@ the scripts; short attached values and root flags out of scope. See the spec's "
 
 ## Global Constraints
 
-- Branch `feat/opt-equals-completion`, stacked on `fix/bash-completion-words` (FU-16, FU-17).
-  Worktree `.worktrees/opt-equals-completion`. Patch coverage base is
-  `fix/bash-completion-words`, not `main`.
+- Branch `feat/opt-equals-completion`, based on `main` (FU-16 and FU-17 have landed there).
+  Worktree `.worktrees/opt-equals-completion`. Patch coverage base is `origin/main`.
 - Stage files by path. Never `git add -A`. Never stage `audit/`.
 - Conventional Commits. No Co-Authored-By trailer. British English.
 - Format only the files you touch (`rustfmt --edition 2024 <file>`).
 - No manifest or runner schema bump. The `__complete` exit codes are unchanged.
 - Scripts never `eval` and never run a value or file name. bash stays errexit-, nounset- and
-  pipefail-safe on `/bin/bash` 3.2.
-- Build on FU-16's rebuilt bash word and readline-word trim. Don't add a second one. If FU-16
-  landed a different shape, adapt Task 3 to it and note the change in the spec.
+  pipefail-safe on bash ≥ 4.4, the only bash the script supports.
+- Build on the bash script's rebuilt word (`_toolr_raw_cur`), the part readline keeps
+  (`_toolr_raw_prefix`) and the trim (`_toolr_quote_after`). Don't add a second one.
+- Every new bash local, `for` target and `read` target is `_toolr_`-prefixed; a lint test
+  enforces it.
 
 ## Review Focus
 
 - `--mode=x=` (a value containing `=`) splits at the first `=` in the engine and in all
   three scripts.
-- bash 4+ word shape (`--mode`, `=`, `a`) reaches the engine as `--mode=a` via FU-16.
+- bash 4+ word shape (`--mode`, `=`, `a`) reaches the engine as `--mode=a` via the script's
+  word rebuild.
+- bash with `=` removed from `COMP_WORDBREAKS` gets the whole `--opt=…` back in every reply.
 - Boolean and unknown `--name=` offer nothing, not flag names.
 - Old scripts against the new binary offer nothing for `--opt=`, as today.
 
@@ -98,37 +101,43 @@ the scripts; short attached values and root flags out of scope. See the spec's "
 
 **Interfaces:**
 
-- Consumes: bare candidates and exit 10/11 for `--name=partial` from Task 1; FU-16's rebuilt
-  word and readline-word trim in `bash.sh`.
+- Consumes: bare candidates and exit 10/11 for `--name=partial` from Task 1; `_toolr_raw_cur`,
+  `_toolr_raw_prefix` and `_toolr_quote_after` in `bash.sh`.
 - [ ] **Step 1: Write the failing tests.**
-    - bash driver: pass readline's word as `$2` to `_toolr_complete`, and add a variant with
-      bash 4's split words (`toolr ci lint --mode = dr`, `cword` on `dr`, `$2` = `dr`). On every
-      `bashes()` entry and both shapes: `--mode=` offers every choice `%q`-quoted;
-      `--mode=dr` filters; `--mode=x=` (readline word `~r` after `x=~r`) inserts `\~root`;
-      `--cfg=files/` gives the quoted names with `files/sub/`; `--out=files/` gives only
-      `files/sub/`; `--cfg=~/` keeps the bare `~`; no sentinel exists; the errexit test gains
-      a `--mode=` case. Old-script test: `--mode=dr` offers nothing.
+    - bash driver: no driver change; use the existing `SPLITS` (`Split::Whole`,
+      `Split::AtBreaks`) and `.breaks()` variants. On every `bashes()` entry and both splits:
+      `--mode=` offers every choice `%q`-quoted; `--mode=dr` filters; `--mode=x=` inserts
+      `\~root`; `--cfg=files/` gives the quoted names with `files/sub/`; `--out=files/` gives
+      only `files/sub/`; `--cfg=~/` keeps the bare `~`; `--cfg=$HOME/` keeps `$HOME/` bare;
+      `--cfg=$(touch …)/` and its backtick form offer nothing and leave no sentinel. A
+      `.breaks()` variant with `=` removed (in the script's `COMP_WORDBREAKS` too) gets the whole
+      `--mode=…` / `--cfg=files/…` reply. The errexit test gains a `--mode=` case. Old-script
+      test: `--mode=dr` offers nothing. The pty end-to-end test gains `--mode=` and `--cfg=`
+      lines.
     - zsh driver: stub `compset() { print -r -- "COMPSET:$*"; }`. `--mode=a` records
       `COMPSET:-P 1 *=` before `COMPADD:`; `--cfg=files/` records it before `FILES:`;
-      `--out=` before `FILES:-/`; `--mode a` records no `COMPSET`.
+      `--out=` before `FILES:-/`; `--mode a` records no `COMPSET`; `--verbose=` records
+      nothing (no `COMPSET`, no `COMPADD`).
     - fish: `complete -C "toolr ci lint --mode=dr"` lists `--mode=dry run` and
       `--mode=dry walk`; `--cfg=files/` lists `--cfg=files/with space.txt` and
       `--cfg=files/sub/`; `--out=files/` lists only `--out=files/sub/`; sentinel absent.
 - [ ] **Step 2:** Run `cargo test -p toolr --test complete_shells`. Expected: new tests FAIL.
 - [ ] **Step 3: Implement.**
-    - bash: when `raw_cur` matches `--?*=*`, set `opt_prefix=${raw_cur%%=*}=` and
-      `val_cur=${raw_cur#*=}`; else both empty and `val_cur=$raw_cur`. Filter candidates on
-      `val_cur`, build `opt_prefix$value`, apply FU-16's trim, then `_toolr_quote`. Pass
-      `opt_prefix` and `val_cur` to `_toolr_complete_paths`, which runs `compgen` on
-      `val_cur` and puts each name through the same prefix-then-trim step before quoting.
-      Keep `local` declarations and `|| :` guards so `set -eu` callers stay safe.
-    - zsh: `[[ $cur == --?*=* ]] && compset -P 1 '*='` after reading the exit code and before
-      `compadd`, `_files` or `_files -/`.
+    - bash: when `_toolr_raw_cur` matches `--?*=*`, set
+      `_toolr_opt_prefix=${_toolr_raw_cur%%=*}=`, else leave it empty. Values: build
+      `_toolr_full=$_toolr_opt_prefix$_toolr_value` and run the existing filter, quote and
+      `_toolr_quote_after` trim on it. Paths: strip `_toolr_opt_prefix` from `_toolr_raw_cur`
+      and `_toolr_raw_prefix`; when `_toolr_raw_prefix` didn't start with it (`=` not a break),
+      pass the option prefix as a fourth argument that `_toolr_complete_paths` prepends to
+      every reply. Keep `local` declarations and `|| :` guards so `set -eu` callers stay safe.
+    - zsh: save `$?` right after the `lines=(…)` assignment, drop empty lines, then call
+      `compset -P 1 '*='` (when `$cur` matches `--?*=*`) before `_files` / `_files -/`, and
+      before `compadd` only when there are values.
     - fish: `set -l opt_prefix (string match -r -- '^--[^=]+=' $current)`; case 0 prints
       `"$opt_prefix$line"`. Cases 10 and 11 stay as they are.
 - [ ] **Step 4:** Run `cargo test -p toolr --test complete_shells` and
       `shellcheck crates/toolr-core/src/complete/scripts/bash.sh`. Expected: PASS.
-- [ ] **Step 5:** Smoke-test by hand in an interactive zsh and `/bin/bash` in the scratch repo:
+- [ ] **Step 5:** Smoke-test by hand in an interactive zsh and a bash ≥ 4.4 in the scratch repo:
       `toolr ci lint --mode=<TAB>`, `--cfg=<TAB>`, `--out=<TAB>`.
 - [ ] **Step 6: Commit** `feat(complete): complete --opt=value in bash, zsh and fish` with a
       `Release-Notes: skip` trailer.
@@ -152,7 +161,7 @@ the scripts; short attached values and root flags out of scope. See the spec's "
 
 - [ ] **Step 1:** Run `mise run test`, polling the output every 30–60 seconds.
 - [ ] **Step 2:** Run the CI coverage command from CLAUDE.md, then
-      `cargo xtask patch-coverage --base fix/bash-completion-words`. Expected: 99% or more.
+      `cargo xtask patch-coverage --base origin/main`. Expected: 99% or more.
 - [ ] **Step 3:** `git mv` both spec files to `specs/archive/2026/` and commit
       `docs(specs): archive FU-15 --opt=value completion spec and plan` with a
       `Release-Notes: skip` trailer. This is the final commit before the PR.
