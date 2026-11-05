@@ -75,7 +75,7 @@ The Python suite runs in random order with `pytest-randomly`. Every run prints i
 (`Using --randomly-seed=1234`), including in the CI log. To replay that order locally:
 
 ```sh
-uv run pytest -p randomly --randomly-seed=1234
+uv run pytest --randomly-seed=1234
 ```
 
 `-p no:randomly` restores the default order. To replay the reverse of the default order, which is a
