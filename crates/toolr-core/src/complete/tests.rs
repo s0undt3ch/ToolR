@@ -1758,7 +1758,12 @@ fn attached_fixture() -> Manifest {
                     ),
                     typed_arg("out", Optional, SupportedType::DirectoryPath, &[]),
                     typed_arg("verbose", Flag, SupportedType::Bool, &[]),
-                    typed_arg("shape", Positional, SupportedType::Str, &["wide", "tall"]),
+                    typed_arg(
+                        "shape",
+                        Positional,
+                        SupportedType::Str,
+                        &["wide", "tall", "k=v"],
+                    ),
                 ],
                 false,
             ),
@@ -1847,5 +1852,12 @@ fn committed_attached_value_is_one_token_for_positionals() {
         &m,
         &tokens(&["ci", "lint", "--mode=alpha", ""]),
     ));
-    assert_eq!(got, vec!["tall", "wide"]);
+    assert_eq!(got, vec!["k=v", "tall", "wide"]);
+}
+
+#[test]
+fn positional_word_holding_an_equals_is_not_an_attached_value() {
+    let m = attached_fixture();
+    let got = values(serve_completions(&m, &tokens(&["ci", "lint", "k="])));
+    assert_eq!(got, vec!["k=v"]);
 }
