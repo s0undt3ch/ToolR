@@ -604,6 +604,93 @@ fn bash_path_keeps_a_typed_leading_tilde() {
     }
 }
 
+/// Native bash keeps a typed `$HOME/` as typed; escaping it would insert a literal `\$HOME`.
+#[test]
+fn bash_path_keeps_a_typed_leading_variable() {
+    for bash in bashes() {
+        for (var, split) in ["$HOME", "${HOME}"]
+            .into_iter()
+            .flat_map(|v| SPLITS.map(|s| (v, s)))
+        {
+            let fx = fixture();
+            let script = print_script("bash");
+            let cur = format!("{var}/files/s");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, split);
+            assert_eq!(run.rc, "0", "{bash} {var} {split:?}: {}", run.stderr);
+            assert_eq!(run.reply, vec![format!("{var}/files/sub/")], "{bash} {var}");
+            assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{bash} {var}");
+            let cur = format!("{var}/files/");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, split);
+            let mut want: Vec<String> = run.quoted.iter().map(|q| format!("{var}/{q}")).collect();
+            want.push(format!("{var}/files/sub/"));
+            want.sort();
+            let mut got = run.reply.clone();
+            got.sort();
+            assert_eq!(got, want, "{bash} {var} {split:?}");
+            let cur = format!("{var}/files/host:p");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, split);
+            assert_eq!(
+                run.reply,
+                vec!["port.txt".to_string()],
+                "{bash} {var} {split:?}"
+            );
+            let cur = format!("{var}/fil");
+            let run = run_bash_path_split(&bash, &script, &fx, "--out", &cur, split);
+            assert_eq!(
+                run.reply,
+                vec![format!("{var}/files/")],
+                "{bash} {var} {split:?}"
+            );
+            assert!(!fx.sentinel3.exists(), "{bash} {var}: file name executed");
+        }
+    }
+}
+
+/// Like native bash, an unset variable lists nothing, and under `set -u` doesn't error.
+#[test]
+fn bash_path_under_an_unset_variable_offers_nothing() {
+    for bash in bashes() {
+        let fx = fixture();
+        let script = format!("set -eu\n{}", print_script("bash"));
+        for cur in ["$TOOLR_TEST_UNSET_VAR/f", "${TOOLR_TEST_UNSET_VAR}/f"] {
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", cur, Split::Whole);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert_eq!(run.stderr, "", "{bash} {cur}");
+            assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
+        }
+    }
+}
+
+/// Only a plain `$NAME` or `${NAME}` is expanded: substitutions and operators stay inert.
+#[test]
+fn bash_path_never_runs_a_typed_substitution() {
+    for bash in bashes() {
+        let fx = fixture();
+        let sentinel = fx.sentinel.to_str().unwrap();
+        for cur in [
+            format!("$(touch {sentinel})/"),
+            format!("${{HOME:-$(touch {sentinel})}}/"),
+            format!("`touch {sentinel}`/"),
+            "$1/".to_string(),
+        ] {
+            let run = run_bash_path_split(
+                &bash,
+                &print_script("bash"),
+                &fx,
+                "--cfg",
+                &cur,
+                Split::Whole,
+            );
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
+            assert!(
+                !fx.sentinel.exists(),
+                "{bash} {cur}: typed substitution ran"
+            );
+        }
+    }
+}
+
 /// A user's `set -e` or `set -u` must not leak into Tab: a non-zero
 /// `__complete` exit or an unset array would otherwise close their shell.
 #[test]

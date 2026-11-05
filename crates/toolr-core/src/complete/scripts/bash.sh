@@ -111,10 +111,22 @@ _toolr_complete() {
 # Usage: _toolr_complete_paths MODE RAW_CUR [RAW_PREFIX], where MODE is `-f` or `-d`,
 # RAW_CUR the unescaped typed word and RAW_PREFIX the part of it readline keeps.
 _toolr_complete_paths() {
-    local mode=$1 raw_cur=$2 raw_prefix=${3-} name rest q tilde is_dir dirs=0
+    local mode=$1 raw_cur=$2 raw_prefix=${3-} name rest q keep is_dir dirs=0 bare='' var value=''
     local -A tilde_dirs=()
+    # shellcheck disable=SC2016 # The `$` is literal: a typed variable, not one to expand here.
+    local var_re='^(\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\})/'
     # `${#COMPREPLY[@]}` errors under `set -u` while the array is unset.
     COMPREPLY=()
+    # A leading `$NAME/` stays as typed, like native bash; only its value is listed and tested.
+    # `${!name}` reads a validated name, so nothing else in the word is expanded.
+    if [[ $raw_cur =~ $var_re && ( -z $raw_prefix || $raw_prefix == "${BASH_REMATCH[1]}"/* ) ]]; then
+        bare=${BASH_REMATCH[1]}
+        var=${BASH_REMATCH[2]}${BASH_REMATCH[3]}
+        [[ -n ${!var+set} ]] || return 0
+        value=${!var}
+        raw_cur=$value${raw_cur#"$bare"}
+        [[ -n $raw_prefix ]] && raw_prefix=$value${raw_prefix#"$bare"}
+    fi
     # `[[ -d ]]` can't test `~user/...` without expanding it, but `compgen -d` resolves it.
     if [[ $mode == -f && $raw_cur == '~'* ]]; then
         # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
@@ -123,20 +135,23 @@ _toolr_complete_paths() {
         done < <(compgen -d -- "$raw_cur" || :)
     fi
     while IFS= read -r name; do
-        tilde=
+        keep=
         q=
         if [[ -n $raw_prefix ]]; then
             [[ $name != "$raw_prefix" ]] && _toolr_quote_after "$raw_prefix" "$name"
         else
             rest=$name
+            if [[ -n $bare ]]; then
+                keep=$bare
+                rest=${name#"$value"}
             # `compgen` echoes a typed leading `~`; it must stay bare to expand.
-            if [[ $raw_cur == '~'* && $name == '~'* ]]; then
-                tilde='~'
+            elif [[ $raw_cur == '~'* && $name == '~'* ]]; then
+                keep='~'
                 rest=${name#\~}
             fi
             [[ -n $rest ]] && _toolr_quote "$rest"
         fi
-        q=$tilde$q
+        q=$keep$q
         is_dir=0
         if [[ $mode == -d ]]; then
             is_dir=1
