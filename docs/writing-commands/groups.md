@@ -117,7 +117,18 @@ toolr: warning: group `ci` is declared more than once; keeping the one in tools.
 ```
 
 Declare each group's title and description once, and fetch it by title
-everywhere else.
+everywhere else. The title-only calls can come before the one that
+describes the group: `toolr` takes the description from whichever
+declaration gives it. A group none of whose declarations passes a
+description or docstring fails the build:
+
+```text
+toolr: command groups with no description (1):
+  - `ci` (declared in tools.ci.build, tools.ci.lint): give one declaration a description or docstring.
+```
+
+A single call can't pass both `docstring=` and `description=` (or
+`long_description=`); the build refuses that too.
 
 "First" means first in file order to `toolr`, which reads `tools/` in
 sorted path order. Python declares in import order instead, so a module
