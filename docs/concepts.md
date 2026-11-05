@@ -79,7 +79,9 @@ shell with `toolr self completion install <shell>`.
 
 Path-typed arguments complete from the file system, using each shell's
 own file completion. `--opt=value` completes like `--opt value`, for
-choices and paths alike. A script installed by an older toolr doesn't do
+choices and paths alike. One catch: the shell doesn't expand `~` after
+`--opt=`, so `--opt=~/x` passes a literal `~`; write `--opt ~/x` or
+`--opt=$HOME/x` instead. A script installed by an older toolr doesn't do
 either: re-run `toolr self completion install <shell> --force`.
 
 ## The per-repo cache
