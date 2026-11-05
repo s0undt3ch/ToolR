@@ -7,11 +7,14 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import tomllib
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 from typing import NamedTuple
 
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 from rich.pretty import Pretty
 
 from toolr import Context
@@ -36,11 +39,58 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 group = command_group("ci", "CI utilities", docstring=__doc__)
 
 
+TOOLR_PY_PYPROJECT = REPO_ROOT / "crates" / "toolr-py" / "pyproject.toml"
+
+
+def python3_floor(requires_python: str) -> int:
+    """Return ``N`` from the ``>=3.N`` clause, rejecting a patch-level floor as the Rust lockstep test does."""
+    for specifier in SpecifierSet(requires_python):
+        release = Version(specifier.version).release
+        if specifier.operator == ">=" and release[0] == 3 and len(release) > 1:
+            # Same rule as `python3_floor` in crates/toolr-core/tests/python_floor_lockstep.rs; change both.
+            if len(release) > 2 and release[2] != 0:
+                msg = (
+                    f"requires-python {requires_python!r} sets a patch-level floor, which the "
+                    "version lists (and MIN_PYTHON_MINOR) can't express; use `>=3.N`"
+                )
+                raise ValueError(msg)
+            return release[1]
+    msg = f"requires-python {requires_python!r} has no `>=3.N` clause"
+    raise ValueError(msg)
+
+
+def supported_minors(requires_python: str) -> list[int]:
+    """Return the CPython 3 minors ``requires_python`` admits; it needs both a floor and a `<3.N` ceiling."""
+    spec = SpecifierSet(requires_python)
+    ceilings = [
+        Version(specifier.version).release
+        for specifier in spec
+        if specifier.operator in {"<", "<="}
+    ]
+    ceiling = min(
+        (release[1] for release in ceilings if release[0] == 3 and len(release) > 1), default=None
+    )
+    if ceiling is None:
+        msg = (
+            f"requires-python {requires_python!r} needs an explicit `<3.N` upper bound; "
+            "the version lists are derived from it"
+        )
+        raise ValueError(msg)
+    floor = python3_floor(requires_python)
+    return [minor for minor in range(floor, ceiling + 1) if f"3.{minor}" in spec]
+
+
+def _requires_python(pyproject: Path) -> str:
+    """Return ``project.requires-python`` from ``pyproject``."""
+    return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["requires-python"]
+
+
 # Every supported CPython, dotted form derived below. This drives the
 # *test* matrix only — the toolr-py wheel itself is now a single abi3
-# build (see ABI3_WHEEL_PYTHONS). Checked against `requires-python` by
-# `tests/test_python_versions.py`.
-ALL_CPYTHONS = ["cp311", "cp312", "cp313", "cp314", "cp315"]
+# build (see ABI3_WHEEL_PYTHONS). Derived from `requires-python` in
+# `crates/toolr-py/pyproject.toml`.
+# An unbounded or malformed `requires-python` fails at import, on purpose: the wheel build would fail anyway.
+ALL_CPYTHONS = [f"cp3{minor}" for minor in supported_minors(_requires_python(TOOLR_PY_PYPROJECT))]
 
 # CPython ABI tags cibuildwheel builds for the toolr-py (pyo3) wheel.
 # abi3 stable-ABI → a single cp311 wheel covers all CPython >=3.11;

@@ -207,8 +207,10 @@ force-single-line = true
 known-first-party = [
   "toolr",
 ]
+# The repo's own dev tooling and tests: each in its own block after toolr's.
 forced-separate = [
-  "tests"
+  "tools",
+  "tests",
 ]
 required-imports = [
   "from __future__ import annotations"

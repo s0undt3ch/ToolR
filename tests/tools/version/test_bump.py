@@ -27,6 +27,10 @@ from unittest import mock
 
 import pytest
 from packaging.version import Version
+
+from toolr.testing import ContextForTesting
+from toolr.testing import make_context
+
 from tools.version import TODAY_VERSION
 from tools.version import _cargo_version
 from tools.version import _compute_dev_version
@@ -34,9 +38,6 @@ from tools.version import _parse_release_version
 from tools.version import _read_workspace_version
 from tools.version import _set_action_yml_default_version
 from tools.version import bump
-
-from toolr.testing import ContextForTesting
-from toolr.testing import make_context
 
 from tests._git import git
 from tests._git import make_repo
