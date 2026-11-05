@@ -612,9 +612,9 @@ fn print_bash_source_hint(shell: CompletionShell, path: &std::path::Path, quiet:
         return;
     }
     // Test seam: CI hosts ship bash-completion, so tests move the probe's root.
-    let sysroot = bash_completion_sysroot(std::env::var_os("TOOLR_BASH_COMPLETION_SYSROOT"));
+    let sysroot = non_empty_env_path("TOOLR_BASH_COMPLETION_SYSROOT").unwrap_or_else(|| "/".into());
     let xdg_data_dirs = std::env::var_os("XDG_DATA_DIRS");
-    let homebrew_prefix = std::env::var_os("HOMEBREW_PREFIX").map(PathBuf::from);
+    let homebrew_prefix = non_empty_env_path("HOMEBREW_PREFIX");
     if !bash_completion_installed(
         &sysroot,
         xdg_data_dirs.as_deref(),
@@ -622,14 +622,6 @@ fn print_bash_source_hint(shell: CompletionShell, path: &std::path::Path, quiet:
     ) {
         println!("{}", bash_source_hint(path));
     }
-}
-
-/// An empty override reads as unset; probing relative to the cwd would be
-/// a silent misconfiguration.
-fn bash_completion_sysroot(value: Option<std::ffi::OsString>) -> PathBuf {
-    value
-        .filter(|v| !v.is_empty())
-        .map_or_else(|| PathBuf::from("/"), PathBuf::from)
 }
 
 /// A non-UTF-8 path can't be printed losslessly, so that hint names no path
@@ -645,8 +637,8 @@ fn bash_source_hint(path: &std::path::Path) -> String {
     )
 }
 
-/// The XDG base directory spec, and bash-completion with it, treats an empty
-/// value as unset; using it would install relative to the cwd.
+/// An empty value reads as unset, as the XDG base directory spec and
+/// bash-completion do; using it would install or probe relative to the cwd.
 fn non_empty_env_path(name: &str) -> Option<PathBuf> {
     std::env::var_os(name)
         .filter(|v| !v.is_empty())
@@ -892,19 +884,6 @@ mod tests {
             bash_source_hint(path),
             "toolr: can't find bash-completion, so bash won't load this script by itself; \
              add a `source` line for the installed script to your bash startup file (~/.bashrc)."
-        );
-    }
-
-    #[test]
-    fn bash_completion_sysroot_defaults_to_root_when_unset_or_empty() {
-        assert_eq!(bash_completion_sysroot(None), PathBuf::from("/"));
-        assert_eq!(
-            bash_completion_sysroot(Some(std::ffi::OsString::new())),
-            PathBuf::from("/")
-        );
-        assert_eq!(
-            bash_completion_sysroot(Some("/tmp/sysroot".into())),
-            PathBuf::from("/tmp/sysroot")
         );
     }
 
