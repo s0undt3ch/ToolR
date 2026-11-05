@@ -11,7 +11,7 @@ a call to [`arg(...)`][toolr.arg].
 from typing import Annotated
 from toolr import arg, command_group
 
-git = command_group("git", title="Git helpers")
+git = command_group("git", "Git helpers", "Helpers for working with git.")
 
 
 @git.command

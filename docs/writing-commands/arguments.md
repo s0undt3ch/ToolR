@@ -283,7 +283,7 @@ CommitHash: TypeAlias = Annotated[
     arg(help="A 40-char git SHA, or None for HEAD."),
 ]
 
-git = command_group("git", title="Git helpers")
+git = command_group("git", "Git helpers", "Helpers for working with git.")
 
 
 @git.command

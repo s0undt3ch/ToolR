@@ -401,6 +401,44 @@ def _record_standalone_command(
         _get_pending_command_storage().append(PendingCommand(group or "", cli_name, func))
 
 
+def _resolve_group_fields(
+    title: str,
+    description: str | None,
+    long_description: str | None,
+    docstring: str | None,
+    *,
+    exists: bool = False,
+) -> tuple[str, str, str | None]:
+    """Validate ``command_group`` arguments and resolve the final group fields.
+
+    A description is only required to create a group. For an ``exists`` group a
+    missing one is a re-fetch, so the returned description is empty.
+
+    Returns:
+        The ``(title, description, long_description)`` the group is created with
+    """
+    if docstring is None and description is None:
+        _reject_stripped_docstrings()
+    if docstring is not None:
+        if description is not None or long_description is not None:
+            err_msg = "You can't pass both docstring and description or long_description"
+            raise ValueError(err_msg)
+        # Mirror the static parser (parser/groups.rs) and the `@command`
+        # path (parser/commands.rs): the docstring's first paragraph
+        # populates `title` (clap's `about`); the Rust-rendered
+        # ``full_description`` (short + long + Examples/Notes/…)
+        # populates `description` (clap's `long_about`). An explicit
+        # `title=` always wins for the short slot.
+        parsed_docstring = Docstring.parse(docstring)
+        if not title:
+            title = parsed_docstring.short_description
+        return title, parsed_docstring.full_description, None
+    if description is None and not exists:
+        err_msg = "You must at least pass either the 'docstring' or 'description' argument"
+        raise ValueError(err_msg)
+    return title, description or "", long_description
+
+
 def command_group(
     name: str,
     title: str = "",
@@ -458,36 +496,37 @@ def command_group(
         parent = "tools"
 
     collector = _get_command_group_storage()
-
     group: CommandGroup | None = collector.get(f"{parent}.{name}")
+
+    # Contradictory arguments raise whether or not the group exists; a missing
+    # description only raises when this call would have to create the group.
+    title, description, long_description = _resolve_group_fields(
+        title, description, long_description, docstring, exists=group is not None
+    )
+
     if group is not None:
-        # In this case, we return the existing group
-        log.debug("Command group '%s' already exists, returning existing group", f"{parent}.{name}")
+        # The first declaration wins; flag a later one that disagrees with it
+        # on a field it actually provided.
+        differing = [
+            field
+            for field, wanted in (
+                ("title", title),
+                ("description", description),
+                ("long_description", long_description),
+            )
+            if wanted and getattr(group, field) != wanted
+        ]
+        if differing:
+            log.debug(
+                "Command group '%s' is already declared; ignoring the different %s of this declaration",
+                group.full_name,
+                ", ".join(differing),
+            )
+        else:
+            log.debug(
+                "Command group '%s' already exists, returning existing group", group.full_name
+            )
         return group
-
-    if docstring is None and description is None:
-        _reject_stripped_docstrings()
-    if docstring is not None:
-        if description is not None or long_description is not None:
-            err_msg = "You can't pass both docstring and description or long_description"
-            raise ValueError(err_msg)
-        # Mirror the static parser (parser/groups.rs) and the `@command`
-        # path (parser/commands.rs): the docstring's first paragraph
-        # populates `title` (clap's `about`); the Rust-rendered
-        # ``full_description`` (short + long + Examples/Notes/…)
-        # populates `description` (clap's `long_about`). An explicit
-        # `title=` always wins for the short slot.
-        parsed_docstring = Docstring.parse(docstring)
-        if not title:
-            title = parsed_docstring.short_description
-        description = parsed_docstring.full_description
-        long_description = None
-    elif description is None:
-        err_msg = "You must at least pass either the 'docstring' or 'description' argument"
-        raise ValueError(err_msg)
-
-    if TYPE_CHECKING:
-        assert description is not None
 
     # Create the command group
     collector[f"{parent}.{name}"] = group = CommandGroup(

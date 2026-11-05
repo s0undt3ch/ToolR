@@ -22,36 +22,14 @@ import subprocess
 import sys
 import textwrap
 import warnings
-from collections.abc import Iterator
 
 import pytest
 
 from toolr._decorators import CommandGroup
-from toolr._decorators import _get_command_group_storage
 from toolr._decorators import _get_pending_command_storage
 from toolr._decorators import command
 from toolr._decorators import command_group
 from toolr._exc import ToolrDeprecationWarning
-
-
-@pytest.fixture(autouse=True)
-def _clean_registry() -> Iterator[None]:
-    """Snapshot + restore the process-wide command-group storage.
-
-    Autouse: every test in this module exercises ``command_group``
-    registration, and without isolation a registration from one test
-    leaks into the next so ``command_group(name, ...)`` returns the
-    cached instance instead of walking the freshly-exercised code
-    paths. The fixture has no value to inject, so consumers don't need
-    to name it as a parameter.
-    """
-    storage = _get_command_group_storage()
-    saved = dict(storage)
-    storage.clear()
-    yield
-    storage.clear()
-    storage.update(saved)
-
 
 # --------------------------------------------------------------------
 # CommandGroup.full_name
