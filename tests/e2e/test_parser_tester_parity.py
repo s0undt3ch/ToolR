@@ -3,12 +3,16 @@
 Each directory under `files/parity_corpus/` is copied into `tools/`, or into the
 project root when it has its own `tools/`, so a module can sit outside `tools/`. An `ok_*` case
 must build on both sides with the same groups and commands; an `err_*` case
-must fail on both with the same message.
+must fail on both with the same message. An `ok_warn_*` case re-declares a
+group with different fields: both sides keep the first and report the same
+conflict, which no other `ok_*` case may do.
 """
 
 from __future__ import annotations
 
 import json
+import logging
+import re
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -53,25 +57,67 @@ def _manifest_commands(project: ToolsProject) -> dict[str, list[str]]:
     return {path: sorted(names) for path, names in found.items()}
 
 
+def _manifest_groups(project: ToolsProject) -> dict[str, tuple[str, str]]:
+    """`{group path: (title, description)}` from the manifest `toolr` wrote."""
+    manifest = json.loads((project.root / "tools" / ".toolr-manifest.json").read_text())
+    return {
+        f"{group['parent']}.{group['name']}" if group.get("parent") else group["name"]: (
+            group["title"],
+            group["description"],
+        )
+        for group in manifest["groups"]
+    }
+
+
+def _rust_conflicts(stderr: str) -> list[tuple[str, str]]:
+    """`(group path, differing fields)` for each group conflict `toolr` warned about."""
+    pattern = r"group `([^`]+)` is declared more than once; .* ignoring the different (.+) in "
+    return re.findall(pattern, stderr)
+
+
+def _python_conflicts(caplog: pytest.LogCaptureFixture) -> list[tuple[str, str]]:
+    """`(group path, differing fields)` for each conflict `command_group` logged."""
+    pattern = r"Command group 'tools\.([^']+)' is already declared; ignoring the different (.+) of"
+    return [
+        (match[1], match[2])
+        for record in caplog.records
+        if (match := re.match(pattern, record.getMessage()))
+    ]
+
+
 def test_corpus_covers_both_outcomes() -> None:
     """A case named neither way would be skipped by both branches below."""
     assert all(case.startswith(("ok_", "err_")) for case in CASES), CASES
 
 
 @pytest.mark.parametrize("case", CASES)
-def test_parser_and_tester_agree(case: str, corpus_project: Callable[[str], ToolsProject]) -> None:
+def test_parser_and_tester_agree(
+    case: str,
+    corpus_project: Callable[[str], ToolsProject],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     project = corpus_project(case)
     proc = project.run("--help")
+    # The level `command_group` logs a conflict at doesn't matter, only that it does.
+    caplog.set_level(logging.DEBUG, logger="toolr")
     with CommandsTester(search_path=project.root) as tester:
         tester.discover()
         if case.startswith("ok_"):
-            groups = tester.collected_command_groups()
-            assert proc.returncode == 0, proc.stderr
-            assert _manifest_commands(project) == {
-                _group_path(key): sorted(group.get_commands())
-                for key, group in groups.items()
+            groups = {
+                _group_path(key): group
+                for key, group in tester.collected_command_groups().items()
                 if isinstance(group, CommandGroup)
             }
+            assert proc.returncode == 0, proc.stderr
+            assert _manifest_commands(project) == {
+                path: sorted(group.get_commands()) for path, group in groups.items()
+            }
+            assert _manifest_groups(project) == {
+                path: (group.title, group.description) for path, group in groups.items()
+            }
+            conflicts = _rust_conflicts(proc.stderr)
+            assert conflicts == _python_conflicts(caplog)
+            assert bool(conflicts) == case.startswith("ok_warn_"), proc.stderr
             return
         with pytest.raises(ValueError) as excinfo:  # noqa: PT011  # the text is compared below
             tester.collected_command_groups()
