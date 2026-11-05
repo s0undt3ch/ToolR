@@ -27,6 +27,30 @@ from tests.conftest import ToolsProject
 
 CORPUS = Path(__file__).parent / "files" / "parity_corpus"
 CASES = sorted(path.name for path in CORPUS.iterdir() if path.is_dir())
+# Cases whose Python side needs #677's `command_group`: a title-only call that
+# fetches an existing group, or creates one, must not raise at import.
+# Strict, so they fail loudly once that lands and the mark can go.
+NEEDS_LENIENT_COMMAND_GROUP = {
+    "err_group_no_description",
+    "ok_group_described_in_sibling",
+    "ok_group_title_only_refetch",
+}
+# `toolr` gives the group the description a later declaration passes; the
+# runtime keeps the empty one the title-only call created.
+NEEDS_LATER_DESCRIPTION = {"ok_group_described_after_title_only"}
+
+
+def _param(case: str) -> object:
+    if case in NEEDS_LENIENT_COMMAND_GROUP:
+        reason = "needs #677's lenient title-only `command_group`"
+    elif case in NEEDS_LATER_DESCRIPTION:
+        reason = "needs `command_group` to take a later declaration's description"
+    else:
+        return case
+    return pytest.param(case, marks=pytest.mark.xfail(strict=True, reason=reason))
+
+
+PARAMS = [_param(case) for case in CASES]
 
 
 @pytest.fixture
@@ -85,12 +109,18 @@ def _python_conflicts(caplog: pytest.LogCaptureFixture) -> list[tuple[str, str]]
     ]
 
 
+def _discover_and_collect(tester: CommandsTester) -> None:
+    """Some errors `discover()` raises before importing anything, others show after."""
+    tester.discover()
+    tester.collected_command_groups()
+
+
 def test_corpus_covers_both_outcomes() -> None:
     """A case named neither way would be skipped by both branches below."""
     assert all(case.startswith(("ok_", "err_")) for case in CASES), CASES
 
 
-@pytest.mark.parametrize("case", CASES)
+@pytest.mark.parametrize("case", PARAMS)
 def test_parser_and_tester_agree(
     case: str,
     corpus_project: Callable[[str], ToolsProject],
@@ -101,8 +131,8 @@ def test_parser_and_tester_agree(
     # The level `command_group` logs a conflict at doesn't matter, only that it does.
     caplog.set_level(logging.DEBUG, logger="toolr")
     with CommandsTester(search_path=project.root) as tester:
-        tester.discover()
         if case.startswith("ok_"):
+            tester.discover()
             groups = {
                 _group_path(key): group
                 for key, group in tester.collected_command_groups().items()
@@ -120,7 +150,7 @@ def test_parser_and_tester_agree(
             assert bool(conflicts) == case.startswith("ok_warn_"), proc.stderr
             return
         with pytest.raises(ValueError) as excinfo:  # noqa: PT011  # the text is compared below
-            tester.collected_command_groups()
+            _discover_and_collect(tester)
     assert proc.returncode != 0, proc.stdout
     assert f"toolr: {excinfo.value}\n" in proc.stderr
 
