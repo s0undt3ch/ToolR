@@ -78,8 +78,9 @@ Shell scripts for bash, zsh, and fish that call a hidden
 shell with `toolr self completion install <shell>`.
 
 Path-typed arguments complete from the file system, using each shell's
-own file completion. A script installed by an older toolr doesn't do
-this: re-run `toolr self completion install <shell> --force`.
+own file completion. `--opt=value` completes like `--opt value`, for
+choices and paths alike. A script installed by an older toolr doesn't do
+either: re-run `toolr self completion install <shell> --force`.
 
 ## The per-repo cache
 
