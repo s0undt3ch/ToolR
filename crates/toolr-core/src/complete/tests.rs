@@ -1720,3 +1720,132 @@ mod bash_completion_probe {
         ));
     }
 }
+
+// --- `--name=partial`: the attached value of `--name` ---
+
+fn attached_fixture() -> Manifest {
+    use ArgumentKind::{Flag, Optional, Positional};
+    let mut mode = typed_arg(
+        "mode",
+        Optional,
+        SupportedType::Literal(vec!["alpha".into(), "abc".into(), "x=~root".into()]),
+        &["alpha", "abc", "x=~root"],
+    );
+    mode.metadata.aliases = vec!["--style".into()];
+    Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: "h".into(),
+        third_party_hash: String::new(),
+        toolr_version: String::new(),
+        groups: vec![Group {
+            name: "ci".into(),
+            title: String::new(),
+            description: String::new(),
+            parent: None,
+            origin: Origin::Static,
+        }],
+        commands: vec![
+            leaf(
+                "lint",
+                "ci",
+                vec![
+                    mode,
+                    typed_arg(
+                        "cfg",
+                        Optional,
+                        SupportedType::Optional(Box::new(SupportedType::FilePath)),
+                        &[],
+                    ),
+                    typed_arg("out", Optional, SupportedType::DirectoryPath, &[]),
+                    typed_arg("verbose", Flag, SupportedType::Bool, &[]),
+                    typed_arg("shape", Positional, SupportedType::Str, &["wide", "tall"]),
+                ],
+                false,
+            ),
+            leaf(
+                "job",
+                "ci",
+                vec![typed_arg(
+                    "level",
+                    Optional,
+                    SupportedType::Str,
+                    &["debug", "info"],
+                )],
+                true,
+            ),
+            leaf(
+                "run",
+                "ci.job",
+                vec![typed_arg("cfg", Optional, SupportedType::FilePath, &[])],
+                false,
+            ),
+        ],
+        plugin_warnings: vec![],
+        input_records: Default::default(),
+    }
+}
+
+#[test]
+fn attached_value_completes_the_flags_choices_bare() {
+    let m = attached_fixture();
+    for (word, want) in [
+        ("--mode=", &["abc", "alpha", "x=~root"][..]),
+        ("--mode=a", &["abc", "alpha"]),
+        ("--mode=x=", &["x=~root"]),
+        ("--style=a", &["abc", "alpha"]),
+        ("--mode=z", &[]),
+    ] {
+        let got = values(serve_completions(&m, &tokens(&["ci", "lint", word])));
+        assert_eq!(got, want, "{word}");
+    }
+}
+
+#[test]
+fn attached_value_of_a_boolean_or_unknown_flag_offers_nothing() {
+    let m = attached_fixture();
+    for word in ["--verbose=", "--nope=", "--=", "--=x"] {
+        let got = serve_completions(&m, &tokens(&["ci", "lint", word]));
+        assert!(got.is_empty(), "{word}: {got:?}");
+    }
+}
+
+#[test]
+fn attached_value_hands_path_slots_to_the_shell() {
+    let m = attached_fixture();
+    for (word, want) in [
+        ("--cfg=", Completion::Paths),
+        ("--cfg=files/", Completion::Paths),
+        ("--out=", Completion::Directories),
+    ] {
+        assert_eq!(complete(&m, &tokens(&["ci", "lint", word])), want, "{word}");
+    }
+    let got = complete_values(complete(&m, &tokens(&["ci", "lint", "--mode="])));
+    assert_eq!(got, vec!["abc", "alpha", "x=~root"]);
+}
+
+#[test]
+fn attached_value_on_a_dispatcher_and_its_child() {
+    let m = attached_fixture();
+    let got = values(serve_completions(&m, &tokens(&["ci", "job", "--level=i"])));
+    assert_eq!(got, vec!["info"]);
+    assert_eq!(
+        complete(&m, &tokens(&["ci", "job", "run", "--cfg="])),
+        Completion::Paths
+    );
+    // A committed `--level=info` is one token, so the child name still completes.
+    let got = values(serve_completions(
+        &m,
+        &tokens(&["ci", "job", "--level=info", "r"]),
+    ));
+    assert_eq!(got, vec!["run"]);
+}
+
+#[test]
+fn committed_attached_value_is_one_token_for_positionals() {
+    let m = attached_fixture();
+    let got = values(serve_completions(
+        &m,
+        &tokens(&["ci", "lint", "--mode=alpha", ""]),
+    ));
+    assert_eq!(got, vec!["tall", "wide"]);
+}
