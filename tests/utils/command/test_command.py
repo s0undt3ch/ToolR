@@ -275,13 +275,13 @@ def test_fd_streaming_works(echo_command):
             )
         except Exception as e:
             exception = e
+        finally:
+            # Closing here, not after start(), keeps the fds open until run_command_impl dups them.
+            os.close(w_stdout)
+            os.close(w_stderr)
 
     thread = threading.Thread(target=run_cmd)
     thread.start()
-
-    # Read from the pipes
-    os.close(w_stdout)  # Close write end in this process
-    os.close(w_stderr)  # Close write end in this process
 
     stdout_reader = os.fdopen(r_stdout, "r")
     stderr_reader = os.fdopen(r_stderr, "r")
@@ -364,13 +364,13 @@ def test_specific_fd_with_capture(echo_command):
                 )
             except Exception as e:
                 exception = e
+            finally:
+                # Closing here, not after start(), keeps the fds open until run_command_impl dups them.
+                os.close(w_stdout)
+                os.close(w_stderr)
 
         thread = threading.Thread(target=run_cmd)
         thread.start()
-
-        # Read from the pipes (for streaming)
-        os.close(w_stdout)
-        os.close(w_stderr)
 
         stdout_reader = os.fdopen(r_stdout, "r")
         stderr_reader = os.fdopen(r_stderr, "r")
