@@ -7,7 +7,7 @@ mod common;
 use std::ffi::CStr;
 use std::path::PathBuf;
 use std::process::Command as StdCommand;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 /// Files under the fixture root that path slots complete. `files/sub/` is a directory.
@@ -736,46 +736,48 @@ fn bash_earlier_word_with_a_colon_stays_one_word() {
 }
 
 /// Marking directories must not rescan the whole listing for every name. Wall-clock
-/// bounds flake under load, so compare 4x the entries against 1x in the same run:
-/// linear work grows about 4x, a per-name rescan about 16x.
+/// bounds flake under load, so compare 16x the entries against 1x in the same run: linear
+/// work grows about 16x, a per-name rescan about 256x. A wide span keeps the fixed cost of
+/// starting bash and toolr small next to the listing, and the 64x bound between the two
+/// leaves room for a loaded runner without letting a quadratic through.
 #[test]
 fn bash_path_completion_scales_linearly_with_the_listing() {
+    const SMALL: usize = 1000;
+    const LARGE: usize = 16 * SMALL;
     for bash in bashes() {
         let fx = fixture();
         let script = print_script("bash");
-        for (name, n) in [("small", 1000), ("large", 4000), ("empty", 0)] {
+        for (name, n) in [("small", SMALL), ("large", LARGE)] {
             let dir = fx.tmp.path().join(name);
             std::fs::create_dir_all(&dir).unwrap();
             for i in 0..n {
-                std::fs::create_dir_all(dir.join(format!("d{i:04}"))).unwrap();
-                std::fs::write(dir.join(format!("f{i:04}")), "").unwrap();
+                std::fs::create_dir_all(dir.join(format!("d{i:05}"))).unwrap();
+                std::fs::write(dir.join(format!("f{i:05}")), "").unwrap();
             }
         }
-        // The fastest of three runs, so a burst of load on one doesn't count.
         let time = |cur: &str, n: usize| {
-            (0..3)
-                .map(|_| {
-                    let start = Instant::now();
-                    let run = Drive::new(&script, &["--cfg"], cur).run(&bash, &fx);
-                    let took = start.elapsed();
-                    assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
-                    assert_eq!(run.reply.len(), 2 * n, "{bash} {cur}");
-                    let dirs = run.reply.iter().filter(|r| r.ends_with('/')).count();
-                    assert_eq!(dirs, n, "{bash} {cur}");
-                    took
-                })
-                .min()
-                .unwrap()
+            let start = Instant::now();
+            let run = Drive::new(&script, &["--cfg"], cur).run(&bash, &fx);
+            let took = start.elapsed();
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert_eq!(run.reply.len(), 2 * n, "{bash} {cur}");
+            let dirs = run.reply.iter().filter(|r| r.ends_with('/')).count();
+            assert_eq!(dirs, n, "{bash} {cur}");
+            took
         };
         // `~/` takes the path that looks directories up in `compgen -d`'s output.
         for prefix in ["", "~/"] {
-            let base = time(&format!("{prefix}empty/"), 0);
-            let small = time(&format!("{prefix}small/"), 1000).saturating_sub(base);
-            let large = time(&format!("{prefix}large/"), 4000).saturating_sub(base);
-            let ratio = large.as_secs_f64() / small.as_secs_f64().max(0.001);
+            // The fastest of three, with the sizes interleaved, so a burst of load on the
+            // runner doesn't land on every run of one size.
+            let (mut small, mut large) = (Duration::MAX, Duration::MAX);
+            for _ in 0..3 {
+                small = small.min(time(&format!("{prefix}small/"), SMALL));
+                large = large.min(time(&format!("{prefix}large/"), LARGE));
+            }
+            let ratio = large.as_secs_f64() / small.as_secs_f64();
             assert!(
-                ratio < 8.0,
-                "{bash} {prefix:?}: 4x the entries took {ratio:.1}x as long ({small:?} -> {large:?})"
+                ratio < 64.0,
+                "{bash} {prefix:?}: 16x the entries took {ratio:.1}x as long ({small:?} -> {large:?})"
             );
         }
     }
