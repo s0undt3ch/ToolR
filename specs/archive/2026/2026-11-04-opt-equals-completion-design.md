@@ -46,7 +46,7 @@ Measured with a logging `toolr` shim on `PATH`, driving each shell through a pty
 - **fish 4.9.3**: `commandline -ct` is the whole `--mode=a`, and fish filters candidates
   against it. Bare `alpha` gives nothing; `--mode=alpha` works. `__fish_complete_path
   "--cfg=/tm"` already returns `--cfg=/tmp/`, and `__fish_complete_directories "--out=/tm"`
-  returns `--out=/tmp/`.
+  returns `--out=/tmp/`, but fish 3.6 globs the whole word and returns nothing.
 
 So the engine must recognise the form, and every script needs a change: the shells disagree
 on whether the `--opt=` part belongs in the candidate.
@@ -108,7 +108,7 @@ The engine returns bare values, and each script adds what its shell needs:
 | ----- | ------------------------------------------------- | -------------------------------------------- |
 | bash  | `--opt=` plus the value, trimmed to what readline replaces | path completion of the part after `=`, `--opt=` put back when readline replaces it |
 | zsh   | `compset -P 1 '*='`, then `compadd` bare values   | `compset -P 1 '*='`, then `_files` / `_files -/` |
-| fish  | print `$opt_prefix$value` for each line           | unchanged: `__fish_complete_path "$current"` handles `--opt=` |
+| fish  | print `$opt_prefix$value` for each line           | strip `--opt=`, complete the bare path, print `$opt_prefix$line` |
 
 Why not have the engine print `--mode=alpha`:
 
@@ -170,9 +170,9 @@ script drops empty lines, and calls `compset` before `compadd` only when there a
 ### fish
 
 `set -l opt_prefix (string match -r -- '^--[^=]+=' $current)`. On exit 0, each line is printed
-as `"$opt_prefix$line"` (the description after the tab is kept). Paths need nothing new.
-`__fish_complete_path` and `__fish_complete_directories` strip and re-add `--opt=` themselves
-(checked on fish 4.9.3; the shell test covers the CI version).
+as `"$opt_prefix$line"` (the description after the tab is kept). Paths do the same: fish 3.7+
+strips `--opt=` inside `__fish_complete_path`, but fish 3.6 doesn't, so the script strips it,
+completes the bare path and prints `"$opt_prefix$line"` for each result.
 
 ### Upgrade path
 

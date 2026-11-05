@@ -27,10 +27,15 @@ function __toolr_complete
             for line in $out
                 printf '%s\n' "$opt_prefix$line"
             end
+        # fish < 3.7 globs the whole `--opt=` word, so complete the bare path instead.
         case 10
-            __fish_complete_path "$current"
+            for line in (__fish_complete_path (string replace -r -- '^--[^=]+=' '' "$current"))
+                printf '%s\n' "$opt_prefix$line"
+            end
         case 11
-            __fish_complete_directories "$current"
+            for line in (__fish_complete_directories (string replace -r -- '^--[^=]+=' '' "$current"))
+                printf '%s\n' "$opt_prefix$line"
+            end
     end
 end
 
