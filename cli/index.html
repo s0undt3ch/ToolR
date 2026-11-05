@@ -2491,9 +2491,17 @@ into your own dotfiles management.</p>
 </span></code></pre></div>
 <h3 id="self-completion-install"><code>toolr self completion install &lt;shell&gt; [--force]</code><a class="headerlink" href="#self-completion-install" title="Permanent link">&para;</a></h3>
 <p>Write the completion script for <code>&lt;shell&gt;</code> into its standard location
-(<code>~/.bash_completion.d/</code>, <code>~/.zsh/completions/</code>, or
+(<code>~/.local/share/bash-completion/completions/</code>, <code>~/.zfunc/</code>, or
 <code>~/.config/fish/completions/</code>). <code>--force</code> overwrites an existing file
 without prompting.</p>
+<p>Bash completion needs bash 4.4 or newer; on an older bash, sourcing the
+script prints one warning and registers nothing. The script itself doesn't
+need the bash-completion package, but only that package loads the install
+directory. Without it, source the script from <code>~/.bashrc</code> instead:
+<code>source &lt;(toolr self completion print bash)</code>. A word with an unclosed
+quote (<code>--cfg 'a:b</code>) completes nothing.</p>
+<p>An aliased toolr (<code>alias t=toolr</code>) gets no completion by default; run
+<code>complete -F _toolr_complete t</code> to register it.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>install<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>Install the completion script for a shell into its standard location

@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev704-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev731-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev704 - 2026-11-05
+        0.35.2-dev731 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev704 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev731 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev704-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev731-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev704 - 2026-11-05
+        0.35.2-dev731 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev704 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev731 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev704-2026-11-05">0.35.2-dev704 - 2026-11-05<a class="headerlink" href="#0352-dev704-2026-11-05" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev731-2026-11-05">0.35.2-dev731 - 2026-11-05<a class="headerlink" href="#0352-dev731-2026-11-05" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7586,6 +7586,9 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <p>When a timeout fires, toolr now also kills the processes the command started, not just the command. It used to kill only the direct child, so <code>ctx.run("sh", "-c", "sleep 999; true", timeout_secs=1)</code> left <code>sleep</code> running. A process that detached itself first, such as a daemon that double-forks, can't be found and keeps running.</p>
 <p><strong>Breaking:</strong> <code>toolr project trust</code> now runs <code>uv sync</code> on the tools venv after trusting the repository, when the venv needs one and you accept on a terminal or <code>TOOLR_AUTO_INSTALL_UV=1</code> is set, and it exits non-zero if that sync fails. It used to only record the trust and always exit 0, so scripts and hooks that run it with <code>TOOLR_AUTO_INSTALL_UV=1</code> now sync too. Pass <code>--no-sync</code> to keep the old trust-only behaviour. The trust is kept either way.</p>
 <p>A fresh clone now needs one step before its commands run. On a terminal <code>toolr project trust</code> asks first (<code>Sync it now? [y/N]</code>); declining keeps the trust and points you at <code>toolr project venv sync</code>. Running a command in an untrusted repository works the same way: answer <code>y</code> to the trust prompt and, if the venv is missing, out of date or broken, toolr offers to sync it and then runs the command. The sync prompt replaces the uv install prompt for that sync, so you see at most two prompts. With <code>--quiet</code> or no terminal toolr doesn't ask and doesn't sync unless <code>TOOLR_AUTO_INSTALL_UV=1</code> is set.</p>
+<p><strong>Breaking:</strong> bash completion now needs bash 4.4 or newer. On bash 4.0 to 4.3, which worked before, sourcing the script prints one warning and registers nothing, so completion is lost until you upgrade bash.</p>
+<p>In return, completion works for file names and choice values containing <code>:</code>, <code>=</code>, <code>@</code> or <code>$</code> (bash split <code>:</code> and <code>=</code> into separate words, so they completed nothing or repeated the typed prefix), and it no longer needs the bash-completion package. The install paths in <code>docs/cli.md</code> are corrected too. Re-run <code>toolr self completion install bash --force</code>, or re-source the script, to pick it up.</p>
+<p>The warning prints only in an interactive shell, so a bashrc sourced by scripts or <code>bash -c</code> stays quiet.</p>
 <p><strong>Breaking:</strong> <code>toolr</code> and <code>CommandsTester</code> now refuse several shapes they used to read differently. A command name defined twice in one group, in one file or across files of one <code>tools/</code> tree or plugin package, fails with "duplicate commands" listing every definition (it used to keep one silently); rename all but one, e.g. with <code>name="…"</code>. A command decorator on a nested <code>def</code> (inside another function, a class or an <code>if</code>) and a <code>group=</code> or command name that isn't a string literal fail with "unsupported command declarations"; move the <code>def</code> to module level and write the value as a literal. A local command shadowing a plugin's, or two plugins defining one command, still only warn.</p>
 <p>Both now also reject a command decorator inside <code>if TYPE_CHECKING:</code>, a platform guard or an uncalled factory, even when that code never runs, and a <code>def</code> carrying two command decorators; each command must be a top-level <code>def</code>, with platform checks inside its body. toolr recognises <code>command</code> imported from <code>toolr</code> or any <code>toolr.*</code> submodule, re-exported within <code>tools/</code>, or assigned from <code>toolr.command</code>; one imported from anywhere else, such as click, counts only when called with <code>group=</code>, and a module's own <code>def command</code> never does.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
@@ -7885,6 +7888,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(testing)</em> Read tools sources as bytes for the shape check (<a href="https://github.com/s0undt3ch/ToolR/commit/ba80c4d350a3693ee343f540bbd9b9a0fb1ea7c5"><code>ba80c4d</code></a>)</li>
 <li><em>(decorators)</em> Validate command_group arguments before returning an existing group (<a href="https://github.com/s0undt3ch/ToolR/commit/e053ae1c72e3587bff9b91e82e28eb4eda7f79cf"><code>e053ae1</code></a>)</li>
 <li><em>(decorators)</em> Allow a title-only re-fetch of an existing command group (<a href="https://github.com/s0undt3ch/ToolR/commit/897f2e8cf0115d81451b93036231dc9523261182"><code>897f2e8</code></a>)</li>
+<li><em>(complete)</em> Bash completes words with colons, without bash-completion (<a href="https://github.com/s0undt3ch/ToolR/commit/e7cea51aed47768168d736e473884de075ac7a0b"><code>e7cea51</code></a>)</li>
+<li><em>(complete)</em> Keep a typed <code>@</code> or <code>$</code> in bash completion replies (<a href="https://github.com/s0undt3ch/ToolR/commit/11f0d6e30d004280df876dd5fd222b72112fc1fc"><code>11f0d6e</code></a>)</li>
+<li><em>(complete)</em> Warn about an old bash only in an interactive shell (<a href="https://github.com/s0undt3ch/ToolR/commit/35fc070d5a1bd784bee6e57d513564b56f93e408"><code>35fc070</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8151,6 +8157,16 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Spec and plan FU-12 registry test isolation (<a href="https://github.com/s0undt3ch/ToolR/commit/55566005462d0d9c40c9040b871e61a361a76435"><code>5556600</code></a>)</li>
 <li><em>(specs)</em> Archive the FU-12 registry test isolation design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/0770bf192289a17f231518f8462a96b9b0edae1a"><code>0770bf1</code></a>)</li>
 <li><em>(writing-commands)</em> Give the command_group examples a description (<a href="https://github.com/s0undt3ch/ToolR/commit/0831ec8fa3e12d4f111532ee0745391e376aa404"><code>0831ec8</code></a>)</li>
+<li><em>(specs)</em> Spec and plan FU-16/FU-17 bash completion word handling (<a href="https://github.com/s0undt3ch/ToolR/commit/1a642a17f366dc464657c98c11636313fc24f6ed"><code>1a642a1</code></a>)</li>
+<li><em>(specs)</em> Record the bash completion words decisions (<a href="https://github.com/s0undt3ch/ToolR/commit/33545017a83638e92c1cb2b49ed450e07e864c4d"><code>3354501</code></a>)</li>
+<li><em>(cli)</em> Fix completion install paths and state the bash 4.4 floor (<a href="https://github.com/s0undt3ch/ToolR/commit/8ed0eafefc9d3cb7ef104ff2bd45cc53c3dcf2df"><code>8ed0eaf</code></a>)</li>
+<li><em>(specs)</em> Archive the FU-16 bash completion words design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/ba47f66f52f0f55819633336adc120b5addc45f9"><code>ba47f66</code></a>)</li>
+<li><em>(specs)</em> Spec and plan FU-21 order-independent tests and pytest-randomly (<a href="https://github.com/s0undt3ch/ToolR/commit/6b02597d0cd7ef6a745fa0ce65bfacd1877f6e51"><code>6b02597</code></a>)</li>
+<li><em>(contributing)</em> Reproduce a test failure from its seed (<a href="https://github.com/s0undt3ch/ToolR/commit/6bbfc8fe1d8aaef59ed66ce51b813659b9d7f857"><code>6bbfc8f</code></a>)</li>
+<li><em>(specs)</em> Record that order-dependent distribution tests are fixed, not exempted (<a href="https://github.com/s0undt3ch/ToolR/commit/9c6d53d0470a59f5bb1611cc154a06dd0090b7c9"><code>9c6d53d</code></a>)</li>
+<li><em>(specs)</em> Archive the FU-21 order-independent tests design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/d2cc928c15a5586d4dcdddd71a028f19884efeb1"><code>d2cc928</code></a>)</li>
+<li><em>(contributing)</em> Drop the redundant -p randomly from the replay example (<a href="https://github.com/s0undt3ch/ToolR/commit/70e767e6fd39e0dcee12b2c579a25cfedc19f0b2"><code>70e767e</code></a>)</li>
+<li>Note random test order and the autouse fixture convention (<a href="https://github.com/s0undt3ch/ToolR/commit/169c66a5ce6a658e868186ee78acb486a19cfb71"><code>169c66a</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8256,6 +8272,13 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(ci)</em> Move tool tests into tests/tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/f8e808cc5c668cc5de3a70021dbbe64eb07ede26"><code>f8e808c</code></a>)</li>
 <li><em>(parser)</em> A dotted <code>command = a.b.command</code> isn't followed (<a href="https://github.com/s0undt3ch/ToolR/commit/eba5376dd3aa277e4f783fe24af5be4b535bef7d"><code>eba5376</code></a>)</li>
 <li><em>(registry)</em> Isolate the command-group registry for every test (<a href="https://github.com/s0undt3ch/ToolR/commit/3939b6889b0b725d4a18970f42767c0e59e1ffbc"><code>3939b68</code></a>)</li>
+<li><em>(complete)</em> Accept any pre-4.4 bash in the old-bash warning test (<a href="https://github.com/s0undt3ch/ToolR/commit/dd6a2e4bfd76fc146bc8bfadb20c07430f5139fb"><code>dd6a2e4</code></a>)</li>
+<li><em>(complete)</em> Check bash path completion scales linearly, not a time bound (<a href="https://github.com/s0undt3ch/ToolR/commit/3db9a49734f564e906988f8c51059e3d099a2c07"><code>3db9a49</code></a>)</li>
+<li><em>(complete)</em> Compare 16x the entries in the bash path scaling test (<a href="https://github.com/s0undt3ch/ToolR/commit/3039a46943ab5424f99c1c41ace3834c4fa9a071"><code>3039a46</code></a>)</li>
+<li><em>(complete)</em> Read the pty echo so bash 5 starts on macOS (<a href="https://github.com/s0undt3ch/ToolR/commit/d5ef85092afc13492e0e90482daeb536c479b6fb"><code>d5ef850</code></a>)</li>
+<li>Restore cwd, logging and tools state between tests (<a href="https://github.com/s0undt3ch/ToolR/commit/8f0200c87a77c921b0ee94cff93ef2cf46f6dc2b"><code>8f0200c</code></a>)</li>
+<li><em>(logs)</em> Test setup_logging through caplog and real handlers, not mocks (<a href="https://github.com/s0undt3ch/ToolR/commit/efff996a1f1e1438526132a17f935e7b0ec332f9"><code>efff996</code></a>)</li>
+<li><em>(logs)</em> Name and document the autouse fixtures, parametrise the timestamp-off test (<a href="https://github.com/s0undt3ch/ToolR/commit/1893ef86cc40d89f797a9de3b0b4edc20fb85c41"><code>1893ef8</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8308,6 +8331,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(ruff)</em> Mark the repo's tools package as first-party (<a href="https://github.com/s0undt3ch/ToolR/commit/f6b6a6b548de7eedf045b78c9c3e6e426f06f0d5"><code>f6b6a6b</code></a>)</li>
 <li><em>(ci)</em> Drop the tests/support/coverage exemption (<a href="https://github.com/s0undt3ch/ToolR/commit/f836a90b58ed6a3ff5cb838d05c72dd281213e68"><code>f836a90</code></a>)</li>
 <li><em>(ruff)</em> Sort the tools package in its own import block (<a href="https://github.com/s0undt3ch/ToolR/commit/19013ee8fbb00f290b24a73d778a9de0c2332f51"><code>19013ee</code></a>)</li>
+<li><em>(test)</em> Install bash 4.4+ on macOS for the completion tests (<a href="https://github.com/s0undt3ch/ToolR/commit/72c5aa7b5d20280194ec3affbf9f7440575170a3"><code>72c5aa7</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
