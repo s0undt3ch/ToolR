@@ -6,7 +6,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from unittest.mock import patch
 
@@ -252,50 +251,14 @@ def test_negative_fd_is_an_error_naming_the_argument(echo_command):
         run_command_impl(echo_command("test"), sys_stdout_fd=1, sys_stderr_fd=-1)
 
 
-def test_fd_streaming_works(echo_command):
-    """Test that streaming with file descriptors works correctly"""
+def test_fd_streaming_works(echo_command, run_streaming):
+    result_code, stdout_streamed, stderr_streamed = run_streaming(
+        echo_command("to stdout", "to stderr")
+    )
 
-    # Create pipe pairs for stdout and stderr
-    r_stdout, w_stdout = os.pipe()
-    r_stderr, w_stderr = os.pipe()
-
-    # Run command with these file descriptors
-    # Run in a separate thread so we don't block
-
-    result_code = None
-    exception = None
-
-    def run_cmd():
-        nonlocal result_code, exception
-        try:
-            result_code = run_command_impl(
-                echo_command("to stdout", "to stderr"),
-                sys_stdout_fd=w_stdout,
-                sys_stderr_fd=w_stderr,
-            )
-        except Exception as e:
-            exception = e
-        finally:
-            # Closing here, not after start(), keeps the fds open until run_command_impl dups them.
-            os.close(w_stdout)
-            os.close(w_stderr)
-
-    thread = threading.Thread(target=run_cmd)
-    thread.start()
-
-    with os.fdopen(r_stdout, "r") as stdout_reader, os.fdopen(r_stderr, "r") as stderr_reader:
-        stdout_content = stdout_reader.read()
-        stderr_content = stderr_reader.read()
-
-    # Wait for thread to finish
-    thread.join(timeout=2.0)
-    assert not thread.is_alive(), "Command did not complete"
-
-    # Check results
-    assert exception is None, f"Got exception: {exception}"
-    assert result_code == 0, f"Expected exit code 0, got {result_code}"
-    assert "to stdout" in stdout_content
-    assert "to stderr" in stderr_content
+    assert result_code == 0
+    assert "to stdout" in stdout_streamed
+    assert "to stderr" in stderr_streamed
 
 
 def test_timeout(sleep_command):
@@ -339,58 +302,24 @@ def test_no_output_timeout(sleep_command):
     assert elapsed < 1.0  # Verify timeout happened quickly
 
 
-def test_specific_fd_with_capture(echo_command):
+def test_specific_fd_with_capture(echo_command, run_streaming):
     """Test streaming to specific file descriptors while also capturing."""
-    # Create pipe pairs for custom stdout and stderr
-    r_stdout, w_stdout = os.pipe()
-    r_stderr, w_stderr = os.pipe()
-
-    # Create temp files for capturing
     with tempfile.TemporaryFile() as stdout_capture, tempfile.TemporaryFile() as stderr_capture:
-        result_code = None
-        exception = None
-
-        def run_cmd():
-            nonlocal result_code, exception
-            try:
-                result_code = run_command_impl(
-                    echo_command("to both stdout", "to both stderr"),
-                    sys_stdout_fd=w_stdout,
-                    sys_stderr_fd=w_stderr,
-                    stdout_fd=stdout_capture.fileno(),
-                    stderr_fd=stderr_capture.fileno(),
-                )
-            except Exception as e:
-                exception = e
-            finally:
-                # Closing here, not after start(), keeps the fds open until run_command_impl dups them.
-                os.close(w_stdout)
-                os.close(w_stderr)
-
-        thread = threading.Thread(target=run_cmd)
-        thread.start()
-
-        with os.fdopen(r_stdout, "r") as stdout_reader, os.fdopen(r_stderr, "r") as stderr_reader:
-            stdout_streamed = stdout_reader.read()
-            stderr_streamed = stderr_reader.read()
-
-        # Wait for thread to finish
-        thread.join(timeout=2.0)
-        assert not thread.is_alive(), "Command did not complete"
-        assert exception is None, f"Got exception: {exception}"
-
-        # Read from the capture files
+        result_code, stdout_streamed, stderr_streamed = run_streaming(
+            echo_command("to both stdout", "to both stderr"),
+            stdout_fd=stdout_capture.fileno(),
+            stderr_fd=stderr_capture.fileno(),
+        )
         stdout_capture.seek(0)
         stderr_capture.seek(0)
-
         stdout_captured = stdout_capture.read().decode("utf-8")
         stderr_captured = stderr_capture.read().decode("utf-8")
 
-        # Verify both streaming and capturing worked
-        assert "to both stdout" in stdout_streamed
-        assert "to both stderr" in stderr_streamed
-        assert "to both stdout" in stdout_captured
-        assert "to both stderr" in stderr_captured
+    assert result_code == 0
+    assert "to both stdout" in stdout_streamed
+    assert "to both stderr" in stderr_streamed
+    assert "to both stdout" in stdout_captured
+    assert "to both stderr" in stderr_captured
 
 
 def test_command_with_cwd(tmp_path, cat_command, cwd_command):
