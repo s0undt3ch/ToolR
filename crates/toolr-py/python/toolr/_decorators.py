@@ -403,8 +403,13 @@ def _resolve_group_fields(
     description: str | None,
     long_description: str | None,
     docstring: str | None,
+    *,
+    exists: bool = False,
 ) -> tuple[str, str, str | None]:
     """Validate ``command_group`` arguments and resolve the final group fields.
+
+    A description is only required to create a group. For an ``exists`` group a
+    missing one is a re-fetch, so the returned description is empty.
 
     Returns:
         The ``(title, description, long_description)`` the group is created with
@@ -425,10 +430,10 @@ def _resolve_group_fields(
         if not title:
             title = parsed_docstring.short_description
         return title, parsed_docstring.full_description, None
-    if description is None:
+    if description is None and not exists:
         err_msg = "You must at least pass either the 'docstring' or 'description' argument"
         raise ValueError(err_msg)
-    return title, description, long_description
+    return title, description or "", long_description
 
 
 def command_group(
@@ -487,17 +492,18 @@ def command_group(
     elif parent is None:
         parent = "tools"
 
-    # Validate before the lookup, so a malformed call raises whether or not
-    # another module already declared the group.
+    collector = _get_command_group_storage()
+    group: CommandGroup | None = collector.get(f"{parent}.{name}")
+
+    # Contradictory arguments raise whether or not the group exists; a missing
+    # description only raises when this call would have to create the group.
     title, description, long_description = _resolve_group_fields(
-        title, description, long_description, docstring
+        title, description, long_description, docstring, exists=group is not None
     )
 
-    collector = _get_command_group_storage()
-
-    group: CommandGroup | None = collector.get(f"{parent}.{name}")
     if group is not None:
-        # The first declaration wins; flag a later one that disagrees with it.
+        # The first declaration wins; flag a later one that disagrees with it
+        # on a field it actually provided.
         differing = [
             field
             for field, wanted in (
@@ -505,10 +511,10 @@ def command_group(
                 ("description", description),
                 ("long_description", long_description),
             )
-            if getattr(group, field) != wanted
+            if wanted and getattr(group, field) != wanted
         ]
         if differing:
-            log.warning(
+            log.debug(
                 "Command group '%s' is already declared; ignoring the different %s of this declaration",
                 group.full_name,
                 ", ".join(differing),

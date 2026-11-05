@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
+import sys
+import textwrap
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
 from toolr import command_group
+from toolr._decorators import _get_command_group_storage
 
 
 def test_command_group_without_description_or_docstring():
@@ -62,53 +68,137 @@ def test_command_group_full_name_without_parent():
     assert group.full_name == "tools.test"
 
 
-def test_invalid_call_raises_even_when_the_group_exists():
+def test_contradictory_call_raises_even_when_the_group_exists():
     existing = command_group("dup", "T", "d")
 
-    with pytest.raises(
-        ValueError, match="You must at least pass either the 'docstring' or 'description' argument"
-    ):
-        command_group("dup", "T")
     with pytest.raises(
         ValueError, match="You can't pass both docstring and description or long_description"
     ):
         command_group("dup", "T", description="d", docstring="x")
+    with pytest.raises(
+        ValueError, match="You can't pass both docstring and description or long_description"
+    ):
+        command_group("dup", "T", long_description="l", docstring="x")
 
     assert command_group("dup", "T", "d") is existing
 
 
-def test_invalid_call_raises_for_an_existing_dotted_group():
-    command_group("ci.helm", "T", "d")
+def test_title_only_refetch_returns_the_existing_group(caplog: pytest.LogCaptureFixture):
+    existing = command_group("ci", "CI", "Continuous integration.")
+
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
+        again = command_group("ci", "CI")
+        bare = command_group("ci")
+
+    assert again is existing
+    assert bare is existing
+    assert existing.description == "Continuous integration."
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_title_only_refetch_of_a_dotted_group():
+    existing = command_group("ci.helm", "T", "d")
+
+    assert command_group("ci.helm", "T") is existing
+
+
+def test_refetch_with_a_different_title_is_logged(caplog: pytest.LogCaptureFixture):
+    existing = command_group("ci", "CI", "d")
+
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
+        again = command_group("ci", "Other")
+
+    assert again is existing
+    assert "title" in caplog.records[-1].getMessage()
+
+
+@pytest.fixture
+def make_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Callable[[dict[str, str]], None]:
+    def factory(files: dict[str, str]) -> None:
+        for rel, body in files.items():
+            target = tmp_path / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(textwrap.dedent(body))
+        monkeypatch.syspath_prepend(str(tmp_path))
+        for name in list(sys.modules):
+            if name == "pkgtools" or name.startswith("pkgtools."):
+                monkeypatch.delitem(sys.modules, name)
+        importlib.invalidate_caches()
+
+    return factory
+
+
+def test_package_init_declares_and_submodule_refetches_by_title(make_package):
+    make_package(
+        {
+            "pkgtools/__init__.py": "",
+            "pkgtools/ci/__init__.py": '''
+                """CI helpers."""
+                from toolr import command_group
+
+                group = command_group("ci", "CI", docstring=__doc__)
+            ''',
+            "pkgtools/ci/lint.py": """
+                from toolr import command_group
+
+                group = command_group("ci", "CI")
+            """,
+        }
+    )
+
+    declared = importlib.import_module("pkgtools.ci")
+    refetched = importlib.import_module("pkgtools.ci.lint")
+
+    assert refetched.group is declared.group
+    assert _get_command_group_storage()["tools.ci"] is declared.group
+
+
+def test_submodule_imported_first_cannot_create_the_group_from_a_title(make_package):
+    make_package(
+        {
+            "pkgtools/__init__.py": "",
+            "pkgtools/lint.py": """
+                from toolr import command_group
+
+                group = command_group("ci", "CI")
+            """,
+        }
+    )
 
     with pytest.raises(ValueError, match="You must at least pass"):
-        command_group("ci.helm", "T")
+        importlib.import_module("pkgtools.lint")
 
 
-def test_identical_redeclaration_returns_the_group_without_a_warning(
+def test_identical_redeclaration_returns_the_group_without_a_conflict_record(
     caplog: pytest.LogCaptureFixture,
 ):
     first = command_group("same", "T", "d", long_description="l")
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
         second = command_group("same", "T", "d", long_description="l")
 
     assert second is first
-    assert caplog.records == []
+    assert not [r for r in caplog.records if "ignoring" in r.getMessage()]
 
 
-def test_conflicting_redeclaration_returns_the_first_group_and_warns(
+def test_conflicting_redeclaration_returns_the_first_group_and_logs_at_debug(
     caplog: pytest.LogCaptureFixture,
 ):
     first = command_group("clash", "T", "first")
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
         second = command_group("clash", "T", "second")
 
     assert second is first
     assert second.description == "first"
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert len(warnings) == 1
-    message = warnings[0].getMessage()
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    conflicts = [
+        r for r in caplog.records if r.levelno == logging.DEBUG and "ignoring" in r.getMessage()
+    ]
+    assert len(conflicts) == 1
+    message = conflicts[0].getMessage()
     assert "tools.clash" in message
     assert "description" in message
     assert "title" not in message
@@ -117,7 +207,7 @@ def test_conflicting_redeclaration_returns_the_first_group_and_warns(
 def test_conflicting_redeclaration_names_every_differing_field(caplog: pytest.LogCaptureFixture):
     command_group("many", "T", "d", long_description="l")
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
         command_group("many", "U", "e", long_description="m")
 
     message = caplog.records[-1].getMessage()
