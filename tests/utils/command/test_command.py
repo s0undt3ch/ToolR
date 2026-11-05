@@ -283,11 +283,9 @@ def test_fd_streaming_works(echo_command):
     thread = threading.Thread(target=run_cmd)
     thread.start()
 
-    stdout_reader = os.fdopen(r_stdout, "r")
-    stderr_reader = os.fdopen(r_stderr, "r")
-
-    stdout_content = stdout_reader.read()
-    stderr_content = stderr_reader.read()
+    with os.fdopen(r_stdout, "r") as stdout_reader, os.fdopen(r_stderr, "r") as stderr_reader:
+        stdout_content = stdout_reader.read()
+        stderr_content = stderr_reader.read()
 
     # Wait for thread to finish
     thread.join(timeout=2.0)
@@ -372,11 +370,9 @@ def test_specific_fd_with_capture(echo_command):
         thread = threading.Thread(target=run_cmd)
         thread.start()
 
-        stdout_reader = os.fdopen(r_stdout, "r")
-        stderr_reader = os.fdopen(r_stderr, "r")
-
-        stdout_streamed = stdout_reader.read()
-        stderr_streamed = stderr_reader.read()
+        with os.fdopen(r_stdout, "r") as stdout_reader, os.fdopen(r_stderr, "r") as stderr_reader:
+            stdout_streamed = stdout_reader.read()
+            stderr_streamed = stderr_reader.read()
 
         # Wait for thread to finish
         thread.join(timeout=2.0)
