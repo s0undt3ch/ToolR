@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev772-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev779-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev772 - 2026-11-05
+        0.35.2-dev779 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev772 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev779 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev772-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev779-2026-11-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev772 - 2026-11-05
+        0.35.2-dev779 - 2026-11-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev772 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev779 - 2026-11-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev772-2026-11-05">0.35.2-dev772 - 2026-11-05<a class="headerlink" href="#0352-dev772-2026-11-05" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev779-2026-11-05">0.35.2-dev779 - 2026-11-05<a class="headerlink" href="#0352-dev779-2026-11-05" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7717,6 +7717,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p><code>command_group()</code> now raises for contradictory arguments (such as passing both <code>docstring</code> and <code>description</code>) even when the group already exists, instead of silently returning the existing group. It no longer raises at runtime for a missing description: a title-only call, <code>command_group("ci", "CI")</code>, returns the group if it exists and creates it otherwise, and the manifest build checks that some declaration describes the group instead.</p>
 <p>When several calls declare the same group, a later call fills a title, description or long description the group still has empty, so <code>toolr &lt;group&gt; --help</code> and <code>CommandsTester</code> show the description whichever module gives it. A conflicting re-declaration, with a different non-empty title, description or long description, keeps the first group: Python logs it at DEBUG level, and toolr warns when it rebuilds the manifest or <code>toolr self build-manifest</code> builds a plugin, naming the module each kept value came from and the module it ignores.</p>
 <p>The manifest build now reads a group's <code>title=</code> passed by keyword and <code>parent=</code> passed by position, as <code>command_group</code> does. Before, it ignored a keyword title, so <code>toolr --help</code> showed no title for <code>command_group("ci", title="CI", description="…")</code>. <code>toolr --help</code> shows a group's title and description only when they are string literals or the module docstring through <code>__doc__</code>; any other expression, such as a constant, counts as given but shows empty.</p>
+<p>Bash tab completion on a path option keeps a typed leading <code>$NAME/</code> or <code>${NAME}/</code> as typed, as native bash does: <code>$HOME/xd&lt;TAB&gt;</code> now completes to <code>$HOME/xdir/</code> instead of inserting a literal <code>\$HOME/xdir</code> and dropping the trailing <code>/</code>.</p>
+<p>Bash path completion offers nothing for any other word containing <code>$</code> or a backtick, such as <code>${VAR:-$(cmd)}/</code>, <code>$_/</code> or a typed <code>\$</code>. Bash 5.3 expands such a word while completing it and could run a command substitution on Tab.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7908,6 +7910,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(testing)</em> Read group fields like the build without constants (<a href="https://github.com/s0undt3ch/ToolR/commit/8445441ce69fe3457e03efff2328b52a7d67efb0"><code>8445441</code></a>)</li>
 <li><em>(cli)</em> Print every build warning of the run's first build (<a href="https://github.com/s0undt3ch/ToolR/commit/844c578efaf9e0246d8a3dba4d46386cddce28ed"><code>844c578</code></a>)</li>
 <li><em>(cli)</em> Print group warnings from toolr self build-manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/f3e8eef6bae6a620a5894b1672959d70132799d9"><code>f3e8eef</code></a>)</li>
+<li><em>(complete)</em> Keep a typed leading <code>$NAME/</code> bare in bash path completion (<a href="https://github.com/s0undt3ch/ToolR/commit/dac6873686bf210d071dc7b87827062cdb16f8f8"><code>dac6873</code></a>)</li>
+<li><em>(complete)</em> Read a typed <code>$NAME/</code> from the user's variable, not a script local (<a href="https://github.com/s0undt3ch/ToolR/commit/eeef57de8c2c9e87dcd8aa3a668214a879f18167"><code>eeef57d</code></a>)</li>
+<li><em>(completion)</em> Don't treat $_ as a variable prefix in bash path completion (<a href="https://github.com/s0undt3ch/ToolR/commit/a676f20f890b06e05357210aa97e1bd268ed2da5"><code>a676f20</code></a>)</li>
+<li><em>(complete)</em> Never hand bash compgen a word holding <code>$</code> or a backtick (<a href="https://github.com/s0undt3ch/ToolR/commit/c781b0c6f928ab3a5c26afbd3802b0a5eaacff33"><code>c781b0c</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7982,6 +7988,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(testing)</em> Mirror the parser's group-field model in the tester (<a href="https://github.com/s0undt3ch/ToolR/commit/ee063d66229ff60f9c9b40ca8c58da7649e69dcf"><code>ee063d6</code></a>)</li>
 <li><em>(build-fragment)</em> Return a named BuiltFragment (<a href="https://github.com/s0undt3ch/ToolR/commit/e604b077928118ad2f9a0b320ca9f73c72d2585d"><code>e604b07</code></a>)</li>
 <li><em>(manifest)</em> Return build warnings beside the manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/1e0b5d8513fff9fd56ca75722f7fc5c8181a068c"><code>1e0b5d8</code></a>)</li>
+<li><em>(complete)</em> Tidy bash path-completion script and tests (<a href="https://github.com/s0undt3ch/ToolR/commit/f2d72f6fdc4d4903d09dfe0aa0fd07a9ce11cc2a"><code>f2d72f6</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
