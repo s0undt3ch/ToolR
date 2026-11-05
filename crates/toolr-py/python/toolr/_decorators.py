@@ -402,12 +402,20 @@ def _record_standalone_command(
         _get_pending_command_storage().append(PendingCommand(group or "", cli_name, func))
 
 
+class _GroupFields(NamedTuple):
+    """The fields a ``command_group`` call gives its group, in the order they're compared."""
+
+    title: str
+    description: str
+    long_description: str | None
+
+
 def _resolve_group_fields(
     title: str,
     description: str | None,
     long_description: str | None,
     docstring: str | None,
-) -> tuple[str, str, str | None]:
+) -> _GroupFields:
     """Validate ``command_group`` arguments and resolve the final group fields.
 
     A missing description is not an error at runtime: the runner imports only
@@ -416,7 +424,7 @@ def _resolve_group_fields(
     describes each group.
 
     Returns:
-        The ``(title, description, long_description)`` the group is created with
+        The fields the group is created with
     """
     if docstring is None and description is None:
         _reject_stripped_docstrings()
@@ -433,8 +441,8 @@ def _resolve_group_fields(
         parsed_docstring = Docstring.parse(docstring)
         if not title:
             title = parsed_docstring.short_description
-        return title, parsed_docstring.full_description, None
-    return title, description or "", long_description
+        return _GroupFields(title, parsed_docstring.full_description, None)
+    return _GroupFields(title, description or "", long_description)
 
 
 def command_group(
@@ -497,19 +505,13 @@ def command_group(
     group: CommandGroup | None = collector.get(f"{parent}.{name}")
 
     # Contradictory arguments raise whether or not the group exists.
-    title, description, long_description = _resolve_group_fields(
-        title, description, long_description, docstring
-    )
+    fields = _resolve_group_fields(title, description, long_description, docstring)
 
     if group is not None:
         # An empty field has no opinion: a later declaration fills it. Of two
         # non-empty values the first wins, and the later one is logged.
         differing = []
-        for field, wanted in (
-            ("title", title),
-            ("description", description),
-            ("long_description", long_description),
-        ):
+        for field, wanted in fields._asdict().items():
             current = getattr(group, field)
             if not wanted or current == wanted:
                 continue
@@ -531,11 +533,7 @@ def command_group(
 
     # Create the command group
     collector[f"{parent}.{name}"] = group = CommandGroup(
-        name=name,
-        title=title,
-        description=description,
-        parent=parent,
-        long_description=long_description,
+        name=name, parent=parent, **fields._asdict()
     )
     pending = _get_pending_command_storage()
     waiting = [entry for entry in pending if _group_full_name(entry.group) == group.full_name]

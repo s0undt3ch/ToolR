@@ -12,6 +12,7 @@ from toolr.testing._groups import GroupDeclaration
 from toolr.testing._groups import _format_contradictory_groups
 from toolr.testing._groups import _format_undescribed_groups
 from toolr.testing._groups import _group_declarations
+from toolr.testing._groups import _undescribed_groups
 
 
 @pytest.fixture
@@ -127,12 +128,12 @@ def test_undescribed_groups_message() -> None:
         GroupDeclaration("ci", "tools.ci.lint", describes=False, contradictory=False),
         GroupDeclaration("ok", "tools.ok2", describes=True, contradictory=False),
     ]
-    assert _format_undescribed_groups(declarations) == (
+    assert _format_undescribed_groups(_undescribed_groups(declarations)) == (
         "command groups with no description (1):\n"
         "  - `ci` (declared in tools.ci.build, tools.ci.lint): give one declaration a "
         "description or docstring."
     )
-    assert _format_undescribed_groups(declarations[4:]) is None
+    assert _format_undescribed_groups(_undescribed_groups(declarations[4:])) is None
 
 
 def test_parent_by_position(make_tools_dir: Callable[..., Path]) -> None:
@@ -280,7 +281,7 @@ def test_undescribed_groups_message_asks_for_a_readable_value() -> None:
         GroupDeclaration("ci", "tools.a", describes=False, contradictory=False),
         GroupDeclaration("ci", "tools.b", describes=False, contradictory=False, unreadable=True),
     ]
-    assert _format_undescribed_groups(declarations) == (
+    assert _format_undescribed_groups(_undescribed_groups(declarations)) == (
         "command groups with no description (1):\n"
         "  - `ci` (declared in tools.a, tools.b): give one declaration a description or "
         "docstring the static parser can read: a string literal, or the `__doc__` of a "

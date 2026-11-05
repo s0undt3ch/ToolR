@@ -37,6 +37,7 @@ from toolr.testing._groups import _format_contradictory_groups
 from toolr.testing._groups import _format_undescribed_groups
 from toolr.testing._groups import _group_declarations
 from toolr.testing._groups import _is_pruned_dir
+from toolr.testing._groups import _undescribed_groups
 from toolr.testing._shapes import _format_unsupported_commands
 from toolr.testing._shapes import _unsupported_commands
 from toolr.testing._unknown_groups import _escape_control_chars
@@ -344,7 +345,9 @@ class CommandsTester:
                     self.duplicate_command_collector, self.search_path / "tools"
                 )
             )
-        undescribed = _format_undescribed_groups(_group_declarations(tools_dir))
+        undescribed = _format_undescribed_groups(
+            _undescribed_groups(_group_declarations(tools_dir))
+        )
         if undescribed is not None:
             raise ValueError(undescribed)
         return {**self.command_group_collector}
