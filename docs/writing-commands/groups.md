@@ -108,9 +108,10 @@ each declare `command_group("ci", "CI", "CI commands.")` and share it. A
 later call that passes only the title, `command_group("ci", "CI")`, fetches
 the group without repeating its description.
 
-A later declaration fills a title or description the group still has
-empty, so the call that describes the group needn't come first. One with a
-different title or description doesn't change the group. `toolr` keeps the
+A later declaration fills a title, description or long description the
+group still has empty, so the call that describes the group needn't come
+first. One with a different title, description or long description doesn't
+change the group. `toolr` keeps the
 first one and warns when it rebuilds the manifest:
 
 ```text
@@ -125,6 +126,11 @@ docstring fails the build:
 toolr: command groups with no description (1):
   - `ci` (declared in tools.ci.build, tools.ci.lint): give one declaration a description or docstring.
 ```
+
+The build reads a description or docstring written as a string literal, a
+string constant assigned earlier in the module, or `__doc__`. One passed
+through `**options` or as the `__doc__` of a module without a docstring
+doesn't count, and the error says so.
 
 A single call can't pass both `docstring=` and `description=` (or
 `long_description=`); the build refuses that too.
