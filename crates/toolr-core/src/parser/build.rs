@@ -21,12 +21,20 @@ use crate::parser::{
 };
 use crate::third_party::{ThirdPartyError, discover_and_merge};
 
+/// A built manifest and its build's warnings, which the manifest doesn't
+/// keep: they're printed once, by whoever built it.
+#[derive(Debug)]
+pub struct BuiltManifest {
+    pub manifest: Manifest,
+    pub warnings: Vec<String>,
+}
+
 /// Build the static portion of a manifest from a tools directory.
 ///
 /// Surfaces every unsupported-type rejection in a single batch via
 /// [`BuildError::UnsupportedTypes`] so users see all the offending
 /// annotations at once rather than one-at-a-time on each rebuild.
-pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
+pub fn build_static_manifest(tools_dir: &Path) -> Result<BuiltManifest> {
     match build_static_manifest_inner(tools_dir) {
         Ok(m) => Ok(m),
         Err(BuildError::Build(e)) => Err(e),
@@ -36,7 +44,7 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
     }
 }
 
-fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest, BuildError> {
+fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<BuiltManifest, BuildError> {
     // Name validation is deferred so argparse-scanned flags are reported in
     // the same batch as the native names.
     // One walk feeds both the parser and the hash.
@@ -55,7 +63,6 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         groups: built.groups,
         commands: built.commands,
         plugin_warnings: Vec::new(),
-        build_warnings: built.warnings,
         input_records,
     };
 
@@ -104,7 +111,10 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         }
     }
 
-    Ok(manifest)
+    Ok(BuiltManifest {
+        manifest,
+        warnings: built.warnings,
+    })
 }
 
 /// Parse every `.py` under `source_root` and run every validation shared by
@@ -615,9 +625,12 @@ fn dotted_name(cmd: &crate::manifest::Command) -> String {
 pub fn build_static_manifest_with_venv(
     tools_dir: &Path,
     tools_venv: &Path,
-) -> Result<Manifest, BuildError> {
+) -> Result<BuiltManifest, BuildError> {
     let base = build_static_manifest_inner(tools_dir)?;
-    discover_and_merge(tools_venv, base).map_err(BuildError::ThirdParty)
+    Ok(BuiltManifest {
+        manifest: discover_and_merge(tools_venv, base.manifest).map_err(BuildError::ThirdParty)?,
+        warnings: base.warnings,
+    })
 }
 
 /// Error type covering both the local build and the third-party merge.
@@ -1054,7 +1067,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(tools.join("sub/a.py"), "x = 1\n").unwrap();
-        let manifest = build_static_manifest(&tools).unwrap();
+        let manifest = build_static_manifest(&tools).unwrap().manifest;
         let keys: Vec<_> = manifest
             .input_records
             .files
@@ -1192,13 +1205,60 @@ def hello(ctx):
         )
         .unwrap();
 
-        let m = build_static_manifest_with_venv(&tmp.path().join("tools"), &venv).unwrap();
+        let m = build_static_manifest_with_venv(&tmp.path().join("tools"), &venv)
+            .unwrap()
+            .manifest;
         let groups: Vec<_> = m.groups.iter().map(|g| g.name.as_str()).collect();
         assert!(groups.contains(&"ci"));
         assert!(groups.contains(&"deploy"));
         let cmds: Vec<_> = m.commands.iter().map(|c| c.name.as_str()).collect();
         assert!(cmds.contains(&"hello"));
         assert!(cmds.contains(&"rollout"));
+    }
+
+    /// The local build's warnings survive the merge, and a plugin declaring
+    /// the same group adds none: the local one wins silently.
+    #[test]
+    fn build_with_venv_keeps_the_local_build_warnings() {
+        let tmp = TempDir::new().unwrap();
+        for (module, title) in [("m1", "Grp"), ("m2", "Other")] {
+            write(
+                tmp.path(),
+                &format!("tools/{module}.py"),
+                &format!("g = command_group(\"grp\", \"{title}\", \"Grp\")\n"),
+            );
+        }
+        let venv = tmp.path().join("venv");
+        let pkg = venv.join("lib/python3.13/site-packages/ext_pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        let frag = ManifestFragment {
+            toolr_schema_version: SCHEMA_VERSION,
+            package: "ext_pkg".into(),
+            groups: vec![Group {
+                name: "grp".into(),
+                title: "Plugin".into(),
+                description: "Plugin group.".into(),
+                parent: None,
+                origin: Origin::ThirdParty,
+            }],
+            commands: vec![],
+        };
+        std::fs::write(
+            pkg.join("toolr-manifest.json"),
+            serde_json::to_string(&frag).unwrap(),
+        )
+        .unwrap();
+
+        let built = build_static_manifest_with_venv(&tmp.path().join("tools"), &venv).unwrap();
+        assert_eq!(built.manifest.groups.len(), 1);
+        assert_eq!(built.manifest.groups[0].title, "Grp");
+        assert_eq!(
+            built.warnings,
+            [
+                "group `grp` is declared more than once; keeping the title from tools.m1 and \
+                 ignoring the different title in tools.m2"
+            ]
+        );
     }
 
     /// `list_python_files` must NOT recurse into dot-prefixed
@@ -1504,7 +1564,9 @@ def hello(ctx):
     pass
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         assert_eq!(m.schema_version, SCHEMA_VERSION);
         assert_eq!(m.groups.len(), 1);
         assert_eq!(m.groups[0].name, "ci");
@@ -1519,13 +1581,14 @@ def hello(ctx):
         for (name, contents) in files {
             write(tmp.path(), name, contents);
         }
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
-        let groups = m
+        let built = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let groups = built
+            .manifest
             .groups
             .iter()
             .map(|g| (g.full_path(), g.title.clone(), g.description.clone()))
             .collect();
-        (groups, m.build_warnings)
+        (groups, built.warnings)
     }
 
     fn group_row(path: &str, title: &str, description: &str) -> (String, String, String) {
@@ -2140,7 +2203,9 @@ def check_run_build(ctx):
     pass
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         assert_eq!(m.commands.len(), 1);
         assert_eq!(m.commands[0].group, "ci");
         assert_eq!(m.commands[0].name, "check-run-build");
@@ -2290,7 +2355,9 @@ def dup(ctx):
         for (name, contents) in files {
             write(tmp.path(), name, contents);
         }
-        let m = build_static_manifest(&tmp.path().join("tools")).expect("expected a build");
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .expect("expected a build")
+            .manifest;
         let mut out: Vec<_> = m.commands.into_iter().map(|c| (c.group, c.name)).collect();
         out.sort();
         out
@@ -2657,7 +2724,9 @@ def other():
             "tools/o.py",
             "from toolr import *\n\n\n@command(group=\"grp\")\ndef star(ctx):\n    \"\"\"Star.\"\"\"\n",
         );
-        let manifest = build_static_manifest_inner(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest_inner(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let names: Vec<_> = manifest
             .commands
             .iter()
@@ -2697,7 +2766,9 @@ def other():
         for (name, contents) in &files {
             write(tmp.path(), name, contents);
         }
-        let manifest = build_static_manifest_inner(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest_inner(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let names: Vec<_> = manifest
             .commands
             .iter()
@@ -2804,7 +2875,9 @@ parent = "django"
 "#,
         );
 
-        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let names: std::collections::BTreeSet<_> =
             manifest.commands.iter().map(|c| c.name.as_str()).collect();
         assert!(names.contains("django"), "names: {names:?}");
@@ -2850,7 +2923,9 @@ def django(ctx, *, cpu: str = "1", dispatched: DispatchCommand) -> int:
     return 0
 "#,
         );
-        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let django = manifest
             .commands
             .iter()
@@ -2908,7 +2983,9 @@ def bump(ctx, new_version: str | None) -> None:
     """
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let bump = m.commands.iter().find(|c| c.name == "bump").unwrap();
         assert_eq!(bump.arguments.len(), 1);
         assert_eq!(bump.arguments[0].kind, ArgumentKind::Positional);
@@ -3041,7 +3118,9 @@ def f(ctx, name: str, alias: str | None = None) -> None:
     """
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let f = m.commands.iter().find(|c| c.name == "f").unwrap();
         // `alias` should be Optional (flag), not a positional.
         let kinds: Vec<ArgumentKind> = f.arguments.iter().map(|a| a.kind).collect();
@@ -3093,7 +3172,9 @@ def cmd_b(ctx, *, database: Database = Database.REPLICA) -> None:
 "#,
         );
 
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let cmd_a = m.commands.iter().find(|c| c.name == "cmd-a").unwrap();
         let cmd_b = m.commands.iter().find(|c| c.name == "cmd-b").unwrap();
         let arg_a = cmd_a
@@ -3190,7 +3271,9 @@ def analyse(ctx, *, env: Environment | None = None) -> None:
 "#,
         );
 
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let analyse = m.commands.iter().find(|c| c.name == "analyse").unwrap();
         let arg = analyse.arguments.iter().find(|a| a.name == "env").unwrap();
         assert_eq!(
@@ -3243,7 +3326,9 @@ def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
 "#,
         );
 
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let cmd_c = m.commands.iter().find(|c| c.name == "cmd-c").unwrap();
         let arg = cmd_c
             .arguments
@@ -3376,7 +3461,9 @@ def run(
     """
 "#,
         );
-        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let cmd = manifest.commands.iter().find(|c| c.name == "run").unwrap();
         let ty = |name: &str| {
             cmd.arguments
@@ -4032,7 +4119,9 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
     """
 "#,
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let wrap = m.commands.iter().find(|c| c.name == "wrap").unwrap();
         let help = |n: &str| &wrap.arguments.iter().find(|a| a.name == n).unwrap().help;
         assert_eq!(
@@ -4187,7 +4276,9 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
                 "verbose: Verbose = False",
             ),
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let read = m.commands.iter().find(|c| c.name == "read").unwrap();
         let arg = read.arguments.iter().find(|a| a.name == "verbose").unwrap();
         assert_eq!(arg.kind, ArgumentKind::Flag);
@@ -4206,7 +4297,9 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
                 "verbose: bool = False, *, dry_run: bool = False",
             ),
         );
-        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let m = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let read = m.commands.iter().find(|c| c.name == "read").unwrap();
         for name in ["verbose", "dry_run"] {
             let arg = read.arguments.iter().find(|a| a.name == name).unwrap();
@@ -4247,7 +4340,9 @@ parent = "django"
 "#,
         );
 
-        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let manifest = build_static_manifest(&tmp.path().join("tools"))
+            .unwrap()
+            .manifest;
         let runserver = manifest
             .commands
             .iter()

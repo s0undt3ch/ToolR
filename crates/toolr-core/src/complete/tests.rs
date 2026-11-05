@@ -102,7 +102,6 @@ fn fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -304,7 +303,6 @@ fn nested_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -488,7 +486,6 @@ fn dispatcher_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -733,7 +730,6 @@ fn flags_only_child_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -826,7 +822,9 @@ fn returns_cached_manifest_when_hash_matches() {
     // Build once and write to disk.  Stamp the third_party_hash with the
     // empty-venv sentinel so `freshness::compare` (venv_dir=None) sees a
     // matching hash and returns Fresh.
-    let mut built = crate::parser::build_static_manifest(&tmp.path().join("tools")).unwrap();
+    let mut built = crate::parser::build_static_manifest(&tmp.path().join("tools"))
+        .unwrap()
+        .manifest;
     built.third_party_hash = empty_third_party_hash();
     let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");
     write_manifest(&manifest_path, &built).unwrap();
@@ -863,7 +861,9 @@ fn re_parses_when_cached_hash_is_stale() {
         "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     // Write a stale manifest with a bogus hash.
-    let mut stale = crate::parser::build_static_manifest(&tmp.path().join("tools")).unwrap();
+    let mut stale = crate::parser::build_static_manifest(&tmp.path().join("tools"))
+        .unwrap()
+        .manifest;
     stale.static_hash = "deliberately-stale".into();
     let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");
     write_manifest(&manifest_path, &stale).unwrap();
@@ -881,7 +881,9 @@ fn preserves_third_party_entries_from_cache_when_reparsing() {
     )]);
     // Seed a manifest with a fake third-party command and a stale
     // static_hash so the re-parse path runs.
-    let mut seeded = crate::parser::build_static_manifest(&tmp.path().join("tools")).unwrap();
+    let mut seeded = crate::parser::build_static_manifest(&tmp.path().join("tools"))
+        .unwrap()
+        .manifest;
     seeded.static_hash = "stale".into();
     seeded.commands.push(crate::manifest::Command {
         name: "from-plugin".into(),
@@ -936,7 +938,9 @@ fn failed_rebuild_serves_the_cache() {
         "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     let tools = tmp.path().join("tools");
-    let mut built = crate::parser::build_static_manifest(&tools).unwrap();
+    let mut built = crate::parser::build_static_manifest(&tools)
+        .unwrap()
+        .manifest;
     built.third_party_hash = empty_third_party_hash();
     let manifest_path = tools.join(".toolr-manifest.json");
     for pyproject in [
@@ -1312,7 +1316,6 @@ fn manifest_with_leaf_args(arguments: Vec<Argument>) -> Manifest {
             is_dispatcher: false,
         }],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -1479,7 +1482,6 @@ fn path_fixture() -> Manifest {
             ),
         ],
         plugin_warnings: vec![],
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }

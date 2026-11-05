@@ -438,7 +438,6 @@ fn empty_base() -> Manifest {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -538,7 +537,7 @@ fn merge_adds_groups_and_commands_from_fragments() {
 }
 
 /// A plugin may declare a group `tools/` also declares: the local one wins
-/// silently, and the local build's own warnings survive the merge.
+/// silently.
 #[test]
 fn merge_keeps_the_local_group_over_a_disagreeing_plugin_one_silently() {
     let mut base = empty_base();
@@ -549,7 +548,6 @@ fn merge_keeps_the_local_group_over_a_disagreeing_plugin_one_silently() {
         parent: None,
         origin: Origin::Static,
     });
-    base.build_warnings.push("from the local build".into());
     let merged = merge_into_manifest(
         base,
         from_files(vec![sample_fragment("pkg_a", "deploy", "rollout")]),
@@ -564,7 +562,6 @@ fn merge_keeps_the_local_group_over_a_disagreeing_plugin_one_silently() {
         "{:?}",
         merged.plugin_warnings
     );
-    assert_eq!(merged.build_warnings, ["from the local build"]);
 }
 
 #[test]

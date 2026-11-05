@@ -76,7 +76,6 @@ fn empty_base() -> Manifest {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -106,7 +105,7 @@ fn a_command_behaves_the_same_built_locally_and_as_a_plugin() {
     write_tree(&tools);
     write_tree(&pkg);
 
-    let local = build_static_manifest(&tools).unwrap();
+    let local = build_static_manifest(&tools).unwrap().manifest;
 
     let fragment = build_third_party_fragment(&pkg, "parpkg").unwrap().fragment;
     let paths: Vec<(String, Option<String>)> = fragment

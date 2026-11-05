@@ -42,13 +42,14 @@ fn run() -> anyhow::Result<ExitCode> {
     maybe_emit_cache_hint_from_argv();
     let persist = bootstrap::persist_manifest(&cwd, &argv);
     let bootstrap_warnings = bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv, persist)?;
-    let mut manifest = match bootstrap::ensure_manifest_fresh(&cwd, &argv, persist)? {
-        Some(m) => m,
-        // `__complete` resolves the manifest itself; loading it here too
-        // would parse it twice per TAB and warn about a corrupt one.
-        None if bootstrap::is_tab_completion(&argv) => empty_manifest(),
-        None => load_or_empty(&cwd, &argv)?,
-    };
+    let (mut manifest, fresh_warnings) =
+        match bootstrap::ensure_manifest_fresh(&cwd, &argv, persist)? {
+            Some(built) => (built.manifest, built.warnings),
+            // `__complete` resolves the manifest itself; loading it here too
+            // would parse it twice per TAB and warn about a corrupt one.
+            None if bootstrap::is_tab_completion(&argv) => (empty_manifest(), Vec::new()),
+            None => (load_or_empty(&cwd, &argv)?, Vec::new()),
+        };
     // Covers fragments and a hand-edited committed manifest alike. Tab
     // completion drops the same entries in `resolve_manifest_at_tab`.
     manifest.drop_unsafe_names();
@@ -56,9 +57,7 @@ fn run() -> anyhow::Result<ExitCode> {
         // Build warnings come only from a manifest built on this run. When the
         // bootstrap built it, the freshness step's rebuild of the same tree
         // repeats them, so only the bootstrap's print.
-        let built = bootstrap_warnings
-            .as_ref()
-            .unwrap_or(&manifest.build_warnings);
+        let built = bootstrap_warnings.as_ref().unwrap_or(&fresh_warnings);
         let plugin = manifest.plugin_warnings.iter().map(|w| &w.message);
         for message in built.iter().chain(plugin) {
             eprintln!(
@@ -209,7 +208,6 @@ fn empty_manifest() -> Manifest {
         groups: Vec::new(),
         commands: Vec::new(),
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }

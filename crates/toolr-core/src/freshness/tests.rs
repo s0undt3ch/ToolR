@@ -45,7 +45,6 @@ fn manifest_for(tmp: &Path) -> Manifest {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     }
 }
@@ -179,7 +178,6 @@ fn missing_venv_skips_third_party_axis() {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     };
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
@@ -215,7 +213,6 @@ fn toolr_version_mismatch_without_venv_only_forces_static_drift() {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
-        build_warnings: Vec::new(),
         input_records: Default::default(),
     };
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
@@ -320,7 +317,9 @@ fn returns_static_drift_when_scanned_file_changed_without_a_venv() {
     )
     .unwrap();
     let tools = tmp.path().join("tools");
-    let cached = crate::parser::build_static_manifest(&tools).unwrap();
+    let cached = crate::parser::build_static_manifest(&tools)
+        .unwrap()
+        .manifest;
     assert!(cached.commands.iter().any(|c| c.name == "migrate"));
     assert_eq!(
         compare(Some(&cached), &tools, None).unwrap(),
