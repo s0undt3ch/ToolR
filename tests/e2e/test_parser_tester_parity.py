@@ -27,26 +27,15 @@ from tests.conftest import ToolsProject
 
 CORPUS = Path(__file__).parent / "files" / "parity_corpus"
 CASES = sorted(path.name for path in CORPUS.iterdir() if path.is_dir())
-# Cases whose Python side needs #677's `command_group`: a title-only call that
-# fetches an existing group, or creates one, must not raise at import.
-# Strict, so they fail loudly once that lands and the mark can go.
-NEEDS_LENIENT_COMMAND_GROUP = {
-    "err_group_no_description",
-    "ok_group_described_in_sibling",
-    "ok_group_title_only_refetch",
-}
 # `toolr` gives the group the description a later declaration passes; the
 # runtime keeps the empty one the title-only call created.
 NEEDS_LATER_DESCRIPTION = {"ok_group_described_after_title_only"}
 
 
 def _param(case: str) -> object:
-    if case in NEEDS_LENIENT_COMMAND_GROUP:
-        reason = "needs #677's lenient title-only `command_group`"
-    elif case in NEEDS_LATER_DESCRIPTION:
-        reason = "needs `command_group` to take a later declaration's description"
-    else:
+    if case not in NEEDS_LATER_DESCRIPTION:
         return case
+    reason = "needs `command_group` to take a later declaration's description"
     return pytest.param(case, marks=pytest.mark.xfail(strict=True, reason=reason))
 
 
