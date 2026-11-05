@@ -99,3 +99,30 @@ fn built_in_path_arguments_complete_paths() {
         assert_eq!(stdout, "", "{args:?}");
     }
 }
+
+/// `--name=partial` completes as the value of `--name`: path slots still exit 10/11 with empty
+/// stdout, and values come back bare, for user and built-in options alike.
+#[test]
+fn attached_values_complete_like_separate_ones() {
+    let tmp = fixture();
+    for (args, code) in [
+        (&["demo", "hello", "--cfg="][..], 10),
+        (&["demo", "hello", "--cfg=files/"], 10),
+        (&["demo", "hello", "--out="], 11),
+        (&["self", "build-manifest", "--output="], 10),
+        (&["self", "build-manifest", "--source-dir="], 11),
+    ] {
+        let (rc, stdout) = complete(&tmp, args);
+        assert_eq!(rc, Some(code), "{args:?}");
+        assert_eq!(stdout, "", "{args:?}");
+    }
+    for (args, want) in [
+        (&["demo", "hello", "--mode="][..], "a\t\nb\t\n"),
+        (&["demo", "hello", "--mode=b"], "b\t\n"),
+        (&["project", "init", "--venv-location=c"], "cache\t\n"),
+    ] {
+        let (rc, stdout) = complete(&tmp, args);
+        assert_eq!(rc, Some(0), "{args:?}");
+        assert_eq!(stdout, want, "{args:?}");
+    }
+}
