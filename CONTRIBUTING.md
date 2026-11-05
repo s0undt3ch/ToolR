@@ -78,8 +78,8 @@ The Python suite runs in random order with `pytest-randomly`. Every run prints i
 uv run pytest --randomly-seed=1234
 ```
 
-`-p no:randomly` restores the default order. To replay the reverse of the default order, which is a
-quick way to find a test that leaks state:
+`-p no:randomly` restores the default order. To replay the reverse of that order, which is a quick
+way to find a test that leaks state:
 
 ```sh
 uv run pytest --co -q -p no:randomly | grep :: | tail -r > ids.txt   # `tac` on Linux
