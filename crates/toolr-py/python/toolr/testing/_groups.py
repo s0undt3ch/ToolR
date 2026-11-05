@@ -37,6 +37,8 @@ class GroupDeclaration(NamedTuple):
     """Whether the call passes a non-empty description or docstring."""
     contradictory: bool
     """Whether the call passes a docstring with a description or long description."""
+    unreadable: bool = False
+    """Whether the call may pass a description or docstring the parser can't see."""
 
 
 def _python_files(tools_dir: Path) -> list[Path]:
@@ -91,7 +93,7 @@ def _argument(call: ast.Call, keyword: str, position: int) -> ast.expr | None:
 
 
 def _parent_var(call: ast.Call) -> str | None:
-    """``parent`` in ``parent.command_group(...)``, else a ``parent=<name>`` keyword.
+    """``parent`` in ``parent.command_group(...)``, else a ``parent=<name>`` argument.
 
     Mirrors ``parent_var_name`` then ``parent_kwarg_var`` in
     ``crates/toolr-core/src/parser/groups.rs``.
@@ -99,7 +101,7 @@ def _parent_var(call: ast.Call) -> str | None:
     func = call.func
     if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
         return func.value.id
-    parent = next((kw.value for kw in call.keywords if kw.arg == "parent"), None)
+    parent = _argument(call, "parent", 5)
     return parent.id if isinstance(parent, ast.Name) else None
 
 
@@ -117,47 +119,86 @@ def _passed(node: ast.expr | None, module_docstring: str) -> bool:
     return True
 
 
-def _says_something(node: ast.expr | None, module_docstring: str, *, docstring: bool) -> bool:
-    """Whether ``node`` is a non-empty description or docstring.
+def _read(node: ast.expr | None, module_docstring: str, consts: dict[str, str]) -> str | None:
+    """The text of an argument, ``""`` for none, and ``None`` when unreadable.
+
+    ``__doc__`` is the module docstring, and one that is empty or
+    whitespace-only has no opinion. Mirrors ``Source::read`` in
+    ``crates/toolr-core/src/parser/groups.rs``.
+    """
+    if node is None or (isinstance(node, ast.Constant) and node.value is None):
+        return ""
+    if isinstance(node, ast.Name):
+        if node.id == "__doc__":
+            return module_docstring if module_docstring.strip() else ""
+        return consts.get(node.id)
+    return _literal(node)
+
+
+def _describes(call: ast.Call, module_docstring: str, consts: dict[str, str]) -> bool:
+    """Whether the call passes a non-empty description or docstring.
 
     An empty description, or an empty or whitespace-only docstring, leaves the
-    group undescribed. Mirrors ``says_something`` in
+    group undescribed. Mirrors ``describes`` in
     ``crates/toolr-core/src/parser/groups.rs::parse_group_call``.
     """
-    if not _passed(node, module_docstring):
-        return False
-    if isinstance(node, ast.Name) and node.id == "__doc__":
-        return bool(module_docstring.strip())
-    text = _literal(node)
-    if text is None:
+    description = _read(_argument(call, "description", 2), module_docstring, consts)
+    docstring = _read(_argument(call, "docstring", 4), module_docstring, consts)
+    return description != "" or docstring is None or bool(docstring.strip())
+
+
+def _unreadable(call: ast.Call, module_docstring: str) -> bool:
+    """Whether the call may pass a description or docstring the parser can't see.
+
+    Through ``*``/``**`` unpacking, or as the ``__doc__`` of a module without a
+    docstring. Mirrors ``unreadable`` in
+    ``crates/toolr-core/src/parser/groups.rs::parse_group_call``.
+    """
+    if any(isinstance(arg, ast.Starred) for arg in call.args) or any(
+        kw.arg is None for kw in call.keywords
+    ):
         return True
-    return bool(text.strip()) if docstring else bool(text)
+    return not module_docstring.strip() and any(
+        isinstance(node, ast.Name) and node.id == "__doc__"
+        for node in (_argument(call, "description", 2), _argument(call, "docstring", 4))
+    )
 
 
-def _group_calls(tree: ast.Module) -> list[tuple[str | None, ast.Call]]:
-    """``(bound name, call)`` for each top-level ``command_group(...)`` call.
+class _GroupCall(NamedTuple):
+    var: str | None
+    call: ast.Call
+    consts: dict[str, str]
+    """The ``NAME = "text"`` assignments made before the call."""
+
+
+def _group_calls(tree: ast.Module) -> list[_GroupCall]:
+    """Each top-level ``command_group(...)`` call, with its bound name.
 
     Mirrors the statement match in
-    ``crates/toolr-core/src/parser/groups.rs::extract_groups``.
+    ``crates/toolr-core/src/parser/groups.rs::extract_groups`` and
+    ``group_binding``.
     """
-    found: list[tuple[str | None, ast.Call]] = []
+    found: list[_GroupCall] = []
+    consts: dict[str, str] = {}
     for stmt in tree.body:
+        var: str | None = None
+        value: ast.expr | None = None
         if isinstance(stmt, ast.Assign):
-            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
-                continue
-            var: str | None = stmt.targets[0].id
-            value = stmt.value
+            if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                var, value = stmt.targets[0].id, stmt.value
         elif isinstance(stmt, ast.Expr):
-            var, value = None, stmt.value
-        else:
-            continue
-        if not isinstance(value, ast.Call):
-            continue
-        func = value.func
-        if (isinstance(func, ast.Name) and func.id == "command_group") or (
-            isinstance(func, ast.Attribute) and func.attr == "command_group"
+            value = stmt.value
+        if isinstance(value, ast.Call) and (
+            (isinstance(value.func, ast.Name) and value.func.id == "command_group")
+            or (isinstance(value.func, ast.Attribute) and value.func.attr == "command_group")
         ):
-            found.append((var, value))
+            found.append(_GroupCall(var, value, dict(consts)))
+        if isinstance(stmt, ast.Assign) and var is not None:
+            text = _literal(stmt.value)
+            if text is None:
+                consts.pop(var, None)
+            else:
+                consts[var] = text
     return found
 
 
@@ -176,7 +217,7 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
         module = _module_path(tools_dir, file)
         docstring = _module_docstring(tree)
         local: list[tuple[str, str]] = []
-        for var, call in _group_calls(tree):
+        for var, call, consts in _group_calls(tree):
             parent_var = _parent_var(call)
             parent = None
             if parent_var is not None:
@@ -184,9 +225,7 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
                 if parent is None:
                     parent = global_vars.get(parent_var)
             if parent is None:
-                parent = _literal(
-                    next((kw.value for kw in call.keywords if kw.arg == "parent"), None)
-                )
+                parent = _literal(_argument(call, "parent", 5))
             name = _literal(call.args[0] if call.args else None)
             if name is None:
                 continue
@@ -200,17 +239,13 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
                 GroupDeclaration(
                     path=path,
                     module=module,
-                    describes=_says_something(
-                        _argument(call, "docstring", 4), docstring, docstring=True
-                    )
-                    or _says_something(
-                        _argument(call, "description", 2), docstring, docstring=False
-                    ),
+                    describes=_describes(call, docstring, consts),
                     contradictory=docstring_arg
                     and (
                         description_arg
                         or _passed(_argument(call, "long_description", 3), docstring)
                     ),
+                    unreadable=_unreadable(call, docstring),
                 )
             )
         global_vars.update(local)
@@ -234,6 +269,14 @@ def _format_contradictory_groups(declarations: list[GroupDeclaration]) -> str | 
     return "\n".join([f"command groups with contradictory arguments ({len(lines)}):", *lines])
 
 
+_HINT = "give one declaration a description or docstring."
+_UNREADABLE_HINT = (
+    "give one declaration a description or docstring the static parser can read: "
+    "a string literal, a string constant assigned earlier in the module, or the "
+    "`__doc__` of a module with a docstring."
+)
+
+
 def _format_undescribed_groups(declarations: list[GroupDeclaration]) -> str | None:
     """The error for groups no declaration describes, if any.
 
@@ -242,16 +285,19 @@ def _format_undescribed_groups(declarations: list[GroupDeclaration]) -> str | No
     """
     modules: dict[str, list[str]] = {}
     described: set[str] = set()
+    unreadable: set[str] = set()
     for d in declarations:
         places = modules.setdefault(d.path, [])
         if d.module not in places:
             places.append(d.module)
         if d.describes:
             described.add(d.path)
+        if d.unreadable:
+            unreadable.add(d.path)
     lines = [
         f"  - `{_escape_control_chars(path)}` (declared in "
-        f"{', '.join(_escape_control_chars(m) for m in places)}): give one declaration a "
-        "description or docstring."
+        f"{', '.join(_escape_control_chars(m) for m in places)}): "
+        + (_UNREADABLE_HINT if path in unreadable else _HINT)
         for path, places in modules.items()
         if path not in described
     ]

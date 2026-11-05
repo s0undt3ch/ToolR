@@ -133,3 +133,66 @@ def test_undescribed_groups_message() -> None:
         "description or docstring."
     )
     assert _format_undescribed_groups(declarations[4:]) is None
+
+
+def test_parent_by_position(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": """
+                p = command_group("p", "P", "P.")
+                command_group("lit", "Lit", "Lit.", None, None, "p")
+                command_group("var", "Var", "Var.", None, None, p)
+            """,
+        }
+    )
+    assert [d.path for d in _group_declarations(tools)] == ["p", "p.lit", "p.var"]
+
+
+def test_string_constants_and_unreadable_values(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": """
+                from elsewhere import IMPORTED
+                DESC = "Desc."
+                EMPTY = ""
+                LATER = ""
+                REBOUND = "Rebound."
+                REBOUND = make()
+                OPTS = {"description": "Opts."}
+                a = command_group("a", "A", description=DESC)
+                b = command_group("b", "B", description=EMPTY)
+                c = command_group("c", "C", docstring=LATER)
+                LATER = "Later."
+                d = command_group("d", "D", docstring=LATER)
+                e = command_group("e", "E", docstring=REBOUND)
+                f = command_group("f", "F", description=IMPORTED)
+                g = command_group("g", "G", **OPTS)
+                h = command_group("h", *OPTS)
+                i = command_group("i", "I", description=__doc__)
+            """,
+        }
+    )
+    assert [(d.path, d.describes, d.unreadable) for d in _group_declarations(tools)] == [
+        ("a", True, False),
+        ("b", False, False),
+        ("c", False, False),
+        ("d", True, False),
+        ("e", True, False),
+        ("f", True, False),
+        ("g", False, True),
+        ("h", False, True),
+        ("i", False, True),
+    ]
+
+
+def test_undescribed_groups_message_asks_for_a_readable_value() -> None:
+    declarations = [
+        GroupDeclaration("ci", "tools.a", describes=False, contradictory=False),
+        GroupDeclaration("ci", "tools.b", describes=False, contradictory=False, unreadable=True),
+    ]
+    assert _format_undescribed_groups(declarations) == (
+        "command groups with no description (1):\n"
+        "  - `ci` (declared in tools.a, tools.b): give one declaration a description or "
+        "docstring the static parser can read: a string literal, a string constant assigned "
+        "earlier in the module, or the `__doc__` of a module with a docstring."
+    )
