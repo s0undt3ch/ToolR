@@ -291,6 +291,9 @@ directory. Without it, source the script from `~/.bashrc` instead:
 `source <(toolr self completion print bash)`. A word with an unclosed
 quote (`--cfg 'a:b`) completes nothing.
 
+An aliased toolr (`alias t=toolr`) gets no completion by default; run
+`complete -F _toolr_complete t` to register it.
+
 ```sh
 toolr self completion install --help
 ```
