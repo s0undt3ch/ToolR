@@ -7,7 +7,8 @@ use clap::ArgMatches;
 use crate::help::{self, HelpMode};
 use toolr_core::complete::{
     Candidate, Completion, InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell,
-    complete, completion_script, install_script, resolve_manifest_at_tab, sort_and_dedup_by_value,
+    bash_completion_installed, complete, completion_script, install_script,
+    resolve_manifest_at_tab, shell_quote, sort_and_dedup_by_value,
 };
 use toolr_core::discovery::discover_project_root;
 use toolr_core::execute::{ExecutionSpec, spawn_runner, wait_with_signals, write_spec_to_tempfile};
@@ -224,7 +225,7 @@ pub fn dispatch(
         return run_complete(sub);
     }
     if let Some(("self", self_matches)) = matches.subcommand() {
-        return run_self(self_matches);
+        return run_self(self_matches, matches.get_flag("quiet"));
     }
     if let Some(("__build-static-manifest", _)) = matches.subcommand() {
         return run_build_static_manifest();
@@ -425,7 +426,7 @@ fn warn_on_toolr_py_mismatch(venv_dir: &std::path::Path) {
     );
 }
 
-fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+fn run_self(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
     match matches.subcommand() {
         Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches),
         Some(("cache", cache_matches)) => crate::self_cache::dispatch(cache_matches),
@@ -436,7 +437,7 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
             };
             match action {
                 "print" => run_completion_print(action_matches),
-                "install" => run_completion_install(action_matches),
+                "install" => run_completion_install(action_matches, quiet),
                 other => anyhow::bail!("unsupported self completion subcommand: {other}"),
             }
         }
@@ -536,7 +537,7 @@ fn check_against_disk(path: &std::path::Path, serialised: &str) -> anyhow::Resul
     }
 }
 
-fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
     let shell_str = matches
         .get_one::<String>("shell")
         .ok_or_else(|| anyhow::anyhow!("missing <shell>"))?;
@@ -544,8 +545,8 @@ fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode
     let force = matches.get_flag("force");
 
     let home = dirs_home()?;
-    let xdg_data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
-    let xdg_config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let xdg_data_home = non_empty_env_path("XDG_DATA_HOME");
+    let xdg_config_home = non_empty_env_path("XDG_CONFIG_HOME");
     let opts = InstallOptions {
         shell,
         xdg_data_home,
@@ -582,6 +583,7 @@ fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode
                      `autoload -Uz compinit && compinit`."
                 );
             }
+            print_bash_source_hint(shell, &path, quiet);
             Ok(ExitCode::SUCCESS)
         }
         InstallOutcome::AlreadyInstalled { path } => {
@@ -590,6 +592,7 @@ fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode
                 shell,
                 path.display()
             );
+            print_bash_source_hint(shell, &path, quiet);
             Ok(ExitCode::SUCCESS)
         }
         InstallOutcome::SkippedNeedsForce { path } => {
@@ -600,6 +603,46 @@ fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode
             Ok(ExitCode::from(1))
         }
     }
+}
+
+/// Only bash-completion loads the bash install directory; without it, tell
+/// the user to source the script themselves.
+fn print_bash_source_hint(shell: CompletionShell, path: &std::path::Path, quiet: bool) {
+    if quiet || !matches!(shell, CompletionShell::Bash) {
+        return;
+    }
+    // Test seam: CI hosts ship bash-completion, so tests move the probe's root.
+    let sysroot = non_empty_env_path("TOOLR_BASH_COMPLETION_SYSROOT").unwrap_or_else(|| "/".into());
+    let xdg_data_dirs = std::env::var_os("XDG_DATA_DIRS");
+    let homebrew_prefix = non_empty_env_path("HOMEBREW_PREFIX");
+    if !bash_completion_installed(
+        &sysroot,
+        xdg_data_dirs.as_deref(),
+        homebrew_prefix.as_deref(),
+    ) {
+        println!("{}", bash_source_hint(path));
+    }
+}
+
+/// A non-UTF-8 path can't be printed losslessly, so that hint names no path
+/// rather than a wrong one.
+fn bash_source_hint(path: &std::path::Path) -> String {
+    let action = match path.to_str() {
+        Some(path) => format!("add `source {}`", shell_quote(path)),
+        None => "add a `source` line for the installed script".to_string(),
+    };
+    format!(
+        "toolr: can't find bash-completion, so bash won't load this script by itself; \
+         {action} to your bash startup file (~/.bashrc)."
+    )
+}
+
+/// An empty value reads as unset, as the XDG base directory spec and
+/// bash-completion do; using it would install or probe relative to the cwd.
+fn non_empty_env_path(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 fn dirs_home() -> anyhow::Result<PathBuf> {
@@ -818,6 +861,31 @@ mod tests {
     //! subprocess profraws by default). These unit tests run inside the
     //! test process so the coverage counter actually moves.
     use super::*;
+
+    #[test]
+    fn bash_source_hint_names_the_path_and_bashrc() {
+        let hint = bash_source_hint(std::path::Path::new(
+            "/home/u/.local/share/bash-completion/completions/toolr",
+        ));
+        assert_eq!(
+            hint,
+            "toolr: can't find bash-completion, so bash won't load this script by itself; \
+             add `source /home/u/.local/share/bash-completion/completions/toolr` \
+             to your bash startup file (~/.bashrc)."
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bash_source_hint_names_no_path_when_it_is_not_utf8() {
+        use std::os::unix::ffi::OsStrExt;
+        let path = std::path::Path::new(std::ffi::OsStr::from_bytes(b"/home/\xff/toolr"));
+        assert_eq!(
+            bash_source_hint(path),
+            "toolr: can't find bash-completion, so bash won't load this script by itself; \
+             add a `source` line for the installed script to your bash startup file (~/.bashrc)."
+        );
+    }
 
     // ----------------------------------------------------------------
     // dirs_home: $HOME present / absent.

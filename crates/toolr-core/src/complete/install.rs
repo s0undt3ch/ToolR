@@ -1,6 +1,7 @@
 //! Install the embedded shell-completion script into the standard
 //! location for the target shell.
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
@@ -9,11 +10,11 @@ use super::scripts::{Shell, completion_script};
 
 pub struct InstallOptions {
     pub shell: Shell,
-    /// Override for `$XDG_DATA_HOME`. `None` means read from environment
-    /// at call time (callers usually pass `None` in production).
+    /// `$XDG_DATA_HOME` for the bash script. `None` falls back to
+    /// `$HOME/.local/share`.
     pub xdg_data_home: Option<PathBuf>,
-    /// Override for `$XDG_CONFIG_HOME`. `None` means read from
-    /// environment at call time.
+    /// `$XDG_CONFIG_HOME` for the fish script. `None` falls back to
+    /// `$HOME/.config`.
     pub xdg_config_home: Option<PathBuf>,
     /// Path to use as the user's home directory.
     pub home: PathBuf,
@@ -109,4 +110,66 @@ pub fn install_script(opts: &InstallOptions) -> Result<InstallOutcome> {
     }
     std::fs::write(&path, payload)?;
     Ok(InstallOutcome::Wrote { path, prior })
+}
+
+/// Well-known bash-completion 2.x loader scripts, relative to the sysroot.
+/// 1.x never reads `~/.local/share/bash-completion/completions/`, so its
+/// loaders are left out, and so is `etc/profile.d/bash_completion.sh`, which
+/// Homebrew's 1.x formula installs too. `etc/bash_completion` is a 2.x shim
+/// on Debian.
+pub(crate) const BASH_COMPLETION_SYSROOT_PATHS: &[&str] = &[
+    "usr/share/bash-completion/bash_completion",
+    "etc/bash_completion",
+    "usr/local/share/bash-completion/bash_completion",
+    "opt/homebrew/share/bash-completion/bash_completion",
+    "home/linuxbrew/.linuxbrew/share/bash-completion/bash_completion",
+    "opt/local/share/bash-completion/bash_completion",
+];
+
+/// Paths where bash-completion's loader script may live. Probes files, not
+/// directories: other packages create `share/bash-completion/completions/`
+/// without installing the loader.
+pub(crate) fn bash_completion_candidates(
+    sysroot: &Path,
+    xdg_data_dirs: Option<&OsStr>,
+    homebrew_prefix: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = BASH_COMPLETION_SYSROOT_PATHS
+        .iter()
+        .map(|rel| sysroot.join(rel))
+        .collect();
+    if let Some(dirs) = xdg_data_dirs {
+        out.extend(
+            std::env::split_paths(dirs)
+                .filter(|dir| !dir.as_os_str().is_empty())
+                .map(|dir| dir.join("bash-completion/bash_completion")),
+        );
+    }
+    if let Some(prefix) = homebrew_prefix {
+        out.push(prefix.join("share/bash-completion/bash_completion"));
+    }
+    out
+}
+
+/// Whether bash-completion looks installed. Unknown layouts read as "not
+/// installed", so the caller errs toward printing its hint.
+pub fn bash_completion_installed(
+    sysroot: &Path,
+    xdg_data_dirs: Option<&OsStr>,
+    homebrew_prefix: Option<&Path>,
+) -> bool {
+    bash_completion_candidates(sysroot, xdg_data_dirs, homebrew_prefix)
+        .iter()
+        .any(|p| p.is_file())
+}
+
+/// Quote `s` as a single word for POSIX shells: bare when every character
+/// is in a conservative safe set, single-quoted otherwise. It doesn't guard a
+/// leading `-`; callers pass absolute paths.
+pub fn shell_quote(s: &str) -> String {
+    let safe = |c: char| c.is_ascii_alphanumeric() || "/._-+:,@%".contains(c);
+    if !s.is_empty() && s.chars().all(safe) {
+        return s.to_string();
+    }
+    format!("'{}'", s.replace('\'', r#"'\''"#))
 }

@@ -1573,3 +1573,150 @@ fn complete_matches_serve_completions_outside_path_slots() {
         );
     }
 }
+
+mod bash_completion_probe {
+    use std::ffi::OsString;
+    use std::path::Path;
+
+    use tempfile::TempDir;
+
+    use crate::complete::install::{
+        BASH_COMPLETION_SYSROOT_PATHS, bash_completion_candidates, bash_completion_installed,
+        shell_quote,
+    };
+
+    fn plant(root: &Path, rel: &str) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "# loader\n").unwrap();
+    }
+
+    #[test]
+    fn empty_sysroot_reads_as_not_installed() {
+        let tmp = TempDir::new().unwrap();
+        assert!(!bash_completion_installed(tmp.path(), None, None));
+    }
+
+    #[test]
+    fn each_well_known_loader_is_detected() {
+        for rel in BASH_COMPLETION_SYSROOT_PATHS {
+            let tmp = TempDir::new().unwrap();
+            plant(tmp.path(), rel);
+            assert!(bash_completion_installed(tmp.path(), None, None), "{rel}");
+        }
+    }
+
+    #[test]
+    fn bash_completion_1x_loaders_are_not_detected() {
+        // 1.x never reads ~/.local/share/bash-completion/completions/.
+        for rel in [
+            "usr/local/etc/bash_completion",
+            "opt/homebrew/etc/bash_completion",
+            // Homebrew's 1.x formula installs the profile.d loader as well.
+            "usr/local/etc/profile.d/bash_completion.sh",
+            "opt/homebrew/etc/profile.d/bash_completion.sh",
+            "home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh",
+            "opt/local/etc/profile.d/bash_completion.sh",
+        ] {
+            let tmp = TempDir::new().unwrap();
+            plant(tmp.path(), rel);
+            assert!(!bash_completion_installed(tmp.path(), None, None), "{rel}");
+        }
+    }
+
+    #[test]
+    fn homebrew_prefix_profile_d_loader_is_not_detected() {
+        let sysroot = TempDir::new().unwrap();
+        let prefix = TempDir::new().unwrap();
+        plant(prefix.path(), "etc/profile.d/bash_completion.sh");
+        assert!(!bash_completion_installed(
+            sysroot.path(),
+            None,
+            Some(prefix.path())
+        ));
+    }
+
+    #[test]
+    fn shell_quote_leaves_safe_paths_bare() {
+        assert_eq!(shell_quote("/a/b-c_d.e/toolr"), "/a/b-c_d.e/toolr");
+    }
+
+    #[test]
+    fn shell_quote_single_quotes_unsafe_paths() {
+        assert_eq!(shell_quote("/My Data/toolr"), "'/My Data/toolr'");
+        assert_eq!(shell_quote("/a$b/toolr"), "'/a$b/toolr'");
+        assert_eq!(shell_quote("/it's/toolr"), r"'/it'\''s/toolr'");
+        assert_eq!(shell_quote(r"C:\Users\u\toolr"), r"'C:\Users\u\toolr'");
+        assert_eq!(shell_quote(""), "''");
+    }
+
+    #[test]
+    fn completions_directory_alone_is_not_the_loader() {
+        let tmp = TempDir::new().unwrap();
+        plant(
+            tmp.path(),
+            "opt/homebrew/share/bash-completion/completions/brew",
+        );
+        assert!(!bash_completion_installed(tmp.path(), None, None));
+    }
+
+    #[test]
+    fn loader_path_that_is_a_directory_is_not_detected() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("etc/bash_completion")).unwrap();
+        assert!(!bash_completion_installed(tmp.path(), None, None));
+    }
+
+    #[test]
+    fn xdg_data_dirs_entries_are_probed_and_empty_ones_skipped() {
+        let sysroot = TempDir::new().unwrap();
+        let data = TempDir::new().unwrap();
+        let first = data.path().join("first");
+        let second = data.path().join("second");
+        let dirs =
+            std::env::join_paths([first.as_path(), Path::new(""), second.as_path()]).unwrap();
+
+        let candidates = bash_completion_candidates(sysroot.path(), Some(&dirs), None);
+        assert!(candidates.contains(&first.join("bash-completion/bash_completion")));
+        assert!(candidates.contains(&second.join("bash-completion/bash_completion")));
+        assert!(
+            !candidates.contains(&Path::new("bash-completion/bash_completion").to_path_buf()),
+            "an empty XDG_DATA_DIRS entry must not probe a relative path: {candidates:?}"
+        );
+        assert!(!bash_completion_installed(
+            sysroot.path(),
+            Some(&dirs),
+            None
+        ));
+
+        plant(&second, "bash-completion/bash_completion");
+        assert!(bash_completion_installed(sysroot.path(), Some(&dirs), None));
+    }
+
+    #[test]
+    fn empty_xdg_data_dirs_adds_nothing() {
+        let tmp = TempDir::new().unwrap();
+        let empty = OsString::new();
+        assert_eq!(
+            bash_completion_candidates(tmp.path(), Some(&empty), None),
+            bash_completion_candidates(tmp.path(), None, None),
+        );
+    }
+
+    #[test]
+    fn homebrew_prefix_share_loader_is_probed() {
+        let sysroot = TempDir::new().unwrap();
+        let prefix = TempDir::new().unwrap();
+        assert!(!bash_completion_installed(
+            sysroot.path(),
+            None,
+            Some(prefix.path())
+        ));
+        plant(prefix.path(), "share/bash-completion/bash_completion");
+        assert!(bash_completion_installed(
+            sysroot.path(),
+            None,
+            Some(prefix.path())
+        ));
+    }
+}
