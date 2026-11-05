@@ -24,6 +24,7 @@ from typing import overload
 
 from msgspec import Struct
 from msgspec import field
+from msgspec.structs import force_setattr
 
 from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._docstrings import Docstring
@@ -501,17 +502,21 @@ def command_group(
     )
 
     if group is not None:
-        # The first declaration wins; flag a later one that disagrees with it
-        # on a field it actually provided.
-        differing = [
-            field
-            for field, wanted in (
-                ("title", title),
-                ("description", description),
-                ("long_description", long_description),
-            )
-            if wanted and getattr(group, field) != wanted
-        ]
+        # An empty field has no opinion: a later declaration fills it. Of two
+        # non-empty values the first wins, and the later one is logged.
+        differing = []
+        for field, wanted in (
+            ("title", title),
+            ("description", description),
+            ("long_description", long_description),
+        ):
+            current = getattr(group, field)
+            if not wanted or current == wanted:
+                continue
+            if current:
+                differing.append(field)
+            else:
+                force_setattr(group, field, wanted)
         if differing:
             log.debug(
                 "Command group '%s' is already declared; ignoring the different %s of this declaration",

@@ -226,3 +226,44 @@ def test_conflicting_redeclaration_names_every_differing_field(caplog: pytest.Lo
     assert "title" in message
     assert "description" in message
     assert "long_description" in message
+
+
+def test_later_description_fills_an_empty_one(caplog: pytest.LogCaptureFixture):
+    """An empty description has no opinion, so a later one fills it."""
+    first = command_group("ci", "CI")
+    explicit = command_group("cd", "CD", "")
+
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
+        again = command_group("ci", "CI", "Continuous integration.")
+        command_group("cd", "CD", "Continuous delivery.")
+        command_group("ci", "CI", "Something else.")
+
+    assert again is first
+    assert first.description == "Continuous integration."
+    assert explicit.description == "Continuous delivery."
+    conflicts = [r.getMessage() for r in caplog.records if "ignoring" in r.getMessage()]
+    expected = (
+        "Command group 'tools.ci' is already declared; ignoring the different description "
+        "of this declaration"
+    )
+    assert conflicts == [expected]
+
+
+def test_later_title_and_long_description_fill_empty_ones(caplog: pytest.LogCaptureFixture):
+    first = command_group("ci", description="d")
+
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
+        command_group("ci", "CI", "d", long_description="More.")
+
+    assert first.title == "CI"
+    assert first.long_description == "More."
+    assert not [r for r in caplog.records if "ignoring" in r.getMessage()]
+
+
+def test_later_docstring_fills_an_empty_description():
+    first = command_group("ci", "CI")
+
+    command_group("ci", docstring="CI\n\nContinuous integration.")
+
+    assert first.title == "CI"
+    assert first.description == "CI\n\nContinuous integration."
