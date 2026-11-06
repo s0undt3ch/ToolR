@@ -490,10 +490,6 @@ fn completes_nothing_where_clap_rejects_root_flags() {
         &["--timeout-secs", "--"],
         &["--timeout-secs", ""],
         &["--timeout-secs", "abc", ""],
-        &["-V", ""],
-        &["--version", ""],
-        &["-V", "--"],
-        &["--timeout-secs", "-1", ""],
     ] {
         assert_eq!(complete_raw(&tmp, line), "", "{line:?}");
     }
@@ -529,4 +525,19 @@ fn completes_after_an_attached_negative_value() {
     }
     let lines = sorted_lines(&tmp, &["--timeout-secs=-1", "--t"]);
     assert_eq!(lines, ["--timestamps"]);
+}
+
+// Regression guards: these lines printed nothing before the version/value fixes too (by accident, not
+// design). `scan_version_ends_the_line` in `builtin_completions` is what proves the fix.
+#[test]
+fn stays_empty_after_version_or_bad_values() {
+    let tmp = fixture();
+    for line in [
+        &["-V", ""][..],
+        &["--version", ""],
+        &["-V", "--"],
+        &["--timeout-secs", "-1", ""],
+    ] {
+        assert_eq!(complete_raw(&tmp, line), "", "{line:?}");
+    }
 }

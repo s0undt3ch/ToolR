@@ -188,44 +188,26 @@ fn about_text(cmd: &ClapCommand) -> String {
     cmd.get_about().map(ToString::to_string).unwrap_or_default()
 }
 
-/// Root-level long flags carried by the `toolr` binary itself, derived
-/// from [`crate::cli::build_command`]'s root [`Arg`]s. Short aliases are
-/// intentionally omitted (the engine renders leaf flags long-form only),
-/// as is `--help` (offered separately by
-/// [`toolr_core::complete::serve_completions`] at every group node). The
-/// list is sorted so the engine's downstream `sort()` is a no-op.
-pub fn root_long_flags() -> Vec<Candidate> {
-    let root = crate::cli::build_command(&empty_manifest());
-    let mut flags: Vec<Candidate> = root
-        .get_arguments()
-        .filter(|a| a.get_id() != "help" && !a.is_hide_set())
-        .filter_map(|a| {
-            a.get_long().map(|l| {
-                Candidate::new(
-                    format!("--{l}"),
-                    a.get_help().map(ToString::to_string).unwrap_or_default(),
-                )
-            })
-        })
-        .collect();
-    toolr_core::complete::sort_and_dedup_by_value(&mut flags);
-    flags
-}
-
 /// One root flag as the scan sees it, read from the clap command.
+#[derive(Debug, Default, PartialEq, Eq)]
 struct RootFlagSpec {
     id: String,
     long: String,
     short: Option<char>,
     aliases: Vec<String>,
+    help: String,
+    /// Offered as a completion: not hidden, and neither `--help` (the engine offers it) nor `--version`.
+    offered: bool,
     takes_value: bool,
-    /// The value type the scan can check; `None` for a type it does not know (the line dead-ends).
+    /// The value type the scan can check; `None` for a type it does not know.
     value: Option<ValueKind>,
     /// `--version`: clap prints and exits, so nothing after it completes.
     ends_parsing: bool,
     conflicts: Vec<String>,
 }
 
+/// An enum so another parser type is one variant plus one [`accepts_value`] arm; a spec whose `value` is
+/// `None` has a type the scan does not know.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ValueKind {
     Float,
@@ -245,11 +227,35 @@ pub struct RootScan {
     pub seen: Vec<String>,
     /// clap rejects the line (duplicate, conflict, bad or missing value), so nothing completes.
     pub dead_end: bool,
+    /// The root flags, derived once per completion.
+    specs: Vec<RootFlagSpec>,
+}
+
+impl RootScan {
+    /// The root long flags still valid after the ones seen: not given yet and not conflicting with a given one.
+    pub fn offerable_long_flags(&self) -> Vec<Candidate> {
+        let blocked: Vec<&str> = self
+            .specs
+            .iter()
+            .filter(|s| self.seen.contains(&s.id))
+            .flat_map(|s| {
+                std::iter::once(s.id.as_str()).chain(s.conflicts.iter().map(String::as_str))
+            })
+            .collect();
+        let mut flags: Vec<Candidate> = self
+            .specs
+            .iter()
+            .filter(|s| s.offered && !blocked.contains(&s.id.as_str()))
+            .map(|s| Candidate::new(format!("--{}", s.long), s.help.clone()))
+            .collect();
+        toolr_core::complete::sort_and_dedup_by_value(&mut flags);
+        flags
+    }
 }
 
 fn root_flag_specs() -> Vec<RootFlagSpec> {
     let mut root = crate::cli::build_command(&empty_manifest());
-    // Unbuilt, the auto-added `--version` / `-V` arg does not exist yet.
+    // Unbuilt, clap has not added `--version` / `-V` yet, so build before reading the args.
     root.build();
     let mut specs: Vec<RootFlagSpec> = root
         .get_arguments()
@@ -264,10 +270,13 @@ fn root_flag_specs() -> Vec<RootFlagSpec> {
                     .flatten()
                     .map(str::to_string)
                     .collect(),
+                help: a.get_help().map(ToString::to_string).unwrap_or_default(),
+                offered: !a.is_hide_set()
+                    && a.get_id() != "help"
+                    && !matches!(a.get_action(), ArgAction::Version),
                 takes_value: a.get_action().takes_values(),
                 value: value_kind(a),
                 ends_parsing: matches!(a.get_action(), ArgAction::Version),
-                // Only the declaring side lists a conflict; mirrored below.
                 conflicts: root
                     .get_arg_conflicts_with(a)
                     .iter()
@@ -276,29 +285,112 @@ fn root_flag_specs() -> Vec<RootFlagSpec> {
             })
         })
         .collect();
-    // clap enforces a conflict declared on either side, so make the lists symmetric.
+    mirror_conflicts(&mut specs);
+    specs
+}
+
+/// Make each conflict list symmetric. clap enforces a conflict both ways at parse time, but the listing is
+/// one-sided even after `build()` (`--quiet` names `--debug`, `--debug` does not name `--quiet`).
+fn mirror_conflicts(specs: &mut [RootFlagSpec]) {
     let pairs: Vec<(String, String)> = specs
         .iter()
         .flat_map(|s| s.conflicts.iter().map(|c| (s.id.clone(), c.clone())))
         .collect();
     for (a, b) in pairs {
-        for spec in &mut specs {
+        for spec in specs.iter_mut() {
             if spec.id == b && !spec.conflicts.contains(&a) {
                 spec.conflicts.push(a.clone());
             }
         }
     }
-    specs
 }
 
 /// Whether clap accepts `value` for a value-taking root flag. An attached value (`--flag=-1`) is
-/// unambiguous; a detached one that starts with `-` reads as another flag. Unknown value types never pass.
+/// unambiguous; a detached one that starts with `-` reads as another flag. A value type the scan does not
+/// know never passes, so the line dead-ends rather than being checked as the wrong type.
 fn accepts_value(spec: &RootFlagSpec, value: &str, attached: bool) -> bool {
     match spec.value {
         Some(ValueKind::Float) => {
             value.parse::<f64>().is_ok() && (attached || !value.starts_with('-'))
         }
         None => false,
+    }
+}
+
+/// The root flags given so far in the leading run.
+#[derive(Default)]
+struct Seen<'a>(Vec<&'a RootFlagSpec>);
+
+impl<'a> Seen<'a> {
+    /// Record `spec`; false when clap would reject it. `ends_parsing` makes `--version` a dead end whenever
+    /// it is seen (clap prints and exits); a repeat or a conflict with a flag already seen is one too.
+    fn take(&mut self, spec: &'a RootFlagSpec) -> bool {
+        let clash = spec.ends_parsing
+            || self
+                .0
+                .iter()
+                .any(|s| s.id == spec.id || spec.conflicts.contains(&s.id));
+        self.0.push(spec);
+        !clash
+    }
+}
+
+/// How one committed token moved the scan.
+enum Step {
+    /// The scan used this many tokens.
+    Consumed(usize),
+    /// Not a root flag: the leading run ends here.
+    Stop,
+    /// clap rejects the line.
+    DeadEnd,
+}
+
+fn verdict(ok: bool, used: usize) -> Step {
+    if ok {
+        Step::Consumed(used)
+    } else {
+        Step::DeadEnd
+    }
+}
+
+/// `--name`, `--name=value` or `--name value`; `next` is the committed token after `long`, if any.
+fn scan_long<'a>(
+    specs: &'a [RootFlagSpec],
+    seen: &mut Seen<'a>,
+    long: &str,
+    next: Option<&str>,
+) -> Step {
+    let (name, attached) = match long.split_once('=') {
+        Some((n, v)) => (n, Some(v)),
+        None => (long, None),
+    };
+    let Some(spec) = specs
+        .iter()
+        .find(|s| s.long == name || s.aliases.iter().any(|a| a == name))
+    else {
+        return Step::Stop;
+    };
+    match (spec.takes_value, attached) {
+        (false, Some(_)) => Step::DeadEnd,
+        (false, None) => verdict(seen.take(spec), 1),
+        (true, Some(v)) => verdict(accepts_value(spec, v, true) && seen.take(spec), 1),
+        // No committed token after the flag means the in-progress word is its value: a dead end.
+        (true, None) => verdict(
+            next.is_some_and(|v| accepts_value(spec, v, false)) && seen.take(spec),
+            2,
+        ),
+    }
+}
+
+/// A `-xyz` cluster of short flags; every char must be a known short flag that takes no value.
+fn scan_cluster<'a>(specs: &'a [RootFlagSpec], seen: &mut Seen<'a>, cluster: &str) -> Step {
+    let flags: Option<Vec<&RootFlagSpec>> = cluster
+        .chars()
+        .map(|c| specs.iter().find(|s| s.short == Some(c) && !s.takes_value))
+        .collect();
+    match flags {
+        Some(flags) => verdict(flags.into_iter().all(|f| seen.take(f)), 1),
+        None => Step::Stop,
     }
 }
 
@@ -309,89 +401,41 @@ fn accepts_value(spec: &RootFlagSpec, value: &str, attached: bool) -> bool {
 pub fn scan_root_flags(tokens: &[String]) -> RootScan {
     let specs = root_flag_specs();
     let committed = tokens.len().saturating_sub(1);
-    let mut seen: Vec<&RootFlagSpec> = Vec::new();
+    let mut seen = Seen::default();
     let mut i = 0;
     while i < committed {
         let tok = tokens[i].as_str();
-        let mut take = |spec: &RootFlagSpec| -> bool {
-            let clash = spec.ends_parsing
-                || seen
-                    .iter()
-                    .any(|s| s.id == spec.id || spec.conflicts.contains(&s.id));
-            if let Some(found) = specs.iter().find(|s| s.id == spec.id) {
-                seen.push(found);
-            }
-            !clash
-        };
-        let ok = if let Some(long) = tok.strip_prefix("--").filter(|l| !l.is_empty()) {
-            let (name, attached) = match long.split_once('=') {
-                Some((n, v)) => (n, Some(v)),
-                None => (long, None),
-            };
-            let Some(spec) = specs
-                .iter()
-                .find(|s| s.long == name || s.aliases.iter().any(|a| a == name))
-            else {
-                break;
-            };
-            match (spec.takes_value, attached) {
-                (false, Some(_)) => false,
-                (false, None) => take(spec),
-                (true, Some(v)) => accepts_value(spec, v, true) && take(spec),
-                (true, None) => {
-                    i += 1;
-                    // The in-progress word is the value when nothing follows.
-                    i < committed && accepts_value(spec, &tokens[i], false) && take(spec)
-                }
-            }
+        let next = (i + 1 < committed).then(|| tokens[i + 1].as_str());
+        let step = if let Some(long) = tok.strip_prefix("--").filter(|l| !l.is_empty()) {
+            scan_long(&specs, &mut seen, long, next)
         } else if let Some(cluster) = tok
             .strip_prefix('-')
             .filter(|c| !c.is_empty() && !c.starts_with('-'))
         {
-            let flags: Option<Vec<&RootFlagSpec>> = cluster
-                .chars()
-                .map(|c| specs.iter().find(|s| s.short == Some(c) && !s.takes_value))
-                .collect();
-            let Some(flags) = flags else { break };
-            flags.into_iter().all(take)
+            scan_cluster(&specs, &mut seen, cluster)
         } else {
-            break;
+            Step::Stop
         };
-        if !ok {
-            return RootScan {
-                dead_end: true,
-                ..RootScan::default()
-            };
+        match step {
+            // Advance past the flag and, for a detached value, the value too.
+            Step::Consumed(used) => i += used,
+            Step::Stop => break,
+            Step::DeadEnd => {
+                return RootScan {
+                    dead_end: true,
+                    ..RootScan::default()
+                };
+            }
         }
-        i += 1;
     }
-    let mut ids: Vec<String> = seen.iter().map(|s| s.id.clone()).collect();
+    let mut ids: Vec<String> = seen.0.iter().map(|s| s.id.clone()).collect();
     ids.sort();
     RootScan {
         rest: tokens[i..].to_vec(),
         seen: ids,
         dead_end: false,
+        specs,
     }
-}
-
-/// The root long flags still valid after `seen`: not given yet and not conflicting with a given one.
-pub fn root_long_flags_after(seen: &[String]) -> Vec<Candidate> {
-    let specs = root_flag_specs();
-    let blocked: Vec<&str> = specs
-        .iter()
-        .filter(|s| seen.contains(&s.id))
-        .flat_map(|s| std::iter::once(s.id.as_str()).chain(s.conflicts.iter().map(String::as_str)))
-        .collect();
-    root_long_flags()
-        .into_iter()
-        .filter(|c| {
-            let long = c.value.trim_start_matches("--");
-            specs
-                .iter()
-                .find(|s| s.long == long)
-                .is_some_and(|s| !blocked.contains(&s.id.as_str()))
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -613,8 +657,8 @@ mod tests {
     }
 
     #[test]
-    fn root_long_flags_are_sorted_and_exclude_help() {
-        let flags = values(root_long_flags());
+    fn offerable_long_flags_are_sorted_and_exclude_help() {
+        let flags = values(scan(&[""]).offerable_long_flags());
         assert!(!flags.is_empty(), "expected some root flags");
         assert!(
             !flags.contains(&"--help".to_string()),
@@ -659,7 +703,8 @@ mod tests {
 
     #[test]
     fn scan_without_tokens_is_empty() {
-        assert_eq!(scan(&[]), RootScan::default());
+        let s = scan(&[]);
+        assert!(s.rest.is_empty() && s.seen.is_empty() && !s.dead_end);
     }
 
     #[test]
@@ -779,14 +824,21 @@ mod tests {
     }
 
     #[test]
-    fn root_long_flags_after_skips_given_and_conflicting() {
-        let given = |ids: &[&str]| {
-            let seen: Vec<String> = ids.iter().map(ToString::to_string).collect();
-            values(root_long_flags_after(&seen))
-        };
-        assert_eq!(given(&[]), values(root_long_flags()));
+    fn offerable_long_flags_skip_given_and_conflicting() {
+        let after = |line: &[&str]| values(scan(line).offerable_long_flags());
         assert_eq!(
-            given(&["quiet"]),
+            after(&[""]),
+            [
+                "--debug",
+                "--no-output-timeout-secs",
+                "--no-timestamps",
+                "--quiet",
+                "--timeout-secs",
+                "--timestamps"
+            ]
+        );
+        assert_eq!(
+            after(&["--quiet", ""]),
             [
                 "--no-output-timeout-secs",
                 "--no-timestamps",
@@ -795,7 +847,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            given(&["timestamps", "timeout-secs"]),
+            after(&["--timestamps", "--timeout-secs=1", ""]),
             ["--debug", "--no-output-timeout-secs", "--quiet"]
         );
     }
@@ -828,7 +880,7 @@ mod tests {
 
     #[test]
     fn version_is_still_not_offered() {
-        let flags = values(root_long_flags());
+        let flags = values(scan(&[""]).offerable_long_flags());
         assert!(!flags.contains(&"--version".to_string()), "{flags:?}");
     }
 
@@ -845,14 +897,9 @@ mod tests {
         assert_eq!(value_kind(&string), None);
         assert_eq!(value_kind(&int), None);
         let spec = |value| RootFlagSpec {
-            id: "x".into(),
-            long: "x".into(),
-            short: None,
-            aliases: Vec::new(),
             takes_value: true,
             value,
-            ends_parsing: false,
-            conflicts: Vec::new(),
+            ..RootFlagSpec::default()
         };
         assert!(accepts_value(&spec(Some(ValueKind::Float)), "1.5", false));
         assert!(
