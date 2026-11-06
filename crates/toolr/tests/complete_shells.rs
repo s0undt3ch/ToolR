@@ -1803,6 +1803,11 @@ fn zsh_complete(fx: &Fixture, words: &[&str]) -> Vec<String> {
 /// Like [`zsh_complete`], with `compstate[quote]` set to `quote` (the quote character zsh reports
 /// at the cursor) and a `VALUE:` line for each candidate `compadd` gets.
 fn zsh_run(fx: &Fixture, quote: &str, words: &[&str]) -> Vec<String> {
+    zsh_run_with(fx, quote, "", words)
+}
+
+/// [`zsh_run`] with `prelude` evaluated after the script is loaded.
+fn zsh_run_with(fx: &Fixture, quote: &str, prelude: &str, words: &[&str]) -> Vec<String> {
     const DRIVER: &str = r#"
 compdef() { :; }
 _files() { print -r -- "FILES:$*"; }
@@ -1811,6 +1816,7 @@ compset() { print -r -- "COMPSET:$*"; }
 typeset -A compstate
 compstate[quote]=$ZSH_QUOTE
 eval "$1"; shift
+eval "$ZSH_PRELUDE"
 words=("$@"); CURRENT=$#
 _toolr
 "#;
@@ -1825,6 +1831,7 @@ _toolr
         .env("PATH", path_with_toolr())
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .env("ZSH_QUOTE", quote)
+        .env("ZSH_PRELUDE", prelude)
         .output()
         .unwrap();
     assert!(
@@ -1836,6 +1843,18 @@ _toolr
         .lines()
         .map(str::to_string)
         .collect()
+}
+
+/// The word `_toolr` hands the engine for `cur`, read back from a `toolr` shim.
+fn zsh_dequoted(fx: &Fixture, cur: &str) -> String {
+    let words = ["toolr", "ci", "lint", "--cfg", cur];
+    zsh_run_with(
+        fx,
+        "",
+        "toolr() { print -rn -- \"${@[-1]}\" > word.out; }",
+        &words,
+    );
+    std::fs::read_to_string(fx.tmp.path().join("word.out")).unwrap()
 }
 
 /// The candidates `_toolr` hands `compadd` when completing `cur` after `toolr ci lint --mode`.
@@ -1874,6 +1893,10 @@ fn zsh_quoted_and_escaped_partials_match_a_choice() {
             vec!["dry run".to_string()],
             "{quote:?} {cur:?}"
         );
+    }
+    // Both quote kinds, only one of them open.
+    for (cur, want) in [("files/it\"'", "files/it'"), ("a\"b'c d", "ab'c d")] {
+        assert_eq!(zsh_dequoted(&fx, cur), want, "{cur:?}");
     }
     let words = ["toolr", "ci", "lint", "--mode='dry r"];
     assert_eq!(zsh_values(&fx, "", &words), vec!["dry run".to_string()]);
@@ -2330,6 +2353,23 @@ fn fish_quoted_and_escaped_path_partials_still_complete() {
     ] {
         let stdout = fish_complete(&fx, &format!("toolr ci lint {cur}"));
         assert!(fish_names(&stdout).contains(&want), "{cur:?}: {stdout}");
+    }
+}
+
+/// A lone or empty quote unescapes to an empty word, which offers every choice.
+#[test]
+fn fish_empty_quoted_partial_offers_every_choice() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    let mut want = fx.choices();
+    want.sort();
+    for cur in ["\"", "''", "\"\""] {
+        let stdout = fish_complete(&fx, &format!("toolr ci lint --mode {cur}"));
+        let mut got: Vec<String> = fish_names(&stdout).iter().map(|n| n.to_string()).collect();
+        got.sort();
+        assert_eq!(got, want, "{cur:?}");
     }
 }
 
