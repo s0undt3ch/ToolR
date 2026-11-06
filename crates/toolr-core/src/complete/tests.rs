@@ -2037,6 +2037,14 @@ fn double_dash_right_after_a_value_flag_completes_nothing() {
     // clap: "a value is required for '--mode <mode>'".
     assert!(dash_values(&["ci", "lint", "--mode", "--", ""]).is_empty());
     assert!(dash_values(&["ci", "job", "--level", "--", ""]).is_empty());
+    // An empty attached value is just as missing.
+    assert!(dash_values(&["ci", "lint", "--mode=", "--", ""]).is_empty());
+    assert!(dash_values(&["ci", "job", "--level=", "--", ""]).is_empty());
+    // A non-empty one, or a boolean flag, leaves the `--` free to end options.
+    assert_eq!(
+        dash_values(&["ci", "lint", "--mode=fast", "--", ""]),
+        vec!["--dir", "alpha", "beta"]
+    );
 }
 
 #[test]

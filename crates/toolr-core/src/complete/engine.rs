@@ -472,6 +472,15 @@ fn scan_args(command: &Command, arg_tokens: &[String]) -> ArgScan {
             positionals.extend(i + 1..arg_tokens.len());
             break;
         }
+        // `--name=` with nothing attached, then `--`: clap still wants the value.
+        if let Some((name, "")) = token.split_once('=')
+            && name.starts_with("--")
+            && find_flag(command, name).is_some_and(takes_value)
+            && arg_tokens.get(i + 1).is_some_and(|t| t == "--")
+        {
+            missing_value = true;
+            break;
+        }
         match find_flag(command, token) {
             Some(arg) if takes_value(arg) => {
                 if arg_tokens.get(i + 1).is_some_and(|t| t == "--") {
