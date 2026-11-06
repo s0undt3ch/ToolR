@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev885-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev891-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev885 - 2026-11-06
+        0.35.2-dev891 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev885 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev891 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev885-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev891-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev885 - 2026-11-06
+        0.35.2-dev891 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev885 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev891 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev885-2026-11-06">0.35.2-dev885 - 2026-11-06<a class="headerlink" href="#0352-dev885-2026-11-06" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev891-2026-11-06">0.35.2-dev891 - 2026-11-06<a class="headerlink" href="#0352-dev891-2026-11-06" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7731,6 +7731,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p><code>toolr --quiet self completion install</code> now prints nothing on success: the <code>wrote</code>, <code>already up to date</code> and zsh <code>fpath</code> lines are suppressed along with the bash source hint. Refusals and errors still print.</p>
 <p>An empty <code>NO_COLOR</code> no longer disables colour in help output, and a relative <code>XDG_DATA_HOME</code>, <code>XDG_STATE_HOME</code>, <code>XDG_CACHE_HOME</code> or <code>XDG_CONFIG_HOME</code> is now ignored, as the XDG spec says, instead of resolving against the current directory.</p>
 <p>Anything toolr wrote under a relative location (venvs, the managed uv, trust records) stays where it was: toolr rebuilds or re-downloads it under the default directory, asks for trust again, and the old directories can be deleted.</p>
+<p><code>toolr --quiet</code> (and <code>-q</code>) now silences the success lines of <code>self build-manifest</code>, <code>self trusted --prune</code>, <code>project manifest rebuild</code>, <code>project init</code> and <code>project venv sync|lock|add|remove</code>, and passes <code>--quiet</code> on to the uv runs of <code>project init</code> and the <code>venv</code> commands. Errors, refusals and warnings still print, and the <code>self trusted</code> listing is unchanged.
+<code>project venv shell</code> and <code>project venv run</code> also quiet their uv auto-sync. Unlike <code>project venv sync --quiet</code>, the root <code>-q</code> still exits non-zero with a message when there is no toolr project or uv needs install consent.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7955,6 +7957,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(parser)</em> Source-order problems, flag every off-statement command_group, keyword names (<a href="https://github.com/s0undt3ch/ToolR/commit/3fb95144f661cc1b1b41920a5d200206e2ec0487"><code>3fb9514</code></a>)</li>
 <li><em>(completion)</em> Honour --quiet in self completion install (<a href="https://github.com/s0undt3ch/ToolR/commit/4db11c63dab5603a5423115fdee5402562172c87"><code>4db11c6</code></a>)</li>
 <li><em>(env)</em> Honour an empty NO_COLOR and ignore relative XDG dirs (<a href="https://github.com/s0undt3ch/ToolR/commit/30c764815d6be7bc7bc681542b0d5c482591b9c4"><code>30c7648</code></a>)</li>
+<li><em>(cli)</em> Honour the root --quiet in the other self and project built-ins (<a href="https://github.com/s0undt3ch/ToolR/commit/0819664e78cb70fe0cbaad393d5afb80ede01146"><code>0819664</code></a>)</li>
+<li><em>(cli)</em> Quiet uv auto-sync in venv shell and run under root -q (<a href="https://github.com/s0undt3ch/ToolR/commit/e124a8a063a520bc9a568511b4680dac93a45458"><code>e124a8a</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8040,6 +8044,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> One dead-end gate for --, tidy tests and spec (<a href="https://github.com/s0undt3ch/ToolR/commit/c409efd484e367b9668b6f8519e40473f90b6ede"><code>c409efd</code></a>)</li>
 <li><em>(parser)</em> One bound-call helper per side, align mirror names (<a href="https://github.com/s0undt3ch/ToolR/commit/1f7742d21d83a169e64623aaaf77b60c3ee2942b"><code>1f7742d</code></a>)</li>
 <li><em>(completion)</em> Gate install output in one place per arm (<a href="https://github.com/s0undt3ch/ToolR/commit/933558b25512585cfd12bc45a220016894ebc55c"><code>933558b</code></a>)</li>
+<li><em>(cli)</em> State the root --quiet rule once, compute venv_run's quiet once (<a href="https://github.com/s0undt3ch/ToolR/commit/0ccec76e382c236be7190575d5678174be604238"><code>0ccec76</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8290,6 +8295,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Archive empty and relative env values specs (<a href="https://github.com/s0undt3ch/ToolR/commit/e568c736f9605ebcbebcebe1432643713b386f23"><code>e568c73</code></a>)</li>
 <li>XDG dirs count only when set to an absolute path (<a href="https://github.com/s0undt3ch/ToolR/commit/5931071dd272fa84ae16d0e7d57bcf7a8ffdff59"><code>5931071</code></a>)</li>
 <li><em>(env)</em> Say which path reader to use, fix two stale doc comments (<a href="https://github.com/s0undt3ch/ToolR/commit/63f071769abdbe7da60a7d488ab2069beeef579b"><code>63f0717</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for root --quiet in the other built-ins (<a href="https://github.com/s0undt3ch/ToolR/commit/6f0b7aa3720d0cd5f97e041d847ce9bb75a06c59"><code>6f0b7aa</code></a>)</li>
+<li><em>(specs)</em> Archive the root --quiet specs (<a href="https://github.com/s0undt3ch/ToolR/commit/593f1c9d41af74d1b522804c558ef8e606f0b089"><code>593f1c9</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
