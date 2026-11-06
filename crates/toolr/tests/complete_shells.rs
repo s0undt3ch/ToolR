@@ -752,8 +752,14 @@ fn bash_script_names_its_variables_with_the_toolr_prefix() {
             names.push((target.to_string(), line));
         }
         if let Some(at) = words.iter().position(|w| *w == "read") {
+            let mut skip = false;
             for w in &words[at + 1..] {
+                // `-d ''` takes an argument, which is not a name.
+                if std::mem::take(&mut skip) {
+                    continue;
+                }
                 if w.starts_with('-') {
+                    skip = *w == "-d";
                     continue;
                 }
                 let name = w.trim_end_matches(';');
