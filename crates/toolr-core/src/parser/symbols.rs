@@ -360,10 +360,11 @@ impl ImportTable {
                 }
             }
             Stmt::AnnAssign(assign) => {
-                if let Expr::Name(n) = assign.target.as_ref() {
+                // A bare `name: T` binds nothing.
+                if let (Expr::Name(n), Some(value)) = (assign.target.as_ref(), &assign.value) {
                     self.bind_local(n.id.to_string());
                     // `name: T = other` copies like `name = other`.
-                    if let Some(value) = assign.value.as_deref().and_then(Assigned::from_expr) {
+                    if let Some(value) = Assigned::from_expr(value) {
                         self.assigned.insert(n.id.to_string(), value);
                     }
                 }

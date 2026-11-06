@@ -12,6 +12,7 @@ from toolr.testing._groups import GroupDeclaration
 from toolr.testing._groups import _format_contradictory_groups
 from toolr.testing._groups import _format_undescribed_groups
 from toolr.testing._groups import _group_declarations
+from toolr.testing._groups import _ImportTable
 from toolr.testing._groups import _undescribed_groups
 
 
@@ -132,9 +133,9 @@ ALIAS_CASES = {
         {"m.py": "import toolr\ncg: object = toolr.command_group\n" + GROUP.format("a")},
         ["a"],
     ),
-    "annotation without a value": (
+    "annotation without a value binds nothing": (
         {"m.py": "from toolr import command_group as cg\ncg: object\n" + GROUP.format("a")},
-        [],
+        ["a"],
     ),
     "annotated attribute target": (
         {
@@ -349,6 +350,25 @@ ALIAS_CASES = {
         },
         [],
     ),
+    "self copy resolves through the import": (
+        {"m.py": "from toolr import command_group as cg\ncg = cg\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "annotated self copy resolves through the import": (
+        {"m.py": "from toolr import command_group as cg\ncg: object = cg\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "self copy through a star import": (
+        {
+            "m.py": "from tools.lib import *\ncg = cg\n" + GROUP.format("a"),
+            "lib.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "self copy of nothing": (
+        {"m.py": "cg = cg\n" + GROUP.format("a")},
+        [],
+    ),
     "cycle": (
         {
             "x.py": "from tools.y import cg\n",
@@ -367,6 +387,33 @@ def test_aliases_resolve_from_source_as_the_parser_does(
     """Nothing is imported: the resolver reads the `tools/` modules' source only."""
     tools = make_tools_dir(files)
     assert [d.path for d in _group_declarations(tools)] == expected
+
+
+def test_resolution_is_memoised(
+    make_tools_dir: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Six modules star-importing each other fan out 5-wide per hop, eight hops deep, without a memo."""
+    count = 0
+    original = _ImportTable.local_binding_wins
+
+    def counting(self: _ImportTable, name: str) -> bool:
+        nonlocal count
+        count += 1
+        return original(self, name)
+
+    monkeypatch.setattr(_ImportTable, "local_binding_wins", counting)
+    modules = range(6)
+    tools = make_tools_dir(
+        {
+            f"m{n}.py": "".join(f"from tools.m{o} import *\n" for o in modules if o != n)
+            + f"def helper{n}():\n    pass\n"
+            + "".join(f"x{o} = helper{o}()\n" for o in modules if o != n)
+            for n in modules
+        }
+    )
+    assert _group_declarations(tools) == []
+    # One evaluation per (module, name, depth) at most; unmemoised is millions.
+    assert count < 6 * 7 * 9 * 2
 
 
 def test_alias_of_a_package_attribute_resolves_through_its_init(

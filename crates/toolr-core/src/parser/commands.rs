@@ -1,5 +1,6 @@
 //! Extract `@<group>.command`-decorated function definitions.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use ruff_python_ast::statement_visitor::{StatementVisitor, walk_body, walk_stmt};
@@ -44,7 +45,8 @@ pub fn extract_commands(
     // over an inherited one; otherwise the global cross-file map
     // covers `from ._common import group; @group.command` style.
     let by_var = binding_vars(bindings, global_vars);
-    let names = ToolrNames::new(all_imports, module_path);
+    let cache = BindingCache::default();
+    let names = ToolrNames::new(all_imports, module_path).cached(&cache);
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
@@ -149,9 +151,10 @@ pub fn detect_unsupported_commands(
     all_imports: &HashMap<String, ImportTable>,
     by_var: &GlobalVars,
 ) -> Vec<UnsupportedCommand> {
+    let cache = BindingCache::default();
     let mut finder = UnsupportedFinder {
         module_path,
-        names: ToolrNames::new(all_imports, module_path),
+        names: ToolrNames::new(all_imports, module_path).cached(&cache),
         by_var,
         depth: 0,
         out: Vec::new(),
@@ -342,7 +345,8 @@ pub fn detect_name_conflicts(
     module_path: &str,
     all_imports: &HashMap<String, ImportTable>,
 ) -> Vec<CommandNameConflict> {
-    let names = ToolrNames::new(all_imports, module_path);
+    let cache = BindingCache::default();
+    let names = ToolrNames::new(all_imports, module_path).cached(&cache);
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
@@ -371,13 +375,28 @@ pub fn detect_name_conflicts(
 pub struct ToolrNames<'a> {
     all_imports: &'a HashMap<String, ImportTable>,
     module: &'a str,
+    cache: Option<&'a BindingCache>,
 }
+
+/// Results of [`binds_toolr_member`] for one manifest build, keyed by
+/// `(module, name, member, depth)`. The depth is part of the key because the
+/// depth cap truncates a walk, so a result is only reusable at the same depth.
+pub(super) type BindingCache = RefCell<HashMap<(String, String, String, usize), Binding>>;
 
 impl<'a> ToolrNames<'a> {
     pub fn new(all_imports: &'a HashMap<String, ImportTable>, module: &'a str) -> Self {
         Self {
             all_imports,
             module,
+            cache: None,
+        }
+    }
+
+    /// Memoise resolutions in `cache`, which the caller keeps for the whole build.
+    pub(super) fn cached(self, cache: &'a BindingCache) -> Self {
+        Self {
+            cache: Some(cache),
+            ..self
         }
     }
 
@@ -393,13 +412,27 @@ impl<'a> ToolrNames<'a> {
     /// submodule, re-exported by other scanned modules or assigned from one.
     /// A click `command` or a local `def` isn't.
     fn command(self, name: &str) -> Binding {
-        binds_toolr_member(self.all_imports, self.module, name, "command", 0)
+        binds_toolr_member(
+            self.all_imports,
+            self.cache,
+            self.module,
+            name,
+            "command",
+            0,
+        )
     }
 
     /// Whether `name` is toolr's `command_group`, by the same rules as
     /// [`Self::command`].
     pub(super) fn command_group(self, name: &str) -> Binding {
-        binds_toolr_member(self.all_imports, self.module, name, "command_group", 0)
+        binds_toolr_member(
+            self.all_imports,
+            self.cache,
+            self.module,
+            name,
+            "command_group",
+            0,
+        )
     }
 }
 
@@ -440,6 +473,7 @@ const MAX_REEXPORT_DEPTH: usize = 8;
 /// decide whether it is toolr's `member`. `depth` counts hops followed so far.
 fn binds_toolr_member(
     all_imports: &HashMap<String, ImportTable>,
+    cache: Option<&BindingCache>,
     module: &str,
     name: &str,
     member: &str,
@@ -449,30 +483,71 @@ fn binds_toolr_member(
     if depth > MAX_REEXPORT_DEPTH {
         return Binding::Other;
     }
+    let key = (
+        module.to_string(),
+        name.to_string(),
+        member.to_string(),
+        depth,
+    );
+    if let Some(hit) = cache.and_then(|c| c.borrow().get(&key).copied()) {
+        return hit;
+    }
+    let found = resolve_binding(all_imports, cache, module, name, member, depth);
+    if let Some(c) = cache {
+        c.borrow_mut().insert(key, found);
+    }
+    found
+}
+
+fn resolve_binding(
+    all_imports: &HashMap<String, ImportTable>,
+    cache: Option<&BindingCache>,
+    module: &str,
+    name: &str,
+    member: &str,
+    depth: usize,
+) -> Binding {
     let Some(imports) = all_imports.get(module) else {
         return Binding::Unknown;
     };
     if imports.local_binding_wins(name) {
         return match imports.assigned(name) {
+            // `cg = cg` copies whatever the name was before: the imports.
+            Some(Assigned::Name(other)) if other == name => {
+                imported_binding(all_imports, cache, imports, name, member, depth)
+            }
             Some(Assigned::Name(other)) => {
-                binds_toolr_member(all_imports, module, other, member, depth + 1)
+                binds_toolr_member(all_imports, cache, module, other, member, depth + 1)
             }
             Some(Assigned::Attribute { base, attr }) => {
                 match imports.resolve_module_binding(base) {
                     // `import toolr.types` binds `toolr`, not `toolr.types`.
                     Some(m) if is_toolr_path(m) => toolr_member(attr, member),
-                    Some(m) => binds_toolr_member(all_imports, m, attr, member, depth + 1),
+                    Some(m) => binds_toolr_member(all_imports, cache, m, attr, member, depth + 1),
                     None => Binding::Other,
                 }
             }
             None => Binding::Other,
         };
     }
+    imported_binding(all_imports, cache, imports, name, member, depth)
+}
+
+/// What `name` is when read from `module`'s `from ... import` statements,
+/// star imports included, ignoring any local binding of it.
+fn imported_binding(
+    all_imports: &HashMap<String, ImportTable>,
+    cache: Option<&BindingCache>,
+    imports: &ImportTable,
+    name: &str,
+    member: &str,
+    depth: usize,
+) -> Binding {
     let follows = |from: &str, original: &str| {
         if is_toolr_path(from) {
             toolr_member(original, member)
         } else {
-            binds_toolr_member(all_imports, from, original, member, depth + 1)
+            binds_toolr_member(all_imports, cache, from, original, member, depth + 1)
         }
     };
     let candidates = imports.candidates(name);
@@ -484,7 +559,7 @@ fn binds_toolr_member(
             .map(|from| match from.as_str() {
                 "toolr" => follows(from, name),
                 f if is_toolr_path(f) => Binding::Unknown,
-                f => binds_toolr_member(all_imports, f, name, member, depth + 1),
+                f => binds_toolr_member(all_imports, cache, f, name, member, depth + 1),
             })
             .max()
             .unwrap_or(Binding::Other);
@@ -1503,5 +1578,80 @@ def hello(ctx, name="world"):
             .find(|a| a.name == "name")
             .unwrap();
         assert_eq!(name_arg.help, "Who to greet.");
+    }
+
+    /// `ToolrNames` over `modules` (`(path, source)`), asking about the first.
+    fn binding_of(modules: &[(&str, &str)], name: &str, member: &str) -> Binding {
+        let all: HashMap<String, ImportTable> = modules
+            .iter()
+            .map(|(path, src)| {
+                (
+                    path.to_string(),
+                    ImportTable::from_module(&parse_src(src), path, false),
+                )
+            })
+            .collect();
+        binds_toolr_member(&all, None, modules[0].0, name, member, 0)
+    }
+
+    #[test]
+    fn bare_annotation_does_not_hide_an_imported_command() {
+        let src = "from toolr import command\ncommand: object\n";
+        assert_eq!(
+            binding_of(&[("tools.m", src)], "command", "command"),
+            Binding::Toolr
+        );
+    }
+
+    #[test]
+    fn self_copy_of_command_resolves_through_the_import() {
+        for src in [
+            "from toolr import command\ncommand = command\n",
+            "from toolr import command\ncommand: object = command\n",
+        ] {
+            assert_eq!(
+                binding_of(&[("tools.m", src)], "command", "command"),
+                Binding::Toolr
+            );
+        }
+        assert_eq!(
+            binding_of(&[("tools.m", "command = command\n")], "command", "command"),
+            Binding::Other
+        );
+    }
+
+    #[test]
+    fn memo_bounds_the_walk_and_matches_the_uncached_result() {
+        let names: Vec<String> = (0..6).map(|n| format!("tools.m{n}")).collect();
+        let sources: Vec<String> = (0..6)
+            .map(|n| {
+                let mut src = String::new();
+                for o in (0..6).filter(|o| *o != n) {
+                    src += &format!("from tools.m{o} import *\n");
+                }
+                src += &format!("def helper{n}():\n    pass\n");
+                src
+            })
+            .collect();
+        let all: HashMap<String, ImportTable> = names
+            .iter()
+            .zip(&sources)
+            .map(|(path, src)| {
+                (
+                    path.clone(),
+                    ImportTable::from_module(&parse_src(src), path, false),
+                )
+            })
+            .collect();
+        let cache = BindingCache::default();
+        for module in &names {
+            for o in 0..6 {
+                let name = format!("helper{o}");
+                let cached = binds_toolr_member(&all, Some(&cache), module, &name, "command", 0);
+                assert_eq!(cached, Binding::Other);
+            }
+        }
+        // One entry per (module, name, depth) at most; unmemoised is millions of walks.
+        assert!(cache.borrow().len() <= 6 * 6 * 9);
     }
 }

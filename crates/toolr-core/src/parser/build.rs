@@ -11,8 +11,8 @@ use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
-        CommandNameConflict, MissingDocstring, ToolrNames, UnsupportedCommand, binding_vars,
-        detect_name_conflicts, detect_unsupported_commands, extract_commands,
+        BindingCache, CommandNameConflict, MissingDocstring, ToolrNames, UnsupportedCommand,
+        binding_vars, detect_name_conflicts, detect_unsupported_commands, extract_commands,
         format_missing_docstrings, missing_docstrings,
     },
     groups::{Field, GroupFields, extract_groups},
@@ -177,6 +177,7 @@ fn build_commands_inner(
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
     let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
     let mut unsupported: Vec<UnsupportedCommand> = Vec::new();
+    let binding_cache = BindingCache::default();
     for path in py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
@@ -186,7 +187,7 @@ fn build_commands_inner(
             &module,
             module_doc.as_deref(),
             &global_vars,
-            ToolrNames::new(&all_imports, &module_path),
+            ToolrNames::new(&all_imports, &module_path).cached(&binding_cache),
         );
         unsupported.extend(detect_unsupported_commands(
             &module,

@@ -410,7 +410,8 @@ class _ImportTable:
                     if assigned is not None:
                         self._assigned[target.id] = assigned
         elif isinstance(stmt, ast.AnnAssign):
-            if isinstance(stmt.target, ast.Name):
+            # A bare `name: T` binds nothing.
+            if isinstance(stmt.target, ast.Name) and stmt.value is not None:
                 self._bind_local(stmt.target.id)
                 assigned = _Assigned.of(stmt.value)
                 if assigned is not None:
@@ -471,45 +472,46 @@ def _toolr_member(attr: str, member: str) -> _Binding:
     return _Binding.TOOLR if attr == member else _Binding.OTHER
 
 
+_Memo = dict[tuple[str, str, str, int], _Binding]
+"""Results of ``_binding`` keyed by ``(module, name, member, depth)``.
+
+The depth is part of the key because the depth cap truncates a walk, so a
+result is only reusable at the same depth. Mirrors ``BindingCache`` in
+``crates/toolr-core/src/parser/commands.rs``.
+"""
+
+
 def _assigned_binding(
-    tables: dict[str, _ImportTable], module: str, name: str, member: str, depth: int
+    tables: dict[str, _ImportTable], module: str, name: str, member: str, depth: int, memo: _Memo
 ) -> _Binding:
     """What ``name``, bound by ``module`` itself, is: only a copy of another name or attribute can be toolr's."""
     assigned = tables[module].assigned(name)
     if assigned is None:
         return _Binding.OTHER
     if assigned.base is None:
-        return _binding(tables, module, assigned.attr, member, depth + 1)
+        if assigned.attr == name:
+            # `cg = cg` copies whatever the name was before: the imports.
+            return _imported_binding(tables, module, name, member, depth, memo)
+        return _binding(tables, module, assigned.attr, member, memo, depth + 1)
     bound = tables[module].module_bindings.get(assigned.base)
     if bound is None:
         return _Binding.OTHER
     if _is_toolr_path(bound):
         # `import toolr.types` binds `toolr`, not `toolr.types`.
         return _toolr_member(assigned.attr, member)
-    return _binding(tables, bound, assigned.attr, member, depth + 1)
+    return _binding(tables, bound, assigned.attr, member, memo, depth + 1)
 
 
-def _binding(
-    tables: dict[str, _ImportTable], module: str, name: str, member: str, depth: int = 0
+def _imported_binding(
+    tables: dict[str, _ImportTable], module: str, name: str, member: str, depth: int, memo: _Memo
 ) -> _Binding:
-    """Follow ``name`` in ``module`` through imports, re-exports and assignments.
-
-    Decides whether it is toolr's ``member``, from the ``tools/`` modules' source
-    alone. Mirrors ``binds_toolr_member`` in
-    ``crates/toolr-core/src/parser/commands.rs``; change both together.
-    """
-    if depth > _MAX_REEXPORT_DEPTH:
-        return _Binding.OTHER
-    table = tables.get(module)
-    if table is None:
-        return _Binding.UNKNOWN
-    if table.local_binding_wins(name):
-        return _assigned_binding(tables, module, name, member, depth)
+    """What ``name`` is when read from ``module``'s ``from ... import`` statements, ignoring a local binding."""
+    table = tables[module]
 
     def follows(source: str, original: str) -> _Binding:
         if _is_toolr_path(source):
             return _toolr_member(original, member)
-        return _binding(tables, source, original, member, depth + 1)
+        return _binding(tables, source, original, member, memo, depth + 1)
 
     candidates = table.entries.get(name, [])
     if not candidates:
@@ -521,12 +523,45 @@ def _binding(
             elif _is_toolr_path(source):
                 found = max(found, _Binding.UNKNOWN)
             else:
-                found = max(found, _binding(tables, source, name, member, depth + 1))
+                found = max(found, _binding(tables, source, name, member, memo, depth + 1))
         return found
     return max((follows(c.module, c.original) for c in candidates), default=_Binding.OTHER)
 
 
-def _is_command_group(func: ast.expr, tables: dict[str, _ImportTable], module: str) -> bool:
+def _binding(
+    tables: dict[str, _ImportTable],
+    module: str,
+    name: str,
+    member: str,
+    memo: _Memo,
+    depth: int = 0,
+) -> _Binding:
+    """Follow ``name`` in ``module`` through imports, re-exports and assignments.
+
+    Decides whether it is toolr's ``member``, from the ``tools/`` modules' source
+    alone. Mirrors ``binds_toolr_member`` in
+    ``crates/toolr-core/src/parser/commands.rs``; change both together.
+    """
+    if depth > _MAX_REEXPORT_DEPTH:
+        return _Binding.OTHER
+    key = (module, name, member, depth)
+    hit = memo.get(key)
+    if hit is not None:
+        return hit
+    table = tables.get(module)
+    if table is None:
+        found = _Binding.UNKNOWN
+    elif table.local_binding_wins(name):
+        found = _assigned_binding(tables, module, name, member, depth, memo)
+    else:
+        found = _imported_binding(tables, module, name, member, depth, memo)
+    memo[key] = found
+    return found
+
+
+def _is_command_group(
+    func: ast.expr, tables: dict[str, _ImportTable], module: str, memo: _Memo
+) -> bool:
     """Whether ``func`` is toolr's ``command_group``.
 
     A bare name counts when spelt ``command_group`` or resolved to it through
@@ -537,13 +572,13 @@ def _is_command_group(func: ast.expr, tables: dict[str, _ImportTable], module: s
     if isinstance(func, ast.Name):
         return (
             func.id == "command_group"
-            or _binding(tables, module, func.id, "command_group") is _Binding.TOOLR
+            or _binding(tables, module, func.id, "command_group", memo) is _Binding.TOOLR
         )
     return isinstance(func, ast.Attribute) and func.attr == "command_group"
 
 
 def _group_calls(
-    tree: ast.Module, tables: dict[str, _ImportTable], module: str
+    tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
 ) -> list[_GroupCall]:
     """Each top-level ``command_group(...)`` call, with its bound name.
 
@@ -563,7 +598,7 @@ def _group_calls(
                 var, value = stmt.target.id, stmt.value
         elif isinstance(stmt, ast.Expr):
             value = stmt.value
-        if isinstance(value, ast.Call) and _is_command_group(value.func, tables, module):
+        if isinstance(value, ast.Call) and _is_command_group(value.func, tables, module, memo):
             found.append(_GroupCall(var, value))
     return found
 
@@ -586,12 +621,13 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
         modules[file]: _ImportTable(trees[file], modules[file], is_package=file.stem == "__init__")
         for file in files
     }
+    memo: _Memo = {}
     for file in files:
         tree = trees[file]
         module = modules[file]
         source = _Source.of(tree)
         local: list[tuple[str, str]] = []
-        for var, call in _group_calls(tree, tables, module):
+        for var, call in _group_calls(tree, tables, module, memo):
             parent_var = _parent_var(call)
             parent = None
             if parent_var is not None:

@@ -732,6 +732,44 @@ mod tests {
     }
 
     #[test]
+    fn bare_annotation_does_not_hide_an_imported_alias() {
+        let groups = groups_in(
+            "from toolr import command_group as cg\ncg: object\ng = cg(\"x\", \"X\", \"Group x.\")\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("g", "x")]);
+    }
+
+    #[test]
+    fn self_copy_resolves_through_the_import() {
+        let groups = groups_in(
+            "from toolr import command_group as cg\ncg = cg\ng = cg(\"y\", \"Y\", \"Y.\")\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("g", "y")]);
+        let groups = groups_in(
+            "from toolr import command_group as cg\ncg: object = cg\ng = cg(\"y\", \"Y\", \"Y.\")\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("g", "y")]);
+    }
+
+    #[test]
+    fn self_copy_resolves_through_a_star_import() {
+        let groups = groups_in(
+            "from tools.lib import *\ncg = cg\ng = cg(\"s\", \"S\", \"S.\")\n",
+            &[("tools.lib", "from toolr import command_group as cg\n")],
+        );
+        assert_eq!(paths(&groups), [pair("g", "s")]);
+    }
+
+    #[test]
+    fn self_copy_of_nothing_is_not_a_group() {
+        let groups = groups_in("cg = cg\ng = cg(\"n\", \"N\", \"N.\")\n", &[]);
+        assert!(groups.is_empty());
+    }
+
+    #[test]
     fn local_def_alias_is_not_a_group() {
         let groups = groups_in(
             "def cg(*args):\n    pass\ng = cg(\"local\", \"L\", \"L.\")\n",
