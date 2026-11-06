@@ -219,7 +219,21 @@ struct RootFlagSpec {
     short: Option<char>,
     aliases: Vec<String>,
     takes_value: bool,
+    /// The value type the scan can check; `None` for a type it does not know (the line dead-ends).
+    value: Option<ValueKind>,
+    /// `--version`: clap prints and exits, so nothing after it completes.
+    ends_parsing: bool,
     conflicts: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ValueKind {
+    Float,
+}
+
+/// The checkable value type behind an arg's parser, if the scan knows it.
+fn value_kind(arg: &Arg) -> Option<ValueKind> {
+    (arg.get_value_parser().type_id() == std::any::TypeId::of::<f64>()).then_some(ValueKind::Float)
 }
 
 /// What [`scan_root_flags`] found in the committed tokens.
@@ -234,7 +248,9 @@ pub struct RootScan {
 }
 
 fn root_flag_specs() -> Vec<RootFlagSpec> {
-    let root = crate::cli::build_command(&empty_manifest());
+    let mut root = crate::cli::build_command(&empty_manifest());
+    // Unbuilt, the auto-added `--version` / `-V` arg does not exist yet.
+    root.build();
     let mut specs: Vec<RootFlagSpec> = root
         .get_arguments()
         .filter_map(|a| {
@@ -249,6 +265,8 @@ fn root_flag_specs() -> Vec<RootFlagSpec> {
                     .map(str::to_string)
                     .collect(),
                 takes_value: a.get_action().takes_values(),
+                value: value_kind(a),
+                ends_parsing: matches!(a.get_action(), ArgAction::Version),
                 // Only the declaring side lists a conflict; mirrored below.
                 conflicts: root
                     .get_arg_conflicts_with(a)
@@ -273,9 +291,15 @@ fn root_flag_specs() -> Vec<RootFlagSpec> {
     specs
 }
 
-/// Whether clap accepts `value` after a value-taking root flag (an `f64` that is not a flag-looking word).
-fn is_flag_value(value: &str) -> bool {
-    !value.starts_with('-') && value.parse::<f64>().is_ok()
+/// Whether clap accepts `value` for a value-taking root flag. An attached value (`--flag=-1`) is
+/// unambiguous; a detached one that starts with `-` reads as another flag. Unknown value types never pass.
+fn accepts_value(spec: &RootFlagSpec, value: &str, attached: bool) -> bool {
+    match spec.value {
+        Some(ValueKind::Float) => {
+            value.parse::<f64>().is_ok() && (attached || !value.starts_with('-'))
+        }
+        None => false,
+    }
 }
 
 /// Strip the leading run of root flags from the completion tokens (the last one is the in-progress word).
@@ -290,9 +314,10 @@ pub fn scan_root_flags(tokens: &[String]) -> RootScan {
     while i < committed {
         let tok = tokens[i].as_str();
         let mut take = |spec: &RootFlagSpec| -> bool {
-            let clash = seen
-                .iter()
-                .any(|s| s.id == spec.id || spec.conflicts.contains(&s.id));
+            let clash = spec.ends_parsing
+                || seen
+                    .iter()
+                    .any(|s| s.id == spec.id || spec.conflicts.contains(&s.id));
             if let Some(found) = specs.iter().find(|s| s.id == spec.id) {
                 seen.push(found);
             }
@@ -312,11 +337,11 @@ pub fn scan_root_flags(tokens: &[String]) -> RootScan {
             match (spec.takes_value, attached) {
                 (false, Some(_)) => false,
                 (false, None) => take(spec),
-                (true, Some(v)) => is_flag_value(v) && take(spec),
+                (true, Some(v)) => accepts_value(spec, v, true) && take(spec),
                 (true, None) => {
                     i += 1;
                     // The in-progress word is the value when nothing follows.
-                    i < committed && is_flag_value(&tokens[i]) && take(spec)
+                    i < committed && accepts_value(spec, &tokens[i], false) && take(spec)
                 }
             }
         } else if let Some(cluster) = tok
@@ -773,5 +798,67 @@ mod tests {
             given(&["timestamps", "timeout-secs"]),
             ["--debug", "--no-output-timeout-secs", "--quiet"]
         );
+    }
+
+    #[test]
+    fn scan_accepts_attached_negative_values() {
+        for line in [
+            &["--timeout-secs=-1", ""][..],
+            &["--nots=-1", ""],
+            &["--timeout-secs=-1e3", ""],
+        ] {
+            let s = scan(line);
+            assert!(!s.dead_end, "{line:?}");
+            assert_eq!(strs(&s.rest), [""], "{line:?}");
+        }
+        assert!(scan(&["--timeout-secs=-x", ""]).dead_end);
+    }
+
+    #[test]
+    fn scan_version_ends_the_line() {
+        for line in [
+            &["--version", ""][..],
+            &["-V", ""],
+            &["-qV", ""],
+            &["--quiet", "--version", "--"],
+        ] {
+            assert!(scan(line).dead_end, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn version_is_still_not_offered() {
+        let flags = values(root_long_flags());
+        assert!(!flags.contains(&"--version".to_string()), "{flags:?}");
+    }
+
+    #[test]
+    fn unknown_value_types_are_not_validated() {
+        let float = Arg::new("f")
+            .long("f")
+            .value_parser(clap::value_parser!(f64));
+        let string = Arg::new("s").long("s");
+        let int = Arg::new("i")
+            .long("i")
+            .value_parser(clap::value_parser!(i64));
+        assert_eq!(value_kind(&float), Some(ValueKind::Float));
+        assert_eq!(value_kind(&string), None);
+        assert_eq!(value_kind(&int), None);
+        let spec = |value| RootFlagSpec {
+            id: "x".into(),
+            long: "x".into(),
+            short: None,
+            aliases: Vec::new(),
+            takes_value: true,
+            value,
+            ends_parsing: false,
+            conflicts: Vec::new(),
+        };
+        assert!(accepts_value(&spec(Some(ValueKind::Float)), "1.5", false));
+        assert!(
+            !accepts_value(&spec(None), "1.5", false),
+            "unknown type dead-ends"
+        );
+        assert!(!accepts_value(&spec(None), "1.5", true));
     }
 }
