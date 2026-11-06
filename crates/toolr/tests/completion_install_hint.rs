@@ -121,6 +121,68 @@ fn quiet_suppresses_the_hint() {
     assert!(host.installed_bash_script().is_file());
 }
 
+/// Every success message is non-error output, so `--quiet` prints none of it.
+fn assert_quiet_install_is_silent(host: &Host, shell: &str, extra: &[&str]) {
+    let args = [&["--quiet", "self", "completion", "install", shell], extra].concat();
+    let (stdout, stderr) = host.install(&args);
+    assert_eq!(stdout, "", "{args:?}");
+    assert_eq!(stderr, "", "{args:?}");
+}
+
+#[test]
+fn quiet_first_install_prints_nothing_for_every_shell() {
+    for shell in ["bash", "zsh", "fish"] {
+        let host = Host::new();
+        assert_quiet_install_is_silent(&host, shell, &[]);
+    }
+    // The zsh reminder is the extra line a first install adds.
+    let host = Host::new();
+    assert_quiet_install_is_silent(&host, "zsh", &[]);
+    assert!(host.path("home/.zfunc/_toolr").is_file());
+}
+
+#[test]
+fn quiet_repeat_install_prints_nothing() {
+    for shell in ["bash", "zsh", "fish"] {
+        let host = Host::new();
+        host.install(&["self", "completion", "install", shell]);
+        assert_quiet_install_is_silent(&host, shell, &[]);
+    }
+}
+
+#[test]
+fn quiet_force_rewrite_prints_nothing() {
+    let host = Host::new();
+    host.install(&["self", "completion", "install", "zsh"]);
+    assert_quiet_install_is_silent(&host, "zsh", &["--force"]);
+}
+
+#[test]
+fn quiet_force_replace_prints_nothing() {
+    let host = Host::new();
+    let script = host.installed_bash_script();
+    std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+    std::fs::write(&script, "# edited by hand\n").unwrap();
+    assert_quiet_install_is_silent(&host, "bash", &["--force"]);
+    assert_ne!(
+        std::fs::read_to_string(&script).unwrap(),
+        "# edited by hand\n"
+    );
+}
+
+#[test]
+fn quiet_still_reports_a_refused_overwrite() {
+    let host = Host::new();
+    let script = host.installed_bash_script();
+    std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+    std::fs::write(&script, "# edited by hand\n").unwrap();
+    let args = ["--quiet", "self", "completion", "install", "bash"];
+    let out = host.command(&args).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("refusing to overwrite"));
+    assert!(out.stdout.is_empty());
+}
+
 #[test]
 fn other_shells_get_no_bash_hint() {
     let host = Host::new();

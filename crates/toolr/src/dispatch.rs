@@ -560,39 +560,43 @@ fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Re
     let outcome = install_script(&opts)?;
     match outcome {
         InstallOutcome::Wrote { path, prior } => {
-            let msg = match prior {
-                PriorState::None => format!(
-                    "toolr: wrote {} completion script to {}",
-                    shell,
-                    path.display()
-                ),
-                PriorState::Identical => format!(
-                    "toolr: rewrote {} completion script at {} (--force; content unchanged)",
-                    shell,
-                    path.display()
-                ),
-                PriorState::Differed => format!(
-                    "toolr: replaced existing {} completion script at {}",
-                    shell,
-                    path.display()
-                ),
-            };
-            println!("{msg}");
-            if matches!(shell, CompletionShell::Zsh) {
-                println!(
-                    "toolr: ensure your ~/.zshrc includes `fpath=(~/.zfunc $fpath)` and \
-                     `autoload -Uz compinit && compinit`."
-                );
+            if !quiet {
+                let msg = match prior {
+                    PriorState::None => format!(
+                        "toolr: wrote {} completion script to {}",
+                        shell,
+                        path.display()
+                    ),
+                    PriorState::Identical => format!(
+                        "toolr: rewrote {} completion script at {} (--force; content unchanged)",
+                        shell,
+                        path.display()
+                    ),
+                    PriorState::Differed => format!(
+                        "toolr: replaced existing {} completion script at {}",
+                        shell,
+                        path.display()
+                    ),
+                };
+                println!("{msg}");
+                if matches!(shell, CompletionShell::Zsh) {
+                    println!(
+                        "toolr: ensure your ~/.zshrc includes `fpath=(~/.zfunc $fpath)` and \
+                         `autoload -Uz compinit && compinit`."
+                    );
+                }
             }
             print_bash_source_hint(shell, &path, quiet);
             Ok(ExitCode::SUCCESS)
         }
         InstallOutcome::AlreadyInstalled { path } => {
-            println!(
-                "toolr: {} completion already up to date at {}",
-                shell,
-                path.display()
-            );
+            if !quiet {
+                println!(
+                    "toolr: {} completion already up to date at {}",
+                    shell,
+                    path.display()
+                );
+            }
             print_bash_source_hint(shell, &path, quiet);
             Ok(ExitCode::SUCCESS)
         }
