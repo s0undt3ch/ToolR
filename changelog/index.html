@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev807-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev820-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev807 - 2026-11-05
+        0.35.2-dev820 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev807 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev820 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev807-2026-11-05" class="md-nav__link">
+  <a href="#0352-dev820-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev807 - 2026-11-05
+        0.35.2-dev820 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev807 - 2026-11-05">
+    <nav class="md-nav" aria-label="0.35.2-dev820 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev807-2026-11-05">0.35.2-dev807 - 2026-11-05<a class="headerlink" href="#0352-dev807-2026-11-05" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev820-2026-11-06">0.35.2-dev820 - 2026-11-06<a class="headerlink" href="#0352-dev820-2026-11-06" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7721,6 +7721,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>Bash path completion offers nothing for any other word containing <code>$</code> or a backtick, such as <code>${VAR:-$(cmd)}/</code>, <code>$_/</code> or a typed <code>\$</code>. Bash 5.3 expands such a word while completing it and could run a command substitution on Tab.</p>
 <p><code>toolr self completion install bash</code> now prints <code>source &lt;installed path&gt;</code> to add to your bash startup file when it can't find the bash-completion package, which is the only thing that loads the install directory. Without the package, the script used to be installed but never loaded. If bash-completion is installed but not enabled in your startup file, toolr can't tell: enable it, or add the <code>source</code> line yourself. Interactive shells read <code>~/.bashrc</code>; login shells, such as the ones macOS Terminal opens, read <code>~/.bash_profile</code>. <code>toolr --quiet</code> drops the hint.</p>
 <p><code>--opt=value</code> now tab-completes the value, choices or file paths, in bash, zsh and fish, for both your commands and built-ins such as <code>toolr self build-manifest --output=</code>. Re-run <code>toolr self completion install &lt;shell&gt; --force</code> to pick it up.</p>
+<p>Command groups declared through an aliased <code>command_group</code> (such as <code>from toolr import command_group as cg</code>) or with an annotated assignment (<code>group: CommandGroup = command_group(...)</code>) now appear in the manifest with their commands. Before, toolr dropped them without an error. An annotated alias of <code>command</code> (<code>cmd: Any = command</code>) is now followed too.</p>
+<p>A bare annotation (<code>cg: object</code>) no longer hides an imported <code>command</code> or <code>command_group</code>, and a self-copy (<code>cg = cg</code>) now resolves to the import.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7922,6 +7924,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> Tighten the bash install source hint (<a href="https://github.com/s0undt3ch/ToolR/commit/de0ec9b22b45b79d46a969e499c79522ac59c4a1"><code>de0ec9b</code></a>)</li>
 <li><em>(cli)</em> Stop treating bash-completion 1.x as 2.x in the source hint (<a href="https://github.com/s0undt3ch/ToolR/commit/f7720be805262139720c488220df0203ced9a4f6"><code>f7720be</code></a>)</li>
 <li><em>(complete)</em> Complete --opt= paths on fish older than 3.7 (<a href="https://github.com/s0undt3ch/ToolR/commit/54c8c8d8fb9380f1aa4f906fcfbb9689ca7070ca"><code>54c8c8d</code></a>)</li>
+<li><em>(parser)</em> Read command_group aliases and annotated group bindings (<a href="https://github.com/s0undt3ch/ToolR/commit/24f7e287234293578a441f55a7351d57e7f444e1"><code>24f7e28</code></a>)</li>
+<li><em>(testing)</em> Read command_group aliases and annotated bindings in CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/aece5dec956940d40785a8d65ed57b4ddc7c437e"><code>aece5de</code></a>)</li>
+<li><em>(parser)</em> Follow annotated aliases of command and command_group (<a href="https://github.com/s0undt3ch/ToolR/commit/88049ab877299e8903e622fd9704d23d16836a3e"><code>88049ab</code></a>)</li>
+<li><em>(testing)</em> Resolve command_group aliases statically in CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/ad35e7c589ff07ec53fed6714fad5ff4e57f4c81"><code>ad35e7c</code></a>)</li>
+<li><em>(parser)</em> Bind nothing for a bare annotation, resolve self-copies and memoise alias resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/187ec3fedaa8d2643481088739a4e989b493f582"><code>187ec3f</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8000,6 +8007,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> Read every bash probe path through non_empty_env_path (<a href="https://github.com/s0undt3ch/ToolR/commit/a5d0c9b76da1ac8222cbc0c175788fddfca4c5ba"><code>a5d0c9b</code></a>)</li>
 <li><em>(complete)</em> Keep bash_completion_candidates crate-private (<a href="https://github.com/s0undt3ch/ToolR/commit/f82293b5042c4f9db3b01f19ccea0de5dba16a46"><code>f82293b</code></a>)</li>
 <li><em>(complete)</em> Tidy the --opt= completion scripts, tests and specs (<a href="https://github.com/s0undt3ch/ToolR/commit/9e7f7f74ed498ec5498f39bb2d16233b2c31a181"><code>9e7f7f7</code></a>)</li>
+<li><em>(parser)</em> Share one ToolrNames and memo per build, resolve through methods (<a href="https://github.com/s0undt3ch/ToolR/commit/d5fd6bde74ea033f1a356a651fb506f70abff2c5"><code>d5fd6bd</code></a>)</li>
+<li><em>(testing)</em> Drop the unused member parameter and align _binding argument order (<a href="https://github.com/s0undt3ch/ToolR/commit/aabd2f3facf3664cdeab76b57ac04cbfadf33cfa"><code>aabd2f3</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8222,6 +8231,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Document --opt=value completion (<a href="https://github.com/s0undt3ch/ToolR/commit/88b1b5c8c3b1e07706185b2d595b3c5792042abf"><code>88b1b5c</code></a>)</li>
 <li><em>(specs)</em> Archive FU-15 --opt=value completion spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/07c812081bdb2117aefb1829ce1f710c4beebfe7"><code>07c8120</code></a>)</li>
 <li><em>(complete)</em> Note that ~ isn't expanded after --opt= (<a href="https://github.com/s0undt3ch/ToolR/commit/1c9acfc49168090d861359ac94e94fa0ea920ea1"><code>1c9acfc</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for command_group aliases (FU-26) (<a href="https://github.com/s0undt3ch/ToolR/commit/83035c92221af9690aefee15ffc9fa8dd33ed27d"><code>83035c9</code></a>)</li>
+<li><em>(specs)</em> Archive the command_group aliases spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/0010a111220f43db540eb5ed2910ff36c5bdc99a"><code>0010a11</code></a>)</li>
+<li><em>(specs)</em> Describe the shipped static mirror in the command_group aliases design (<a href="https://github.com/s0undt3ch/ToolR/commit/8087eb1f20b0378d7c928908febeaba4b899e3a6"><code>8087eb1</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
