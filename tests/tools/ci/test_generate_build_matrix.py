@@ -14,21 +14,18 @@ from tools.ci import FULL_BUILD_LABEL
 from tools.ci import _run_full_ci
 from tools.ci import generate_build_matrix
 
-from tests._git import git
-from tests._git import make_repo
-
-pytestmark = pytest.mark.skip_if_binaries_missing("git")
+from tests._git import Git
 
 PrRepoFactory = Callable[..., tuple[Path, dict[str, str]]]
 EventFactory = Callable[..., None]
 
 
 @pytest.fixture
-def pr_repo(tmp_path: Path) -> PrRepoFactory:
+def pr_repo(tmp_path: Path, git: Git) -> PrRepoFactory:
     """Factory: a git repo with a base commit and a head commit changing `changed`."""
 
     def factory(changed: list[str]) -> tuple[Path, dict[str, str]]:
-        repo = make_repo(tmp_path / "repo", files={"README.md": "base\n"})
+        repo = git.make_repo(tmp_path / "repo", files={"README.md": "base\n"})
         base = git(repo, "rev-parse", "HEAD").strip()
         for name in changed:
             path = repo / name

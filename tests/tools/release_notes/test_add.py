@@ -17,7 +17,7 @@ from tools.release_notes import _note_filename
 from tools.release_notes import _slug_from_branch
 from tools.release_notes import add
 
-from tests._git import git
+from tests._git import Git
 from tests.tools.release_notes.helpers import notes
 from tests.tools.release_notes.helpers import staged
 
@@ -44,7 +44,7 @@ def test_note_filename() -> None:
     assert _note_filename(now, "x") == "2026-11-01.14-03-27.x.md"
 
 
-def test_add_writes_and_stages(git_repo: Callable[..., Path]) -> None:
+def test_add_writes_and_stages(git_repo: Callable[..., Path], git: Git) -> None:
     repo = git_repo()
     ctx = make_context(repo)
     add(ctx, slug="foo", text="Hello")
@@ -53,16 +53,16 @@ def test_add_writes_and_stages(git_repo: Callable[..., Path]) -> None:
     assert match
     assert match["slug"] == "foo"
     assert note.read_text() == "Hello\n"
-    assert staged(repo) == [f"release-notes/{note.name}"]
+    assert staged(git, repo) == [f"release-notes/{note.name}"]
     assert f"release-notes/{note.name}" in ctx.stdout
 
 
-def test_add_without_text_creates_empty_file(git_repo: Callable[..., Path]) -> None:
+def test_add_without_text_creates_empty_file(git_repo: Callable[..., Path], git: Git) -> None:
     repo = git_repo()
     add(make_context(repo), slug="foo")
     (note,) = notes(repo)
     assert note.read_text() == ""
-    assert staged(repo) == [f"release-notes/{note.name}"]
+    assert staged(git, repo) == [f"release-notes/{note.name}"]
 
 
 def test_add_derives_slug_from_branch(git_repo: Callable[..., Path]) -> None:
@@ -74,7 +74,7 @@ def test_add_derives_slug_from_branch(git_repo: Callable[..., Path]) -> None:
     assert match["slug"] == "some-thing"
 
 
-def test_add_detached_head_fails(git_repo: Callable[..., Path]) -> None:
+def test_add_detached_head_fails(git_repo: Callable[..., Path], git: Git) -> None:
     repo = git_repo()
     git(repo, "checkout", "--detach")
     ctx = make_context(repo)
@@ -102,6 +102,7 @@ def test_add_fails(git_repo: Callable[..., Path], kwargs: dict[str, Any]) -> Non
     assert not (repo / "release-notes").exists()
 
 
+@pytest.mark.usefixtures("git")
 def test_add_outside_git_repo_reports_git_failure(tmp_path: Path) -> None:
     ctx = make_context(tmp_path)
     with pytest.raises(SystemExit) as exc:
@@ -123,7 +124,7 @@ def test_add_duplicate_slug_refused(git_repo: Callable[..., Path]) -> None:
     assert [p.name for p in notes(repo)] == ["2020-01-01.00-00-00.foo.md"]
 
 
-def test_add_append(git_repo: Callable[..., Path]) -> None:
+def test_add_append(git_repo: Callable[..., Path], git: Git) -> None:
     repo = git_repo()
     directory = repo / "release-notes"
     directory.mkdir()
@@ -132,4 +133,4 @@ def test_add_append(git_repo: Callable[..., Path]) -> None:
     add(make_context(repo), slug="foo", text="B", append=True)
     assert [p.name for p in notes(repo)] == [existing.name]
     assert existing.read_text() == "A\n\nB\n"
-    assert staged(repo) == [f"release-notes/{existing.name}"]
+    assert staged(git, repo) == [f"release-notes/{existing.name}"]

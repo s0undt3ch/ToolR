@@ -12,23 +12,21 @@ from pathlib import Path
 
 import pytest
 
-from tests._git import configure_identity
-from tests._git import git
+from tests._git import Git
 from tests.workflows.conftest import StepRunner
 from tests.workflows.conftest import workflow_step_script
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
-pytestmark = [
-    pytest.mark.skip_on_windows(reason="the step runs under bash on ubuntu-latest only"),
-    pytest.mark.skip_if_binaries_missing("git"),
-]
+pytestmark = pytest.mark.skip_on_windows(reason="the step runs under bash on ubuntu-latest only")
 
 
 @pytest.fixture
 def release_remote(
-    tmp_path: Path, git_repo: Callable[..., Path]
+    tmp_path: Path,
+    git_repo: Callable[..., Path],
+    git: Git,
 ) -> Callable[..., tuple[Path, Path]]:
     """Return a factory for an `origin` bare repository and a release work dir.
 
@@ -45,7 +43,7 @@ def release_remote(
 
         workdir = tmp_path / "work"
         git(tmp_path, "clone", "-q", str(origin), str(workdir))
-        configure_identity(workdir)
+        git.configure_identity(workdir)
         (workdir / "Cargo.toml").write_text('version = "9.9.9"\n')
         git(workdir, "commit", "-q", "-am", "chore(release): Prepare for 9.9.9 release")
         git(workdir, "tag", "-m", "chore(release): Release v9.9.9", "-a", "v9.9.9")
@@ -53,7 +51,7 @@ def release_remote(
         if advance_main:
             other = tmp_path / "other"
             git(tmp_path, "clone", "-q", str(origin), str(other))
-            configure_identity(other)
+            git.configure_identity(other)
             (other / "README.md").write_text("Merged during the release\n")
             git(other, "add", "README.md")
             git(other, "commit", "-q", "-m", "feat: merged during the release")
@@ -66,6 +64,7 @@ def release_remote(
 @pytest.fixture
 def run_push_step(
     bash_step: Callable[[str], StepRunner],
+    git: Git,
 ) -> Callable[..., subprocess.CompletedProcess[str]]:
     """Return a callable that runs the push step in `workdir`."""
     step = bash_step(workflow_step_script(RELEASE_YML, "publish-release", "push-release"))
@@ -88,13 +87,14 @@ def run_push_step(
     return run
 
 
-def remote_sha(origin: Path, ref: str) -> str:
+def remote_sha(git: Git, origin: Path, ref: str) -> str:
     return git(origin, "rev-parse", ref).strip()
 
 
 def test_push_non_branch_ref_is_refused(
     release_remote: Callable[..., tuple[Path, Path]],
     run_push_step: Callable[..., subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     origin, workdir = release_remote(advance_main=False)
     refs_before = git(origin, "show-ref")
@@ -109,6 +109,7 @@ def test_push_non_branch_ref_is_refused(
 def test_push_branch_current_publishes_branch_and_tag(
     release_remote: Callable[..., tuple[Path, Path]],
     run_push_step: Callable[..., subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     origin, workdir = release_remote(advance_main=False)
     release_commit = git(workdir, "rev-parse", "HEAD").strip()
@@ -116,8 +117,8 @@ def test_push_branch_current_publishes_branch_and_tag(
     result = run_push_step(workdir)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert remote_sha(origin, "refs/heads/main") == release_commit
-    assert remote_sha(origin, "refs/tags/v9.9.9^{commit}") == release_commit
+    assert remote_sha(git, origin, "refs/heads/main") == release_commit
+    assert remote_sha(git, origin, "refs/tags/v9.9.9^{commit}") == release_commit
 
 
 def test_push_origin_unreachable_reports_unknown_state(
@@ -138,12 +139,13 @@ def test_push_origin_unreachable_reports_unknown_state(
 def test_push_tag_on_release_commit_reports_earlier_attempt(
     release_remote: Callable[..., tuple[Path, Path]],
     run_push_step: Callable[..., subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     """A re-run after a later step failed finds the tag it pushed the first time."""
     origin, workdir = release_remote(advance_main=False)
     first = run_push_step(workdir)
     assert first.returncode == 0, first.stdout + first.stderr
-    published_tag = remote_sha(origin, "refs/tags/v9.9.9")
+    published_tag = remote_sha(git, origin, "refs/tags/v9.9.9")
     # The re-run tags again, so the local tag object differs from the published one.
     git(workdir, "tag", "-f", "-m", "chore(release): Release v9.9.9 (re-run)", "-a", "v9.9.9")
 
@@ -155,18 +157,19 @@ def test_push_tag_on_release_commit_reports_earlier_attempt(
     )
     assert '"Create GitHub release"' in result.stderr
     assert "nothing was published" not in result.stderr
-    assert remote_sha(origin, "refs/tags/v9.9.9") == published_tag
+    assert remote_sha(git, origin, "refs/tags/v9.9.9") == published_tag
 
 
 def test_push_tag_on_other_commit_stops(
     tmp_path: Path,
     release_remote: Callable[..., tuple[Path, Path]],
     run_push_step: Callable[..., subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     origin, workdir = release_remote(advance_main=False)
     other = tmp_path / "other"
     git(tmp_path, "clone", "-q", str(origin), str(other))
-    configure_identity(other)
+    git.configure_identity(other)
     git(other, "tag", "-m", "unrelated", "-a", "v9.9.9")
     git(other, "push", "-q", "origin", "refs/tags/v9.9.9")
     refs_before = git(origin, "show-ref")
@@ -184,15 +187,16 @@ def test_push_tag_on_other_commit_stops(
 def test_push_branch_moved_publishes_nothing(
     release_remote: Callable[..., tuple[Path, Path]],
     run_push_step: Callable[..., subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     origin, workdir = release_remote(advance_main=True)
-    moved_main = remote_sha(origin, "refs/heads/main")
+    moved_main = remote_sha(git, origin, "refs/heads/main")
 
     result = run_push_step(workdir)
 
     assert result.returncode != 0, result.stdout + result.stderr
     assert git(origin, "tag", "--list") == ""
-    assert remote_sha(origin, "refs/heads/main") == moved_main
+    assert remote_sha(git, origin, "refs/heads/main") == moved_main
     assert (
         "Pushing v9.9.9 failed: origin's main moved since the run was dispatched" in result.stderr
     )
@@ -202,6 +206,7 @@ def test_push_branch_moved_publishes_nothing(
 def test_push_branch_unchanged_reports_rerun_safe(
     release_remote: Callable[..., tuple[Path, Path]],
     run_push_step: Callable[..., subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     origin, workdir = release_remote(advance_main=False)
     hook = origin / "hooks" / "pre-receive"

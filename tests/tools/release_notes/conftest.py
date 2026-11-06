@@ -7,10 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from tests._git import configure_identity
-from tests._git import git
+from tests._git import Git
 from tests.tools.release_notes.helpers import VALID_NOTE_NAME
-from tests.tools.release_notes.helpers import commit
 
 
 @pytest.fixture
@@ -30,12 +28,12 @@ def notes_dir(tmp_path: Path) -> Callable[[dict[str, str]], Path]:
 
 
 @pytest.fixture
-def git_repo(tmp_path: Path) -> Callable[..., Path]:
+def git_repo(tmp_path: Path, git: Git) -> Callable[..., Path]:
     """Factory: a repo with one commit on ``main``, checked out to ``branch``."""
 
     def _make(branch: str = "main") -> Path:
         git(tmp_path, "init", "-b", "main")
-        configure_identity(tmp_path)
+        git.configure_identity(tmp_path)
         git(tmp_path, "commit", "--allow-empty", "-m", "init")
         if branch != "main":
             git(tmp_path, "checkout", "-b", branch)
@@ -45,14 +43,16 @@ def git_repo(tmp_path: Path) -> Callable[..., Path]:
 
 
 @pytest.fixture
-def gate_repo(git_repo: Callable[..., Path]) -> Callable[..., Path]:
+def gate_repo(git_repo: Callable[..., Path], git: Git) -> Callable[..., Path]:
     """Factory: ``git_repo`` on a ``feature`` branch, optionally with a note committed on ``main``."""
 
     def _make(main_note: str | None = None) -> Path:
         repo = git_repo()
         if main_note is not None:
-            commit(
-                repo, "docs(release-notes): seed", {f"release-notes/{VALID_NOTE_NAME}": main_note}
+            git.commit(
+                repo,
+                "docs(release-notes): seed",
+                {f"release-notes/{VALID_NOTE_NAME}": main_note},
             )
         git(repo, "checkout", "-b", "feature")
         return repo
