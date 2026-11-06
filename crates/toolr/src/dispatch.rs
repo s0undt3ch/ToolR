@@ -317,7 +317,6 @@ pub fn dispatch(
     if let Err(e) = touched {
         // `finalize_sync` fails on this write; dispatch only warns, as the command runs without it.
         // In-tree venvs, often under a read-only cache home (CI), warn only with --debug.
-        // `-q` doesn't silence it: warnings print under `-q`.
         if !resolved.is_in_tree() || verbose {
             eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
         }

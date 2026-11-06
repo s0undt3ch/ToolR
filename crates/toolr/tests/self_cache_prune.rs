@@ -267,23 +267,31 @@ fn run_prune(xdg_cache_home: &Path, args: &[&str]) -> String {
 
 /// `(stdout, stderr)` of a `prune` run that must succeed.
 fn run_prune_both(xdg_cache_home: &Path, args: &[&str]) -> (String, String) {
-    let output = common::toolr()
+    split_succeeded(prune_cmd(xdg_cache_home, None, args))
+}
+
+/// `toolr [root_flag] self cache prune <args>` against an isolated cache home.
+fn prune_cmd(
+    xdg_cache_home: &Path,
+    root_flag: Option<&str>,
+    args: &[&str],
+) -> std::process::Output {
+    common::toolr()
         .env("XDG_CACHE_HOME", xdg_cache_home)
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")
+        .args(root_flag)
         .args(["self", "cache", "prune"])
         .args(args)
         .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "stderr:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    (
-        String::from_utf8_lossy(&output.stdout).into_owned(),
-        String::from_utf8_lossy(&output.stderr).into_owned(),
-    )
+        .unwrap()
+}
+
+/// `(stdout, stderr)` of a run that must have succeeded.
+fn split_succeeded(output: std::process::Output) -> (String, String) {
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    (String::from_utf8_lossy(&output.stdout).into_owned(), stderr)
 }
 
 #[test]
@@ -381,18 +389,7 @@ fn prune_warns_and_succeeds_when_lock_sweep_fails() {
 
 /// `toolr <root_flag> self cache prune <args>`: `(stdout, stderr)` of a run that must succeed.
 fn run_prune_root(xdg_cache_home: &Path, root_flag: &str, args: &[&str]) -> (String, String) {
-    let output = common::toolr()
-        .env("XDG_CACHE_HOME", xdg_cache_home)
-        .env_remove("HOME")
-        .env("TOOLR_NO_CACHE_HINT", "1")
-        .arg(root_flag)
-        .args(["self", "cache", "prune"])
-        .args(args)
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    assert!(output.status.success(), "stderr:\n{stderr}");
-    (String::from_utf8_lossy(&output.stdout).into_owned(), stderr)
+    split_succeeded(prune_cmd(xdg_cache_home, Some(root_flag), args))
 }
 
 const ROOT_QUIET_FLAGS: [&str; 2] = ["-q", "--quiet"];
@@ -467,13 +464,7 @@ fn root_quiet_prune_all_yes_is_silent() {
 #[test]
 fn root_quiet_prune_all_refuses_without_yes() {
     let (tmp, dirs) = cache_with_two_orphans();
-    let output = common::toolr()
-        .env("XDG_CACHE_HOME", tmp.path())
-        .env_remove("HOME")
-        .env("TOOLR_NO_CACHE_HINT", "1")
-        .args(["-q", "self", "cache", "prune", "--all"])
-        .output()
-        .unwrap();
+    let output = prune_cmd(tmp.path(), Some("-q"), &["--all"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
     assert!(stderr.contains("refusing to wipe"), "stderr:\n{stderr}");

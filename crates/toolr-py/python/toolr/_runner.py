@@ -454,7 +454,7 @@ def _coerce_args(
     :class:`RunnerSpec`) seeds the ``localns`` the annotations are
     evaluated against — see :func:`_localns_for_enum_modules`. A parameter
     whose annotation still can't be resolved gets its raw value, and a
-    warning on stderr, `-q` included.
+    warning on stderr.
     """
     localns = _localns_for_enum_modules(enum_modules) if enum_modules else None
     resolved, sig = resolve_hints(target, localns), signature(target)
