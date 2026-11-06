@@ -239,8 +239,8 @@ impl TrustStore {
 }
 
 /// True when `path` resolves under `canonical_root`. `path` may not exist
-/// yet, so its nearest existing ancestor stands in; a relative `path` (say,
-/// from a relative `XDG_STATE_HOME`) is resolved against `cwd` first.
+/// yet, so its nearest existing ancestor stands in; a relative `path` (only
+/// possible through `TrustStore::at`) is resolved against `cwd` first.
 fn resolves_inside(path: &Path, canonical_root: &Path, cwd: &Path) -> bool {
     let absolute = cwd.join(path);
     let mut probe = absolute.as_path();
