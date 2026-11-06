@@ -1800,9 +1800,9 @@ agreed to fails, the trust is kept and toolr exits non-zero.</p>
 whose path no longer exists. <code>toolr self trusted --prune</code> removes those.
 Records live in toolr's state directory, not in the cache, so
 <code>toolr self cache prune</code> leaves them alone. That's
-<code>$XDG_STATE_HOME/toolr/trust/</code> when <code>XDG_STATE_HOME</code> is set, otherwise the
-platform state directory (<code>~/.local/state/toolr/trust/</code> on Linux), falling
-back to toolr's data directory where there is none
+<code>$XDG_STATE_HOME/toolr/trust/</code> when <code>XDG_STATE_HOME</code> is set and not empty,
+otherwise the platform state directory (<code>~/.local/state/toolr/trust/</code> on
+Linux), falling back to toolr's data directory where there is none
 (<code>~/Library/Application Support/toolr/trust/</code> on macOS).</p>
 <p>toolr refuses to use a trust store that sits inside the repository being
 checked, since that repository could ship its own records. Set

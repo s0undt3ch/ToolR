@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev835-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev843-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev835 - 2026-11-06
+        0.35.2-dev843 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev835 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev843 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev835-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev843-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev835 - 2026-11-06
+        0.35.2-dev843 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev835 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev843 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev835-2026-11-06">0.35.2-dev835 - 2026-11-06<a class="headerlink" href="#0352-dev835-2026-11-06" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev843-2026-11-06">0.35.2-dev843 - 2026-11-06<a class="headerlink" href="#0352-dev843-2026-11-06" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7723,6 +7723,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p><code>--opt=value</code> now tab-completes the value, choices or file paths, in bash, zsh and fish, for both your commands and built-ins such as <code>toolr self build-manifest --output=</code>. Re-run <code>toolr self completion install &lt;shell&gt; --force</code> to pick it up.</p>
 <p>Command groups declared through an aliased <code>command_group</code> (such as <code>from toolr import command_group as cg</code>) or with an annotated assignment (<code>group: CommandGroup = command_group(...)</code>) now appear in the manifest with their commands. Before, toolr dropped them without an error. An annotated alias of <code>command</code> (<code>cmd: Any = command</code>) is now followed too.</p>
 <p>A bare annotation (<code>cg: object</code>) no longer hides an imported <code>command</code> or <code>command_group</code>, and a self-copy (<code>cg = cg</code>) now resolves to the import.</p>
+<p>An empty <code>XDG_DATA_HOME</code>, <code>XDG_STATE_HOME</code> or <code>XDG_CACHE_HOME</code> now falls back to the platform default, as the XDG spec says, instead of resolving to a <code>toolr</code> directory under the current directory. An empty <code>HOME</code> now makes <code>toolr self completion install</code> fail with "$HOME is not set or empty".</p>
 <p>Type checkers now accept <code>ctx.run(..., stream_output=None)</code> and treat <code>with ctx.chdir(...)</code> as a context manager. The type stub for <code>Context</code> had fallen behind the code, and it now declares <code>ctx.run</code>'s <code>interactive</code> parameter.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7935,6 +7936,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(toolr-py)</em> Declare status_to_exit_code in the _context stub (<a href="https://github.com/s0undt3ch/ToolR/commit/55a4fcfbb41874814d3b6e2f2a0cf8e52ceffef3"><code>55a4fcf</code></a>)</li>
 <li><em>(toolr-py)</em> Sync the _context stub with run and chdir (<a href="https://github.com/s0undt3ch/ToolR/commit/2f0d548686596f8b4f08e2898704e5374d5ce283"><code>2f0d548</code></a>)</li>
 <li><em>(tests)</em> Fail the stub check in CI without the extension, correct the note (<a href="https://github.com/s0undt3ch/ToolR/commit/527ad4c8b5ffe35e8c34e4dff4dd4972ca6c7d20"><code>527ad4c</code></a>)</li>
+<li><em>(env)</em> Treat empty XDG_* variables as unset (<a href="https://github.com/s0undt3ch/ToolR/commit/3c54bd5ee6dc4202075ab4859ae2057b7b96bef0"><code>3c54bd5</code></a>)</li>
+<li><em>(cli)</em> Say $HOME is unset or empty when completion install can't use it (<a href="https://github.com/s0undt3ch/ToolR/commit/6e3a35ad656b5438c9fcca6759eee1e3351d47ae"><code>6e3a35a</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8246,6 +8249,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(tests)</em> Say why the signal tests reset SIGINT, sync the plan (<a href="https://github.com/s0undt3ch/ToolR/commit/e16bcfdcd439c3ec69362a63daacf908850a9c20"><code>e16bcfd</code></a>)</li>
 <li><em>(specs)</em> Spec and plan for the stale _context stub (<a href="https://github.com/s0undt3ch/ToolR/commit/fd63d7f1675182a9ae59872ee03eeced2e246a4b"><code>fd63d7f</code></a>)</li>
 <li><em>(specs)</em> Archive the stale _context stub spec (<a href="https://github.com/s0undt3ch/ToolR/commit/0b42fbadae09e3c0a480e737aeba7630b383ed75"><code>0b42fba</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for empty XDG_DATA_HOME handling (<a href="https://github.com/s0undt3ch/ToolR/commit/697c391e7fbd78f0e857e1e3e96ccbf651c22c19"><code>697c391</code></a>)</li>
+<li><em>(specs)</em> Archive the empty XDG_DATA_HOME spec (<a href="https://github.com/s0undt3ch/ToolR/commit/a801e4c34d9d353afc67e97e0fbf65b2b47472d9"><code>a801e4c</code></a>)</li>
+<li>An empty XDG_* variable counts as unset (<a href="https://github.com/s0undt3ch/ToolR/commit/e8cbf21c8085a0af39af3ed33a463ae3117a1ede"><code>e8cbf21</code></a>)</li>
+<li><em>(env)</em> Explain the empty-means-unset reads (<a href="https://github.com/s0undt3ch/ToolR/commit/584e6dc7508674a90249c589e0320c45cddc73ea"><code>584e6dc</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
