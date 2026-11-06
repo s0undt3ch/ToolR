@@ -31,7 +31,13 @@ change leaves it alone.
 `Command::spawn` returns only after `exec` succeeds, so the child has default dispositions before
 `poll_child` sends anything.
 
+`tests/e2e/test_signals.py` has the same weakness: the `toolr` it starts inherits the ignore and
+passes it on to the runner, so the two SIGINT tests see exit 0. Its `Popen` (`preexec_fn`) and its
+`pty.fork` child reset SIGINT before `exec` in the same way.
+
 ## Testing
 
 - Run the reproduction above. Both `pending_*_reaches_the_child` tests must pass.
 - Run the module tests without the trap. Both tests must pass.
+- Run `(trap '' INT; uv run pytest tests/e2e/test_signals.py)`. It must pass, as it does without
+  the trap.

@@ -51,6 +51,11 @@ FORWARDED_SIGINT_WINDOW = 2
 TERMINAL_DRAIN = 0.2
 
 
+def reset_sigint() -> None:
+    """Undo a SIG_IGN inherited from a shell's `&` job, which would hide every SIGINT these tests send."""
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
 def assert_interrupted_once(returncode: int | None, output: str, context: str) -> None:
     """The command got exactly one `KeyboardInterrupt` and its `finally:` ran to the end."""
     assert returncode == 130, context
@@ -79,6 +84,7 @@ def start_cleanup(
             stderr=subprocess.PIPE,
             text=True,
             start_new_session=True,
+            preexec_fn=reset_sigint,  # noqa: PLW1509
         )
         procs.append(proc)
         assert proc.stdout is not None
@@ -161,6 +167,7 @@ def start_cleanup_on_a_terminal(
         pid, master = pty.fork()
         if pid == 0:  # pragma: no cover - replaced by exec
             try:
+                reset_sigint()
                 os.chdir(project.root)
                 argv = [str(project.toolr_bin), "sig", "cleanup"]
                 os.execve(project.toolr_bin, argv, project.env)  # noqa: S606
