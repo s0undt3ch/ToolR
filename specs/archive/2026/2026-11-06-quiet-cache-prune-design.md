@@ -69,7 +69,7 @@ Under the root `-q`, `prune` stays silent on success and prints nothing it would
 | `nothing to prune`, `no cache entries to remove` | dropped, except under `--dry-run` | Under `--dry-run` it is the answer to "what would go". |
 | `aborted, nothing removed` | dropped | The user typed `n`; the exit code is 0 either way. |
 | `DRY-RUN …` per entry, `would free …`, `would remove N rebuild lock(s)` | kept | The dry run's result. |
-| `warning: failed to remove …`, `warning: failed to sweep rebuild locks` | kept | Warnings (see Part 2; flips with option b). |
+| `warning: failed to remove …`, `warning: failed to sweep rebuild locks` | kept, on stderr | Warnings (Part 2, option a). |
 | `refusing to wipe … without --yes` | kept | Error, exit non-zero. |
 | the `continue? [y/N]` prompt | kept | A prompt must be seen to be answered. |
 
@@ -80,14 +80,18 @@ Under the root `-q`, `prune` stays silent on success and prints nothing it would
 Replace the bare `out: &mut dyn Write` with a small `Report<'a>` in `self_cache_prune.rs`:
 
 ```rust
-struct Report<'a> { out: &'a mut dyn Write, quiet: bool, dry_run: bool }
+struct Report<'a> {
+    out: &'a mut dyn Write,
+    /// Test seam for where warnings go; `None` is the process's stderr.
+    err: Option<&'a mut dyn Write>,
+    quiet: bool,
+    dry_run: bool,
+}
 impl Report<'_> {
-    /// Success chatter: dropped under `-q`, unless this is a dry run (then it is the result).
-    fn note(&mut self, args: fmt::Arguments) -> io::Result<()>;
-    /// The command's result: always printed (the `DRY-RUN` lines).
-    fn result(&mut self, args: fmt::Arguments) -> io::Result<()>;
-    /// Warnings: always printed today. Gating this one method is the whole of option (b).
-    fn warn(&mut self, args: fmt::Arguments) -> io::Result<()>;
+    /// Success chatter. A dry run's lines are its answer, so `--quiet` keeps them.
+    fn note(&mut self, line: &str) -> io::Result<()>;
+    /// Warnings go to stderr, and always print.
+    fn warn(&mut self, line: &str) -> io::Result<()>;
 }
 ```
 
@@ -103,8 +107,7 @@ Two behaviour-preserving details that need care:
   `run` passes `confirm_destroy_all`). It is the only way to unit-test the `aborted` branch without a terminal, and
   the 99% patch gate needs that branch covered by a real test.
 
-Warnings stay on stdout as today. Moving them to stderr is a reasonable fix but a separate behaviour change; not in
-this PR.
+Warnings go to stderr (moved from stdout after review; see "Changes after review").
 
 ## Part 2: options
 
@@ -169,9 +172,21 @@ warnings, on every path, built-ins and normal dispatch alike.
 
 ## Open questions
 
-1. Should `prune`'s warnings move from stdout to stderr? Not required here; separate change if wanted.
+1. Should `prune`'s warnings move from stdout to stderr? Answered: yes, done in this PR (see below).
 
 ## Tests
 
 Unit tests in `crates/toolr/src/self_cache_prune.rs` (existing ones switch to `Report::new(&mut buf, false, dry_run)`),
 and integration tests in `crates/toolr/tests/self_cache_prune.rs`. Names and assertions are in the plan.
+
+## Changes after review
+
+- Prune's warnings moved from stdout to stderr, where every other warning goes. The two tests that asserted them on
+  stdout (`prune_warns_and_succeeds_when_lock_sweep_fails`, `root_quiet_prune_sweep_failure_still_warns`) now
+  assert stderr, and stdout must carry no warning.
+- `Report` takes `&str`, so a `?` always sits on a line with real code (no lone `))?;` for llvm-cov). It has no
+  `result` method: it behaved exactly like `note`, which already keeps a dry run's lines. `err` is a test seam.
+- The `-q` rule is stated once, on the arg in `cli::build_command`; other code points at it.
+- The Python runner's unresolved-type warning also lost its quiet gate. A planned change to the Python root log level
+  under `-q` was reverted: `setup_logging` is never called in production, so it did nothing, and a command's
+  `logging.warning` was never hidden.

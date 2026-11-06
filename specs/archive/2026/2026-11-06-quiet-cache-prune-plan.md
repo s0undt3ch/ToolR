@@ -10,7 +10,7 @@ Files: `crates/toolr/src/dispatch.rs`, `crates/toolr/src/self_cache.rs`, `crates
 1. Write the unit and integration tests below; they fail (no `quiet` plumbing, no `Report`).
 2. `run_self`: `Some(("cache", m)) => crate::self_cache::dispatch(m, quiet)`. `self_cache::dispatch(matches, quiet)`
    passes it to `self_cache_prune::run(&root, prune_m, quiet)`; `list` ignores it.
-3. Add `Report` (`note` / `result` / `warn`) and replace the `out` parameter of `prune_all`, `prune_classified`,
+3. Add `Report` (`note` / `warn`; `result` was dropped after review) and replace the `out` parameter of `prune_all`, `prune_classified`,
    `sweep_locks`, `remove_entry`. Classify every existing `writeln!` per the design table. `note` is silent when
    `quiet && !dry_run`. Keep `sweep_locks`' returned count independent of printing.
 4. `prune_all` takes `confirm: impl FnOnce(&[CachedVenv]) -> Result<bool>`; `run` passes `confirm_destroy_all`.
@@ -35,7 +35,7 @@ Use the existing `make_entry` and a `Vec<u8>` buffer.
 - `sweep_locks_quiet_returns_count_without_printing`: one stray lock; returns `1`, buffer empty, lock removed.
   This guards the "nothing to prune" fallback.
 - `sweep_locks_quiet_dry_run_still_reports`: returns `1`, buffer contains `would remove 1 rebuild lock`, lock kept.
-- `remove_entry_quiet_still_warns`: a missing directory; buffer contains `warning: failed to remove`. Pins the
+- `remove_entry_quiet_still_warns` (now one test over quiet and not quiet, asserting stderr): a missing directory; the stderr buffer contains `warning: failed to remove`. Pins the
   warning side, and is the test to flip if option (b) is chosen.
 
 ## Integration tests (`tests/self_cache_prune.rs`)
@@ -53,7 +53,7 @@ over `-q` and `--quiet`.
 - `root_quiet_prune_lock_sweep_is_silent`: stray lock removed, stdout empty; with `--dry-run` stdout has
   `would remove 1 rebuild lock` and the lock stays.
 - `root_quiet_prune_sweep_failure_still_warns`: copy of `prune_warns_and_succeeds_when_lock_sweep_fails` under `-q`;
-  stdout contains `warning: failed to sweep rebuild locks`.
+  stderr contains `warning: failed to sweep rebuild locks` and stdout is empty.
 - Regression guard: the existing un-quiet tests stay untouched and green.
 
 ## Task 2: warning rule, decided (a): warnings print under `-q` everywhere
