@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from collections.abc import Callable
 from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
@@ -205,12 +206,14 @@ class Context(Struct, frozen=True):
     def run(
         self,
         *cmdline: str,
-        stream_output: bool = True,
+        stream_output: bool | None = None,
         capture_output: bool = False,
         timeout_secs: float | None = None,
         no_output_timeout_secs: float | None = None,
+        interactive: bool = False,
         **kwargs: Any,
     ) -> CommandResult[str] | CommandResult[bytes]: ...
+    @contextmanager
     def chdir(self, path: str | Path) -> Iterator[Path]: ...
     def which(self, name: str, mode: int = ..., path: str | None = None) -> str | None: ...
 
