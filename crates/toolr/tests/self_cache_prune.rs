@@ -262,20 +262,36 @@ fn cache_with_kept_and_stray_lock() -> (TempDir, std::path::PathBuf, std::path::
 }
 
 fn run_prune(xdg_cache_home: &Path, args: &[&str]) -> String {
-    let output = common::toolr()
+    run_prune_both(xdg_cache_home, args).0
+}
+
+/// `(stdout, stderr)` of a `prune` run that must succeed.
+fn run_prune_both(xdg_cache_home: &Path, args: &[&str]) -> (String, String) {
+    split_succeeded(prune_cmd(xdg_cache_home, None, args))
+}
+
+/// `toolr [root_flag] self cache prune <args>` against an isolated cache home.
+fn prune_cmd(
+    xdg_cache_home: &Path,
+    root_flag: Option<&str>,
+    args: &[&str],
+) -> std::process::Output {
+    common::toolr()
         .env("XDG_CACHE_HOME", xdg_cache_home)
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")
+        .args(root_flag)
         .args(["self", "cache", "prune"])
         .args(args)
         .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "stderr:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).into_owned()
+        .unwrap()
+}
+
+/// `(stdout, stderr)` of a run that must have succeeded.
+fn split_succeeded(output: std::process::Output) -> (String, String) {
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    (String::from_utf8_lossy(&output.stdout).into_owned(), stderr)
 }
 
 #[test]
@@ -359,10 +375,130 @@ fn prune_warns_and_succeeds_when_lock_sweep_fails() {
     // A regular file where `locks/` should be makes the sweep's read_dir fail.
     fs::write(cache_root.join(LOCKS_DIR), b"").unwrap();
     for args in [&[][..], &["--all"][..]] {
-        let stdout = run_prune(tmp.path(), args);
+        let (stdout, stderr) = run_prune_both(tmp.path(), args);
         assert!(
-            stdout.contains("toolr: warning: failed to sweep rebuild locks"),
+            stderr.contains("toolr: warning: failed to sweep rebuild locks"),
+            "args {args:?}, stderr:\n{stderr}"
+        );
+        assert!(
+            !stdout.contains("warning"),
             "args {args:?}, stdout:\n{stdout}"
         );
     }
+}
+
+/// `toolr <root_flag> self cache prune <args>`: `(stdout, stderr)` of a run that must succeed.
+fn run_prune_root(xdg_cache_home: &Path, root_flag: &str, args: &[&str]) -> (String, String) {
+    split_succeeded(prune_cmd(xdg_cache_home, Some(root_flag), args))
+}
+
+const ROOT_QUIET_FLAGS: [&str; 2] = ["-q", "--quiet"];
+
+/// Two orphan entries under a fresh cache root, returned with their directories.
+fn cache_with_two_orphans() -> (TempDir, Vec<std::path::PathBuf>) {
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr");
+    let dirs = ["orphan-a", "orphan-b"]
+        .iter()
+        .map(|key| {
+            write_entry(
+                &cache_root,
+                key,
+                Path::new("/definitely/missing/repo"),
+                Utc::now(),
+            );
+            cache_root.join(key)
+        })
+        .collect();
+    (tmp, dirs)
+}
+
+#[test]
+fn root_quiet_prune_is_silent() {
+    for flag in ROOT_QUIET_FLAGS {
+        let (tmp, dirs) = cache_with_two_orphans();
+        let (stdout, stderr) = run_prune_root(tmp.path(), flag, &[]);
+        assert!(stdout.is_empty(), "{flag}, stdout:\n{stdout}");
+        assert!(stderr.is_empty(), "{flag}, stderr:\n{stderr}");
+        assert!(dirs.iter().all(|d| !d.exists()), "{flag}: orphans remain");
+    }
+}
+
+#[test]
+fn root_quiet_prune_dry_run_keeps_lines() {
+    for flag in ROOT_QUIET_FLAGS {
+        let (tmp, dirs) = cache_with_two_orphans();
+        let (stdout, stderr) = run_prune_root(tmp.path(), flag, &["--dry-run"]);
+        assert!(
+            stdout.contains("DRY-RUN ORPHAN"),
+            "{flag}, stdout:\n{stdout}"
+        );
+        assert!(stdout.contains("would free"), "{flag}, stdout:\n{stdout}");
+        assert!(stderr.is_empty(), "{flag}, stderr:\n{stderr}");
+        assert!(dirs.iter().all(|d| d.exists()), "{flag}: dry run removed");
+    }
+}
+
+#[test]
+fn root_quiet_prune_nothing_to_prune_is_silent() {
+    for flag in ROOT_QUIET_FLAGS {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join("toolr")).unwrap();
+        let (stdout, stderr) = run_prune_root(tmp.path(), flag, &[]);
+        assert!(stdout.is_empty(), "{flag}, stdout:\n{stdout}");
+        assert!(stderr.is_empty(), "{flag}, stderr:\n{stderr}");
+    }
+}
+
+#[test]
+fn root_quiet_prune_all_yes_is_silent() {
+    for flag in ROOT_QUIET_FLAGS {
+        let (tmp, dirs) = cache_with_two_orphans();
+        let (stdout, stderr) = run_prune_root(tmp.path(), flag, &["--all", "--yes"]);
+        assert!(stdout.is_empty(), "{flag}, stdout:\n{stdout}");
+        assert!(stderr.is_empty(), "{flag}, stderr:\n{stderr}");
+        assert!(dirs.iter().all(|d| !d.exists()), "{flag}: entries remain");
+    }
+}
+
+#[test]
+fn root_quiet_prune_all_refuses_without_yes() {
+    let (tmp, dirs) = cache_with_two_orphans();
+    let output = prune_cmd(tmp.path(), Some("-q"), &["--all"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(stderr.contains("refusing to wipe"), "stderr:\n{stderr}");
+    assert!(dirs.iter().all(|d| d.exists()));
+}
+
+#[test]
+fn root_quiet_prune_lock_sweep_is_silent() {
+    for flag in ROOT_QUIET_FLAGS {
+        let (tmp, kept, stray) = cache_with_kept_and_stray_lock();
+        let (stdout, _) = run_prune_root(tmp.path(), flag, &["--dry-run"]);
+        assert!(
+            stdout.contains("toolr: would remove 1 rebuild lock\n"),
+            "{flag}, stdout:\n{stdout}"
+        );
+        assert!(stray.exists());
+        let (stdout, stderr) = run_prune_root(tmp.path(), flag, &[]);
+        assert!(stdout.is_empty(), "{flag}, stdout:\n{stdout}");
+        assert!(stderr.is_empty(), "{flag}, stderr:\n{stderr}");
+        assert!(!stray.exists());
+        assert!(kept.exists());
+    }
+}
+
+#[test]
+fn root_quiet_prune_sweep_failure_still_warns() {
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr");
+    fs::create_dir_all(&cache_root).unwrap();
+    fs::write(cache_root.join(LOCKS_DIR), b"").unwrap();
+    let (stdout, stderr) = run_prune_root(tmp.path(), "-q", &[]);
+    assert!(
+        stderr.contains("toolr: warning: failed to sweep rebuild locks"),
+        "stderr:\n{stderr}"
+    );
+    assert!(stdout.is_empty(), "stdout:\n{stdout}");
 }

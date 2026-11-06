@@ -599,14 +599,30 @@ def test_coerce_args_resolves_other_params_when_one_hint_fails(
     )
 
 
-def test_coerce_args_quiet_suppresses_unresolved_warning(
+def test_run_keeps_unresolved_warning_under_quiet(
     capsys: pytest.CaptureFixture[str],
+    make_tools_module: Callable[..., ModuleType],
+    tmp_path: Path,
 ) -> None:
-    def _fn(ctx, x: DoesNotExist, n: int) -> None: ...  # type: ignore[name-defined]  # noqa: F821
+    """`-q` doesn't hide the unresolved-type warning: warnings print under `-q`."""
+    # Lazy annotations, so the unresolved name only fails when toolr resolves it (eager before 3.14).
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
 
-    _, keyword = _coerce_args(_fn, {"x": "raw", "n": "2"}, quiet=True)
-    assert keyword == {"x": "raw", "n": 2}
-    assert capsys.readouterr().err == ""
+        def _fn(ctx, x: DoesNotExist, n: int) -> None: ...
+        """
+    )
+    spec = _runner_spec(
+        module=mod.__name__,
+        function="_fn",
+        args={"x": "raw", "n": "2"},
+        verbosity="quiet",
+        repo_root=tmp_path,
+    )
+    # `run` sets the current-context contextvar; keep it out of other tests.
+    assert contextvars.copy_context().run(run, spec) == 0
+    assert "can't resolve the type of `x`" in capsys.readouterr().err
 
 
 def test_coerce_args_does_not_warn_about_an_unresolved_ctx(

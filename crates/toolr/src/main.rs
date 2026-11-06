@@ -53,7 +53,8 @@ fn run() -> anyhow::Result<ExitCode> {
     // Covers fragments and a hand-edited committed manifest alike. Tab
     // completion drops the same entries in `resolve_manifest_at_tab`.
     manifest.drop_unsafe_names();
-    if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
+    if !bootstrap::should_skip_auto_rebuild(&argv) {
+        // Printed under `-q` too (the rule is on the `-q` arg in `cli::build_command`).
         // Build warnings come only from a manifest built on this run. When the
         // bootstrap built it, the freshness step's rebuild of the same tree
         // repeats them, so only the bootstrap's print.
@@ -105,8 +106,7 @@ fn maybe_emit_cache_hint_from_argv() {
         return;
     }
     let argv: Vec<String> = std::env::args().collect();
-    // `--quiet` promises to "suppress non-error output"; the passive
-    // hint is non-error output, so honour it here. We scan argv by hand
+    // The passive hint is advice, which `-q` drops. We scan argv by hand
     // because this runs before clap and because `--quiet` is accepted
     // both root-level and per-subcommand. Detect both `--quiet` and any
     // short cluster containing `q` (e.g. `-q`), and stop at the `--`

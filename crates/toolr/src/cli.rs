@@ -160,6 +160,9 @@ fn build_root_command() -> Command {
                 .help_heading(OUTPUT_HEADING)
                 .help("Increase verbosity (also enables `DEBUG` logging)."),
         )
+        // The `-q` rule, stated once: it drops success lines, progress and advice, never
+        // errors, refusals or warnings. A warning means the result may be incomplete, and
+        // a script that hides it can't tell. Other code points here instead of restating it.
         .arg(
             Arg::new("quiet")
                 .short('q')
@@ -167,7 +170,7 @@ fn build_root_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .conflicts_with("debug")
                 .help_heading(OUTPUT_HEADING)
-                .help("Suppress non-error output and never prompt to install uv."),
+                .help("Suppress non-error output except warnings, and never prompt to install uv."),
         )
         .arg(
             Arg::new("timestamps")
