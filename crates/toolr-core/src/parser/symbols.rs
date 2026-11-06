@@ -228,8 +228,11 @@ impl EnumTable {
     }
 }
 
-/// The right-hand side of a top-level `name = <value>` assignment, kept only
-/// when it's a plain name or `module.attr`.
+/// The right-hand side of a top-level `name = <value>` or `name: T = <value>`
+/// assignment, kept only when it's a plain name or `module.attr`.
+///
+/// `toolr.testing._groups._ImportTable` mirrors how these are recorded in
+/// Python; change both together.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Assigned {
     /// `name = other`.
@@ -292,8 +295,8 @@ pub struct ImportTable {
     import_positions: HashMap<String, usize>,
     /// Source modules of `from X import *`.
     star_modules: Vec<String>,
-    /// Top-level `name = other` or `name = module.attr` assignments still in
-    /// force, so `command = toolr.command` can be followed back to toolr.
+    /// Top-level `name = other` or `name = module.attr` assignments, annotated
+    /// (`name: T = other`) or not, still in force, so `command = toolr.command` can be followed back to toolr.
     assigned: HashMap<String, Assigned>,
     /// Source-order counter shared by imports and local bindings.
     seq: usize,
@@ -359,6 +362,10 @@ impl ImportTable {
             Stmt::AnnAssign(assign) => {
                 if let Expr::Name(n) = assign.target.as_ref() {
                     self.bind_local(n.id.to_string());
+                    // `name: T = other` copies like `name = other`.
+                    if let Some(value) = assign.value.as_deref().and_then(Assigned::from_expr) {
+                        self.assigned.insert(n.id.to_string(), value);
+                    }
                 }
             }
             Stmt::If(if_stmt) if is_type_checking_test(&if_stmt.test) => {

@@ -432,8 +432,8 @@ fn single_name_target(targets: &[Expr]) -> Option<String> {
 /// Whether `call` is toolr's `command_group`: spelt so, an alias the import
 /// tables resolve to it, or any `<x>.command_group(...)`.
 ///
-/// `toolr.testing._groups._group_calls` mirrors this in Python; change both
-/// together.
+/// `toolr.testing._groups._is_command_group` mirrors this in Python, resolving
+/// aliases from source with `_binding`; change both together.
 fn is_command_group_call(call: &ExprCall, names: ToolrNames) -> bool {
     match call.func.as_ref() {
         Expr::Name(n) => {
@@ -676,6 +676,50 @@ mod tests {
             &[],
         );
         assert_eq!(paths(&groups), [pair("h", "ann"), pair("kid", "ann.kid")]);
+    }
+
+    #[test]
+    fn annotated_alias_binds_a_group() {
+        let groups = groups_in(
+            "import toolr\nfrom toolr import command_group\nfrom toolr import command_group as other\ncg: object = command_group\ntcg: object = toolr.command_group\nlater: object = cg\na = cg(\"a\", \"A\", \"A.\")\nb = tcg(\"b\", \"B\", \"B.\")\nc = later(\"c\", \"C\", \"C.\")\nd = other(\"d\", \"D\", \"D.\")\n",
+            &[],
+        );
+        assert_eq!(
+            paths(&groups),
+            [
+                pair("a", "a"),
+                pair("b", "b"),
+                pair("c", "c"),
+                pair("d", "d")
+            ]
+        );
+    }
+
+    #[test]
+    fn annotated_alias_of_something_else_is_not_a_group() {
+        let groups = groups_in(
+            "from toolr import command_group as cg\ncg: object = print\nsub: object = print.x()\ng = cg(\"x\", \"X\", \"X.\")\n",
+            &[],
+        );
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn try_except_fallback_binding_wins() {
+        let groups = groups_in(
+            "try:\n    from toolr import command_group as cg\nexcept ImportError:\n    cg = None\ng = cg(\"d\", \"D\", \"D.\")\n",
+            &[],
+        );
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn del_does_not_unbind_an_alias() {
+        let groups = groups_in(
+            "from toolr import command_group as cg\ng = cg(\"c\", \"C\", \"C.\")\ndel cg\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("g", "c")]);
     }
 
     #[test]

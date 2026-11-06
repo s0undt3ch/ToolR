@@ -404,9 +404,9 @@ impl<'a> ToolrNames<'a> {
 }
 
 /// Whether a name is toolr's `command` or `command_group`, as far as the
-/// parser can see. Keep in step with `_command_decorators` in
-/// `toolr/testing/_shapes.py` and `_group_calls` in `toolr/testing/_groups.py`,
-/// which resolve it by runtime identity: change them together.
+/// parser can see. `_binding` in `toolr/testing/_groups.py` mirrors this for
+/// `command_group`, and `_command_decorators` in `toolr/testing/_shapes.py`
+/// resolves `command` by runtime identity: change them together.
 // Variants run weakest to strongest: callers take `.max()` over candidates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Binding {
