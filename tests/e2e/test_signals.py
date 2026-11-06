@@ -18,7 +18,7 @@ from tests.conftest import ToolsProject
 # `pty` needs `termios`, which Windows lacks; every test here is POSIX-only.
 pty = pytest.importorskip("pty")
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+pytestmark = pytest.mark.skip_on_windows(reason="POSIX signals")
 
 IS_LINUX = sys.platform.startswith("linux")
 

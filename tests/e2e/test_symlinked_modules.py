@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable
 
 import pytest
@@ -12,9 +11,7 @@ from toolr.testing import CommandsTester
 
 from tests.conftest import ToolsProject
 
-pytestmark = pytest.mark.skipif(
-    sys.platform == "win32", reason="symlinks need a privilege on Windows"
-)
+pytestmark = pytest.mark.skip_on_windows(reason="symlinks need a privilege on Windows")
 
 DEMO_MODULE = '''
 from toolr import command_group

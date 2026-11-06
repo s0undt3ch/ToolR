@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -385,7 +384,7 @@ def test_bump_finds_existing_tag_in_any_spelling(
     assert not any(path.exists() for path in github_files.values())
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="the `cargo` stub is a POSIX shell script")
+@pytest.mark.skip_on_windows(reason="the `cargo` stub is a POSIX shell script")
 def test_bump_write_sets_cargo_and_action_versions(
     release_repo: Callable[..., ContextForTesting],
     tmp_path: Path,

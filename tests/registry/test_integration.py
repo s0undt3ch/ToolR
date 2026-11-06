@@ -261,7 +261,7 @@ def test_discover_rejects_a_symlinked_module(tmp_path: Path, tools_repo: ToolsRe
     assert imported == set()
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need a privilege on Windows")
+@pytest.mark.skip_on_windows(reason="symlinks need a privilege on Windows")
 def test_discover_reports_every_symlinked_module(tmp_path: Path, tools_repo: ToolsRepo) -> None:
     """Nested, dangling and non-importable links are all reported, sorted, with
     control characters escaped, as `toolr` reports them."""
@@ -286,7 +286,7 @@ def test_discover_reports_every_symlinked_module(tmp_path: Path, tools_repo: Too
     )
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need a privilege on Windows")
+@pytest.mark.skip_on_windows(reason="symlinks need a privilege on Windows")
 def test_discover_reports_symlinked_modules_it_cannot_resolve(
     tmp_path: Path, tools_repo: ToolsRepo
 ) -> None:

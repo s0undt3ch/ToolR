@@ -13,7 +13,6 @@ import re
 import shlex
 import shutil
 import subprocess
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -37,11 +36,8 @@ SKIP_HINT = "--verify-attestation=skip"
 GH_FLOOR = "install.sh: gh >= 2.56 is required to verify attestations"
 
 pytestmark = [
-    pytest.mark.skipif(sys.platform == "win32", reason="install.sh is POSIX-only"),
-    pytest.mark.skipif(
-        any(shutil.which(tool) is None for tool in ("sh", "bash", "jq")),
-        reason="sh, bash and jq are required",
-    ),
+    pytest.mark.skip_on_windows(reason="install.sh is POSIX-only"),
+    pytest.mark.skip_if_binaries_missing("sh", "bash", "jq"),
 ]
 
 RunVerify = Callable[..., subprocess.CompletedProcess[str]]
@@ -291,7 +287,7 @@ def test_repo_override_drives_the_identities(verify_runner: RunVerify, tmp_path:
     assert "none from the someone/ToolR release workflow on main" in result.stderr
 
 
-@pytest.mark.skipif(shutil.which("openssl") is None, reason="openssl is required")
+@pytest.mark.skip_if_binaries_missing("openssl")
 def test_digest_falls_back_to_openssl(verify_runner: RunVerify) -> None:
     result = verify_runner(build_configs=[RELEASE_BUILD], hashers=("openssl",))
     assert result.returncode == 0, result.stderr
