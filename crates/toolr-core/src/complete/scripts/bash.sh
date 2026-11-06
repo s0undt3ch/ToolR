@@ -39,8 +39,9 @@ _toolr_quote() {
             ;;
         \$\')
             # Bash doesn't history-expand a `!` inside `$'…'`, so only these two need escaping.
+            # Readline sees the run as `'…'`, where `\'` would close it: `'` is `\047` instead.
             _toolr_q=${1//\\/\\\\}
-            _toolr_q=${_toolr_q//\'/\\\'}
+            _toolr_q=${_toolr_q//\'/\\047}
             ;;
         *)
             _toolr_quote_bare "$1"
@@ -62,7 +63,8 @@ _toolr_quote() {
         done
         _toolr_q=$_toolr_out
     fi
-    # Readline adds no closing quote to a reply that already ends in one, so add one more.
+    # Readline adds no closing quote to a reply that already ends in one, so add one more. A
+    # `$'` reply never ends in `'`.
     if [[ -n $_toolr_q && ${_toolr_q: -1} == "${_toolr_qchar: -1}" ]]; then
         _toolr_q+=${_toolr_qchar: -1}
         _toolr_qextra=1
@@ -96,7 +98,7 @@ _toolr_quote_after() {
 
 # Decodes the `$'…'` escape whose backslash is at `$1`'s offset `_toolr_i`: appends it to the
 # caller's `_toolr_raw_cur` and moves `_toolr_i` to its last character. Returns 1 for an escape
-# it declines: one bash keeps as typed, `\cX`, NUL, or `\u` the locale can't encode.
+# it declines: one bash keeps as typed, `\cX`, `\'`, NUL, or `\u` the locale can't encode.
 _toolr_ansi_c_escape() {
     local _toolr_e=${1:_toolr_i+1:1} _toolr_n _toolr_digits _toolr_out
     _toolr_i=$((_toolr_i + 1))
@@ -111,7 +113,10 @@ _toolr_ansi_c_escape() {
         r) _toolr_out=$'\r' ;;
         t) _toolr_out=$'\t' ;;
         v) _toolr_out=$'\v' ;;
-        \\ | \' | \" | \?) _toolr_out=$_toolr_e ;;
+        \\ | \" | \?) _toolr_out=$_toolr_e ;;
+        # Readline sees the run as `'…'`, where this `'` closes it, so the two would disagree on
+        # the open quote and readline would insert a reply quoted for the wrong one.
+        \') return 1 ;;
         [0-7] | x | u | U)
             # The digits are matched first, so the formats below hold nothing else.
             case $_toolr_e in
