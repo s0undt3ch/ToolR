@@ -164,7 +164,7 @@ mod tests {
     use super::unix::{Handlers, Pending, forward_sigint, poll_child};
     use super::*;
     use libc::{SIGINT, SIGTERM, c_int, siginfo_t};
-    use std::os::unix::process::ExitStatusExt;
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
     use std::process::Command;
 
     fn info(signo: c_int, code: c_int) -> siginfo_t {
@@ -252,11 +252,19 @@ mod tests {
 
     /// Bounded by `sleep 10`: if no signal is sent, the child exits 0 and the
     /// caller's assertion fails instead of hanging.
+    /// Resets SIGINT and SIGTERM to default so an inherited SIG_IGN cannot swallow them.
     fn sleeper_status(pending: &Pending) -> ExitStatus {
-        let mut child = Command::new("sleep")
-            .arg("10")
-            .spawn()
-            .expect("spawn sleep");
+        let mut command = Command::new("sleep");
+        command.arg("10");
+        // SAFETY: `signal` is async-signal-safe, so it may run between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(SIGINT, libc::SIG_DFL);
+                libc::signal(SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let mut child = command.spawn().expect("spawn sleep");
         poll_child(&mut child, pending).expect("wait")
     }
 
