@@ -177,6 +177,13 @@ The design was a hypothesis; these parts changed once tested against bash 5.1.16
 - **Exact match for values.** The `''` reply also came from choice values (`--mode fast'`); the same skip
   applies there.
 
+- **A `'` inside `$'…'`.** Readline knows only `'`, `"` and backslash, so it sees `$'…'` as `'…'`, where a
+  backslash is literal and `\'` closes the quote. A reply holding `\'` (the design's `$'` escaping) or a typed
+  `\'` left readline with no open quote while the script still had `$'` open, and readline inserted the reply
+  unquoted: a name `q'$(touch X)` ran `touch X` on Tab and Enter (found in review). Inside a run `'` is now
+  `\047`, and a typed `\'` is declined. Residual: names differing at `'` and `\001` share the prefix `\0`,
+  which then decodes to NUL and offers nothing.
+
 ## Open questions (resolved)
 
 1. Names differing at the control character itself: accepted. `files/nl\nx` and `files/nl\tz` give the
