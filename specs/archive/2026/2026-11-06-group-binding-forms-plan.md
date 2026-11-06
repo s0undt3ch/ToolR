@@ -85,6 +85,6 @@ detector, a new `UnsupportedCommandKind::GroupBinding`, and a Python mirror in `
       scan found no offending call.
 - [ ] Coverage: the `cargo llvm-cov` command from `CLAUDE.md` (lcov output),
       then `cargo xtask patch-coverage --base main`; `uv run coverage run -m pytest && uv run coverage report`.
-- [ ] `prek run --all-files` and `git grep -i paddle` before committing.
+- [ ] `prek run --all-files` before committing.
 - [ ] Archive the design and plan with `git mv` into `specs/archive/2026/` as the last commit before
       opening the PR.
