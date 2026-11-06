@@ -11,7 +11,7 @@ use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
-        CommandNameConflict, MissingDocstring, UnsupportedCommand, binding_vars,
+        CommandNameConflict, MissingDocstring, ToolrNames, UnsupportedCommand, binding_vars,
         detect_name_conflicts, detect_unsupported_commands, extract_commands,
         format_missing_docstrings, missing_docstrings,
     },
@@ -182,7 +182,12 @@ fn build_commands_inner(
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
         name_conflicts.extend(detect_name_conflicts(&module, &module_path, &all_imports));
-        let bindings = extract_groups(&module, module_doc.as_deref(), &global_vars);
+        let bindings = extract_groups(
+            &module,
+            module_doc.as_deref(),
+            &global_vars,
+            ToolrNames::new(&all_imports, &module_path),
+        );
         unsupported.extend(detect_unsupported_commands(
             &module,
             &module_path,

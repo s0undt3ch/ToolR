@@ -3,8 +3,11 @@
 use std::collections::HashMap;
 
 use ruff_python_ast::visitor::{Visitor, walk_except_handler, walk_expr, walk_stmt};
-use ruff_python_ast::{Alias, ExceptHandler, Expr, ExprCall, ModModule, Stmt, StmtAssign};
+use ruff_python_ast::{
+    Alias, ExceptHandler, Expr, ExprCall, ModModule, Stmt, StmtAnnAssign, StmtAssign,
+};
 
+use super::commands::{Binding, ToolrNames};
 use super::parse_docstring;
 
 /// A group binding extracted from source. The `var` is the Python local name
@@ -158,11 +161,12 @@ pub fn extract_groups(
     module: &ModModule,
     module_docstring: Option<&str>,
     global_vars: &HashMap<String, String>,
+    names: ToolrNames,
 ) -> Vec<GroupBinding> {
     let source = Source::new(module, module_docstring);
     let mut out: Vec<GroupBinding> = Vec::new();
     for stmt in &module.body {
-        if let Some(binding) = group_binding(stmt, &source, &out, global_vars) {
+        if let Some(binding) = group_binding(stmt, &source, &out, global_vars, names) {
             out.push(binding);
         }
     }
@@ -305,9 +309,11 @@ fn group_binding(
     source: &Source<'_>,
     local: &[GroupBinding],
     global_vars: &HashMap<String, String>,
+    names: ToolrNames,
 ) -> Option<GroupBinding> {
     // Two recognised shapes:
-    //   1. `var = command_group(...)` — group-binding style.
+    //   1. `var = command_group(...)` or `var: T = command_group(...)` —
+    //      group-binding style.
     //   2. `command_group("path", ...)` — bare expression-statement,
     //      the string-path style. No binding var to capture
     //      (the leaf name becomes a synthetic var so `@var.command`
@@ -320,6 +326,16 @@ fn group_binding(
             };
             (Some(name), call)
         }
+        Stmt::AnnAssign(StmtAnnAssign {
+            target,
+            value: Some(value),
+            ..
+        }) => {
+            let (Expr::Name(name), Expr::Call(call)) = (target.as_ref(), value.as_ref()) else {
+                return None;
+            };
+            (Some(name.id.as_str().to_string()), call)
+        }
         Stmt::Expr(expr_stmt) => {
             let Expr::Call(call) = expr_stmt.value.as_ref() else {
                 return None;
@@ -328,7 +344,7 @@ fn group_binding(
         }
         _ => return None,
     };
-    if !is_command_group_call(call) {
+    if !is_command_group_call(call, names) {
         return None;
     }
     // Parent path can come from three source patterns:
@@ -413,9 +429,16 @@ fn single_name_target(targets: &[Expr]) -> Option<String> {
     }
 }
 
-fn is_command_group_call(call: &ExprCall) -> bool {
+/// Whether `call` is toolr's `command_group`: spelt so, an alias the import
+/// tables resolve to it, or any `<x>.command_group(...)`.
+///
+/// `toolr.testing._groups._group_calls` mirrors this in Python; change both
+/// together.
+fn is_command_group_call(call: &ExprCall, names: ToolrNames) -> bool {
     match call.func.as_ref() {
-        Expr::Name(n) => n.id.as_str() == "command_group",
+        Expr::Name(n) => {
+            n.id.as_str() == "command_group" || names.command_group(n.id.as_str()) == Binding::Toolr
+        }
         Expr::Attribute(a) => a.attr.as_str() == "command_group",
         _ => false,
     }
@@ -552,6 +575,7 @@ fn literal_str(expr: &Expr) -> Option<String> {
 mod tests {
     use super::*;
     use crate::parser::parse_python_file;
+    use crate::parser::symbols::ImportTable;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -561,11 +585,140 @@ mod tests {
         parse_python_file(f.path()).unwrap()
     }
 
+    /// Import tables for `(module path, source)` pairs, all in `tools/`.
+    fn imports(modules: &[(&str, &str)]) -> HashMap<String, ImportTable> {
+        modules
+            .iter()
+            .map(|(path, src)| {
+                let m = parse_src(src);
+                (path.to_string(), ImportTable::from_module(&m, path, false))
+            })
+            .collect()
+    }
+
+    /// `extract_groups` on `src` parsed as `tools.m`, alongside `others`.
+    fn groups_in(src: &str, others: &[(&str, &str)]) -> Vec<GroupBinding> {
+        let mut modules = vec![("tools.m", src)];
+        modules.extend_from_slice(others);
+        let all = imports(&modules);
+        extract_groups(
+            &parse_src(src),
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&all, "tools.m"),
+        )
+    }
+
+    /// `extract_groups` on a module with no imports beyond its own.
+    fn groups_in_module(m: &ModModule, doc: Option<&str>) -> Vec<GroupBinding> {
+        let all = HashMap::from([(
+            "tools.m".to_string(),
+            ImportTable::from_module(m, "tools.m", false),
+        )]);
+        extract_groups(m, doc, &HashMap::new(), ToolrNames::new(&all, "tools.m"))
+    }
+
+    fn paths(groups: &[GroupBinding]) -> Vec<(String, String)> {
+        groups
+            .iter()
+            .map(|g| (g.var.clone(), g.full_path()))
+            .collect()
+    }
+
+    fn pair(var: &str, path: &str) -> (String, String) {
+        (var.to_string(), path.to_string())
+    }
+
+    #[test]
+    fn aliased_import_binds_a_group() {
+        let groups = groups_in(
+            "from toolr import command_group as cg\ng = cg(\"alias\", \"Alias\", \"Aliased.\")\nkid = g.command_group(\"kid\", \"Kid\", \"Kid.\")\n",
+            &[],
+        );
+        assert_eq!(
+            paths(&groups),
+            [pair("g", "alias"), pair("kid", "alias.kid")]
+        );
+        assert_eq!(groups[0].fields.description.text(), "Aliased.");
+    }
+
+    #[test]
+    fn toolr_module_alias_attribute_binds_a_group() {
+        let groups = groups_in(
+            "import toolr as t\ng = t.command_group(\"t\", \"T\", \"T.\")\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("g", "t")]);
+    }
+
+    #[test]
+    fn assigned_alias_binds_a_group() {
+        let groups = groups_in(
+            "import toolr\ncg = toolr.command_group\ng = cg(\"assigned\", \"A\", \"A.\")\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("g", "assigned")]);
+    }
+
+    #[test]
+    fn reexported_alias_binds_a_group() {
+        let groups = groups_in(
+            "from tools._common import cg\ncg(\"re\", \"Re\", \"Re.\")\n",
+            &[("tools._common", "from toolr import command_group as cg\n")],
+        );
+        assert_eq!(paths(&groups), [pair("re", "re")]);
+    }
+
+    #[test]
+    fn annotated_binding_binds_a_group() {
+        let groups = groups_in(
+            "h: CommandGroup = command_group(\"ann\", \"Ann\", \"Ann.\")\nkid = h.command_group(\"kid\", \"Kid\", \"Kid.\")\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("h", "ann"), pair("kid", "ann.kid")]);
+    }
+
+    #[test]
+    fn annotation_without_a_value_binds_nothing() {
+        let groups = groups_in(
+            "g: CommandGroup\nh: int = 1\nk.x: int = command_group(\"k\", \"K\", \"K.\")\n",
+            &[],
+        );
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn local_def_alias_is_not_a_group() {
+        let groups = groups_in(
+            "def cg(*args):\n    pass\ng = cg(\"local\", \"L\", \"L.\")\n",
+            &[],
+        );
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn alias_from_an_unreadable_module_is_not_a_group() {
+        let groups = groups_in(
+            "from elsewhere import cg\ng = cg(\"unknown\", \"U\", \"U.\")\n",
+            &[],
+        );
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn literal_spelling_counts_even_when_local() {
+        let groups = groups_in(
+            "def command_group(*args):\n    pass\ng = command_group(\"lit\", \"L\", \"L.\")\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("g", "lit")]);
+    }
+
     #[test]
     fn extracts_command_group_with_literal_args() {
         let src = r#"group = command_group("ci", "CI utilities")"#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, None, &HashMap::new());
+        let groups = groups_in_module(&m, None);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].var, "group");
         assert_eq!(groups[0].name, "ci");
@@ -580,11 +733,7 @@ mod tests {
         // `description` (clap's `long_about`).
         let src = r#"group = command_group("ci", "CI utilities", docstring=__doc__)"#;
         let m = parse_src(src);
-        let groups = extract_groups(
-            &m,
-            Some("First paragraph short.\n\nLong paragraph body."),
-            &HashMap::new(),
-        );
+        let groups = groups_in_module(&m, Some("First paragraph short.\n\nLong paragraph body."));
         assert_eq!(groups[0].fields.title.text(), "CI utilities");
         assert_eq!(
             groups[0].fields.description.text(),
@@ -599,11 +748,7 @@ mod tests {
         // body, no sections to append).
         let src = r#"group = command_group("widget", docstring=__doc__)"#;
         let m = parse_src(src);
-        let groups = extract_groups(
-            &m,
-            Some("Example single-line docstring for a group."),
-            &HashMap::new(),
-        );
+        let groups = groups_in_module(&m, Some("Example single-line docstring for a group."));
         assert_eq!(
             groups[0].fields.title.text(),
             "Example single-line docstring for a group."
@@ -621,10 +766,9 @@ mod tests {
         // `--help` re-states the blurb plus the long body.
         let src = r#"group = command_group("ci", docstring=__doc__)"#;
         let m = parse_src(src);
-        let groups = extract_groups(
+        let groups = groups_in_module(
             &m,
             Some("Short blurb for parent listing.\n\nLonger prose shown by --help only."),
-            &HashMap::new(),
         );
         assert_eq!(
             groups[0].fields.title.text(),
@@ -641,7 +785,7 @@ mod tests {
         // Python's `command_group` refuses both; the build reports it.
         let src = r#"group = command_group("ci", description="kw-desc", docstring=__doc__)"#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, Some("Short title.\n\nLong paragraph."), &HashMap::new());
+        let groups = groups_in_module(&m, Some("Short title.\n\nLong paragraph."));
         assert!(groups[0].contradictory);
         assert!(groups[0].describes);
     }
@@ -649,7 +793,7 @@ mod tests {
     #[test]
     fn title_only_call_does_not_describe() {
         let m = parse_src(r#"group = command_group("ci", "CI")"#);
-        let groups = extract_groups(&m, None, &HashMap::new());
+        let groups = groups_in_module(&m, None);
         assert!(!groups[0].describes);
         assert!(!groups[0].contradictory);
     }
@@ -658,7 +802,7 @@ mod tests {
     fn parses_description_from_third_positional() {
         let src = r#"group = command_group("n", "t", "desc body")"#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, None, &HashMap::new());
+        let groups = groups_in_module(&m, None);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].fields.description.text(), "desc body");
     }
@@ -667,7 +811,7 @@ mod tests {
     fn description_kwarg_wins_over_positional() {
         let src = r#"group = command_group("n", "t", "pos", description="kw")"#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, None, &HashMap::new());
+        let groups = groups_in_module(&m, None);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].fields.description.text(), "kw");
     }
@@ -676,7 +820,7 @@ mod tests {
     fn ignores_non_command_group_assignments() {
         let src = "x = 1\ny = some_other_func(\"ci\")\n";
         let m = parse_src(src);
-        assert!(extract_groups(&m, None, &HashMap::new()).is_empty());
+        assert!(groups_in_module(&m, None).is_empty());
     }
 
     #[test]
@@ -685,7 +829,7 @@ mod tests {
 image = docker.command_group("image", "Image")
 "#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, None, &HashMap::new());
+        let groups = groups_in_module(&m, None);
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].name, "docker");
         assert_eq!(groups[0].parent, None);
@@ -705,7 +849,7 @@ image = docker.command_group("image", "Image")
 helm_diff = command_group("helm-diff-pr-comment", "Helm diff", parent="ci")
 "#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, None, &HashMap::new());
+        let groups = groups_in_module(&m, None);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].name, "helm-diff-pr-comment");
         assert_eq!(groups[0].parent.as_deref(), Some("ci"));
@@ -719,7 +863,7 @@ b = a.command_group("b", "B")
 c = b.command_group("c", "C")
 "#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, None, &HashMap::new());
+        let groups = groups_in_module(&m, None);
         assert_eq!(groups.len(), 3);
         assert_eq!(groups[2].full_path(), "a.b.c");
         assert_eq!(groups[2].parent.as_deref(), Some("a.b"));

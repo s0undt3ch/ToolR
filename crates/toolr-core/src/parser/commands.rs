@@ -365,15 +365,16 @@ pub fn detect_name_conflicts(
     out
 }
 
-/// Which of a module's names are toolr's `command` or the `toolr` module.
+/// Which of a module's names are toolr's `command`, `command_group` or the
+/// `toolr` module.
 #[derive(Clone, Copy)]
-struct ToolrNames<'a> {
+pub struct ToolrNames<'a> {
     all_imports: &'a HashMap<String, ImportTable>,
     module: &'a str,
 }
 
 impl<'a> ToolrNames<'a> {
-    fn new(all_imports: &'a HashMap<String, ImportTable>, module: &'a str) -> Self {
+    pub fn new(all_imports: &'a HashMap<String, ImportTable>, module: &'a str) -> Self {
         Self {
             all_imports,
             module,
@@ -392,23 +393,30 @@ impl<'a> ToolrNames<'a> {
     /// submodule, re-exported by other scanned modules or assigned from one.
     /// A click `command` or a local `def` isn't.
     fn command(self, name: &str) -> Binding {
-        binds_toolr_command(self.all_imports, self.module, name, 0)
+        binds_toolr_member(self.all_imports, self.module, name, "command", 0)
+    }
+
+    /// Whether `name` is toolr's `command_group`, by the same rules as
+    /// [`Self::command`].
+    pub(super) fn command_group(self, name: &str) -> Binding {
+        binds_toolr_member(self.all_imports, self.module, name, "command_group", 0)
     }
 }
 
-/// Whether a name is toolr's `command`, as far as the parser can see.
-/// Keep in step with `_command_decorators` in `toolr/testing/_shapes.py`,
-/// which resolves it by runtime identity: change both together.
+/// Whether a name is toolr's `command` or `command_group`, as far as the
+/// parser can see. Keep in step with `_command_decorators` in
+/// `toolr/testing/_shapes.py` and `_group_calls` in `toolr/testing/_groups.py`,
+/// which resolve it by runtime identity: change them together.
 // Variants run weakest to strongest: callers take `.max()` over candidates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Binding {
+pub(super) enum Binding {
     /// A local `def`, another name, or a cycle.
     Other,
     /// A module the parser can't read (outside `tools/`), or a star import
     /// from a `toolr.*` submodule; the `group=` rule in `parse_string_path_command`
     /// decides.
     Unknown,
-    /// toolr's `command`.
+    /// toolr's member.
     Toolr,
 }
 
@@ -416,9 +424,9 @@ fn is_toolr_path(module: &str) -> bool {
     module == "toolr" || module.starts_with("toolr.")
 }
 
-/// What `attr` is when read from a `toolr` module: only `command` is toolr's.
-fn toolr_member(attr: &str) -> Binding {
-    if attr == "command" {
+/// What `attr` is when read from a `toolr` module, looking for `member`.
+fn toolr_member(attr: &str, member: &str) -> Binding {
+    if attr == member {
         Binding::Toolr
     } else {
         Binding::Other
@@ -429,14 +437,15 @@ fn toolr_member(attr: &str) -> Binding {
 const MAX_REEXPORT_DEPTH: usize = 8;
 
 /// Follow `name` in `module` through imports, re-exports and assignments to
-/// decide whether it is toolr's `command`. `depth` counts hops followed so far.
-fn binds_toolr_command(
+/// decide whether it is toolr's `member`. `depth` counts hops followed so far.
+fn binds_toolr_member(
     all_imports: &HashMap<String, ImportTable>,
     module: &str,
     name: &str,
+    member: &str,
     depth: usize,
 ) -> Binding {
-    // A re-export cycle can't bind toolr's `command`; the cap stops the walk.
+    // A re-export cycle can't bind a toolr member; the cap stops the walk.
     if depth > MAX_REEXPORT_DEPTH {
         return Binding::Other;
     }
@@ -446,13 +455,13 @@ fn binds_toolr_command(
     if imports.local_binding_wins(name) {
         return match imports.assigned(name) {
             Some(Assigned::Name(other)) => {
-                binds_toolr_command(all_imports, module, other, depth + 1)
+                binds_toolr_member(all_imports, module, other, member, depth + 1)
             }
             Some(Assigned::Attribute { base, attr }) => {
                 match imports.resolve_module_binding(base) {
                     // `import toolr.types` binds `toolr`, not `toolr.types`.
-                    Some(m) if is_toolr_path(m) => toolr_member(attr),
-                    Some(m) => binds_toolr_command(all_imports, m, attr, depth + 1),
+                    Some(m) if is_toolr_path(m) => toolr_member(attr, member),
+                    Some(m) => binds_toolr_member(all_imports, m, attr, member, depth + 1),
                     None => Binding::Other,
                 }
             }
@@ -461,21 +470,21 @@ fn binds_toolr_command(
     }
     let follows = |from: &str, original: &str| {
         if is_toolr_path(from) {
-            toolr_member(original)
+            toolr_member(original, member)
         } else {
-            binds_toolr_command(all_imports, from, original, depth + 1)
+            binds_toolr_member(all_imports, from, original, member, depth + 1)
         }
     };
     let candidates = imports.candidates(name);
     if candidates.is_empty() {
-        // `from toolr.x import *` may or may not carry `command`.
+        // `from toolr.x import *` may or may not carry `member`.
         return imports
             .star_import_modules()
             .iter()
             .map(|from| match from.as_str() {
                 "toolr" => follows(from, name),
                 f if is_toolr_path(f) => Binding::Unknown,
-                f => binds_toolr_command(all_imports, f, name, depth + 1),
+                f => binds_toolr_member(all_imports, f, name, member, depth + 1),
             })
             .max()
             .unwrap_or(Binding::Other);
@@ -751,7 +760,12 @@ def generate_build_matrix(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -807,7 +821,12 @@ def bare_function(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -835,7 +854,12 @@ def hello(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -864,7 +888,12 @@ def check_run_build(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -895,7 +924,12 @@ def check_snippets(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -927,7 +961,12 @@ def check_snippets(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -965,7 +1004,12 @@ def go(ctx, items: list[str] | None = None):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.repro",
@@ -1005,7 +1049,12 @@ def go(ctx, name: str, /, count: int, *rest: int):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.repro",
@@ -1054,7 +1103,12 @@ def go(ctx, pair: tuple[str, int] | None = None):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.repro",
@@ -1165,7 +1219,12 @@ def hello(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1193,7 +1252,12 @@ def do_thing(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1243,7 +1307,12 @@ def do_thing(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1293,7 +1362,12 @@ def collect_data(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1344,7 +1418,12 @@ def do_thing(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
@@ -1398,7 +1477,12 @@ def hello(ctx, name="world"):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, None, &HashMap::new());
+        let bindings = extract_groups(
+            &m,
+            None,
+            &HashMap::new(),
+            ToolrNames::new(&imports_of(&m), "tools.ci"),
+        );
         let commands = extract_commands(
             &m,
             "tools.ci",
