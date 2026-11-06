@@ -7,6 +7,7 @@ names and defaults, which an AST comparison of the two files cannot do.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from importlib.util import find_spec
@@ -18,9 +19,10 @@ REPO_ROOT = Path(__file__).parents[2]
 ALLOWLIST = Path(__file__).parent / "files" / "stubtest_allowlist.txt"
 
 # `toolr._context` imports the compiled extension through `toolr.utils`; without it stubtest
-# could only report an import error, which says nothing about the stub.
+# could only report an import error, which says nothing about the stub. CI always builds it, so
+# there a missing extension fails the test rather than skipping it silently.
 pytestmark = pytest.mark.skipif(
-    find_spec("toolr.utils._rust_utils") is None,
+    find_spec("toolr.utils._rust_utils") is None and not os.environ.get("CI"),
     reason="the compiled toolr-py extension is not built, so stubtest cannot import toolr._context",
 )
 

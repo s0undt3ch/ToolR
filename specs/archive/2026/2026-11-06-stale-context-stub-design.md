@@ -81,9 +81,9 @@ Rejected:
 ## Scope and risk
 
 Type-only change plus one test file; no runtime behaviour changes. The stub affects downstream type checking
-only: `from toolr._context import status_to_exit_code` now type-checks, `ctx.run(..., interactive=True)` no longer
-fails a type check, and `ctx.chdir(...)` is typed as a context manager. No release note: use a `Release-Notes: skip` trailer on the implementation
-commits.
+only: `from toolr._context import status_to_exit_code` now type-checks, `ctx.run(..., stream_output=None)` no
+longer fails a type check, `interactive` is a declared parameter (the old stub's `**kwargs` hid it), and
+`ctx.chdir(...)` is typed as a context manager. Users see the stub, so the change gets a release note.
 
 ## Open questions
 
