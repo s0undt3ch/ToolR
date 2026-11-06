@@ -21,9 +21,12 @@ from tests.workflows.conftest import workflow_step_script
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
-pytestmark = pytest.mark.skipif(
-    sys.platform == "win32", reason="the step runs under bash on ubuntu-latest only"
-)
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="the step runs under bash on ubuntu-latest only"
+    ),
+    pytest.mark.skip_if_binaries_missing("git"),
+]
 
 
 @pytest.fixture

@@ -22,9 +22,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 APPLY_RELEASE_PATCH_YML = REPO_ROOT / ".github" / "actions" / "apply-release-patch" / "action.yml"
 PATCH_NAME = "toolr-9.9.9.patch"
 
-pytestmark = pytest.mark.skipif(
-    sys.platform == "win32", reason="the step runs under bash on ubuntu-latest only"
-)
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="the step runs under bash on ubuntu-latest only"
+    ),
+    pytest.mark.skip_if_binaries_missing("git"),
+]
 
 
 @dataclass(frozen=True)

@@ -9,13 +9,6 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 from pathlib import Path
 
-import pytest
-
-
-def require_git() -> None:
-    """Skip the calling test when `git` isn't installed."""
-    if shutil.which("git") is None:
-        pytest.skip("git not available")
 
 
 def git_env() -> dict[str, str]:

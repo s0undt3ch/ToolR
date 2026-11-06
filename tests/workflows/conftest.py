@@ -14,7 +14,6 @@ import yaml
 
 from tests._git import git_env
 from tests._git import make_repo
-from tests._git import require_git
 
 
 def workflow_step(path: Path, job: str, step_id: str) -> dict[str, Any]:
@@ -43,8 +42,6 @@ def action_step_script(path: Path, step_id: str) -> str:
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Callable[..., Path]:
     """Return a factory that creates a git repository with one commit holding `files`."""
-    require_git()
-
     def make(files: dict[str, str], name: str = "repo") -> Path:
         return make_repo(tmp_path / name, files=files)
 

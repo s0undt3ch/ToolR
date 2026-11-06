@@ -21,8 +21,9 @@ import yaml
 from tests._git import git
 from tests._git import git_env
 from tests._git import make_repo
-from tests._git import require_git
 from tests.workflows.conftest import workflow_step
+
+pytestmark = pytest.mark.skip_if_binaries_missing("git")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "_prepare-release.yml"
@@ -61,7 +62,6 @@ def rc_history(tmp_path: Path) -> Path:
 
     Each tag sits on a release commit worded as `_prepare-release.yml` words it.
     """
-    require_git()
     return make_repo(
         tmp_path / "repo",
         commits=[
