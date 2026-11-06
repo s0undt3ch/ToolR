@@ -22,9 +22,12 @@ from tests.workflows.conftest import workflow_step_script
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "_prepare-release.yml"
 
-pytestmark = pytest.mark.skipif(
-    sys.platform == "win32", reason="the step runs under bash on ubuntu-latest only"
-)
+pytestmark = [
+    pytest.mark.skipif(
+        sys.platform == "win32", reason="the step runs under bash on ubuntu-latest only"
+    ),
+    pytest.mark.skip_if_binaries_missing("git"),
+]
 
 PREK_OK = "exit 0"
 PREK_FAILS = "exit 1"

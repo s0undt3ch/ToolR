@@ -41,7 +41,8 @@ from tools.version import bump
 
 from tests._git import git
 from tests._git import make_repo
-from tests._git import require_git
+
+pytestmark = pytest.mark.skip_if_binaries_missing("git")
 
 GITHUB_FILES = ("GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_STEP_SUMMARY")
 
@@ -186,8 +187,6 @@ def release_repo(
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     for name in ("GITHUB_EVENT_NAME", *GITHUB_FILES):
         monkeypatch.delenv(name, raising=False)
-
-    require_git()
 
     def make(*tags: str, commits: int = 0) -> ContextForTesting:
         repo = make_repo(
