@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev878-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev885-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev878 - 2026-11-06
+        0.35.2-dev885 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev878 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev885 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev878-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev885-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev878 - 2026-11-06
+        0.35.2-dev885 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev878 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev885 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev878-2026-11-06">0.35.2-dev878 - 2026-11-06<a class="headerlink" href="#0352-dev878-2026-11-06" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev885-2026-11-06">0.35.2-dev885 - 2026-11-06<a class="headerlink" href="#0352-dev885-2026-11-06" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7729,6 +7729,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>Bash tab completion now completes paths typed with a backslash escape or a quote, such as <code>files/it\'s</code> or <code>"files/my f</code>, and inside an open quote inserts the name quoted for that quote instead of with stray backslashes (tested on bash 5.1 to 5.3). An open double quote before a leading <code>$NAME/</code> now completes too. A <code>!</code> completed inside double quotes no longer triggers history expansion, and dotfiles are listed whatever <code>GLOBIGNORE</code> is set to.</p>
 <p>Tab completion no longer offers flags, flag values or option names after a bare <code>--</code>: everything after it is a positional, as the CLI reads it. Choices starting with <code>-</code> are offered only where the CLI accepts them: after <code>--opt=</code>, or as a positional after <code>--</code>.</p>
 <p><code>toolr --quiet self completion install</code> now prints nothing on success: the <code>wrote</code>, <code>already up to date</code> and zsh <code>fpath</code> lines are suppressed along with the bash source hint. Refusals and errors still print.</p>
+<p>An empty <code>NO_COLOR</code> no longer disables colour in help output, and a relative <code>XDG_DATA_HOME</code>, <code>XDG_STATE_HOME</code>, <code>XDG_CACHE_HOME</code> or <code>XDG_CONFIG_HOME</code> is now ignored, as the XDG spec says, instead of resolving against the current directory.</p>
+<p>Anything toolr wrote under a relative location (venvs, the managed uv, trust records) stays where it was: toolr rebuilds or re-downloads it under the default directory, asks for trust again, and the old directories can be deleted.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7952,6 +7954,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(parser)</em> Only flag toolr's own command_group calls, skip bound statements whole (<a href="https://github.com/s0undt3ch/ToolR/commit/c6141f256c3c404452c451250b5685f16128ad53"><code>c6141f2</code></a>)</li>
 <li><em>(parser)</em> Source-order problems, flag every off-statement command_group, keyword names (<a href="https://github.com/s0undt3ch/ToolR/commit/3fb95144f661cc1b1b41920a5d200206e2ec0487"><code>3fb9514</code></a>)</li>
 <li><em>(completion)</em> Honour --quiet in self completion install (<a href="https://github.com/s0undt3ch/ToolR/commit/4db11c63dab5603a5423115fdee5402562172c87"><code>4db11c6</code></a>)</li>
+<li><em>(env)</em> Honour an empty NO_COLOR and ignore relative XDG dirs (<a href="https://github.com/s0undt3ch/ToolR/commit/30c764815d6be7bc7bc681542b0d5c482591b9c4"><code>30c7648</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8283,6 +8286,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li>One statement of the command_group placement rule (<a href="https://github.com/s0undt3ch/ToolR/commit/3ad4e5b6d01221f6dacb396d9fffd36d0d86b6a2"><code>3ad4e5b</code></a>)</li>
 <li><em>(specs)</em> Spec and plan for --quiet completion install (<a href="https://github.com/s0undt3ch/ToolR/commit/8f3bb5e24dad1b58079b92e7f855ef43670964a0"><code>8f3bb5e</code></a>)</li>
 <li><em>(specs)</em> Archive quiet-completion-install spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/e37b453667b847b71da81c9951847a1d26f9353a"><code>e37b453</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for empty and relative env values (<a href="https://github.com/s0undt3ch/ToolR/commit/c00de79fd69708c6f26ba610c66d46794a6f7025"><code>c00de79</code></a>)</li>
+<li><em>(specs)</em> Archive empty and relative env values specs (<a href="https://github.com/s0undt3ch/ToolR/commit/e568c736f9605ebcbebcebe1432643713b386f23"><code>e568c73</code></a>)</li>
+<li>XDG dirs count only when set to an absolute path (<a href="https://github.com/s0undt3ch/ToolR/commit/5931071dd272fa84ae16d0e7d57bcf7a8ffdff59"><code>5931071</code></a>)</li>
+<li><em>(env)</em> Say which path reader to use, fix two stale doc comments (<a href="https://github.com/s0undt3ch/ToolR/commit/63f071769abdbe7da60a7d488ab2069beeef579b"><code>63f0717</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
