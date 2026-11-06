@@ -490,6 +490,10 @@ fn completes_nothing_where_clap_rejects_root_flags() {
         &["--timeout-secs", "--"],
         &["--timeout-secs", ""],
         &["--timeout-secs", "abc", ""],
+        &["-V", ""],
+        &["--version", ""],
+        &["-V", "--"],
+        &["--timeout-secs", "-1", ""],
     ] {
         assert_eq!(complete_raw(&tmp, line), "", "{line:?}");
     }
@@ -514,4 +518,15 @@ fn terminator_blocks_root_flags() {
     let tmp = fixture();
     assert_eq!(complete_raw(&tmp, &["--", "--"]), "");
     assert_eq!(complete_raw(&tmp, &["--quiet", "--", "--"]), "");
+}
+
+#[test]
+fn completes_after_an_attached_negative_value() {
+    let tmp = fixture();
+    for flag in ["--timeout-secs=-1", "--nots=-1"] {
+        let lines = sorted_lines(&tmp, &[flag, ""]);
+        assert!(lines.contains(&"ci".to_string()), "{flag}: {lines:?}");
+    }
+    let lines = sorted_lines(&tmp, &["--timeout-secs=-1", "--t"]);
+    assert_eq!(lines, ["--timestamps"]);
 }
