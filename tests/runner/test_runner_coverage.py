@@ -613,7 +613,8 @@ def test_run_keeps_unresolved_warning_under_quiet(
         verbosity="quiet",
         repo_root=tmp_path,
     )
-    assert run(spec) == 0
+    # `run` sets the current-context contextvar; keep it out of other tests.
+    assert contextvars.copy_context().run(run, spec) == 0
     assert "can't resolve the type of `x`" in capsys.readouterr().err
 
 
