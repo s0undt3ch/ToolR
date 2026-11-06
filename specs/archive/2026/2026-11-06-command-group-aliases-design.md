@@ -88,3 +88,10 @@ mirrors.
 A `fix` note: groups declared through an aliased `command_group` import, or with an annotated
 assignment, now appear in the manifest with their commands. Before this fix, both were dropped
 without an error.
+
+## Known gap
+
+`CommandsTester` runs its contradictory-arguments check before it imports any `tools` module, so
+it has no module globals to resolve an alias against. An aliased call that passes both `docstring=`
+and `description=` still fails in the tester, but through Python's own `TypeError` at import, not
+the build's "contradictory arguments" message. Logged as a follow-up.

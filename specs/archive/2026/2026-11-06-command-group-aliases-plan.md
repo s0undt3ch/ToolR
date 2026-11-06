@@ -11,7 +11,7 @@
 
 **Tech Stack:** Rust (`ruff_python_ast`), Python 3.11+ `ast`, pytest.
 
-**Spec:** `specs/2026-11-06-command-group-aliases-design.md`
+**Spec:** `specs/archive/2026/2026-11-06-command-group-aliases-design.md`
 
 ## Global Constraints
 
