@@ -353,3 +353,33 @@ fn venv_sync_root_quiet_does_not_swallow_a_missing_project() {
     assert!(!out.status.success(), "{out:?}");
     assert!(!stderr(&out).is_empty());
 }
+
+/// The fixture's venv has no sync stamp, so both commands auto-sync first.
+#[test]
+fn venv_shell_and_run_quiet_the_auto_sync_uv() {
+    for args in [
+        &["-q", "project", "venv", "shell"][..],
+        &["-q", "project", "venv", "run", "--", "/usr/bin/true"][..],
+        &["project", "venv", "run", "--quiet", "--", "/usr/bin/true"][..],
+    ] {
+        let fx = VenvFixture::new();
+        let out = common::toolr()
+            .env("PATH", &fx.bin_dir)
+            .env("SHELL", "/usr/bin/true")
+            .current_dir(&fx.root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{args:?}: {out:?}");
+        assert!(fx.uv_ran_sync(), "{args:?}");
+        assert!(uv_got_quiet(&fx), "{args:?}: {}", fx.uv_argv());
+    }
+}
+
+#[test]
+fn venv_run_without_the_flag_does_not_quiet_uv() {
+    let fx = VenvFixture::new();
+    let out = venv_toolr(&fx, &["project", "venv", "run", "--", "/usr/bin/true"]);
+    assert!(out.status.success(), "{out:?}");
+    assert!(fx.uv_ran_sync() && !uv_got_quiet(&fx));
+}

@@ -656,9 +656,11 @@ fn venv_shell(root_quiet: bool) -> Result<ExitCode> {
     let (resolved, _) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
-        toolr_core::project::EnsureOpts::default().with_trust(TrustMode {
-            never_prompt: root_quiet,
-        }),
+        toolr_core::project::EnsureOpts::default()
+            .with_quiet(root_quiet)
+            .with_trust(TrustMode {
+                never_prompt: root_quiet,
+            }),
     )?;
 
     let shell = default_shell_path();
@@ -724,7 +726,7 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
             &cwd,
             consent,
             toolr_core::project::EnsureOpts::default()
-                .with_quiet(quiet)
+                .with_quiet(quiet || root_quiet)
                 .with_trust(TrustMode {
                     never_prompt: quiet || root_quiet,
                 }),

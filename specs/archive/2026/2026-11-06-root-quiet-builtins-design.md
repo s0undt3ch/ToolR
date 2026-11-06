@@ -53,7 +53,7 @@ Reuse the existing plumbing, no new type:
 | `project trust` | Unchanged | Already honours both flags. Stdout root is its result. |
 | `project untrust` | Unchanged | Stdout root is its result. `<path> was not trusted` is a notice that nothing happened, not success chatter. |
 | `project venv path` | Unchanged | Its stdout is the result. |
-| `project venv shell` / `run` | Unchanged | The child owns stdout and stderr. Root `-q` already stops uv prompts. |
+| `project venv shell` / `run` | Auto-sync uv gets `--quiet`; the child's output is untouched | uv's sync output is non-error output; the child owns stdout and stderr. |
 | `self completion print` | Unchanged | Its stdout is the script. |
 | `self cache list` | Unchanged | The table is the result. |
 
