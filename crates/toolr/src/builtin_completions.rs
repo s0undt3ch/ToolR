@@ -212,6 +212,163 @@ pub fn root_long_flags() -> Vec<Candidate> {
     flags
 }
 
+/// One root flag as the scan sees it, read from the clap command.
+struct RootFlagSpec {
+    id: String,
+    long: String,
+    short: Option<char>,
+    aliases: Vec<String>,
+    takes_value: bool,
+    conflicts: Vec<String>,
+}
+
+/// What [`scan_root_flags`] found in the committed tokens.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct RootScan {
+    /// Tokens left for the engine: everything after the leading root flags, plus the in-progress word.
+    pub rest: Vec<String>,
+    /// Ids of the root flags given, sorted (aliases and shorts resolved).
+    pub seen: Vec<String>,
+    /// clap rejects the line (duplicate, conflict, bad or missing value), so nothing completes.
+    pub dead_end: bool,
+}
+
+fn root_flag_specs() -> Vec<RootFlagSpec> {
+    let root = crate::cli::build_command(&empty_manifest());
+    let mut specs: Vec<RootFlagSpec> = root
+        .get_arguments()
+        .filter_map(|a| {
+            Some(RootFlagSpec {
+                id: a.get_id().to_string(),
+                long: a.get_long()?.to_string(),
+                short: a.get_short(),
+                aliases: a
+                    .get_all_aliases()
+                    .into_iter()
+                    .flatten()
+                    .map(str::to_string)
+                    .collect(),
+                takes_value: a.get_action().takes_values(),
+                // Only the declaring side lists a conflict; mirrored below.
+                conflicts: root
+                    .get_arg_conflicts_with(a)
+                    .iter()
+                    .map(|c| c.get_id().to_string())
+                    .collect(),
+            })
+        })
+        .collect();
+    // clap enforces a conflict declared on either side, so make the lists symmetric.
+    let pairs: Vec<(String, String)> = specs
+        .iter()
+        .flat_map(|s| s.conflicts.iter().map(|c| (s.id.clone(), c.clone())))
+        .collect();
+    for (a, b) in pairs {
+        for spec in &mut specs {
+            if spec.id == b && !spec.conflicts.contains(&a) {
+                spec.conflicts.push(a.clone());
+            }
+        }
+    }
+    specs
+}
+
+/// Whether clap accepts `value` after a value-taking root flag (an `f64` that is not a flag-looking word).
+fn is_flag_value(value: &str) -> bool {
+    !value.starts_with('-') && value.parse::<f64>().is_ok()
+}
+
+/// Strip the leading run of root flags from the completion tokens (the last one is the in-progress word).
+///
+/// Root flags are not global, so only a leading run counts; the scan mirrors what clap accepts and flags the
+/// lines it rejects as a dead end.
+pub fn scan_root_flags(tokens: &[String]) -> RootScan {
+    let specs = root_flag_specs();
+    let committed = tokens.len().saturating_sub(1);
+    let mut seen: Vec<&RootFlagSpec> = Vec::new();
+    let mut i = 0;
+    while i < committed {
+        let tok = tokens[i].as_str();
+        let mut take = |spec: &RootFlagSpec| -> bool {
+            let clash = seen
+                .iter()
+                .any(|s| s.id == spec.id || spec.conflicts.contains(&s.id));
+            if let Some(found) = specs.iter().find(|s| s.id == spec.id) {
+                seen.push(found);
+            }
+            !clash
+        };
+        let ok = if let Some(long) = tok.strip_prefix("--").filter(|l| !l.is_empty()) {
+            let (name, attached) = match long.split_once('=') {
+                Some((n, v)) => (n, Some(v)),
+                None => (long, None),
+            };
+            let Some(spec) = specs
+                .iter()
+                .find(|s| s.long == name || s.aliases.iter().any(|a| a == name))
+            else {
+                break;
+            };
+            match (spec.takes_value, attached) {
+                (false, Some(_)) => false,
+                (false, None) => take(spec),
+                (true, Some(v)) => is_flag_value(v) && take(spec),
+                (true, None) => {
+                    i += 1;
+                    // The in-progress word is the value when nothing follows.
+                    i < committed && is_flag_value(&tokens[i]) && take(spec)
+                }
+            }
+        } else if let Some(cluster) = tok
+            .strip_prefix('-')
+            .filter(|c| !c.is_empty() && !c.starts_with('-'))
+        {
+            let flags: Option<Vec<&RootFlagSpec>> = cluster
+                .chars()
+                .map(|c| specs.iter().find(|s| s.short == Some(c) && !s.takes_value))
+                .collect();
+            let Some(flags) = flags else { break };
+            flags.into_iter().all(take)
+        } else {
+            break;
+        };
+        if !ok {
+            return RootScan {
+                dead_end: true,
+                ..RootScan::default()
+            };
+        }
+        i += 1;
+    }
+    let mut ids: Vec<String> = seen.iter().map(|s| s.id.clone()).collect();
+    ids.sort();
+    RootScan {
+        rest: tokens[i..].to_vec(),
+        seen: ids,
+        dead_end: false,
+    }
+}
+
+/// The root long flags still valid after `seen`: not given yet and not conflicting with a given one.
+pub fn root_long_flags_after(seen: &[String]) -> Vec<Candidate> {
+    let specs = root_flag_specs();
+    let blocked: Vec<&str> = specs
+        .iter()
+        .filter(|s| seen.contains(&s.id))
+        .flat_map(|s| std::iter::once(s.id.as_str()).chain(s.conflicts.iter().map(String::as_str)))
+        .collect();
+    root_long_flags()
+        .into_iter()
+        .filter(|c| {
+            let long = c.value.trim_start_matches("--");
+            specs
+                .iter()
+                .find(|s| s.long == long)
+                .is_some_and(|s| !blocked.contains(&s.id.as_str()))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,5 +605,173 @@ mod tests {
                 "missing {expected} in {flags:?}"
             );
         }
+    }
+
+    fn scan(tokens: &[&str]) -> RootScan {
+        let owned: Vec<String> = tokens.iter().map(ToString::to_string).collect();
+        scan_root_flags(&owned)
+    }
+
+    fn strs(v: &[String]) -> Vec<&str> {
+        v.iter().map(String::as_str).collect()
+    }
+
+    #[test]
+    fn scan_strips_leading_root_flags() {
+        let s = scan(&["--quiet", "--timestamps", "ci", ""]);
+        assert_eq!(strs(&s.rest), ["ci", ""]);
+        assert_eq!(strs(&s.seen), ["quiet", "timestamps"]);
+        assert!(!s.dead_end);
+    }
+
+    #[test]
+    fn scan_in_progress_word_is_never_consumed() {
+        let s = scan(&["--quiet", "--timeo"]);
+        assert_eq!(strs(&s.rest), ["--timeo"]);
+        assert_eq!(strs(&s.seen), ["quiet"]);
+        assert!(!s.dead_end);
+    }
+
+    #[test]
+    fn scan_without_tokens_is_empty() {
+        assert_eq!(scan(&[]), RootScan::default());
+    }
+
+    #[test]
+    fn scan_resolves_aliases_and_shorts() {
+        let s = scan(&["--ts", "-q", "--nots", "5", ""]);
+        assert_eq!(
+            strs(&s.seen),
+            ["no-output-timeout-secs", "quiet", "timestamps"]
+        );
+        assert_eq!(strs(&s.rest), [""]);
+        assert!(!s.dead_end);
+        let s = scan(&["-h", "--nts", "--timeout", "2", ""]);
+        assert_eq!(strs(&s.seen), ["help", "no-timestamps", "timeout-secs"]);
+    }
+
+    #[test]
+    fn scan_value_flag_takes_next_token() {
+        let s = scan(&["--timeout-secs", "5", ""]);
+        assert_eq!(strs(&s.rest), [""]);
+        assert_eq!(strs(&s.seen), ["timeout-secs"]);
+        assert!(!s.dead_end);
+    }
+
+    #[test]
+    fn scan_attached_value() {
+        let s = scan(&["--timeout-secs=5", ""]);
+        assert_eq!(strs(&s.rest), [""]);
+        assert_eq!(strs(&s.seen), ["timeout-secs"]);
+        assert!(!s.dead_end);
+    }
+
+    #[test]
+    fn scan_value_owed_is_dead_end() {
+        assert!(scan(&["--timeout-secs", ""]).dead_end);
+        assert!(scan(&["--quiet", "--timeout-secs", "--"]).dead_end);
+    }
+
+    #[test]
+    fn scan_bad_value_is_dead_end() {
+        for line in [
+            &["--timeout-secs", "abc", ""][..],
+            &["--timeout-secs=", ""],
+            &["--timeout-secs=abc", ""],
+            &["--timeout-secs", "-5", ""],
+            &["--timeout-secs", "--quiet", ""],
+            &["--quiet=yes", ""],
+        ] {
+            assert!(scan(line).dead_end, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn scan_duplicate_is_dead_end() {
+        for line in [
+            &["--quiet", "--quiet", ""][..],
+            &["--ts", "--timestamps", ""],
+            &["--help", "-h", ""],
+            &["--timeout-secs", "1", "--timeout", "2", ""],
+            &["-qq", ""],
+        ] {
+            assert!(scan(line).dead_end, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn scan_conflict_is_dead_end() {
+        for line in [
+            &["--quiet", "--debug", ""][..],
+            &["-d", "--quiet", ""],
+            &["-qd", ""],
+            &["--ts", "--nts", ""],
+            &["--nts", "--timestamps", ""],
+        ] {
+            assert!(scan(line).dead_end, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn scan_stops_at_terminator() {
+        let s = scan(&["--quiet", "--", ""]);
+        assert_eq!(strs(&s.rest), ["--", ""]);
+        assert_eq!(strs(&s.seen), ["quiet"]);
+        assert!(!s.dead_end);
+    }
+
+    #[test]
+    fn scan_stops_at_first_word() {
+        let s = scan(&["--quiet", "ci", "--debug", ""]);
+        assert_eq!(strs(&s.rest), ["ci", "--debug", ""]);
+        assert_eq!(strs(&s.seen), ["quiet"]);
+        assert!(!s.dead_end);
+    }
+
+    #[test]
+    fn scan_stops_at_unknown_flag_or_short() {
+        for line in [&["--bogus", "--quiet", ""][..], &["-qx", ""], &["-", ""]] {
+            let s = scan(line);
+            assert_eq!(strs(&s.rest), line, "{line:?}");
+            assert!(s.seen.is_empty() && !s.dead_end, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn root_flag_conflicts_are_symmetric() {
+        let specs = root_flag_specs();
+        for a in &specs {
+            for b in &specs {
+                assert_eq!(
+                    a.conflicts.contains(&b.id),
+                    b.conflicts.contains(&a.id),
+                    "{} / {}",
+                    a.id,
+                    b.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn root_long_flags_after_skips_given_and_conflicting() {
+        let given = |ids: &[&str]| {
+            let seen: Vec<String> = ids.iter().map(ToString::to_string).collect();
+            values(root_long_flags_after(&seen))
+        };
+        assert_eq!(given(&[]), values(root_long_flags()));
+        assert_eq!(
+            given(&["quiet"]),
+            [
+                "--no-output-timeout-secs",
+                "--no-timestamps",
+                "--timeout-secs",
+                "--timestamps"
+            ]
+        );
+        assert_eq!(
+            given(&["timestamps", "timeout-secs"]),
+            ["--debug", "--no-output-timeout-secs", "--quiet"]
+        );
     }
 }
