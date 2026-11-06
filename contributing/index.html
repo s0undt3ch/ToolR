@@ -1887,6 +1887,9 @@ turns the trust check off because every test drives a throwaway repository. Use 
 </table>
 <p>The Rust integration tests spawn the built <code>toolr</code> binary via <code>assert_cmd</code>. Don't shadow them with
 Python-level subprocess tests unless the behaviour can't be exercised in Rust.</p>
+<p><code>crates/toolr-py/python/toolr/_context.pyi</code> is hand-written, not generated. <code>tests/context/test_context_stub.py</code>
+runs mypy's stubtest against it, so changing <code>Context</code> or another public name in <code>_context.py</code> needs a matching
+stub edit.</p>
 <h3 id="reproducing-a-failure-from-its-seed">Reproducing a failure from its seed<a class="headerlink" href="#reproducing-a-failure-from-its-seed" title="Permanent link">&para;</a></h3>
 <p>The Python suite runs in random order with <code>pytest-randomly</code>. Every run prints its seed in the header
 (<code>Using --randomly-seed=1234</code>), including in the CI log. To replay that order locally:</p>
