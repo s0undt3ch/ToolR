@@ -849,6 +849,21 @@ mod test_suite {
             text.lines().next()?.trim().parse().ok()
         }
 
+        /// The pid in `path`, once the process that writes it has got that far.
+        #[cfg(unix)]
+        fn wait_for_pid_file(path: &std::path::Path, within: Duration) -> Option<u32> {
+            let deadline = Instant::now() + within;
+            loop {
+                let pid = std::fs::read_to_string(path)
+                    .ok()
+                    .and_then(|t| t.trim().parse().ok());
+                if pid.is_some() || Instant::now() > deadline {
+                    return pid;
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+        }
+
         /// The pid the child prints to `file`, read while `run` is still going. Polls a
         /// reopened handle: seeking `file` itself would move the child's write offset.
         fn pid_while_running<T>(file: &NamedTempFile, run: &thread::JoinHandle<T>) -> Option<u32> {
@@ -874,17 +889,32 @@ mod test_suite {
 
         /// Kills whatever matches `pattern` when the test ends, for processes whose
         /// pid the test never learns.
+        ///
+        /// Machine-wide match: build `pattern` with `unique_sleep`, never a fixed command line, or a concurrent run will kill your processes.
         #[cfg(unix)]
-        struct KillMatching(&'static str);
+        struct KillMatching(String);
 
         #[cfg(unix)]
         impl Drop for KillMatching {
             fn drop(&mut self) {
-                pids_matching(self.0).into_iter().for_each(terminate);
+                pids_matching(&self.0).into_iter().for_each(terminate);
             }
         }
 
+        /// A `sleep` command line no other test run on the machine shares: `pgrep` and
+        /// `KillMatching` see every process, so a fixed duration lets a concurrent run
+        /// (another worktree, llvm-cov) kill this run's `sleep` mid-test. Returns the
+        /// command and the `pgrep` pattern that matches exactly it.
+        #[cfg(unix)]
+        fn unique_sleep(base: u32) -> (String, String) {
+            let command = format!("sleep {base}.{}", std::process::id());
+            let pattern = format!("^{}$", command.replace('.', "\\."));
+            (command, pattern)
+        }
+
         /// Pids whose full command line matches `pattern`.
+        ///
+        /// Machine-wide match: build `pattern` with `unique_sleep`, never a fixed command line, or a concurrent run will kill your processes.
         #[cfg(unix)]
         fn pids_matching(pattern: &str) -> Vec<u32> {
             Command::new("pgrep")
@@ -958,16 +988,17 @@ mod test_suite {
         #[cfg(unix)]
         #[test]
         fn timeout_kills_the_shells_child() -> Result<()> {
-            let _cleanup = KillMatching("^sleep 999$");
+            let (sleep, pattern) = unique_sleep(999);
+            let _cleanup = KillMatching(pattern.clone());
             let config = CommandConfig {
-                args: sh("sleep 999; true"),
+                args: sh(&format!("{sleep}; true")),
                 timeout_secs: Some(3.0),
                 ..Default::default()
             };
             let run = thread::spawn(move || bounded_run_command(config, TREE_BOUND));
-            let sleeper = wait_for_pids("^sleep 999$", DEATH_WAIT);
+            let sleeper = wait_for_pids(&pattern, DEATH_WAIT);
             assert_timeout_error(run.join().expect("run thread")?, "timed out after");
-            assert!(!sleeper.is_empty(), "never saw `sleep 999` start");
+            assert!(!sleeper.is_empty(), "never saw `{sleep}` start");
             for pid in sleeper {
                 assert!(
                     wait_until_dead(pid, DEATH_WAIT),
@@ -1026,16 +1057,17 @@ mod test_suite {
 
         /// `sh` exits 0 at once and the backgrounded `sleep` holds the pipes until
         /// one of the timeouts runs out. Each caller uses its own `sleep` duration so
-        /// the cleanup finds only its own leftover.
+        /// the cleanup finds only its own leftover (see `unique_sleep`).
         #[cfg(unix)]
         fn background_holder_times_out(
-            sleeper: &'static str,
+            base: u32,
             timeouts: (Option<f64>, Option<f64>),
             expected: &str,
         ) -> Result<()> {
-            let _cleanup = KillMatching(sleeper);
+            let (sleep, pattern) = unique_sleep(base);
+            let _cleanup = KillMatching(pattern);
             let config = CommandConfig {
-                args: sh(&format!("{} &", sleeper.trim_matches(['^', '$']))),
+                args: sh(&format!("{sleep} &")),
                 timeout_secs: timeouts.0,
                 no_output_timeout_secs: timeouts.1,
                 ..Default::default()
@@ -1054,13 +1086,13 @@ mod test_suite {
         #[cfg(unix)]
         #[test]
         fn timeout_holds_when_a_background_sleep_keeps_pipe_open() -> Result<()> {
-            background_holder_times_out("^sleep 301$", (Some(1.0), None), "timed out after")
+            background_holder_times_out(301, (Some(1.0), None), "timed out after")
         }
 
         #[cfg(unix)]
         #[test]
         fn no_output_timeout_holds_when_a_background_sleep_keeps_pipe_open() -> Result<()> {
-            background_holder_times_out("^sleep 302$", (None, Some(1.0)), "no output for")
+            background_holder_times_out(302, (None, Some(1.0)), "no output for")
         }
 
         /// A writer that left the tree before the timeout escapes the walk. The call
@@ -1070,25 +1102,33 @@ mod test_suite {
         #[test]
         fn timeout_returns_when_an_escaped_process_holds_the_pipe() -> Result<()> {
             // The subshell exits at once, so the writer is reparented before the timeout.
-            let (mut config, mut stdout_file, _stderr) = capturing_config(sh(
-                "(sh -c 'echo $$; while echo tick; do sleep 0.1; done' &); sleep 60",
-            ));
-            config.timeout_secs = Some(2.0);
+            // The writer reports its pid through a file, not the pipe under test: the detached
+            // reader may drop what arrives after the call returns.
+            let dir = tempfile::tempdir()?;
+            let pid_file = dir.path().join("writer.pid");
+            let (mut config, stdout_file, _stderr) = capturing_config(sh(&format!(
+                "(sh -c 'echo $$ >\"{0}.tmp\"; mv \"{0}.tmp\" \"{0}\"; while echo tick; do sleep 0.1; done' &); sleep 60",
+                pid_file.display()
+            )));
+            // The writer's start-up must finish before the timeout, or it is still in the tree
+            // and hasn't escaped. It has taken over 2.5s on a loaded machine; 10s leaves ~4x headroom.
+            const TIMEOUT: Duration = Duration::from_secs(10);
+            config.timeout_secs = Some(TIMEOUT.as_secs_f64());
 
             let start = Instant::now();
             let result = bounded_run_command(config, TREE_BOUND);
             let elapsed = start.elapsed();
-            let writer = read_pid(&mut stdout_file);
+            let writer = wait_for_pid_file(&pid_file, DEATH_WAIT);
             let _cleanup = KillOnDrop(writer.into_iter().collect());
+            let writer = writer.ok_or_else(|| anyhow!("the writer never printed its pid"))?;
             assert_timeout_error(result?, "timed out after");
             assert!(
-                elapsed < Duration::from_secs(20),
+                elapsed < TIMEOUT + Duration::from_secs(20),
                 "the call waited {elapsed:?} for the escaped process"
             );
             // The drain waited out the grace, then detached.
-            let floor = Duration::from_secs(2) + crate::command::KILL_GRACE;
+            let floor = TIMEOUT + crate::command::KILL_GRACE;
             assert!(elapsed >= floor, "returned after {elapsed:?}");
-            let writer = writer.ok_or_else(|| anyhow!("the writer never printed its pid"))?;
             assert!(
                 wait_until_dead(writer, DEATH_WAIT),
                 "writer {writer} still running: the detached reader kept the pipe open"
