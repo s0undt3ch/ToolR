@@ -2025,6 +2025,11 @@ fn bash_tab_rc(fx: &Fixture) -> String {
 /// Types `typed`, Tab and Enter into an interactive bash on a pty, and asserts the shim printed
 /// `want`.
 fn assert_bash_tab_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, want: &str) {
+    assert_bash_keys_line(bash, fx, rcfile, &format!("{typed}\t"), want);
+}
+
+/// Types `keys` and Enter into an interactive bash on a pty, and asserts the shim printed `want`.
+fn assert_bash_keys_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, want: &str) {
     let mut cmd = StdCommand::new(bash);
     cmd.args(["--noprofile", "--rcfile"])
         .arg(rcfile)
@@ -2036,7 +2041,7 @@ fn assert_bash_tab_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, wa
         // No escape sequences, and no user readline settings.
         .env("TERM", "dumb")
         .env("INPUTRC", "/dev/null");
-    let out = common::run_on_pty(cmd, &format!("{typed}\t\nexit\n"));
+    let out = common::run_on_pty(cmd, &format!("{typed}\nexit\n"));
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
@@ -2389,6 +2394,70 @@ fn bash_tab_keeps_ansi_c_forms_readline_misreads_end_to_end() {
             let typed = format!("toolr ci lint {typed}");
             assert_bash_tab_line(&bash, &fx, &rcfile, &typed, want);
             assert!(!fx.sentinel.exists(), "{bash} {typed:?}: command ran");
+        }
+    }
+}
+
+/// Names that run a command if `insert-completions` inserts them unquoted: `w/` holds
+/// `a;touch sentinel-one;#` and `cx$(touch sentinel-one)`, and `d/` the directories `'d1` and
+/// `'d2$(touch sentinel-one)`.
+fn insert_all_dirs(fx: &Fixture) {
+    for name in ["w/a;touch sentinel-one;#", "w/cx$(touch sentinel-one)"] {
+        let path = fx.tmp.path().join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "").unwrap();
+    }
+    for name in ["d/'d1", "d/'d2$(touch sentinel-one)"] {
+        std::fs::create_dir_all(fx.tmp.path().join(name)).unwrap();
+    }
+}
+
+/// `insert-completions` (`M-*`, `COMP_TYPE` 42) deletes the open quote and inserts every reply as
+/// is, so a reply quoted for the inside of the quote would land unquoted: offer nothing there.
+#[test]
+fn bash_insert_completions_inside_an_open_quote_offers_nothing() {
+    let script = print_script("bash");
+    let insert_all = format!("COMP_TYPE=42\n{script}");
+    for bash in bashes() {
+        let fx = fixture();
+        insert_all_dirs(&fx);
+        for cur in ["'w/a", "\"w/a", "$'w/c", "$'d/", "w/$'c", "'d/"] {
+            assert_path_replies(&bash, &insert_all, &fx, cur, &[]);
+        }
+        // With no open quote every reply is a whole quoted word, which is safe to insert.
+        for cur in ["w/", "d/"] {
+            let want = run_bash_cfg_path(&bash, &fx, cur);
+            assert_eq!(want.reply.len(), 2, "{bash} {cur}: {:?}", want.reply);
+            let want: Vec<&str> = want.reply.iter().map(String::as_str).collect();
+            assert_path_replies(&bash, &insert_all, &fx, cur, &want);
+        }
+        assert!(!fx.sentinel.exists(), "{bash}: command ran");
+    }
+}
+
+/// End to end: `ESC *` inside an open quote inserts nothing, and the `'` typed after it closes the
+/// word for bash; with no open quote it inserts each name quoted.
+#[test]
+fn bash_insert_completions_never_runs_a_name_end_to_end() {
+    for bash in bashes() {
+        let fx = fixture();
+        insert_all_dirs(&fx);
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc(&fx)).unwrap();
+        for (keys, want) in [
+            ("--cfg 'w/a\x1b*'", "LINE:ci lint --cfg w/a"),
+            ("--cfg \"w/a\x1b*\"", "LINE:ci lint --cfg w/a"),
+            ("--cfg $'w/c\x1b*'", "LINE:ci lint --cfg w/c"),
+            ("--cfg $'d/\x1b*'", "LINE:ci lint --cfg d/"),
+            (
+                "--cfg w/a\x1b*",
+                "LINE:ci lint --cfg w/a;touch sentinel-one;#",
+            ),
+        ] {
+            let keys = format!("toolr ci lint {keys}");
+            assert_bash_keys_line(&bash, &fx, &rcfile, &keys, want);
+            // Checked after each line: a command that ran is the finding.
+            assert!(!fx.sentinel.exists(), "{bash} {keys:?}: command ran");
         }
     }
 }
