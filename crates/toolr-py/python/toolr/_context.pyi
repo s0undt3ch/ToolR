@@ -18,6 +18,8 @@ from rich.text import TextType
 from toolr.utils._console import ConsoleVerbosity
 from toolr.utils.command import CommandResult
 
+def status_to_exit_code(status: int) -> int: ...
+
 class Context(Struct, frozen=True):
     repo_root: Path
     parser: ArgumentParser
