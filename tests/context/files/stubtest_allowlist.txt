@@ -1,0 +1,2 @@
+# msgspec builds Struct.__init__ at class creation, so stubtest can't see its signature.
+toolr\._context\.Context\.__init__

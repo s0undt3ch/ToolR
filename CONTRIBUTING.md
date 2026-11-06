@@ -69,6 +69,10 @@ cargo build -p toolr --release
 The Rust integration tests spawn the built `toolr` binary via `assert_cmd`. Don't shadow them with
 Python-level subprocess tests unless the behaviour can't be exercised in Rust.
 
+`crates/toolr-py/python/toolr/_context.pyi` is hand-written, not generated. `tests/context/test_context_stub.py`
+runs mypy's stubtest against it, so changing `Context` or another public name in `_context.py` needs a matching
+stub edit.
+
 ### Reproducing a failure from its seed
 
 The Python suite runs in random order with `pytest-randomly`. Every run prints its seed in the header
