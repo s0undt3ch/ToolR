@@ -1876,7 +1876,7 @@ fn dash_fixture() -> Manifest {
                     "mode",
                     Optional,
                     SupportedType::Str,
-                    &["fast", "full", "--dash", "-x"],
+                    &["fast", "full", "--dash", "-x", "-", "-1"],
                 ),
                 typed_arg("verbose", Flag, SupportedType::Bool, &[]),
                 typed_arg(
@@ -1886,6 +1886,17 @@ fn dash_fixture() -> Manifest {
                     &["alpha", "beta", "--dir"],
                 ),
             ],
+            false,
+        ),
+        leaf(
+            "pos",
+            "ci",
+            vec![typed_arg(
+                "p",
+                Positional,
+                SupportedType::Str,
+                &["a", "-", "--n"],
+            )],
             false,
         ),
         leaf(
@@ -1997,16 +2008,48 @@ fn double_dash_inside_a_dispatcher() {
 fn separate_flag_value_drops_dash_leading_choices() {
     assert_eq!(
         dash_values(&["ci", "lint", "--mode", ""]),
-        vec!["fast", "full"]
+        vec!["-", "fast", "full"]
     );
-    assert!(dash_values(&["ci", "lint", "--mode", "-"]).is_empty());
+    // A bare `-` is a plain value to clap, and `-1` is dropped like any dash-leading choice.
+    assert_eq!(dash_values(&["ci", "lint", "--mode", "-"]), vec!["-"]);
+    assert_eq!(
+        dash_values(&["ci", "lint", "--mode", "-1"]),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn numeric_negative_choice_only_in_the_attached_form() {
+    for (words, want) in [
+        (
+            &["ci", "lint", "--mode", ""][..],
+            &["-", "fast", "full"][..],
+        ),
+        (&["ci", "lint", "--mode=-"], &["-", "--dash", "-1", "-x"]),
+        (&["ci", "lint", "--mode=-1"], &["-1"]),
+    ] {
+        assert_eq!(dash_values(words), want, "{words:?}");
+    }
+}
+
+#[test]
+fn double_dash_right_after_a_value_flag_completes_nothing() {
+    // clap: "a value is required for '--mode <mode>'".
+    assert!(dash_values(&["ci", "lint", "--mode", "--", ""]).is_empty());
+    assert!(dash_values(&["ci", "job", "--level", "--", ""]).is_empty());
+}
+
+#[test]
+fn bare_dash_positional_choice_is_offered() {
+    assert_eq!(dash_values(&["ci", "pos", ""]), vec!["-", "a"]);
+    assert_eq!(dash_values(&["ci", "pos", "--", ""]), vec!["-", "--n", "a"]);
 }
 
 #[test]
 fn attached_flag_value_keeps_dash_leading_choices() {
     for (word, want) in [
-        ("--mode=", &["--dash", "-x", "fast", "full"][..]),
-        ("--mode=-", &["--dash", "-x"]),
+        ("--mode=", &["-", "--dash", "-1", "-x", "fast", "full"][..]),
+        ("--mode=-", &["-", "--dash", "-1", "-x"]),
         ("--mode=--d", &["--dash"]),
     ] {
         assert_eq!(dash_values(&["ci", "lint", word]), want, "{word}");

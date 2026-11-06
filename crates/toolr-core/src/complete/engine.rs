@@ -251,6 +251,9 @@ fn classify_leaf_args<'a>(command: &'a Command, arg_tokens: &[String], prefix: S
     // After a committed `--` clap reads every word as a positional, so flag
     // names, `--name=value` and `--name <value>` no longer mean anything.
     let scan = scan_args(command, arg_tokens);
+    if scan.missing_value {
+        return Slot::None;
+    }
     let after_terminator = scan.terminator.is_some();
     if !after_terminator {
         if let Some(slot) = attached_value(command, &prefix) {
@@ -336,6 +339,9 @@ fn classify_dispatcher<'a>(
     // the *child*, not the dispatcher. Checking this first prevents
     // the dispatcher's flag-name fallback from masking the child's.
     let scan = scan_args(command, arg_tokens);
+    if scan.missing_value {
+        return Slot::None;
+    }
     // clap rejects a `--` before the child name, so nothing completes there.
     if let Some(t) = scan.terminator
         && scan.positionals.first().is_none_or(|&child| t < child)
@@ -446,6 +452,8 @@ struct ArgScan {
     positionals: Vec<usize>,
     /// Index of the committed `--`, when there is one.
     terminator: Option<usize>,
+    /// A value-taking flag is directly followed by `--`: clap errors, so nothing completes.
+    missing_value: bool,
 }
 
 /// Walk `arg_tokens`, skipping each known flag and, when it takes one, its
@@ -455,6 +463,7 @@ struct ArgScan {
 fn scan_args(command: &Command, arg_tokens: &[String]) -> ArgScan {
     let mut positionals = Vec::new();
     let mut terminator = None;
+    let mut missing_value = false;
     let mut i = 0usize;
     while i < arg_tokens.len() {
         let token = &arg_tokens[i];
@@ -464,7 +473,13 @@ fn scan_args(command: &Command, arg_tokens: &[String]) -> ArgScan {
             break;
         }
         match find_flag(command, token) {
-            Some(arg) if takes_value(arg) => i += 2,
+            Some(arg) if takes_value(arg) => {
+                if arg_tokens.get(i + 1).is_some_and(|t| t == "--") {
+                    missing_value = true;
+                    break;
+                }
+                i += 2;
+            }
             Some(_) => i += 1,
             None if token.starts_with("--") => i += 1,
             None => {
@@ -476,6 +491,7 @@ fn scan_args(command: &Command, arg_tokens: &[String]) -> ArgScan {
     ArgScan {
         positionals,
         terminator,
+        missing_value,
     }
 }
 
@@ -537,12 +553,13 @@ fn flags(command: &Command, prefix: &str) -> Vec<Candidate> {
 }
 
 /// Choices matching `prefix`. A choice starting with `-` is offered only when
-/// `dash_ok`: clap reads it as a flag anywhere else and rejects the line.
+/// `dash_ok`: clap reads it as a flag anywhere else and rejects the line. A bare
+/// `-` is a plain value to clap, so it is always offered.
 fn values(argument: &Argument, prefix: &str, dash_ok: bool) -> Vec<Candidate> {
     argument
         .allowed_values
         .iter()
-        .filter(|v| dash_ok || !v.starts_with('-'))
+        .filter(|v| dash_ok || v.len() == 1 || !v.starts_with('-'))
         .filter(|v| v.starts_with(prefix))
         .map(|v| Candidate::bare(v.clone()))
         .collect()

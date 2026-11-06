@@ -715,25 +715,14 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
 /// handling. Returns [`None`] when the structure doesn't look right
 /// (e.g. invoked as a library or via a non-standard entry point), in
 /// which case the caller falls back to clap's parsed view.
-///
-/// An optional explicit `--` separator inserted by completion scripts
-/// between the cwd and the in-progress tokens is stripped so future
-/// script revisions can adopt it without changing engine behavior.
 fn raw_complete_tokens(matches: &clap::ArgMatches) -> Option<Vec<String>> {
     let cwd = matches.get_one::<String>("cwd")?;
     let argv: Vec<String> = std::env::args().collect();
     let marker_pos = argv.iter().position(|a| a == "__complete")?;
     let after_marker = argv.get(marker_pos + 1..)?;
     let cwd_pos = after_marker.iter().position(|a| a == cwd)?;
-    let mut rest: Vec<String> = after_marker[cwd_pos + 1..].to_vec();
-    // Strip a leading `--` ONLY when more tokens follow. That preserves
-    // the meaning of a trailing bare `--` (the user's in-progress word
-    // when they type `toolr --<TAB>`) while letting completion scripts
-    // optionally pass an explicit separator before the real tokens.
-    if rest.len() >= 2 && rest[0] == "--" {
-        rest.remove(0);
-    }
-    Some(rest)
+    // A leading `--` is kept: it is a committed terminator, as in `toolr -- ci`.
+    Some(after_marker[cwd_pos + 1..].to_vec())
 }
 
 /// When the user is completing a flag at the root (`toolr --<TAB>` or

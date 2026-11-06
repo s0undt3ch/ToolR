@@ -375,3 +375,11 @@ def deploy(ctx, env: Literal["staging", "production"]):
         "--dash\n-x\nplain"
     );
 }
+
+#[test]
+fn root_double_dash_is_a_terminator() {
+    let tmp = fixture();
+    // clap rejects `toolr -- ci`, so nothing completes after a committed root `--`.
+    assert_eq!(complete(&tmp, &["--", ""]), "");
+    assert_eq!(complete(&tmp, &["--", "ci", ""]), "");
+}

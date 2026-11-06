@@ -34,7 +34,8 @@ Two engine bugs in `toolr __complete`, both on `main`, fixed together because bo
 
 ## Design
 
-All changes are in `crates/toolr-core/src/complete/engine.rs`. No script change: the scripts already pass
+Changes are in `crates/toolr-core/src/complete/engine.rs`, plus `raw_complete_tokens` in
+`crates/toolr/src/dispatch.rs` (round-1 fix below). No script change: the scripts already pass
 a committed `--` through, and the attached-form `--opt=` prefixing from #685 is untouched.
 
 ### FU-31: a committed `--` ends option parsing
@@ -95,6 +96,17 @@ fn values(argument: &Argument, prefix: &str, dash_ok: bool) -> Vec<Candidate>;
 Consequences: `--opt <TAB>` and `--opt -<TAB>` drop `--dash`/`-x`; `--opt=<TAB>` and `--opt=-<TAB>` offer
 them; a positional `--dir` choice shows only after `--`. Dispatcher flag values go through the same
 `pending_flag_value` call sites, so they are covered without extra code.
+
+### Round-1 review fixes
+
+- Root `--`: `raw_complete_tokens` no longer strips a leading `--`. No script sends a separator, so
+  `toolr -- <TAB>` offered groups that clap rejects (`toolr -- ci`). The engine now sees the committed `--` and
+  offers nothing; a lone trailing `--` (`toolr --<TAB>`) is still the in-progress word and lists root flags.
+- `--opt -- <TAB>`: `ArgScan` gains `missing_value`, set when a value-taking flag is directly followed by `--`.
+  Clap errors there (`a value is required`), so leaf and dispatcher classification return `Slot::None`.
+- A bare `-` is a plain value to clap, so `values()` always offers it; only choices longer than one character
+  that start with `-` (`--dash`, `-x`, `-1`) are dropped in the separate form.
+- Numeric negative choices such as `-1` follow the same rule, with an explicit test.
 
 ## Tests
 
