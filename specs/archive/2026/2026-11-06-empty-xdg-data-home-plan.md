@@ -73,7 +73,6 @@ cargo test -p toolr-core env::
 cargo test -p toolr-core uv::
 cargo test -p toolr --test '*'
 mise run test
-git grep -in 'paddle'
 ```
 
 Coverage gate: every changed line sits in `env.rs`, `uv/mod.rs` or `dispatch.rs`, each reached by the tests
