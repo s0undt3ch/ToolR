@@ -1794,11 +1794,22 @@ fn zsh_completion_never_executes_values() {
 /// Runs the real `_toolr` under `zsh -f` with `_files` and `compadd` stubbed
 /// to record their arguments; `words` completes the last word.
 fn zsh_complete(fx: &Fixture, words: &[&str]) -> Vec<String> {
+    zsh_run(fx, "", words)
+        .into_iter()
+        .filter(|l| !l.starts_with("VALUE:"))
+        .collect()
+}
+
+/// Like [`zsh_complete`], with `compstate[quote]` set to `quote` (the quote character zsh reports
+/// at the cursor) and a `VALUE:` line for each candidate `compadd` gets.
+fn zsh_run(fx: &Fixture, quote: &str, words: &[&str]) -> Vec<String> {
     const DRIVER: &str = r#"
 compdef() { :; }
 _files() { print -r -- "FILES:$*"; }
-compadd() { print -r -- "COMPADD:$*"; }
+compadd() { print -r -- "COMPADD:$*"; print -rl -- "${values[@]/#/VALUE:}"; }
 compset() { print -r -- "COMPSET:$*"; }
+typeset -A compstate
+compstate[quote]=$ZSH_QUOTE
 eval "$1"; shift
 words=("$@"); CURRENT=$#
 _toolr
@@ -1813,6 +1824,7 @@ _toolr
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
         .env("XDG_CACHE_HOME", common::test_cache_home())
+        .env("ZSH_QUOTE", quote)
         .output()
         .unwrap();
     assert!(
@@ -1824,6 +1836,116 @@ _toolr
         .lines()
         .map(str::to_string)
         .collect()
+}
+
+/// The candidates `_toolr` hands `compadd` when completing `cur` after `toolr ci lint --mode`.
+fn zsh_mode_values(fx: &Fixture, quote: &str, cur: &str) -> Vec<String> {
+    zsh_values(fx, quote, &["toolr", "ci", "lint", "--mode", cur])
+}
+
+fn zsh_values(fx: &Fixture, quote: &str, words: &[&str]) -> Vec<String> {
+    zsh_run(fx, quote, words)
+        .iter()
+        .filter_map(|l| l.strip_prefix("VALUE:").map(str::to_string))
+        .collect()
+}
+
+/// `$words` holds the word as typed; the script must take the quoting off before the engine
+/// matches it. zsh reports the open quote even after it's closed, so `'dry r'` carries `'` too.
+#[test]
+fn zsh_quoted_and_escaped_partials_match_a_choice() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    for (quote, cur) in [
+        ("", r"dry\ r"),
+        ("'", "'dry r"),
+        ("\"", "\"dry r"),
+        ("'", "'dry r'"),
+        ("$'", "$'dry r"),
+        ("", "dr'y r'"),
+    ] {
+        assert_eq!(
+            zsh_mode_values(&fx, quote, cur),
+            vec!["dry run".to_string()],
+            "{quote:?} {cur:?}"
+        );
+    }
+}
+
+#[test]
+fn zsh_attached_option_with_escaped_value_matches() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let calls = zsh_run(&fx, "", &["toolr", "ci", "lint", r"--mode=dry\ r"]);
+    assert_eq!(
+        calls,
+        vec![
+            "COMPSET:-P 1 *=".to_string(),
+            "COMPADD:-d descriptions -a values".to_string(),
+            "VALUE:dry run".to_string(),
+        ]
+    );
+}
+
+/// A quoted earlier word must reach the engine as the shell will pass it, or `'--mode'` isn't
+/// recognised as the option whose value is being completed.
+#[test]
+fn zsh_earlier_quoted_words_reach_the_engine_unquoted() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let words = ["toolr", "ci", "lint", "'--mode'", "fa"];
+    assert_eq!(zsh_values(&fx, "", &words), vec!["fast".to_string()]);
+    let words = [
+        "toolr", "ci", "lint", r"--cfg", r"a\ b", "--mode", r"dry\ r",
+    ];
+    assert_eq!(zsh_values(&fx, "", &words), vec!["dry run".to_string()]);
+}
+
+/// Live zsh completes the command inside backticks itself and never calls `_toolr`; if it ever
+/// did, the script offers nothing rather than treat a command as a value.
+#[test]
+fn zsh_backtick_quote_offers_nothing() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let words = ["toolr", "ci", "lint", "--mode", "`dry"];
+    assert_eq!(zsh_run(&fx, "`", &words), Vec::<String>::new());
+}
+
+/// A typed `$(...)` or backtick, quoted or not, is matched as text and never runs.
+#[test]
+fn zsh_quoted_substitution_partial_is_inert() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let sub = format!("$(touch {})", fx.sentinel.display());
+    let tick = format!("`touch {}`", fx.sentinel2.display());
+    for (quote, cur, want) in [
+        ("'", "'$(touch", &sub),
+        ("$'", "$'$(touch", &sub),
+        ("", r"\$\(touch", &sub),
+        ("'", "'`touch", &tick),
+        ("", r"\`touch", &tick),
+    ] {
+        assert_eq!(
+            zsh_mode_values(&fx, quote, cur),
+            vec![want.clone()],
+            "{quote:?} {cur:?}"
+        );
+    }
+    // In `"…"`, `$(` opens a substitution, so the word is no value; live zsh doesn't call `_toolr`.
+    let words = ["toolr", "ci", "lint", "--mode", "\"$(touch"];
+    assert_eq!(zsh_values(&fx, "\"", &words), Vec::<String>::new());
+    assert!(!fx.sentinel.exists(), "a typed $(...) ran");
+    assert!(!fx.sentinel2.exists(), "a typed backtick ran");
 }
 
 /// zsh's own `_files` quotes the names it inserts.
@@ -2087,4 +2209,130 @@ fn fish_attached_value_keeps_the_option_prefix() {
     assert!(!fx.sentinel3.exists(), "fish executed a file name");
     let stdout = fish_complete(&fx, "toolr ci lint --out=files/");
     assert_eq!(fish_names(&stdout), vec!["--out=files/sub/"]);
+}
+
+/// An interactive zsh on a pty: types `typed` after `toolr ci lint `, then Tab, then `after`.
+/// The rc file sources the script, a `toolr()` shim prints each submitted line as `LINE:<args>`
+/// after shell parsing, and `^Xd` prints the edit buffer as `BUF:<line>` and clears it.
+fn zsh_tab(fx: &Fixture, typed: &str, after: &str) -> String {
+    let script = fx.tmp.path().join("toolr.zsh");
+    std::fs::write(&script, print_script("zsh")).unwrap();
+    std::fs::write(
+        fx.tmp.path().join(".zshrc"),
+        format!(
+            "autoload -Uz compinit\ncompinit -u -D\nsource '{}'\n\
+             toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
+             else print -r -- \"LINE:$*\"; fi; }}\n\
+             _toolr_test_dump() {{ print -r -- \"BUF:$BUFFER\"; BUFFER=; zle accept-line; }}\n\
+             zle -N _toolr_test_dump\nbindkey '^Xd' _toolr_test_dump\n",
+            script.display()
+        ),
+    )
+    .unwrap();
+    let mut cmd = StdCommand::new("zsh");
+    cmd.args(["--no-globalrcs", "-i"])
+        .current_dir(fx.tmp.path())
+        .env("ZDOTDIR", fx.tmp.path())
+        .env("HOME", fx.tmp.path())
+        .env("PATH", path_with_toolr())
+        .env("XDG_CACHE_HOME", common::test_cache_home())
+        .env("TERM", "dumb");
+    let out = common::run_on_pty(cmd, &format!("toolr ci lint {typed}\t{after}exit\n"));
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(
+        !stdout.contains("command not found"),
+        "{typed:?}: {stdout}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    stdout
+}
+
+/// A live Tab: zsh hands `_toolr` the word as typed, and quotes the inserted match to fit the
+/// quote at the cursor, so the submitted line parses back to the plain value.
+#[test]
+fn zsh_tab_completes_quoted_and_escaped_partials_end_to_end() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let sub = format!("$(touch {})", fx.sentinel.display());
+    for (typed, want) in [
+        (r"--mode dry\ w", "--mode dry walk".to_string()),
+        ("--mode 'dry w", "--mode dry walk".to_string()),
+        (r#"--mode "dry w"#, "--mode dry walk".to_string()),
+        ("--mode $'dry w", "--mode dry walk".to_string()),
+        (r"--mode=dry\ w", "--mode=dry walk".to_string()),
+        ("'--mode' fa", "--mode fast".to_string()),
+        (r#"--mode "wo"#, "--mode wow!".to_string()),
+        (
+            r#"--cfg "files/with s"#,
+            "--cfg files/with space.txt".to_string(),
+        ),
+        ("--mode '$(touch", format!("--mode {sub}")),
+    ] {
+        let stdout = zsh_tab(&fx, typed, "\n");
+        let want = format!("LINE:ci lint {want}");
+        assert!(
+            stdout.lines().any(|l| l.trim_end_matches('\r') == want),
+            "{typed:?}: want {want:?}\n{stdout}"
+        );
+    }
+    // zsh completes the command inside these itself; nothing toolr offers may land or run.
+    for typed in [r#"--mode "$(to"#, "--mode `to"] {
+        let stdout = zsh_tab(&fx, typed, "\x18d");
+        assert!(stdout.contains("BUF:"), "{typed:?}: {stdout}");
+        assert!(!stdout.contains("sentinel"), "{typed:?}: {stdout}");
+    }
+    assert!(!fx.sentinel.exists(), "a typed $(...) ran");
+    assert!(!fx.sentinel2.exists(), "a typed backtick ran");
+}
+
+#[test]
+fn fish_quoted_and_escaped_partials_match_a_choice() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    for (cur, want) in [
+        (r"--mode dry\ r", "dry run"),
+        ("--mode 'dry r", "dry run"),
+        (r#"--mode "dry r"#, "dry run"),
+        ("--mode 'dry r'", "dry run"),
+        (r"--mode=dry\ r", "--mode=dry run"),
+    ] {
+        let stdout = fish_complete(&fx, &format!("toolr ci lint {cur}"));
+        assert_eq!(fish_names(&stdout), vec![want], "{cur:?}");
+    }
+}
+
+/// fish's path completers parse their argument as shell text, so they must get the raw word.
+#[test]
+fn fish_quoted_and_escaped_path_partials_still_complete() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    for (cur, want) in [
+        (r"--cfg files/with\ s", "files/with space.txt"),
+        ("--cfg 'files/with s", "files/with space.txt"),
+        (r"--cfg=files/with\ s", "--cfg=files/with space.txt"),
+    ] {
+        let stdout = fish_complete(&fx, &format!("toolr ci lint {cur}"));
+        assert!(fish_names(&stdout).contains(&want), "{cur:?}: {stdout}");
+    }
+}
+
+/// A typed `$(...)` or backtick, quoted or not, is matched as text and never runs.
+#[test]
+fn fish_quoted_substitution_partial_is_inert() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    for cur in ["'$(touch", r#""$(touch"#, r"\$\(touch", "'`touch"] {
+        let stdout = fish_complete(&fx, &format!("toolr ci lint --mode {cur}"));
+        assert!(stdout.contains("touch"), "{cur:?}: {stdout}");
+    }
+    assert!(!fx.sentinel.exists(), "a typed $(...) ran");
+    assert!(!fx.sentinel2.exists(), "a typed backtick ran");
 }

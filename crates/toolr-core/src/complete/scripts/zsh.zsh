@@ -6,17 +6,22 @@
 # `compinit`.
 
 _toolr() {
-    local cur
-    cur="${words[CURRENT]}"
+    # Inside backticks the word is a command, never a value.
+    [[ ${compstate[quote]-} == '`' ]] && return
+    # `$words` holds each word as typed; the engine matches the text the shell would pass.
+    # `(Q)` only removes quotes, it never expands or runs anything.
+    local raw cur
+    raw="${words[CURRENT]}"
+    cur="${(Q)raw}"
+    # `(Q)` leaves a word with an open quote untouched, so close it first. `compstate[quote]`
+    # is the quote at the cursor: `'`, `"` or `$'`, each closed by its last character.
+    if [[ -n ${compstate[quote]-} && $cur == "$raw" ]]; then
+        cur="${(Q):-$raw${compstate[quote]: -1}}"
+    fi
 
     # words[1] is `toolr`; pass the rest plus the in-progress word.
     local -a passthrough
-    passthrough=("${(@)words[2,CURRENT]}")
-    # When CURRENT points one past the last typed word, the in-progress
-    # word is empty - make sure we still send an empty trailing token.
-    if [[ ${#passthrough} -eq 0 ]]; then
-        passthrough=("")
-    fi
+    passthrough=("${(@Q)words[2,CURRENT-1]}" "$cur")
 
     # Each line from `__complete` is `value<TAB>description`; split into
     # parallel arrays so `compadd -d` can show the description next to
