@@ -6,7 +6,7 @@ All commands run from the worktree root. Commits use the `Release-Notes: skip` t
 
 ## Task 1: failing guard test
 
-File: `tests/test_context_stub_parity.py` (new; `tests/__init__.py` already exists).
+File: `tests/context/test_stub_parity.py` (new; `tests/__init__.py` already exists).
 
 - Module constants: `PKG = Path(__file__).parents[1] / "crates/toolr-py/python/toolr"`.
 - Helper `_declared_names(path: Path) -> tuple[set[str], set[str]]`: parse with `ast`, return
@@ -21,7 +21,7 @@ Assertions compare against the empty set so a failure prints the missing names.
 Verify the test fails first:
 
 ```sh
-uv run pytest tests/test_context_stub_parity.py -q
+uv run pytest tests/context/test_stub_parity.py -q
 ```
 
 Expected: `test_context_stub_declares_every_top_level_name` fails with `{'status_to_exit_code'}`; the member test
@@ -35,10 +35,10 @@ immediately before `class Context(Struct, frozen=True):`.
 ## Task 3: verify
 
 ```sh
-uv run pytest tests/test_context_stub_parity.py tests/context/test_exit.py -q
+uv run pytest tests/context/test_stub_parity.py tests/context/test_exit.py -q
 prek run mypy --files tests/context/test_exit.py      # was failing, must pass
 prek run mypy --all-files
-uv run ruff format tests/test_context_stub_parity.py
+uv run ruff format tests/context/test_stub_parity.py
 prek run --all-files
 mise run test
 ```

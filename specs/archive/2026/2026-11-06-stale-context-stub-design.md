@@ -45,7 +45,7 @@ An AST diff of the two files shows the missing function is the only drift: top-l
 
 1. Add `def status_to_exit_code(status: int) -> int: ...` to `_context.pyi`, placed before `class Context` to
    mirror the `.py` order. Stub files carry no docstrings in this repo, so none is added.
-2. Add a drift guard: a pytest module that parses `_context.py` and `_context.pyi` with `ast` and asserts every
+2. Add a drift guard: a pytest module at `tests/context/test_stub_parity.py` that parses `_context.py` and `_context.pyi` with `ast` and asserts every
    top-level name and every `Context` member in the `.py` is declared in the `.pyi`.
 
 Why the guard is worth it: it is about 30 lines, needs no built extension or mypy run, and the drift is
