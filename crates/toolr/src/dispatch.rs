@@ -229,7 +229,7 @@ pub fn dispatch(
         return run_self(self_matches, matches.get_flag("quiet"));
     }
     if let Some(("__build-static-manifest", _)) = matches.subcommand() {
-        return run_build_static_manifest();
+        return run_build_static_manifest(matches.get_flag("quiet"));
     }
     if let Some(("__install-uv-now", _)) = matches.subcommand() {
         return run_install_uv_now();
@@ -429,9 +429,9 @@ fn warn_on_toolr_py_mismatch(venv_dir: &std::path::Path) {
 
 fn run_self(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
     match matches.subcommand() {
-        Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches),
+        Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches, quiet),
         Some(("cache", cache_matches)) => crate::self_cache::dispatch(cache_matches),
-        Some(("trusted", trusted_matches)) => run_self_trusted(trusted_matches),
+        Some(("trusted", trusted_matches)) => run_self_trusted(trusted_matches, quiet),
         Some(("completion", completion_matches)) => {
             let Some((action, action_matches)) = completion_matches.subcommand() else {
                 anyhow::bail!("expected a `self completion` subcommand");
@@ -447,8 +447,9 @@ fn run_self(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode>
 }
 
 /// List trusted roots, one per line, marking those that no longer exist.
-/// `--prune` drops the missing ones and lists what's left.
-fn run_self_trusted(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+/// `--prune` drops the missing ones and lists what's left. The listing is the
+/// result, so `--quiet` only drops the `pruned` notes.
+fn run_self_trusted(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
     let store = toolr_core::trust::TrustStore::open_default()?;
     let prune = matches.get_flag("prune");
     for record in store.list()? {
@@ -456,7 +457,7 @@ fn run_self_trusted(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
         if root.exists() {
             println!("{}", shown(root));
         } else if prune {
-            if store.untrust(root)? {
+            if store.untrust(root)? && !quiet {
                 eprintln!("toolr: pruned {}", shown(root));
             }
         } else {
@@ -466,7 +467,7 @@ fn run_self_trusted(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+fn run_self_build_manifest(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
     let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches)?;
 
     let output_path = resolve_output_path(matches, &resolved.source_dir);
@@ -489,12 +490,14 @@ fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCod
     }
 
     write_atomically(&output_path, &serialised)?;
-    eprintln!(
-        "toolr build-manifest: wrote {} group(s) / {} command(s) to {}",
-        fragment.groups.len(),
-        fragment.commands.len(),
-        output_path.display(),
-    );
+    if !quiet {
+        eprintln!(
+            "toolr build-manifest: wrote {} group(s) / {} command(s) to {}",
+            fragment.groups.len(),
+            fragment.commands.len(),
+            output_path.display(),
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -761,7 +764,7 @@ fn empty_manifest_for_completion() -> Manifest {
     }
 }
 
-fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
+fn run_build_static_manifest(quiet: bool) -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let root = toolr_core::discovery::discover_project_root(&cwd)?;
     let tools = root.join("tools");
@@ -778,12 +781,14 @@ fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
             toolr_core::text::strip_control_chars(warning)
         );
     }
-    println!(
-        "toolr: wrote {} groups / {} commands to {}",
-        manifest.groups.len(),
-        manifest.commands.len(),
-        path.display()
-    );
+    if !quiet {
+        println!(
+            "toolr: wrote {} groups / {} commands to {}",
+            manifest.groups.len(),
+            manifest.commands.len(),
+            path.display()
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 

@@ -32,7 +32,7 @@ pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCo
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("manifest", manifest_m)) => match manifest_m.subcommand() {
-            Some(("rebuild", _)) => manifest_rebuild(),
+            Some(("rebuild", _)) => manifest_rebuild(root_quiet),
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("trust", trust_m)) => project_trust(trust_m, root_quiet),
@@ -100,7 +100,7 @@ fn project_init(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let force = matches.get_flag("force");
     let no_sync = matches.get_flag("no-sync");
     let no_example = matches.get_flag("no-example");
-    let quiet = matches.get_flag("quiet");
+    let quiet = matches.get_flag("quiet") || root_quiet;
     let yes_all = matches.get_flag("yes");
     let venv_location_str = matches
         .get_one::<String>("venv-location")
@@ -142,7 +142,6 @@ fn project_init(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         force,
         no_sync,
         quiet,
-        quiet || root_quiet,
         yes_all,
         init_trust_store().as_ref(),
         &mut |dest| prompt_overwrite_file(dest, &cwd),
@@ -169,7 +168,6 @@ pub(crate) fn run_project_init(
     force: bool,
     no_sync: bool,
     quiet: bool,
-    never_prompt: bool,
     yes_all: bool,
     trust_store: Option<&TrustStore>,
     confirm: &mut dyn FnMut(&Path) -> Result<bool>,
@@ -235,13 +233,16 @@ pub(crate) fn run_project_init(
     }
 
     // Auto-sync — same path as `toolr project venv sync --force`.
-    let consent = toolr_core::uv::install::ConsentMode::from_env(never_prompt);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         cwd,
         consent,
         toolr_core::project::EnsureOpts::default()
             .with_force_sync(true)
-            .with_trust(TrustMode { never_prompt }),
+            .with_quiet(quiet)
+            .with_trust(TrustMode {
+                never_prompt: quiet,
+            }),
     )?;
     if !quiet {
         println!(
@@ -292,7 +293,7 @@ fn requires_python_from(python: Option<&Path>) -> String {
     format!(">=3.{minor}")
 }
 
-fn manifest_rebuild() -> Result<ExitCode> {
+fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
     use toolr_core::manifest_build::rebuild_manifest_full;
 
     let cwd = std::env::current_dir()?;
@@ -302,18 +303,23 @@ fn manifest_rebuild() -> Result<ExitCode> {
     for w in &outcome.warnings {
         eprintln!("toolr: warning: {w}");
     }
-    println!(
-        "toolr: wrote {} groups / {} commands to {}",
-        outcome.group_count,
-        outcome.command_count,
-        outcome.manifest_path.display(),
-    );
+    if !quiet {
+        println!(
+            "toolr: wrote {} groups / {} commands to {}",
+            outcome.group_count,
+            outcome.command_count,
+            outcome.manifest_path.display(),
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
 fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let force = matches.get_flag("force");
-    let quiet = matches.get_flag("quiet");
+    // The root `-q` silences output but, unlike the subcommand flag, never turns an
+    // error into a silent exit 0 (the unattended guard below).
+    let own_quiet = matches.get_flag("quiet");
+    let quiet = own_quiet || root_quiet;
     let upgrade_all = matches.get_flag("upgrade");
     let upgrade_pkgs: Vec<String> = matches
         .get_many::<String>("upgrade-package")
@@ -339,19 +345,19 @@ fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         }
     }
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
 
     let opts = toolr_core::project::EnsureOpts::default()
         .with_force_sync(force)
         .with_quiet(quiet)
         .with_upgrade(upgrade)
         .with_trust(TrustMode {
-            never_prompt: quiet || root_quiet,
+            never_prompt: quiet,
         });
 
     let result = toolr_core::project::ensure_venv_ready(&cwd, consent, opts);
 
-    if quiet && let Some(code) = venv_sync_unattended_quiet_exit(&result) {
+    if own_quiet && let Some(code) = venv_sync_unattended_quiet_exit(&result) {
         return Ok(code);
     }
 
@@ -388,7 +394,7 @@ fn build_upgrade_mode(all: bool, pkgs: Vec<String>) -> toolr_core::venv::Upgrade
 }
 
 fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
-    let quiet = matches.get_flag("quiet");
+    let quiet = matches.get_flag("quiet") || root_quiet;
     let upgrade_all = matches.get_flag("upgrade");
     let upgrade_pkgs: Vec<String> = matches
         .get_many::<String>("upgrade-package")
@@ -415,14 +421,14 @@ fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
 
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
         toolr_core::project::EnsureOpts::default()
             .with_quiet(quiet)
             .with_trust(TrustMode {
-                never_prompt: quiet || root_quiet,
+                never_prompt: quiet,
             }),
     )?;
 
@@ -438,7 +444,7 @@ fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
 }
 
 fn venv_add(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
-    let quiet = matches.get_flag("quiet");
+    let quiet = matches.get_flag("quiet") || root_quiet;
     let specs: Vec<String> = matches
         .get_many::<String>("packages")
         .expect("clap marks this required")
@@ -450,14 +456,14 @@ fn venv_add(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         .context("locating project root for the tools venv")?;
     let tools_dir = repo_root.join("tools");
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
         toolr_core::project::EnsureOpts::default()
             .with_quiet(quiet)
             .with_trust(TrustMode {
-                never_prompt: quiet || root_quiet,
+                never_prompt: quiet,
             }),
     )?;
 
@@ -477,7 +483,7 @@ fn venv_add(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
 }
 
 fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
-    let quiet = matches.get_flag("quiet");
+    let quiet = matches.get_flag("quiet") || root_quiet;
     let packages: Vec<String> = matches
         .get_many::<String>("packages")
         .expect("clap marks this required")
@@ -500,14 +506,14 @@ fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         }
     }
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
         toolr_core::project::EnsureOpts::default()
             .with_quiet(quiet)
             .with_trust(TrustMode {
-                never_prompt: quiet || root_quiet,
+                never_prompt: quiet,
             }),
     )?;
 
@@ -899,7 +905,6 @@ mod tests {
             /*force=*/ false,
             /*no_sync=*/ true,
             /*quiet=*/ true,
-            /*never_prompt=*/ false,
             /*yes_all=*/ true,
             Some(&store.store()),
             &mut |_| unreachable!("confirm should not be called when yes_all=true"),
@@ -927,7 +932,6 @@ mod tests {
             /*force=*/ false,
             /*no_sync=*/ true,
             /*quiet=*/ true,
-            /*never_prompt=*/ false,
             /*yes_all=*/ false,
             Some(&store.store()),
             &mut |_| Ok(false), // always decline
@@ -957,7 +961,6 @@ mod tests {
             /*force=*/ false,
             /*no_sync=*/ true,
             /*quiet=*/ true,
-            /*never_prompt=*/ false,
             /*yes_all=*/ false,
             Some(&store.store()),
             &mut |dest| {
