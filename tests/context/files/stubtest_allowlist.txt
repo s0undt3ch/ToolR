@@ -1,0 +1,2 @@
+# msgspec generates Struct.__init__ at class-creation time with no signature stubtest can introspect, so it reports every stub field as a missing runtime parameter.
+toolr\._context\.Context\.__init__

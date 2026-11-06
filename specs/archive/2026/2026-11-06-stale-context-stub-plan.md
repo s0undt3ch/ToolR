@@ -4,53 +4,43 @@ Design: [`2026-11-06-stale-context-stub-design.md`](2026-11-06-stale-context-stu
 
 All commands run from the worktree root. Commits use the `Release-Notes: skip` trailer.
 
-## Task 1: failing guard test
+## Task 1: sync the stub
 
-File: `tests/context/test_stub_parity.py` (new; `tests/__init__.py` already exists).
+Run `.venv/bin/python -m mypy.stubtest toolr._context` and fix every real report in
+`crates/toolr-py/python/toolr/_context.pyi`:
 
-- Module constants: `PKG = Path(__file__).parents[1] / "crates/toolr-py/python/toolr"`.
-- Helper `_declared_names(path: Path) -> tuple[set[str], set[str]]`: parse with `ast`, return
-  `(top_level_names, context_member_names)`. Top-level covers `FunctionDef`, `ClassDef` and `Assign` / `AnnAssign`
-  targets that are `ast.Name`. Members come from the `Context` class body: `FunctionDef` names and `AnnAssign`
-  targets. Import top-of-file; no deferred imports.
-- `test_context_stub_declares_every_top_level_name`: assert `top(py) - top(pyi) == set()`.
-- `test_context_stub_declares_every_context_member`: assert `members(py) - members(pyi) == set()`.
+- add `def status_to_exit_code(status: int) -> int: ...` before `class Context`;
+- `Context.run`: `stream_output: bool | None = None`, add `interactive: bool = False`;
+- `Context.chdir`: add `@contextmanager`.
 
-Assertions compare against the empty set so a failure prints the missing names.
+Only the `Context.__init__` reports (msgspec-generated) may remain.
 
-Verify the test fails first:
+## Task 2: stubtest test
 
-```sh
-uv run pytest tests/context/test_stub_parity.py -q
-```
+- `tests/context/files/stubtest_allowlist.txt`: one entry, `toolr\._context\.Context\.__init__`, with a comment
+  saying why.
+- `tests/context/test_stub_parity.py`: one test running
+  `sys.executable -m mypy.stubtest toolr._context --allowlist <file>` from the repo root, asserting exit 0 and
+  showing stubtest's output on failure. Skipped when `toolr.utils._rust_utils` cannot be found.
 
-Expected: `test_context_stub_declares_every_top_level_name` fails with `{'status_to_exit_code'}`; the member test
-passes.
-
-## Task 2: fix the stub
-
-File: `crates/toolr-py/python/toolr/_context.pyi`: add `def status_to_exit_code(status: int) -> int: ...`
-immediately before `class Context(Struct, frozen=True):`.
+Prove it fails, restoring after each: delete `status_to_exit_code` from the stub; add `def ghost() -> int: ...`;
+rename a parameter.
 
 ## Task 3: verify
 
 ```sh
-uv run pytest tests/context/test_stub_parity.py tests/context/test_exit.py -q
-prek run mypy --files tests/context/test_exit.py      # was failing, must pass
-prek run mypy --all-files
-uv run ruff format tests/context/test_stub_parity.py
+uv run pytest tests/context -q
+prek run mypy --files tests/context/test_exit.py
 prek run --all-files
 mise run test
 ```
 
-`mise run test` is required because Python files changed. `cargo xtask build-skill-refs --check` runs inside it;
-this change touches no `__all__`, so it must stay green without a regen.
-
 ## Task 4: commit and archive
 
-1. `fix(toolr-py): declare status_to_exit_code in the _context stub`, with the stub and the test in one commit,
-   trailer `Release-Notes: skip`.
-2. Last commit before the PR: `git mv` the design and plan into `specs/archive/2026/`.
-3. `toolr release-notes check --base main` to confirm the skip is accepted.
+1. `fix(toolr-py): sync the _context stub with run and chdir` (stub only).
+2. `test(toolr-py): check the _context stub with stubtest` (test and allowlist).
+3. Last commit before the PR: `git mv` the design and plan into `specs/archive/2026/` (already done on this
+   branch; the content is updated in place).
+4. `toolr release-notes check --base main` to confirm the skips are accepted.
 
 Stage files explicitly by path; never `git add -A`.

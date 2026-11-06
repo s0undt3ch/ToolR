@@ -35,40 +35,54 @@ Root cause:
 - `--all-files` passes only because the hook then lists `_context.py` as an explicit source file. An explicit
   source is checked as the module itself, and the stub is ignored. A staged-only run that omits `_context.py`
   resolves the import through the stub and reports the gap.
-- Nothing guards the pair: no `stubtest` (it needs the built `_rust_utils` extension to import the module),
-  and no test compares the files.
+- Nothing guards the pair: the earlier draft of this spec assumed `stubtest` could not run because it needs the
+  built `_rust_utils` extension, but the dev `.venv` has it built and CI runs pytest against a prebuilt toolr-py
+  wheel.
 
-An AST diff of the two files shows the missing function is the only drift: top-level names differ by
-`status_to_exit_code` alone, and `Context` members match.
+`mypy.stubtest toolr._context` shows the stub had drifted by more than the one missing name:
+
+- `status_to_exit_code` was absent.
+- `Context.run` lacked `interactive: bool = False` and typed `stream_output` as `bool = True` where the runtime
+  is `bool | None = None`.
+- `Context.chdir` is `@contextmanager` at runtime but was a plain `def` in the stub.
+- Ten `Context.__init__` errors, which are noise: msgspec generates `__init__` and stubtest cannot see its
+  signature.
 
 ## Design
 
-1. Add `def status_to_exit_code(status: int) -> int: ...` to `_context.pyi`, placed before `class Context` to
-   mirror the `.py` order. Stub files carry no docstrings in this repo, so none is added.
-2. Add a drift guard: a pytest module at `tests/context/test_stub_parity.py` that parses `_context.py` and `_context.pyi` with `ast` and asserts every
-   top-level name and every `Context` member in the `.py` is declared in the `.pyi`.
+1. Sync the stub with the runtime: declare `status_to_exit_code`, add `interactive` and fix `stream_output` on
+   `run`, and decorate `chdir` with `@contextmanager`.
+2. Replace the drift guard with `tests/context/test_stub_parity.py`, which runs
+   `python -m mypy.stubtest toolr._context --allowlist tests/context/files/stubtest_allowlist.txt` in a
+   subprocess from the repo root and asserts exit 0, printing stubtest's output on failure. The allowlist holds
+   only the msgspec `__init__` noise. The test is skipped when `toolr.utils._rust_utils` is not importable, since
+   stubtest could then only report an import error.
 
-Why the guard is worth it: it is about 30 lines, needs no built extension or mypy run, and the drift is
-already a recurring failure with a confusing symptom (CI green, commit hook red). It checks names only, not
-signatures. Signature drift stays with mypy and review, which keeps the test cheap and unlikely to flake.
-The check is one-directional (`.py` names must appear in the `.pyi`), because a stub-only name is a different
-bug that mypy surfaces in the stub's own callers.
+Why stubtest and not an `ast` comparison: the first implementation compared declared names only. Review found it
+missed `async def`, nested bodies, re-exports, stub-only names and every signature difference, and it let the
+`run` and `chdir` drift through. stubtest imports the runtime and compares names, signatures, defaults and
+decorators in both directions, so none of those need bespoke code. Its limit is that it does not compare
+parameter annotations on their own; a pure annotation change with an unchanged default is not reported.
+
+CI: `_test.yml` runs `uv run --no-sync coverage run -m pytest` against the dev group (which includes mypy) plus
+the prebuilt toolr-py wheel, so the extension is present. `tests/distribution/` jobs run only that directory and
+never collect this test.
 
 Rejected:
 
 - Delete the `.pyi` and rely on the annotated `.py` plus `py.typed`. It removes the drift class entirely, but
   the stub exists on purpose (overloads and `...` bodies for the type surface, asserted by
-  `tests/distribution/test_toolr_py_wheel.py`) and removing it changes the shipped wheel. Out of scope for a
-  stale-name fix; raise separately if wanted.
-- `stubtest` in CI. It needs the compiled extension, which the pre-commit environment does not have.
+  `tests/distribution/test_toolr_py_wheel.py`) and removing it changes the shipped wheel. Out of scope; raise
+  separately if wanted.
+- An `ast` name comparison (the first implementation); see above.
 - Make the mypy hook always pass `_context.py`. It hides the stub from the hook, so it would leave users
   type-checking against a stale stub unnoticed.
 
 ## Scope and risk
 
 Type-only change plus one test file; no runtime behaviour changes. The stub affects downstream type checking
-only, so the user-visible effect is that `from toolr._context import status_to_exit_code` now type-checks. That
-is a private module (`_context`), so no release note: use a `Release-Notes: skip` trailer on the implementation
+only: `from toolr._context import status_to_exit_code` now type-checks, `ctx.run(..., interactive=True)` no longer
+fails a type check, and `ctx.chdir(...)` is typed as a context manager. No release note: use a `Release-Notes: skip` trailer on the implementation
 commits.
 
 ## Open questions

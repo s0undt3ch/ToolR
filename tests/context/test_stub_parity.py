@@ -1,61 +1,37 @@
-"""Guard the hand-written `_context.pyi` stub against drifting from `_context.py`.
+"""Check the hand-written `_context.pyi` against the real `_context` module with mypy's stubtest.
 
-mypy prefers a `.pyi` over its `.py`, so a name missing from the stub is invisible to a
-run that omits the `.py` source, even though the runtime module defines it.
+mypy prefers a `.pyi` over its `.py`, so a missing or stale stub entry is invisible to the runtime
+and to any test that imports the module. stubtest imports the runtime and compares signatures,
+names and defaults, which an AST comparison of the two files cannot do.
 """
 
 from __future__ import annotations
 
-import ast
-from dataclasses import dataclass
+import subprocess
+import sys
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
 
-PKG = Path(__file__).parents[2] / "crates/toolr-py/python/toolr"
+REPO_ROOT = Path(__file__).parents[2]
+ALLOWLIST = Path(__file__).parent / "files" / "stubtest_allowlist.txt"
+
+# `toolr._context` imports the compiled extension through `toolr.utils`; without it stubtest
+# could only report an import error, which says nothing about the stub.
+pytestmark = pytest.mark.skipif(
+    find_spec("toolr.utils._rust_utils") is None,
+    reason="the compiled toolr-py extension is not built, so stubtest cannot import toolr._context",
+)
 
 
-@dataclass(frozen=True)
-class DeclaredNames:
-    top_level: set[str]
-    context_members: set[str]
-
-
-@pytest.fixture
-def stub_names() -> tuple[DeclaredNames, DeclaredNames]:
-    """Parse the `.py` and the `.pyi` once per test, with the same rules for both."""
-
-    def parse(path: Path) -> DeclaredNames:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        top_level: set[str] = set()
-        context_members: set[str] = set()
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-                top_level.add(node.name)
-            elif isinstance(node, ast.Assign):
-                top_level.update(t.id for t in node.targets if isinstance(t, ast.Name))
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                top_level.add(node.target.id)
-            if isinstance(node, ast.ClassDef) and node.name == "Context":
-                for member in node.body:
-                    if isinstance(member, ast.FunctionDef):
-                        context_members.add(member.name)
-                    elif isinstance(member, ast.AnnAssign) and isinstance(member.target, ast.Name):
-                        context_members.add(member.target.id)
-        return DeclaredNames(top_level, context_members)
-
-    return parse(PKG / "_context.py"), parse(PKG / "_context.pyi")
-
-
-def test_context_stub_declares_every_top_level_name(
-    stub_names: tuple[DeclaredNames, DeclaredNames],
-) -> None:
-    source, stub = stub_names
-    assert source.top_level - stub.top_level == set()
-
-
-def test_context_stub_declares_every_context_member(
-    stub_names: tuple[DeclaredNames, DeclaredNames],
-) -> None:
-    source, stub = stub_names
-    assert source.context_members - stub.context_members == set()
+def test_context_stub_matches_runtime() -> None:
+    # cwd is the repo root so stubtest picks up `[tool.mypy]` (mypy_path) from pyproject.toml.
+    result = subprocess.run(  # noqa: S603  # interpreter and allowlist path are test-controlled
+        [sys.executable, "-m", "mypy.stubtest", "toolr._context", "--allowlist", str(ALLOWLIST)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        check=False,
+    )
+    assert result.returncode == 0, f"stubtest found drift:\n{result.stdout}\n{result.stderr}"
