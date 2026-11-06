@@ -436,8 +436,6 @@ def _coerce_args(
     target: Callable[..., Any],
     raw: dict[str, Any],
     enum_modules: dict[str, str] | None = None,
-    *,
-    quiet: bool = False,
 ) -> tuple[list[Any], dict[str, Any]]:
     """Coerce `raw` against `target`'s actual type hints.
 
@@ -456,27 +454,26 @@ def _coerce_args(
     :class:`RunnerSpec`) seeds the ``localns`` the annotations are
     evaluated against — see :func:`_localns_for_enum_modules`. A parameter
     whose annotation still can't be resolved gets its raw value, and a
-    warning on stderr unless ``quiet``.
+    warning on stderr, `-q` included.
     """
     localns = _localns_for_enum_modules(enum_modules) if enum_modules else None
     resolved, sig = resolve_hints(target, localns), signature(target)
     hints = resolved.hints
-    if not quiet:
-        where = qualified_name(target)
-        for name, exc in resolved.unresolved.items():
-            # The runner passes `ctx` itself and never converts it.
-            if name == "ctx":
-                continue
-            advice = (
-                " Import it at runtime, not only under `if TYPE_CHECKING:`."
-                if isinstance(exc, (NameError, AttributeError))
-                else ""
-            )
-            print(  # noqa: T201
-                f"toolr: warning: can't resolve the type of `{name}` on {where} ({exc}); "
-                f"passing the raw value.{advice}",
-                file=sys.stderr,
-            )
+    where = qualified_name(target)
+    for name, exc in resolved.unresolved.items():
+        # The runner passes `ctx` itself and never converts it.
+        if name == "ctx":
+            continue
+        advice = (
+            " Import it at runtime, not only under `if TYPE_CHECKING:`."
+            if isinstance(exc, (NameError, AttributeError))
+            else ""
+        )
+        print(  # noqa: T201
+            f"toolr: warning: can't resolve the type of `{name}` on {where} ({exc}); "
+            f"passing the raw value.{advice}",
+            file=sys.stderr,
+        )
     var_positional_name = next(
         (name for name, p in sig.parameters.items() if p.kind == p.VAR_POSITIONAL),
         None,
@@ -657,14 +654,13 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         # lives on the Rust side, which knows the cwd, arg types, and values.
         _append_repo_root(str(repo_root))
         target = _import_target(spec)
-        quiet = ctx.verbosity is ConsoleVerbosity.QUIET
         if spec.dispatch is not None:
             # Dispatched leaf: `target` is the parent dispatcher, `args`
             # carries the parent's own kwargs, `dispatch` carries the
             # child name/args/schema. Coerce the parent kwargs against
             # the parent's hints — `invoke_dispatcher` injects the
             # `DispatchCommand` keyword on top of those.
-            _, parent_kwargs = _coerce_args(target, spec.args, spec.enum_modules, quiet=quiet)
+            _, parent_kwargs = _coerce_args(target, spec.args, spec.enum_modules)
             invoke_dispatcher(
                 ctx=ctx,
                 func=target,
@@ -674,7 +670,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
                 child_schema=spec.dispatch.schema,
             )
         else:
-            var_args, kw_args = _coerce_args(target, spec.args, spec.enum_modules, quiet=quiet)
+            var_args, kw_args = _coerce_args(target, spec.args, spec.enum_modules)
             target(ctx, *var_args, **kw_args)
     except SystemExit as exc:
         code = exc.code

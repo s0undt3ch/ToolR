@@ -17,6 +17,8 @@ use toolr_core::cache::{
 /// Output of one prune run, classified so the root `--quiet` rule lives in one place.
 struct Report<'a> {
     out: &'a mut dyn Write,
+    /// Where warnings go; `None` is the process's stderr.
+    err: Option<&'a mut dyn Write>,
     quiet: bool,
     dry_run: bool,
 }
@@ -25,9 +27,17 @@ impl<'a> Report<'a> {
     fn new(out: &'a mut dyn Write, quiet: bool, dry_run: bool) -> Self {
         Self {
             out,
+            err: None,
             quiet,
             dry_run,
         }
+    }
+
+    /// Send warnings to `err` rather than the process's stderr.
+    #[cfg(test)]
+    fn with_err(mut self, err: &'a mut dyn Write) -> Self {
+        self.err = Some(err);
+        self
     }
 
     /// Success chatter. A dry run's lines are its answer, so `--quiet` keeps them.
@@ -43,9 +53,12 @@ impl<'a> Report<'a> {
         writeln!(self.out, "{line}")
     }
 
-    /// Warnings print under `--quiet` too: it drops success lines, never warnings.
+    /// Warnings go to stderr and print under `--quiet` too: it drops success lines, never warnings.
     fn warn(&mut self, line: &str) -> io::Result<()> {
-        writeln!(self.out, "toolr: warning: {line}")
+        match self.err.as_deref_mut() {
+            Some(err) => writeln!(err, "toolr: warning: {line}"),
+            None => writeln!(io::stderr(), "toolr: warning: {line}"),
+        }
     }
 }
 
@@ -445,12 +458,13 @@ mod tests {
     fn remove_entry_swallows_already_missing_directory_and_warns() {
         let tmp = TempDir::new().unwrap();
         let missing = tmp.path().join("never-was");
-        let mut out: Vec<u8> = Vec::new();
+        let (mut out, mut err): (Vec<u8>, Vec<u8>) = (Vec::new(), Vec::new());
         // `remove_dir_all` on a non-existent path returns `NotFound`; the
         // helper writes a warning and returns Ok(()) regardless so the
         // surrounding loop doesn't abort mid-prune.
-        remove_entry(&missing, &mut Report::new(&mut out, false, false)).unwrap();
-        let s = String::from_utf8(out).unwrap();
+        let rep = &mut Report::new(&mut out, false, false).with_err(&mut err);
+        remove_entry(&missing, rep).unwrap();
+        let s = String::from_utf8(err).unwrap();
         assert!(s.contains("warning: failed to remove"));
     }
 
@@ -626,10 +640,11 @@ mod tests {
     #[test]
     fn remove_entry_quiet_still_warns() {
         let tmp = TempDir::new().unwrap();
-        let mut out: Vec<u8> = Vec::new();
-        let rep = &mut Report::new(&mut out, true, false);
+        let (mut out, mut err): (Vec<u8>, Vec<u8>) = (Vec::new(), Vec::new());
+        let rep = &mut Report::new(&mut out, true, false).with_err(&mut err);
         remove_entry(&tmp.path().join("never-was"), rep).unwrap();
-        let s = String::from_utf8(out).unwrap();
-        assert!(s.contains("warning: failed to remove"), "got {s}");
+        let s = String::from_utf8(err).unwrap();
+        assert!(s.contains("toolr: warning: failed to remove"), "got {s}");
+        assert!(out.is_empty());
     }
 }

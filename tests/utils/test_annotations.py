@@ -202,7 +202,7 @@ def test_lazy_annotations_resolve_per_parameter(make_tools_module: ModuleFactory
     resolved = resolve_hints(mod.f)
     assert resolved.hints == {"path": Path, "count": int}
     assert list(resolved.unresolved) == ["x"]
-    _, keyword = _coerce_args(mod.f, {"path": "some/dir", "x": "raw", "count": "3"}, quiet=True)
+    _, keyword = _coerce_args(mod.f, {"path": "some/dir", "x": "raw", "count": "3"})
     assert keyword == {"path": Path("some/dir"), "x": "raw", "count": 3}
     assert _coerce_args(mod.opt, {})[1] == {"p": None}
     assert detect_dispatch_parameter(mod.disp) == "cmd"
