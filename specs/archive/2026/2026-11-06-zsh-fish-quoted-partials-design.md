@@ -1,6 +1,6 @@
 # zsh and fish: escaped and quoted partial values (FU-33)
 
-Status: proposed. Audit follow-up FU-33, found in #685 round 2 and pre-existing.
+Status: shipped in #698. Audit follow-up FU-33, found in #685 round 2 and pre-existing.
 
 Written against `main`, which now includes:
 
@@ -25,11 +25,14 @@ Fixture: `Literal["fast", "dry run", "dry walk"]` on `--mode`, a `pathlib.Path` 
 | zsh | `--mode 'dry r` | none | `dry run` |
 | zsh | `--mode "dry r` | none | `dry run` |
 | zsh | `--mode=dry\ r` | none | `dry run` |
+| zsh | `--mode dr'y r`, `--mode d"ry r` | none | `dry run` |
+| zsh | `--mode='dry r` | none | `dry run` |
 | zsh | `--cfg files/with\ s` | `_files` (zsh's own, so it works) | unchanged |
 | fish | `--mode dry\ r` | none | `dry run` |
 | fish | `--mode 'dry r` | none | `dry run` |
 | fish | `--mode "dry r` | none | `dry run` |
 | fish | `--mode=dry\ r` | none | `--mode=dry run` |
+| fish | `--mode "` (lone quote) | every choice | every choice |
 | fish | `--cfg files/with\ s` | `files/with space.txt` (works) | unchanged, must stay on the raw word |
 | bash on `main` | `--mode dry\ r` | `dry\ run` | covered by #690 |
 | bash on `main` | `--mode "dry r`, `--mode 'dry r` | none | `dry run` on #690 |
@@ -78,8 +81,10 @@ script to say which shell it came from.
 In `_toolr`:
 
 - Dequote the current word and every earlier word with `(Q)`: `${(@Q)words[2,CURRENT-1]}`.
-- For the current word, if `compstate[quote]` is set and `(Q)` left the word unchanged (an open quote), append
-  the quote's last character (`'`, `"`, or `'` for `$'`) and apply `(Q)` again. For a backtick, offer nothing.
+- For the current word, if `(Q)` left it unchanged and it holds a quote (so a quote is open), try closing it with
+  the last character of `compstate[quote]` (`'`, `"`, or `'` for `$'`), then `'`, then `"`, and keep the first that
+  `(Q)` accepts. zsh sets `compstate[quote]` only when the quote opens the word, so a quote opened mid-word
+  (`dr'y r`, `--mode='dry r`) relies on the fallbacks. For a backtick, offer nothing.
 - The `--opt=value` test (`attached`) runs on the dequoted word.
 - The `10`/`11` exits still call `_files` untouched: zsh's `_files` dequotes the word itself.
 
@@ -97,10 +102,14 @@ dequoted only inside quotes (`dry\ w` stays escaped). `compadd` without `-Q` re-
 
 In `__toolr_complete`:
 
-- Keep `set -l raw (commandline -ct)` and derive `current` as `string unescape -- $raw`.
-- The engine gets `current`. `opt_prefix` and `bare` for the `0` reply branch come from `current`.
+- Keep `set -l raw (commandline -ct)` and derive `current` as `string unescape -- "$raw" | string collect`.
+  `string collect` keeps an unescaped newline inside one word; a bare command substitution would split it.
+- `string collect` exits 1 on empty input, so the script checks `string unescape`'s own status in `$pipestatus`.
+  If the unescape failed (a lone trailing backslash), `current` falls back to `raw`. If it succeeded with no output
+  (`"`, `''`), `current` is one empty word, so a lone quote still offers every choice.
+- The engine gets `current`. `opt_prefix` for the `0` reply branch comes from `current`.
   fish matches the replies against the unescaped token, so `--mode=dry run` is right.
-- The `10`/`11` branches keep using the raw word (`raw` minus the `--opt=` prefix) for `__fish_complete_path`.
+- The `10`/`11` branches use `raw_prefix` and `bare`, both from the raw word, for `__fish_complete_path`.
   Unescaping there breaks paths with spaces (verified: it printed nothing).
 - Print replies unescaped. fish escapes on insertion, as `complete -C` output shows (`dry run` for `dry\ r`).
   Do not pass `--no-escape`.
@@ -119,6 +128,8 @@ In `__toolr_complete`:
   against the raw `PREFIX`, so the decoded word the engine matched never lines up.
 - A word ending in a lone backslash (`dry\`): fish's `string unescape` fails on it, so the script falls back to the raw
   word and matches nothing. zsh's `(Q)` drops the backslash, and whether the match is inserted is up to zsh's matcher.
+- fish: `string collect` trims trailing newlines, so a value that really ends in a newline loses it. `-N` would also
+  keep the newline `string unescape` prints after every value.
 
 ## Open questions
 

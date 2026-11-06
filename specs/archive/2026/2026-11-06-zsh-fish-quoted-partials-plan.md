@@ -3,6 +3,20 @@
 Design: `specs/2026-11-06-zsh-fish-quoted-partials-design.md`. Branch `fix/zsh-fish-quoted-partials`, one PR,
 based on `main`, which now includes #690.
 
+## Shipped differently
+
+The tests and helpers landed under other names than the ones planned below:
+
+- zsh stub tests: `zsh_quoted_and_escaped_partials_match_a_choice` (one table covering backslash, open, closed,
+  `$'…'` and mid-word quotes), `zsh_attached_option_with_escaped_value_matches`,
+  `zsh_earlier_quoted_words_reach_the_engine_unquoted`, `zsh_backtick_quote_offers_nothing` and
+  `zsh_quoted_substitution_partial_is_inert`. The driver is `zsh_run_with`.
+- zsh live Tab: `zsh_tab_completes_quoted_and_escaped_partials_end_to_end`, in the default suite.
+- fish: `fish_quoted_and_escaped_partials_match_a_choice`, `fish_quoted_and_escaped_path_partials_still_complete`,
+  `fish_empty_quoted_partial_offers_every_choice`, `fish_unescaped_newline_stays_one_word` and
+  `fish_quoted_substitution_partial_is_inert`.
+- No `_toolr_unquote` helper: the dequoting is inline in `_toolr`.
+
 ## Files
 
 - `crates/toolr-core/src/complete/scripts/zsh.zsh`
