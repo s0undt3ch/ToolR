@@ -12,7 +12,7 @@ sees a 5.3-only difference, which is why it looked version-specific.
 ### Reproduction
 
 Tools: bash 5.1.16, 5.2.37 and 5.3.0 from `mise` (`conda:bash@<version>`; `mise ls-remote conda:bash` offers nothing
-older than 5.1.16). Bash 4.4 could not be built locally, so the floor is untested (see "Open questions"). The system
+older than 5.1.16). Bash 4.4 could not be built locally, so the floor is untested here (see "Decisions"). The system
 bash is 3.2, which the script refuses.
 
 Harness: the dev `toolr` binary, a scratch project with `--cfg: pathlib.Path` and `--out: DirectoryPath`, and an
@@ -104,12 +104,12 @@ done < <(
 - The `$`/backtick guard from #681 stays exactly where it is and still returns early. It no longer protects a
   `compgen` call, but keeping it means no behaviour change for those words in this fix.
 
-`~` and `~user` need the home directory, which `compgen` used to resolve. A bare `~` uses `$HOME`. For `~user`, the
-name must match `^[A-Za-z0-9._][A-Za-z0-9._-]*$`, then `eval "_toolr_home=~$_toolr_user"` resolves it; an unknown
-user leaves `~user` unexpanded, which lists nothing. The `eval` sees only a validated name. The glob output is mapped
-back to the typed form (`~` or `~user` kept bare, the rest quoted) before the `_toolr_raw_prefix` strip, and the
-separate `compgen -d` probe for tilde directories goes away because `[[ -d ]]` now tests a real path. The `./` hack for
-a `$NAME` value starting with `~` also goes away: a quoted pattern never tilde-expands.
+`~` and `~user` need the home directory, which `compgen` used to resolve. A bare `~` with `$HOME` set globs under
+`$HOME`, and the glob output is mapped back to the typed `~` (kept bare, the rest quoted) before the
+`_toolr_raw_prefix` strip. `~user`, and `~` with `HOME` unset, keep today's `compgen` path, including its `compgen -d`
+probe for directories, but only when the name matches `^[A-Za-z0-9._][A-Za-z0-9._-]*$` and the rest of the word holds
+no `\`, `'` or `"`. Then readline's dequoting has nothing to change. Any other `~user` word offers nothing. The script
+has no `eval`. The `./` hack for a `$NAME` value starting with `~` goes away: a quoted pattern never tilde-expands.
 
 ### 2. Parse quotes in the cursor word and quote replies for the open quote
 
@@ -180,11 +180,9 @@ with each one first on `PATH`.
 
 Yes. User-visible fix: `fix(complete)` with a queued note.
 
-## Open questions
+## Decisions (2026-11-06)
 
-1. Bash 4.4 is the documented floor but no CI job runs it, and it could not be built here. Accept 5.1.16 as the
-   lowest tested version, or add a 4.4 build to CI?
-2. `~user` resolution uses `eval` on a name validated against `^[A-Za-z0-9._][A-Za-z0-9._-]*$`. The script so far has
-   no `eval`. Accept that, or keep `compgen` for `~user` words only when the rest holds no `\`, `'` or `"`?
-3. Should the `$`/backtick guard be relaxed now that nothing hands the word to `compgen`? A file whose name holds a
-   literal `$` would then complete. This design keeps the guard as is.
+1. Bash 4.4 stays the documented floor. It is tested elsewhere; this change is checked locally on 5.1.16, 5.2.37 and
+   5.3 from mise, and uses no bash feature newer than 4.4. The CI matrix is unchanged here.
+2. `~user` keeps `compgen`, after the name is validated, and only when the rest holds no `\`, `'` or `"`. No `eval`.
+3. The `$`/backtick guard stays as it is.

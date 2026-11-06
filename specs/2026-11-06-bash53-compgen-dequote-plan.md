@@ -9,7 +9,7 @@ supported bash (audit FU-24 remainder).
 **Architecture:** `_toolr_complete_paths` lists paths with a literal glob in a subshell instead of `compgen`, and the
 cursor-word parser in `_toolr_complete` understands quotes and quotes each reply for the open quote readline is in.
 
-**Spec:** `specs/2026-11-06-bash53-compgen-dequote-design.md`. Settle its "Open questions" with the user before Task 2.
+**Spec:** `specs/2026-11-06-bash53-compgen-dequote-design.md`. Its "Decisions" section records the user's calls.
 
 ## Global constraints
 
@@ -90,14 +90,14 @@ done
 - [ ] Drop `.` and `..` from the glob, and add `$_toolr_dir.` and `$_toolr_dir..` back when `_toolr_leaf` starts with
       `.` and is a prefix of them.
 - [ ] `-d` mode: skip names failing `[[ -d $_toolr_name ]]`.
-- [ ] Tilde: when `_toolr_tilde_ok` (Task 3; until then, a leading `~`) and the word is `~` or `~user` up to the first
-      `/`, resolve the home (`$HOME`, or the validated `eval` from the spec), glob under it, and map each name back to
-      the typed `~`/`~user` before the `_toolr_raw_prefix` strip. Delete `_toolr_tilde_dirs` and its `compgen -d`
-      probe.
+- [ ] Tilde: a bare `~` with `HOME` set globs under `$HOME` and maps each name back to the typed `~` before the
+      `_toolr_raw_prefix` strip. `~user` (and `~` with `HOME` unset) keeps the `compgen` listing and its `compgen -d`
+      probe, only when the name matches `^[A-Za-z0-9._][A-Za-z0-9._-]*$` and the rest holds no `\`, `'` or `"`;
+      otherwise it offers nothing. No `eval`.
 - [ ] `$NAME`: drop the `./` prefix for a value starting with `~`; keep the rest of the `$NAME` logic.
 - [ ] Keep the `$`/backtick guard line and its comment's first sentence; reword its second sentence to say the guard
       predates the glob and is kept on purpose.
-- [ ] `rg -n compgen crates/toolr-core/src/complete/scripts/bash.sh` returns only comments.
+- [ ] `compgen` appears only on the `~user` path.
 - [ ] Run the loop. The backslash rows (`files/back\\s`, `--cfg=files/back\\s`) and the newline `Drive` test pass. All
       existing `bash_` tests pass.
 - [ ] Commit: `fix(complete): list bash path candidates with a literal glob, not compgen`.
