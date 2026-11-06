@@ -46,6 +46,7 @@ jobs:
       test-pythons: ${{ steps.generate-build-matrix.outputs.test-pythons }}
       test-pythons-narrow: ${{ steps.generate-build-matrix.outputs.test-pythons-narrow }}
       run-full-bench: ${{ steps.generate-build-matrix.outputs.run-full-bench }}
+      run-full-ci: ${{ steps.generate-build-matrix.outputs.run-full-ci }}
       # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
       # reusable workflows can read them via `needs.prepare-ci.outputs.*`
       # (the `env` context is not allowed in workflow-call `with:` blocks).
@@ -60,6 +61,8 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # `generate-build-matrix` diffs the PR's base and head commits.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Load shared env vars
@@ -169,6 +172,9 @@ jobs:
 
   prepare-release:
     name: Prepare Release
+    # Every build, test, docs and bench job needs this one, so skipping it
+    # skips them all. Pre-commit and the pipeline gate still run.
+    if: needs.prepare-ci.outputs.run-full-ci == 'true'
     needs:
       - prepare-ci
       - pre-commit
@@ -799,7 +805,7 @@ jobs:
     name: Codecov Notify
     # `.codecov.yml` sets `manual_trigger`, so Codecov computes statuses
     # only once this runs, after every job that uploads coverage.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.prepare-ci.outputs.run-full-ci == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
