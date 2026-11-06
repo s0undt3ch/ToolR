@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
+import toolr
 from toolr.testing._groups import GroupDeclaration
 from toolr.testing._groups import _format_contradictory_groups
 from toolr.testing._groups import _format_undescribed_groups
@@ -72,6 +75,37 @@ def test_paths_follow_the_parsers_resolution(make_tools_dir: Callable[..., Path]
         ("ci.deep", "tools.b"),
         ("pkg", "tools.pkg"),
     ]
+
+
+def test_aliases_count_once_their_module_is_imported(
+    make_tools_dir: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": """
+                from toolr import command_group as cg
+                a = cg("a", "A", "A.")
+                b: CommandGroup = command_group("b", "B", "B.")
+                c: CommandGroup
+                d = local("d", "D", "D.")
+                obj.attr: CommandGroup = cg("e", "E", "E.")
+            """,
+        }
+    )
+    assert [d.path for d in _group_declarations(tools)] == ["b"]
+
+    def module(name: str, file: Path | None, **globals_: object) -> None:
+        mod = ModuleType(name)
+        if file is not None:
+            mod.__file__ = str(file)
+        vars(mod).update(globals_)
+        monkeypatch.setitem(sys.modules, name, mod)
+
+    module("tools.m", tools / "m.py", cg=toolr.command_group, local=print)
+    # Neither is a module under `tools`, so neither's globals are read.
+    module("tools.elsewhere", tools.parent / "m.py", local=toolr.command_group)
+    module("tools.builtin", None)
+    assert [d.path for d in _group_declarations(tools)] == ["a", "b"]
 
 
 def test_description_and_contradiction_flags(make_tools_dir: Callable[..., Path]) -> None:

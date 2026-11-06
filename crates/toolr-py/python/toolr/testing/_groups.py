@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import ast
 import os
+import sys
 from enum import Enum
 from pathlib import Path
+from typing import Any
 from typing import NamedTuple
 
+import toolr
 from toolr.testing._unknown_groups import _escape_control_chars
 
 
@@ -292,9 +295,23 @@ class _GroupCall(NamedTuple):
     call: ast.Call
 
 
-def _group_calls(tree: ast.Module) -> list[_GroupCall]:
+def _is_command_group(func: ast.expr, namespace: dict[str, Any]) -> bool:
+    """Whether ``func`` is toolr's ``command_group``.
+
+    A bare name counts when spelt ``command_group`` or bound to it in the
+    module's globals; any ``<x>.command_group`` counts. Mirrors
+    ``crates/toolr-core/src/parser/groups.rs::is_command_group_call``, which
+    resolves aliases by import chain: change both together.
+    """
+    if isinstance(func, ast.Name):
+        return func.id == "command_group" or namespace.get(func.id) is toolr.command_group
+    return isinstance(func, ast.Attribute) and func.attr == "command_group"
+
+
+def _group_calls(tree: ast.Module, namespace: dict[str, Any]) -> list[_GroupCall]:
     """Each top-level ``command_group(...)`` call, with its bound name.
 
+    ``namespace`` is the imported module's globals, or empty before import.
     Mirrors the statement match in
     ``crates/toolr-core/src/parser/groups.rs::extract_groups`` and
     ``group_binding``.
@@ -306,13 +323,27 @@ def _group_calls(tree: ast.Module) -> list[_GroupCall]:
         if isinstance(stmt, ast.Assign):
             if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
                 var, value = stmt.targets[0].id, stmt.value
+        elif isinstance(stmt, ast.AnnAssign):
+            if isinstance(stmt.target, ast.Name):
+                var, value = stmt.target.id, stmt.value
         elif isinstance(stmt, ast.Expr):
             value = stmt.value
-        if isinstance(value, ast.Call) and (
-            (isinstance(value.func, ast.Name) and value.func.id == "command_group")
-            or (isinstance(value.func, ast.Attribute) and value.func.attr == "command_group")
-        ):
+        if isinstance(value, ast.Call) and _is_command_group(value.func, namespace):
             found.append(_GroupCall(var, value))
+    return found
+
+
+def _namespaces(tools_dir: Path) -> dict[Path, dict[str, Any]]:
+    """The globals of each imported ``tools`` module under ``tools_dir``, by resolved path."""
+    root = tools_dir.resolve()
+    found: dict[Path, dict[str, Any]] = {}
+    for name, module in list(sys.modules.items()):
+        file = getattr(module, "__file__", None)
+        if file is None or (name != "tools" and not name.startswith("tools.")):
+            continue
+        path = Path(file).resolve()
+        if path.is_relative_to(root):
+            found.setdefault(path, vars(module))
     return found
 
 
@@ -322,16 +353,18 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
     Mirrors ``crates/toolr-core/src/parser/groups.rs::extract_groups`` and its
     ``parse_group_call``, including how a parent variable resolves: this
     module's bindings first, then the last binding of that name in an earlier
-    file.
+    file. An alias of ``command_group`` counts only once its module is
+    imported, as ``_unsupported_commands`` reads commands.
     """
     declarations: list[GroupDeclaration] = []
     global_vars: dict[str, str] = {}
+    namespaces = _namespaces(tools_dir)
     for file in _python_files(tools_dir):
         tree = ast.parse(file.read_bytes())
         module = _module_path(tools_dir, file)
         source = _Source.of(tree)
         local: list[tuple[str, str]] = []
-        for var, call in _group_calls(tree):
+        for var, call in _group_calls(tree, namespaces.get(file.resolve(), {})):
             parent_var = _parent_var(call)
             parent = None
             if parent_var is not None:
