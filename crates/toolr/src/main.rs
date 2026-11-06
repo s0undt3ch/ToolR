@@ -53,7 +53,7 @@ fn run() -> anyhow::Result<ExitCode> {
     // Covers fragments and a hand-edited committed manifest alike. Tab
     // completion drops the same entries in `resolve_manifest_at_tab`.
     manifest.drop_unsafe_names();
-    if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
+    if !bootstrap::should_skip_auto_rebuild(&argv) {
         // Build warnings come only from a manifest built on this run. When the
         // bootstrap built it, the freshness step's rebuild of the same tree
         // repeats them, so only the bootstrap's print.
@@ -138,7 +138,7 @@ fn maybe_emit_cache_hint_from_argv() {
 }
 
 /// Best-effort scan of `argv` for a `--quiet` / `-q` request, used to
-/// gate the passive cache hint. Stops at the `--` separator so args
+/// gate the passive cache hint (advice, so `-q` drops it; warnings print under `-q`). Stops at the `--` separator so args
 /// belonging to a wrapped command (`toolr project venv run -- <cmd>
 /// --quiet`) are never mistaken for toolr's own quiet flag.
 fn argv_requests_quiet(argv: &[String]) -> bool {

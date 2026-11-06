@@ -279,7 +279,7 @@ fn no_warning_when_venv_toolr_py_matches_binary() {
 }
 
 #[test]
-fn quiet_suppresses_the_version_warning() {
+fn quiet_keeps_the_version_warning() {
     let p = synced_project();
     install_toolr_py(&p, "0.0.1");
     let output = p
@@ -289,5 +289,5 @@ fn quiet_suppresses_the_version_warning() {
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "stderr:\n{stderr}");
-    assert!(!stderr.contains("toolr-py"), "stderr:\n{stderr}");
+    assert!(stderr.contains("toolr-py 0.0.1"), "stderr:\n{stderr}");
 }

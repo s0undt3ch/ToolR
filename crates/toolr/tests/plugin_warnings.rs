@@ -122,10 +122,12 @@ fn warning_repeats_on_every_run() {
 }
 
 #[test]
-fn quiet_suppresses_the_warning() {
+fn quiet_keeps_the_warning() {
     let p = project_with_skipped_plugin();
-    let stderr = p.stderr(&["--quiet", "--help"]);
-    assert!(!stderr.contains("warning: skipping"), "stderr:\n{stderr}");
+    for flag in ["-q", "--quiet"] {
+        let stderr = p.stderr(&[flag, "--help"]);
+        assert!(stderr.contains(SKIP_WARNING), "{flag}, stderr:\n{stderr}");
+    }
 }
 
 #[test]

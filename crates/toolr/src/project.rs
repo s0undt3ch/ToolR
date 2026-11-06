@@ -17,7 +17,8 @@ use toolr_core::trust::{TrustError, TrustMode, TrustStore, require_trust, shown,
 /// output, uv's `--quiet` and the uv install prompt. It must never feed a guard that turns
 /// an error into exit 0: only the subcommand's own flag does that, for the mise hook (see
 /// `venv_sync_unattended_quiet_exit`). A new handler that may install uv must honour it and
-/// get a case in `tests/quiet_uv_consent.rs`.
+/// get a case in `tests/quiet_uv_consent.rs`. `--quiet` drops success lines and advice,
+/// never errors, refusals or warnings: a handler's warnings print under it.
 pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     match matches.subcommand() {
         Some(("init", init_m)) => project_init(init_m, root_quiet),

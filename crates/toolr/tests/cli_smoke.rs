@@ -488,7 +488,7 @@ fn dispatch_with_unwritable_meta_json(
 }
 
 /// A sidecar that can't be written never stops dispatch. A cache venv warns
-/// unless `-q`; an in-tree venv, often under a read-only cache home in CI,
+/// even under `-q`; an in-tree venv, often under a read-only cache home in CI,
 /// warns only with `--debug`.
 #[test]
 #[cfg(unix)]
@@ -498,7 +498,7 @@ fn dispatch_touch_failure_warning_follows_location_and_verbosity() {
         (VenvLocation::InTree, &["-q"], false),
         (VenvLocation::InTree, &["--debug"], true),
         (VenvLocation::Cache, &[], true),
-        (VenvLocation::Cache, &["-q"], false),
+        (VenvLocation::Cache, &["-q"], true),
         (VenvLocation::Cache, &["--debug"], true),
     ];
     for &(location, flags, warns) in cases {
@@ -510,7 +510,7 @@ fn dispatch_touch_failure_warning_follows_location_and_verbosity() {
             warns,
             "{case}: stderr:\n{stderr}"
         );
-        if flags == ["-q"] {
+        if location == VenvLocation::InTree && flags == ["-q"] {
             assert!(!stderr.contains("toolr:"), "{case}: stderr:\n{stderr}");
         }
         // The fake python exits 1: the runner was spawned, so the failure didn't abort dispatch.
@@ -862,9 +862,9 @@ fn group_conflict_warns_once_per_build() {
     assert_eq!(stderr_of(root, &["--help"]), "");
     assert_eq!(stderr_of(root, &["-q", "--help"]), "");
 
-    // A changed module rebuilds the manifest, which warns again, unless quiet.
+    // A changed module rebuilds the manifest, which warns again, `-q` included.
     std::fs::write(root.join("tools/m3.py"), "x = 1\n").unwrap();
-    assert_eq!(stderr_of(root, &["-q", "--help"]), "");
+    assert_eq!(stderr_of(root, &["-q", "--help"]), GROUP_CONFLICT_WARNING);
     std::fs::write(root.join("tools/m3.py"), "x = 2\n").unwrap();
     assert_eq!(stderr_of(root, &["--help"]), GROUP_CONFLICT_WARNING);
 

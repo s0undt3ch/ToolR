@@ -167,7 +167,7 @@ fn build_root_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .conflicts_with("debug")
                 .help_heading(OUTPUT_HEADING)
-                .help("Suppress non-error output and never prompt to install uv."),
+                .help("Suppress non-error output except warnings, and never prompt to install uv."),
         )
         .arg(
             Arg::new("timestamps")
