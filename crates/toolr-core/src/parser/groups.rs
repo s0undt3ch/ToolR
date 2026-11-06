@@ -161,12 +161,13 @@ pub fn extract_groups(
     module: &ModModule,
     module_docstring: Option<&str>,
     global_vars: &HashMap<String, String>,
-    names: ToolrNames,
+    names: &ToolrNames,
+    module_path: &str,
 ) -> Vec<GroupBinding> {
     let source = Source::new(module, module_docstring);
     let mut out: Vec<GroupBinding> = Vec::new();
     for stmt in &module.body {
-        if let Some(binding) = group_binding(stmt, &source, &out, global_vars, names) {
+        if let Some(binding) = group_binding(stmt, &source, &out, global_vars, names, module_path) {
             out.push(binding);
         }
     }
@@ -309,7 +310,8 @@ fn group_binding(
     source: &Source<'_>,
     local: &[GroupBinding],
     global_vars: &HashMap<String, String>,
-    names: ToolrNames,
+    names: &ToolrNames,
+    module_path: &str,
 ) -> Option<GroupBinding> {
     // Two recognised shapes:
     //   1. `var = command_group(...)` or `var: T = command_group(...)` —
@@ -344,7 +346,7 @@ fn group_binding(
         }
         _ => return None,
     };
-    if !is_command_group_call(call, names) {
+    if !is_command_group_call(call, names, module_path) {
         return None;
     }
     // Parent path can come from three source patterns:
@@ -434,10 +436,11 @@ fn single_name_target(targets: &[Expr]) -> Option<String> {
 ///
 /// `toolr.testing._groups._is_command_group` mirrors this in Python, resolving
 /// aliases from source with `_binding`; change both together.
-fn is_command_group_call(call: &ExprCall, names: ToolrNames) -> bool {
+fn is_command_group_call(call: &ExprCall, names: &ToolrNames, module: &str) -> bool {
     match call.func.as_ref() {
         Expr::Name(n) => {
-            n.id.as_str() == "command_group" || names.command_group(n.id.as_str()) == Binding::Toolr
+            n.id.as_str() == "command_group"
+                || names.command_group(module, n.id.as_str()) == Binding::Toolr
         }
         Expr::Attribute(a) => a.attr.as_str() == "command_group",
         _ => false,
@@ -605,7 +608,8 @@ mod tests {
             &parse_src(src),
             None,
             &HashMap::new(),
-            ToolrNames::new(&all, "tools.m"),
+            &ToolrNames::new(&all),
+            "tools.m",
         )
     }
 
@@ -615,7 +619,7 @@ mod tests {
             "tools.m".to_string(),
             ImportTable::from_module(m, "tools.m", false),
         )]);
-        extract_groups(m, doc, &HashMap::new(), ToolrNames::new(&all, "tools.m"))
+        extract_groups(m, doc, &HashMap::new(), &ToolrNames::new(&all), "tools.m")
     }
 
     fn paths(groups: &[GroupBinding]) -> Vec<(String, String)> {

@@ -11,8 +11,8 @@ use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
-        BindingCache, CommandNameConflict, MissingDocstring, ToolrNames, UnsupportedCommand,
-        binding_vars, detect_name_conflicts, detect_unsupported_commands, extract_commands,
+        CommandNameConflict, MissingDocstring, ToolrNames, UnsupportedCommand, binding_vars,
+        detect_name_conflicts, detect_unsupported_commands, extract_commands,
         format_missing_docstrings, missing_docstrings,
     },
     groups::{Field, GroupFields, extract_groups},
@@ -177,22 +177,23 @@ fn build_commands_inner(
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
     let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
     let mut unsupported: Vec<UnsupportedCommand> = Vec::new();
-    let binding_cache = BindingCache::default();
+    let names = ToolrNames::new(&all_imports);
     for path in py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
-        name_conflicts.extend(detect_name_conflicts(&module, &module_path, &all_imports));
+        name_conflicts.extend(detect_name_conflicts(&module, &module_path, &names));
         let bindings = extract_groups(
             &module,
             module_doc.as_deref(),
             &global_vars,
-            ToolrNames::new(&all_imports, &module_path).cached(&binding_cache),
+            &names,
+            &module_path,
         );
         unsupported.extend(detect_unsupported_commands(
             &module,
             &module_path,
-            &all_imports,
+            &names,
             &binding_vars(&bindings, &global_vars),
         ));
         let type_imports = TypeImports::from_module(&module);
@@ -204,6 +205,7 @@ fn build_commands_inner(
             &bindings,
             &enums,
             &all_imports,
+            &names,
             &consts,
             &type_imports,
             &sources_imports,
