@@ -30,7 +30,7 @@ variable (`_runner.py`); none is a path variable.
 | `toolr-core/src/uv/mod.rs` `toolr_cache_dir` | `XDG_CACHE_HOME` | relative `toolr` (bug) | switch |
 | `toolr/src/dispatch.rs` `run_completion_install` | `XDG_DATA_HOME`, `XDG_CONFIG_HOME` | unset (correct) | switch to shared helper |
 | `toolr/src/dispatch.rs` `print_bash_source_hint` | `TOOLR_BASH_COMPLETION_SYSROOT`, `HOMEBREW_PREFIX` | unset (correct) | switch to shared helper |
-| `toolr/src/dispatch.rs` `dirs_home` | `HOME` | `PathBuf::new()`, so the install path is relative | switch; empty reports the existing "$HOME is not set" error |
+| `toolr/src/dispatch.rs` `dirs_home` | `HOME` | `PathBuf::new()`, so the install path is relative | switch; empty reports the existing "$HOME is not set or empty" error |
 | `toolr/src/dispatch.rs` `print_bash_source_hint` | `XDG_DATA_DIRS` | passed raw; `bash_completion_installed` skips empty entries (tested) | leave |
 | `toolr-core/src/venv/resolve.rs` | `TOOLR_VENV_LOCATION` | unset (correct, inline `!raw.is_empty()`) | leave |
 | `toolr-core/src/uv/install.rs` | `TOOLR_UV_LIBC` | empty string reaches `detect_linux_libc_from` | leave, see open questions |
@@ -72,7 +72,7 @@ pub fn non_empty_env_path(name: &str) -> Option<PathBuf>
 One function is enough: every call site wants a `PathBuf`. `toolr_{data,state,cache}_dir` become
 `non_empty_env_path("XDG_…_HOME").map(|v| v.join("toolr")).or_else(…)`. `dispatch.rs` deletes its private
 copy and imports the shared one; `dirs_home` becomes
-`non_empty_env_path("HOME").ok_or_else(|| anyhow!("$HOME is not set; cannot pick install path"))`.
+`non_empty_env_path("HOME").ok_or_else(|| anyhow!("$HOME is not set or empty; cannot pick install path"))`.
 
 Not changed: path layout, precedence between the XDG variable and the `dirs` fallback, and the
 `toolr_state_dir` to `toolr_data_dir` fallback chain. A relative non-empty value such as
@@ -88,7 +88,7 @@ platforms, and still does. The empty-value fix applies equally. `HOME` is normal
 An empty `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CACHE_HOME` now selects the platform default
 (`~/.local/share/toolr`, `~/Library/Application Support/toolr`, and so on) instead of `./toolr` under the
 current directory. An empty `HOME` makes `toolr self completion install` fail with the existing
-"$HOME is not set" error rather than writing under the cwd. A release note is required.
+"$HOME is not set or empty" error rather than writing under the cwd. A release note is required.
 
 ## Open questions
 
