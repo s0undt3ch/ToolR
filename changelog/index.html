@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev820-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev826-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev820 - 2026-11-06
+        0.35.2-dev826 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev820 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev826 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev820-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev826-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev820 - 2026-11-06
+        0.35.2-dev826 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev820 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev826 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev820-2026-11-06">0.35.2-dev820 - 2026-11-06<a class="headerlink" href="#0352-dev820-2026-11-06" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev826-2026-11-06">0.35.2-dev826 - 2026-11-06<a class="headerlink" href="#0352-dev826-2026-11-06" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7929,6 +7929,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(parser)</em> Follow annotated aliases of command and command_group (<a href="https://github.com/s0undt3ch/ToolR/commit/88049ab877299e8903e622fd9704d23d16836a3e"><code>88049ab</code></a>)</li>
 <li><em>(testing)</em> Resolve command_group aliases statically in CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/ad35e7c589ff07ec53fed6714fad5ff4e57f4c81"><code>ad35e7c</code></a>)</li>
 <li><em>(parser)</em> Bind nothing for a bare annotation, resolve self-copies and memoise alias resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/187ec3fedaa8d2643481088739a4e989b493f582"><code>187ec3f</code></a>)</li>
+<li><em>(execute)</em> Reset inherited signal dispositions in the signal tests (<a href="https://github.com/s0undt3ch/ToolR/commit/1ebe1aa9b90871c4c61f6ec6a538849459e9e014"><code>1ebe1aa</code></a>)</li>
+<li><em>(tests)</em> Reset an inherited SIGINT ignore in the e2e signal tests (<a href="https://github.com/s0undt3ch/ToolR/commit/63da29b7c730b872c35b768bff054bf04415dfa0"><code>63da29b</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8234,6 +8236,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Spec and plan for command_group aliases (FU-26) (<a href="https://github.com/s0undt3ch/ToolR/commit/83035c92221af9690aefee15ffc9fa8dd33ed27d"><code>83035c9</code></a>)</li>
 <li><em>(specs)</em> Archive the command_group aliases spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/0010a111220f43db540eb5ed2910ff36c5bdc99a"><code>0010a11</code></a>)</li>
 <li><em>(specs)</em> Describe the shipped static mirror in the command_group aliases design (<a href="https://github.com/s0undt3ch/ToolR/commit/8087eb1f20b0378d7c928908febeaba4b899e3a6"><code>8087eb1</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for the inherited SIG_IGN signal-test flake (<a href="https://github.com/s0undt3ch/ToolR/commit/071b4c864ccc0eb4aec908a858572e98f50483c4"><code>071b4c8</code></a>)</li>
+<li><em>(specs)</em> Archive the inherited SIG_IGN signal-test spec (<a href="https://github.com/s0undt3ch/ToolR/commit/53499b3cd8a519dc4f2b435dfe5e5a1e798e4645"><code>53499b3</code></a>)</li>
+<li><em>(tests)</em> Say why the signal tests reset SIGINT, sync the plan (<a href="https://github.com/s0undt3ch/ToolR/commit/e16bcfdcd439c3ec69362a63daacf908850a9c20"><code>e16bcfd</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
