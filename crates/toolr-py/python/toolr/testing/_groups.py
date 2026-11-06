@@ -11,13 +11,11 @@ from __future__ import annotations
 
 import ast
 import os
-import sys
 from enum import Enum
+from enum import IntEnum
 from pathlib import Path
-from typing import Any
 from typing import NamedTuple
 
-import toolr
 from toolr.testing._unknown_groups import _escape_control_chars
 
 
@@ -295,23 +293,260 @@ class _GroupCall(NamedTuple):
     call: ast.Call
 
 
-def _is_command_group(func: ast.expr, namespace: dict[str, Any]) -> bool:
+class _Binding(IntEnum):
+    """What a name is, when looking for a toolr member.
+
+    Mirrors ``Binding`` in ``crates/toolr-core/src/parser/commands.rs``; the
+    variants run weakest to strongest, as there, so ``max`` picks the strongest
+    of several candidates. Change both together.
+    """
+
+    OTHER = 0
+    """A local ``def``, another name, or a cycle."""
+    UNKNOWN = 1
+    """A module the parser can't read (outside ``tools/``), or a star import from a ``toolr.*`` submodule."""
+    TOOLR = 2
+    """toolr's member."""
+
+
+_MAX_REEXPORT_DEPTH = 8
+"""Re-export chains deeper than this are treated as cycles.
+
+Mirrors ``MAX_REEXPORT_DEPTH`` in ``crates/toolr-core/src/parser/commands.rs``.
+"""
+
+
+class _Assigned(NamedTuple):
+    """The right-hand side of ``name = <value>`` or ``name: T = <value>``.
+
+    Mirrors ``Assigned`` in ``crates/toolr-core/src/parser/symbols.rs``: a plain
+    name (``base`` is ``None``) or ``base.attr``.
+    """
+
+    base: str | None
+    attr: str
+
+    @classmethod
+    def of(cls, node: ast.expr | None) -> _Assigned | None:
+        """Mirrors ``Assigned::from_expr`` in ``crates/toolr-core/src/parser/symbols.rs``."""
+        if isinstance(node, ast.Name):
+            return cls(None, node.id)
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            return cls(node.value.id, node.attr)
+        return None
+
+
+class _Imported(NamedTuple):
+    """One ``from <module> import <original> [as <local>]``, resolved to an absolute module."""
+
+    module: str
+    original: str
+
+
+def _resolve_relative_module(
+    level: int, module: str | None, current: str, *, is_package: bool
+) -> str | None:
+    """Mirrors ``resolve_relative_module`` in ``crates/toolr-core/src/parser/symbols.rs``."""
+    pops = max(level - 1, 0) if is_package else level
+    segments = current.split(".")
+    if pops > len(segments):
+        return None
+    out = ".".join(segments[: len(segments) - pops])
+    if module:
+        out = f"{out}.{module}" if out else module
+    return out or None
+
+
+def _is_type_checking_test(node: ast.expr) -> bool:
+    """Mirrors ``is_type_checking_test`` in ``crates/toolr-core/src/parser/symbols.rs``."""
+    if isinstance(node, ast.Name):
+        return node.id == "TYPE_CHECKING"
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "TYPE_CHECKING"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "typing"
+    )
+
+
+class _ImportTable:
+    """What a module's top-level imports and bindings make each name.
+
+    Mirrors the parts of ``ImportTable`` in
+    ``crates/toolr-core/src/parser/symbols.rs`` that ``_binding`` reads, and
+    records the same statements: ``from`` imports, bare imports, ``def``,
+    ``class`` and (annotated) assignments, inside the top level, a
+    ``TYPE_CHECKING`` block, or a ``try`` body or handler. Nothing else
+    counts, so ``del`` and an ``if`` don't unbind or bind. Change both
+    together.
+    """
+
+    def __init__(self, tree: ast.Module, module: str, *, is_package: bool) -> None:
+        self.entries: dict[str, list[_Imported]] = {}
+        self.star_modules: list[str] = []
+        self.module_bindings: dict[str, str] = {}
+        self._local_names: dict[str, int] = {}
+        self._import_positions: dict[str, int] = {}
+        self._assigned: dict[str, _Assigned] = {}
+        self._seq = 0
+        for stmt in tree.body:
+            self._collect(stmt, module, is_package=is_package)
+
+    def _collect(self, stmt: ast.stmt, module: str, *, is_package: bool) -> None:
+        """Mirrors ``ImportTable::collect_stmt``."""
+        if isinstance(stmt, ast.ImportFrom):
+            self._collect_import_from(stmt, module, is_package=is_package)
+        elif isinstance(stmt, ast.Import):
+            for alias in stmt.names:
+                local = alias.asname or alias.name.split(".")[0]
+                self.module_bindings[local] = alias.name
+        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            self._bind_local(stmt.name)
+        elif isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if isinstance(target, ast.Name):
+                    self._bind_local(target.id)
+                    assigned = _Assigned.of(stmt.value)
+                    if assigned is not None:
+                        self._assigned[target.id] = assigned
+        elif isinstance(stmt, ast.AnnAssign):
+            if isinstance(stmt.target, ast.Name):
+                self._bind_local(stmt.target.id)
+                assigned = _Assigned.of(stmt.value)
+                if assigned is not None:
+                    self._assigned[stmt.target.id] = assigned
+        elif isinstance(stmt, ast.If) and _is_type_checking_test(stmt.test):
+            # Not `orelse`: that is the runtime branch.
+            for inner in stmt.body:
+                self._collect(inner, module, is_package=is_package)
+        elif isinstance(stmt, (ast.Try, ast.TryStar)):
+            # Not `orelse` or `finalbody`.
+            for inner in stmt.body:
+                self._collect(inner, module, is_package=is_package)
+            for handler in stmt.handlers:
+                for inner in handler.body:
+                    self._collect(inner, module, is_package=is_package)
+
+    def _collect_import_from(self, stmt: ast.ImportFrom, module: str, *, is_package: bool) -> None:
+        """Mirrors ``ImportTable::collect_import_from``."""
+        if stmt.level == 0:
+            target = stmt.module
+        else:
+            target = _resolve_relative_module(
+                stmt.level, stmt.module, module, is_package=is_package
+            )
+        if target is None:
+            return
+        for alias in stmt.names:
+            if alias.name == "*":
+                self.star_modules.append(target)
+                continue
+            local = alias.asname or alias.name
+            self._seq += 1
+            self._import_positions[local] = self._seq
+            self.entries.setdefault(local, []).append(_Imported(target, alias.name))
+
+    def _bind_local(self, name: str) -> None:
+        self._seq += 1
+        self._assigned.pop(name, None)
+        self._local_names[name] = self._seq
+
+    def local_binding_wins(self, name: str) -> bool:
+        """Whether the last top-level binding of ``name`` is the module's own, not an import."""
+        local = self._local_names.get(name)
+        if local is None:
+            return False
+        return local > self._import_positions.get(name, 0)
+
+    def assigned(self, name: str) -> _Assigned | None:
+        """What the last top-level binding of ``name`` copied, if it is a copy."""
+        return self._assigned.get(name) if self.local_binding_wins(name) else None
+
+
+def _is_toolr_path(module: str) -> bool:
+    return module == "toolr" or module.startswith("toolr.")
+
+
+def _toolr_member(attr: str, member: str) -> _Binding:
+    return _Binding.TOOLR if attr == member else _Binding.OTHER
+
+
+def _assigned_binding(
+    tables: dict[str, _ImportTable], module: str, name: str, member: str, depth: int
+) -> _Binding:
+    """What ``name``, bound by ``module`` itself, is: only a copy of another name or attribute can be toolr's."""
+    assigned = tables[module].assigned(name)
+    if assigned is None:
+        return _Binding.OTHER
+    if assigned.base is None:
+        return _binding(tables, module, assigned.attr, member, depth + 1)
+    bound = tables[module].module_bindings.get(assigned.base)
+    if bound is None:
+        return _Binding.OTHER
+    if _is_toolr_path(bound):
+        # `import toolr.types` binds `toolr`, not `toolr.types`.
+        return _toolr_member(assigned.attr, member)
+    return _binding(tables, bound, assigned.attr, member, depth + 1)
+
+
+def _binding(
+    tables: dict[str, _ImportTable], module: str, name: str, member: str, depth: int = 0
+) -> _Binding:
+    """Follow ``name`` in ``module`` through imports, re-exports and assignments.
+
+    Decides whether it is toolr's ``member``, from the ``tools/`` modules' source
+    alone. Mirrors ``binds_toolr_member`` in
+    ``crates/toolr-core/src/parser/commands.rs``; change both together.
+    """
+    if depth > _MAX_REEXPORT_DEPTH:
+        return _Binding.OTHER
+    table = tables.get(module)
+    if table is None:
+        return _Binding.UNKNOWN
+    if table.local_binding_wins(name):
+        return _assigned_binding(tables, module, name, member, depth)
+
+    def follows(source: str, original: str) -> _Binding:
+        if _is_toolr_path(source):
+            return _toolr_member(original, member)
+        return _binding(tables, source, original, member, depth + 1)
+
+    candidates = table.entries.get(name, [])
+    if not candidates:
+        # `from toolr.x import *` may or may not carry `member`.
+        found = _Binding.OTHER
+        for source in table.star_modules:
+            if source == "toolr":
+                found = max(found, follows(source, name))
+            elif _is_toolr_path(source):
+                found = max(found, _Binding.UNKNOWN)
+            else:
+                found = max(found, _binding(tables, source, name, member, depth + 1))
+        return found
+    return max((follows(c.module, c.original) for c in candidates), default=_Binding.OTHER)
+
+
+def _is_command_group(func: ast.expr, tables: dict[str, _ImportTable], module: str) -> bool:
     """Whether ``func`` is toolr's ``command_group``.
 
-    A bare name counts when spelt ``command_group`` or bound to it in the
-    module's globals; any ``<x>.command_group`` counts. Mirrors
-    ``crates/toolr-core/src/parser/groups.rs::is_command_group_call``, which
-    resolves aliases by import chain: change both together.
+    A bare name counts when spelt ``command_group`` or resolved to it through
+    the ``tools/`` modules' imports; any ``<x>.command_group`` counts. Mirrors
+    ``crates/toolr-core/src/parser/groups.rs::is_command_group_call``: change
+    both together.
     """
     if isinstance(func, ast.Name):
-        return func.id == "command_group" or namespace.get(func.id) is toolr.command_group
+        return (
+            func.id == "command_group"
+            or _binding(tables, module, func.id, "command_group") is _Binding.TOOLR
+        )
     return isinstance(func, ast.Attribute) and func.attr == "command_group"
 
 
-def _group_calls(tree: ast.Module, namespace: dict[str, Any]) -> list[_GroupCall]:
+def _group_calls(
+    tree: ast.Module, tables: dict[str, _ImportTable], module: str
+) -> list[_GroupCall]:
     """Each top-level ``command_group(...)`` call, with its bound name.
 
-    ``namespace`` is the imported module's globals, or empty before import.
     Mirrors the statement match in
     ``crates/toolr-core/src/parser/groups.rs::extract_groups`` and
     ``group_binding``.
@@ -328,22 +563,8 @@ def _group_calls(tree: ast.Module, namespace: dict[str, Any]) -> list[_GroupCall
                 var, value = stmt.target.id, stmt.value
         elif isinstance(stmt, ast.Expr):
             value = stmt.value
-        if isinstance(value, ast.Call) and _is_command_group(value.func, namespace):
+        if isinstance(value, ast.Call) and _is_command_group(value.func, tables, module):
             found.append(_GroupCall(var, value))
-    return found
-
-
-def _namespaces(tools_dir: Path) -> dict[Path, dict[str, Any]]:
-    """The globals of each imported ``tools`` module under ``tools_dir``, by resolved path."""
-    root = tools_dir.resolve()
-    found: dict[Path, dict[str, Any]] = {}
-    for name, module in list(sys.modules.items()):
-        file = getattr(module, "__file__", None)
-        if file is None or (name != "tools" and not name.startswith("tools.")):
-            continue
-        path = Path(file).resolve()
-        if path.is_relative_to(root):
-            found.setdefault(path, vars(module))
     return found
 
 
@@ -353,18 +574,24 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
     Mirrors ``crates/toolr-core/src/parser/groups.rs::extract_groups`` and its
     ``parse_group_call``, including how a parent variable resolves: this
     module's bindings first, then the last binding of that name in an earlier
-    file. An alias of ``command_group`` counts only once its module is
-    imported, as ``_unsupported_commands`` reads commands.
+    file. An alias of ``command_group`` resolves from the modules' source, so
+    nothing needs importing first.
     """
     declarations: list[GroupDeclaration] = []
     global_vars: dict[str, str] = {}
-    namespaces = _namespaces(tools_dir)
-    for file in _python_files(tools_dir):
-        tree = ast.parse(file.read_bytes())
-        module = _module_path(tools_dir, file)
+    files = _python_files(tools_dir)
+    trees = {file: ast.parse(file.read_bytes()) for file in files}
+    modules = {file: _module_path(tools_dir, file) for file in files}
+    tables = {
+        modules[file]: _ImportTable(trees[file], modules[file], is_package=file.stem == "__init__")
+        for file in files
+    }
+    for file in files:
+        tree = trees[file]
+        module = modules[file]
         source = _Source.of(tree)
         local: list[tuple[str, str]] = []
-        for var, call in _group_calls(tree, namespaces.get(file.resolve(), {})):
+        for var, call in _group_calls(tree, tables, module):
             parent_var = _parent_var(call)
             parent = None
             if parent_var is not None:

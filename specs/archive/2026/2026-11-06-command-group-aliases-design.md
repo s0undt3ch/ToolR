@@ -89,9 +89,20 @@ A `fix` note: groups declared through an aliased `command_group` import, or with
 assignment, now appear in the manifest with their commands. Before this fix, both were dropped
 without an error.
 
-## Known gap
+## Closed gap: aliases in `CommandsTester` (FU-35)
 
-`CommandsTester` runs its contradictory-arguments check before it imports any `tools` module, so
-it has no module globals to resolve an alias against. An aliased call that passes both `docstring=`
-and `description=` still fails in the tester, but through Python's own `TypeError` at import, not
-the build's "contradictory arguments" message. Logged as a follow-up.
+`CommandsTester` first resolved an alias by runtime identity against each imported module's
+globals. That disagreed with the parser (an alias re-exported from outside `tools/`, a `try`/`except`
+fallback binding, a `del`) and could not see aliases at all in the contradictory-arguments check,
+which runs before anything is imported.
+
+`_groups.py` now resolves aliases statically over the `tools/` module sources, mirroring
+`binds_toolr_member`, `ImportTable` and `Assigned` rule for rule: same import, re-export and
+assignment following, local binding wins, star imports, `MAX_REEXPORT_DEPTH` of 8, a module outside
+`tools/` is `Unknown` and not counted, `del` and a non-`TYPE_CHECKING` `if` change nothing. No module
+needs importing, so the contradictory check sees aliases too, with the build's message. The parity
+corpus pins each shape (`*alias*` cases) so the two sides can't drift apart.
+
+`Assigned` also reads a top-level annotated assignment with a value (`cg: object = command_group`)
+like a plain one. That applies to `command` as well as `command_group`, as both go through
+`binds_toolr_member`.

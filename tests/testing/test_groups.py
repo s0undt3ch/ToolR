@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
-import toolr
 from toolr.testing._groups import GroupDeclaration
 from toolr.testing._groups import _format_contradictory_groups
 from toolr.testing._groups import _format_undescribed_groups
@@ -77,35 +74,311 @@ def test_paths_follow_the_parsers_resolution(make_tools_dir: Callable[..., Path]
     ]
 
 
-def test_aliases_count_once_their_module_is_imported(
-    make_tools_dir: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+GROUP = 'g = cg("{0}", "{0}", "Described.")\n'
+
+ALIAS_CASES = {
+    "import as": (
+        {"m.py": "from toolr import command_group as cg\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "submodule": (
+        {"m.py": "from toolr._decorators import command_group as cg\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "other member": (
+        {"m.py": "from toolr import command as cg\n" + GROUP.format("a")},
+        [],
+    ),
+    "module attribute": (
+        {"m.py": "import toolr as t\ncg = t.command_group\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "dotted import binds the top-level name": (
+        {"m.py": "import toolr.types\ncg = toolr.command_group\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "attribute of a tools module": (
+        {
+            "m.py": "import tools.lib as lib\ncg = lib.cg\n" + GROUP.format("a"),
+            "lib.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "attribute of an unbound name": (
+        {"m.py": "cg = nothing.command_group\n" + GROUP.format("a")},
+        [],
+    ),
+    "attribute of a call": (
+        {"m.py": "cg = make().command_group\n" + GROUP.format("a")},
+        [],
+    ),
+    "name assignment chain": (
+        {
+            "m.py": (
+                "from toolr import command_group\nfirst = second = command_group\n"
+                "cg = first\n" + GROUP.format("a")
+            )
+        },
+        ["a"],
+    ),
+    "annotated alias": (
+        {
+            "m.py": "from toolr import command_group\ncg: object = command_group\n"
+            + GROUP.format("a")
+        },
+        ["a"],
+    ),
+    "annotated alias of an attribute": (
+        {"m.py": "import toolr\ncg: object = toolr.command_group\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "annotation without a value": (
+        {"m.py": "from toolr import command_group as cg\ncg: object\n" + GROUP.format("a")},
+        [],
+    ),
+    "annotated attribute target": (
+        {
+            "m.py": "from toolr import command_group as cg\nobj.cg: object = cg\n"
+            + GROUP.format("a")
+        },
+        ["a"],
+    ),
+    "tuple target": (
+        {"m.py": "from toolr import command_group as cg\ncg, other = 1, 2\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "assigned something else": (
+        {"m.py": "from toolr import command_group as cg\ncg = cg()\n" + GROUP.format("a")},
+        [],
+    ),
+    "local def": (
+        {"m.py": "def cg(*args):\n    pass\n" + GROUP.format("a")},
+        [],
+    ),
+    "local async def": (
+        {"m.py": "async def cg(*args):\n    pass\n" + GROUP.format("a")},
+        [],
+    ),
+    "local class": (
+        {"m.py": "class cg:\n    pass\n" + GROUP.format("a")},
+        [],
+    ),
+    "local binding after the import wins": (
+        {"m.py": "from toolr import command_group as cg\ncg = None\n" + GROUP.format("a")},
+        [],
+    ),
+    "import after the local binding wins": (
+        {"m.py": "cg = None\nfrom toolr import command_group as cg\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "literal spelling counts even when local": (
+        {"m.py": 'def command_group(*args):\n    pass\ncommand_group("a", "A", "Described.")\n'},
+        ["a"],
+    ),
+    "try body": (
+        {
+            "m.py": "try:\n    from toolr import command_group as cg\nexcept ImportError:\n    pass\n"
+            + GROUP.format("a")
+        },
+        ["a"],
+    ),
+    "try handler binding wins": (
+        {
+            "m.py": (
+                "try:\n    from toolr import command_group as cg\nexcept ImportError:\n    cg = None\n"
+                + GROUP.format("a")
+            )
+        },
+        [],
+    ),
+    "try star handler": (
+        {
+            "m.py": (
+                "try:\n    pass\nexcept* ImportError:\n    from toolr import command_group as cg\n"
+                + GROUP.format("a")
+            )
+        },
+        ["a"],
+    ),
+    "try else is not read": (
+        {
+            "m.py": "try:\n    pass\nexcept ImportError:\n    pass\nelse:\n    from toolr import command_group as cg\n"
+            + GROUP.format("a")
+        },
+        [],
+    ),
+    "type checking block": (
+        {
+            "m.py": "if TYPE_CHECKING:\n    from toolr import command_group as cg\n"
+            + GROUP.format("a")
+        },
+        ["a"],
+    ),
+    "typing.TYPE_CHECKING block": (
+        {
+            "m.py": "import typing\nif typing.TYPE_CHECKING:\n    from toolr import command_group as cg\n"
+            + GROUP.format("a")
+        },
+        ["a"],
+    ),
+    "type checking else is not read": (
+        {
+            "m.py": "if TYPE_CHECKING:\n    pass\nelse:\n    from toolr import command_group as cg\n"
+            + GROUP.format("a")
+        },
+        [],
+    ),
+    "other attribute of typing": (
+        {
+            "m.py": "if typing.other:\n    from toolr import command_group as cg\n"
+            + GROUP.format("a")
+        },
+        [],
+    ),
+    "other if is not read": (
+        {"m.py": "if True:\n    from toolr import command_group as cg\n" + GROUP.format("a")},
+        [],
+    ),
+    "del does not unbind": (
+        {"m.py": "from toolr import command_group as cg\n" + GROUP.format("a") + "del cg\n"},
+        ["a"],
+    ),
+    "from tools module": (
+        {
+            "m.py": "from tools.lib import cg\n" + GROUP.format("a"),
+            "lib.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "relative import": (
+        {
+            "m.py": "from .lib import cg\n" + GROUP.format("a"),
+            "lib.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "relative import of a package": (
+        {
+            "pkg/m.py": "from . import cg\n" + GROUP.format("a"),
+            "pkg/__init__.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "relative import in a package": (
+        {
+            "pkg/__init__.py": "from .lib import cg\n" + GROUP.format("a"),
+            "pkg/lib.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "relative import above the root": (
+        {
+            "m.py": "from .... import cg\n" + GROUP.format("a"),
+        },
+        [],
+    ),
+    "relative import to the root": (
+        {
+            "pkg/m.py": "from .. import cg\n" + GROUP.format("a"),
+            "__init__.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "from a module outside tools": (
+        {"m.py": "from elsewhere import cg\n" + GROUP.format("a")},
+        [],
+    ),
+    "star import from toolr": (
+        {"m.py": "from toolr import *\ncg = command_group\n" + GROUP.format("a")},
+        ["a"],
+    ),
+    "star import alias from toolr": (
+        {"m.py": "from toolr import *\n" + GROUP.format("a").replace("cg(", "command_group(")},
+        ["a"],
+    ),
+    "star import of the member name from toolr": (
+        {
+            "m.py": "from toolr import *\nfrom tools.lib import cg\n" + GROUP.format("a"),
+            "lib.py": "from toolr import *\ncg = command_group\n",
+        },
+        ["a"],
+    ),
+    "star import of another name from toolr": (
+        {"m.py": "from toolr import *\n" + GROUP.format("a")},
+        [],
+    ),
+    "star import from a toolr submodule": (
+        {"m.py": "from toolr._decorators import *\n" + GROUP.format("a")},
+        [],
+    ),
+    "star import from a tools module": (
+        {
+            "m.py": "from tools.lib import *\n" + GROUP.format("a"),
+            "lib.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "star import from outside tools": (
+        {"m.py": "from elsewhere import *\n" + GROUP.format("a")},
+        [],
+    ),
+    "star import beside a stronger one": (
+        {
+            "m.py": "from elsewhere import *\nfrom tools.lib import *\n" + GROUP.format("a"),
+            "lib.py": "from toolr import command_group as cg\n",
+        },
+        ["a"],
+    ),
+    "no star import at all": (
+        {"m.py": GROUP.format("a")},
+        [],
+    ),
+    "longest chain": (
+        {
+            **{f"c{i}.py": f"from tools.c{i + 1} import cg\n" for i in range(7)},
+            "c7.py": "from toolr import command_group as cg\n",
+            "m.py": "from tools.c0 import cg\n" + GROUP.format("a"),
+        },
+        ["a"],
+    ),
+    "chain one hop too long": (
+        {
+            **{f"c{i}.py": f"from tools.c{i + 1} import cg\n" for i in range(8)},
+            "c8.py": "from toolr import command_group as cg\n",
+            "m.py": "from tools.c0 import cg\n" + GROUP.format("a"),
+        },
+        [],
+    ),
+    "cycle": (
+        {
+            "x.py": "from tools.y import cg\n",
+            "y.py": "from tools.x import cg\n",
+            "m.py": "from tools.x import cg\n" + GROUP.format("a"),
+        },
+        [],
+    ),
+}
+
+
+@pytest.mark.parametrize(("files", "expected"), ALIAS_CASES.values(), ids=ALIAS_CASES.keys())
+def test_aliases_resolve_from_source_as_the_parser_does(
+    make_tools_dir: Callable[..., Path], files: dict[str, str], expected: list[str]
+) -> None:
+    """Nothing is imported: the resolver reads the `tools/` modules' source only."""
+    tools = make_tools_dir(files)
+    assert [d.path for d in _group_declarations(tools)] == expected
+
+
+def test_alias_of_a_package_attribute_resolves_through_its_init(
+    make_tools_dir: Callable[..., Path],
 ) -> None:
     tools = make_tools_dir(
         {
-            "m.py": """
-                from toolr import command_group as cg
-                a = cg("a", "A", "A.")
-                b: CommandGroup = command_group("b", "B", "B.")
-                c: CommandGroup
-                d = local("d", "D", "D.")
-                obj.attr: CommandGroup = cg("e", "E", "E.")
-            """,
+            "m.py": "from tools.pkg import cg\n" + GROUP.format("a"),
+            "pkg/__init__.py": "from toolr import command_group as cg\n",
         }
     )
-    assert [d.path for d in _group_declarations(tools)] == ["b"]
-
-    def module(name: str, file: Path | None, **globals_: object) -> None:
-        mod = ModuleType(name)
-        if file is not None:
-            mod.__file__ = str(file)
-        vars(mod).update(globals_)
-        monkeypatch.setitem(sys.modules, name, mod)
-
-    module("tools.m", tools / "m.py", cg=toolr.command_group, local=print)
-    # Neither is a module under `tools`, so neither's globals are read.
-    module("tools.elsewhere", tools.parent / "m.py", local=toolr.command_group)
-    module("tools.builtin", None)
-    assert [d.path for d in _group_declarations(tools)] == ["a", "b"]
+    assert [d.path for d in _group_declarations(tools)] == ["a"]
 
 
 def test_description_and_contradiction_flags(make_tools_dir: Callable[..., Path]) -> None:
