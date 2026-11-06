@@ -1,8 +1,7 @@
 # Root `--quiet` in `self cache prune`, and the warning rule
 
-Audit follow-up FU-43, left out of #695. This is written against the `fix/root-quiet-builtins` branch (PR #695,
-tip `bd0added`), not `main`: it builds on #695's rule and on `dispatch_project`'s doc comment. The implementing
-branch stacks on #695 (git-spice) and must not be opened before it merges, or must target it.
+Audit follow-up FU-43, left out of #695. #695 has merged, so this builds on `main`: on #695's rule and on
+`dispatch_project`'s doc comment. (It was first written against #695's branch, `fix/root-quiet-builtins`.)
 
 ## Problem
 

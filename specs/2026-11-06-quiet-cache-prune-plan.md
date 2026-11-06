@@ -1,8 +1,7 @@
 # Plan: root `--quiet` in `self cache prune`
 
-Design: [`2026-11-06-quiet-cache-prune-design.md`](2026-11-06-quiet-cache-prune-design.md). Stacked on PR #695
-(`fix/root-quiet-builtins`); create the branch with `git-spice branch create`. Part 1 only is planned in detail;
-the Part 2 task depends on the user's answer to open question 1.
+Design: [`2026-11-06-quiet-cache-prune-design.md`](2026-11-06-quiet-cache-prune-design.md). #695 has merged, so this branches from `main`.
+Part 2 is decided (option a): see Task 2.
 
 ## Task 1: thread `quiet` and add `Report` (red first)
 
@@ -71,6 +70,5 @@ over `-q` and `--quiet`.
 
 1. `toolr release-notes add --text "…"` (root `-q` now silences `self cache prune`'s success output).
 2. `mise run test` (Rust and Python touched), `prek run --all-files`.
-3. Coverage: `cargo xtask patch-coverage --base fix/root-quiet-builtins` against the CI lcov (run by CI or the
-   user: local llvm-cov is off the table on this disk). Every new branch above has a test.
+3. Coverage: `cargo xtask patch-coverage --base main` against the llvm-cov lcov. Every new branch above has a test.
 4. Last commit: `git mv` this design and plan to `specs/archive/2026/`.
