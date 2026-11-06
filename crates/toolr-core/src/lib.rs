@@ -14,6 +14,8 @@ pub mod complete;
 pub mod discovery;
 pub mod docstrings;
 #[cfg(feature = "full")]
+pub mod env;
+#[cfg(feature = "full")]
 pub mod execute;
 pub mod exit_status;
 #[cfg(feature = "full")]

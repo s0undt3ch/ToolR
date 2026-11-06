@@ -195,30 +195,30 @@ impl UvError {
 
 /// Where toolr keeps its private state (binaries, etc).
 /// Defaults to `$XDG_DATA_HOME/toolr`, falling back to
-/// `~/.local/share/toolr` if `XDG_DATA_HOME` is unset.
+/// `~/.local/share/toolr` if `XDG_DATA_HOME` is unset or empty.
 pub fn toolr_data_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_DATA_HOME")
-        .map(|v| PathBuf::from(v).join("toolr"))
+    crate::env::non_empty_env_path("XDG_DATA_HOME")
+        .map(|v| v.join("toolr"))
         .or_else(|| dirs::data_dir().map(|d| d.join("toolr")))
 }
 
 /// Where toolr keeps state that must survive a cache wipe, such as repository
-/// trust. Defaults to `$XDG_STATE_HOME/toolr`, then the platform state
-/// directory, then [`toolr_data_dir`] (`dirs::state_dir()` is `None` on macOS
-/// and Windows).
+/// trust. Defaults to `$XDG_STATE_HOME/toolr` if `XDG_STATE_HOME` is unset or
+/// empty, then the platform state directory, then [`toolr_data_dir`]
+/// (`dirs::state_dir()` is `None` on macOS and Windows).
 pub fn toolr_state_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(|v| PathBuf::from(v).join("toolr"))
+    crate::env::non_empty_env_path("XDG_STATE_HOME")
+        .map(|v| v.join("toolr"))
         .or_else(|| dirs::state_dir().map(|d| d.join("toolr")))
         .or_else(toolr_data_dir)
 }
 
 /// Where toolr keeps cached venvs and other transient files.
 /// Defaults to `$XDG_CACHE_HOME/toolr`, falling back to
-/// `~/.cache/toolr`.
+/// `~/.cache/toolr` if `XDG_CACHE_HOME` is unset or empty.
 pub fn toolr_cache_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_CACHE_HOME")
-        .map(|v| PathBuf::from(v).join("toolr"))
+    crate::env::non_empty_env_path("XDG_CACHE_HOME")
+        .map(|v| v.join("toolr"))
         .or_else(|| dirs::cache_dir().map(|d| d.join("toolr")))
 }
 
@@ -281,6 +281,43 @@ mod tests {
         env.set("XDG_DATA_HOME", "/tmp/test-xdg-data");
         let result = toolr_data_dir();
         assert_eq!(result, Some(PathBuf::from("/tmp/test-xdg-data/toolr")));
+    }
+
+    #[test]
+    fn toolr_data_dir_treats_empty_xdg_data_home_as_unset() {
+        let mut env = EnvGuard::write();
+        env.set("XDG_DATA_HOME", "");
+        let result = toolr_data_dir();
+        assert_eq!(result, dirs::data_dir().map(|d| d.join("toolr")));
+        assert!(result.expect("platform data dir").is_absolute());
+    }
+
+    #[test]
+    fn toolr_state_dir_treats_empty_xdg_state_home_as_unset() {
+        let mut env = EnvGuard::write();
+        env.remove("XDG_STATE_HOME");
+        let expected = toolr_state_dir();
+        env.set("XDG_STATE_HOME", "");
+        assert_eq!(toolr_state_dir(), expected);
+        assert!(expected.expect("platform state dir").is_absolute());
+    }
+
+    #[test]
+    fn toolr_cache_dir_treats_empty_xdg_cache_home_as_unset() {
+        let mut env = EnvGuard::write();
+        env.set("XDG_CACHE_HOME", "");
+        let result = toolr_cache_dir();
+        assert_eq!(result, dirs::cache_dir().map(|d| d.join("toolr")));
+        assert!(result.expect("platform cache dir").is_absolute());
+    }
+
+    #[test]
+    fn managed_uv_path_ignores_empty_xdg_data_home() {
+        let mut env = EnvGuard::write();
+        env.set("XDG_DATA_HOME", "");
+        let p = managed_uv_path().expect("platform data dir");
+        assert!(p.is_absolute());
+        assert!(p.ends_with("toolr/bin/uv") || p.ends_with("toolr/bin/uv.exe"));
     }
 
     #[test]
