@@ -128,14 +128,21 @@ rename it once (`colour = not no_colour`). For more than two states, use
   `if TYPE_CHECKING:`), a `def` with two command decorators, a
   non-literal `group=`/name or a command name defined twice in a group
   fails the build, and `CommandsTester` the same way, even when the
-  surrounding code never runs. So does any `command_group(...)` call that isn't the whole value of a
-  module-level assignment or bare statement, e.g. under
-  `if`/`try`/`with`/loops/`match`, inside a function, lambda,
-  comprehension or class, or nested in another expression such as a
-  decorator or call argument. `command_group` creates a group when none is
-  registered, so a name-only call such as `command_group("ci")` counts
-  too, and so does a name that isn't a string literal. Only a function's
-  or lambda's parameters shadow `command_group`.
+  surrounding code never runs.
+  A `command_group(...)` call is supported only as the whole value of a
+  module-level `name = command_group(...)`, `name: T = command_group(...)`
+  or bare `command_group(...)` statement, with a string-literal name. Any
+  other call to toolr's `command_group` fails the same way:
+
+    - part of a tuple or chained target, or a walrus;
+    - under `if`, `try`, `with`, a loop or `match`;
+    - inside a function, lambda, comprehension or class;
+    - nested in another expression, such as a decorator or call argument;
+    - a group whose name isn't a string literal.
+
+  `command_group` creates a group when none is registered, so a name-only
+  call such as `command_group("ci")` counts too. Only a parameter of the
+  enclosing `def` or `lambda` shadows `command_group`.
 - **Nested subgroups.** A dotted name (`command_group("docker.image",
   ...)`) attaches under the parent named before the last dot.
 - **Help sections.** Build an `ArgSection` at module scope via

@@ -39,132 +39,134 @@ reports a healthy project that `toolr` then ships without its commands.
 
 Reject every `command_group` call the parser can't bind. Support none of the extra forms.
 
-A `command_group(...)` call is supported only as the whole value of a module-level statement of the
-three shapes above. Any other `command_group` call in a `tools/` module is an unsupported
-declaration: inside an `if`, `try`, `with`, `for`, `while` or `match`, inside a `def` or class body,
-in a tuple or chained target, in a walrus, or nested in a larger expression such as
-`command_group(...).command`.
+A `command_group(...)` call is supported only as the whole value of a module-level
+`name = command_group(...)`, `name: T = command_group(...)` or bare `command_group(...)` statement,
+with a string-literal name (positional or `name=`). Any other call to toolr's `command_group` is an
+unsupported declaration: part of a tuple or chained target or a walrus, under `if`/`try`/`with`/a
+loop/`match`, inside a function, lambda, comprehension or class, nested in another expression (a
+decorator, a call argument, `command_group(...).command`), or a supported statement whose name isn't
+a string literal. A supported statement is skipped whole, annotation included.
 
 Why reject rather than support:
 
 - Tuple, chained and walrus bindings are rare, and each has a plain rewrite
-  (`a = command_group(...)` on its own line). Supporting them means the parser must pair targets
-  with values positionally, with starred targets and mismatched arity as edge cases, for no capability
-  the plain form lacks.
+  (`a = command_group(...)` on its own line). Supporting them means pairing targets with values
+  positionally, with starred targets and mismatched arity as edge cases, for no capability the plain
+  form lacks.
 - A group under `if`/`try`/`with` is a conditional declaration. The manifest is static, so the group
-  would exist or not by a branch toolr can't evaluate. That is the same reason #674 rejects commands
-  under `if`. Accepting the group while rejecting the commands under it would be incoherent.
-- Matching what `command_group` already allows keeps one rule to document: "declare groups and
-  commands at the top level of the module".
+  would exist or not by a branch toolr can't evaluate, which is why #674 rejects commands under
+  `if`. Accepting the group while rejecting the commands under it would be incoherent.
+- One rule to document: declare groups and commands at the top level of the module.
 
-Walking `def` and class bodies too is deliberate: `def make(): return command_group(...)` called as
-`g = make()` is the same silent drop. A scan of this repo's `tools/`, `examples/`, `docs/.fixtures/`
-and `skills/` finds no `command_group` call outside the supported shapes, so the tree itself doesn't
-change. (Calls elsewhere are in `tests/` and toolr's own `_decorators.py`, which no `tools/` scan
-reads.)
+Walking `def` and class bodies is deliberate: `def make(): return command_group(...)` called as
+`g = make()` is the same silent drop. A scan of this repo's `tools/`, `examples/`,
+`docs/.fixtures/` and `skills/` finds no call outside the supported shapes.
+
+`command_group` creates a group when none is registered, so a name-only or title-only call is not a
+harmless lookup. An exemption for calls that can't describe a group was tried and withdrawn for
+that reason.
+
+### What counts as `command_group`
+
+The detector is deliberately stricter than the binding path: it reports, the binding path binds.
+
+- Binding (`is_command_group_call` / `_is_command_group`, unchanged): the literal name
+  `command_group`, an alias the import tables resolve to it, and any `<x>.command_group(...)`.
+- Detector (`UnboundGroupCalls::is_toolr_group_call` / `is_toolr_group_call` in `_unbound_group_calls`):
+  a name counts only when it resolves to toolr's `command_group` through the import tables
+  (`Binding::Toolr` and its Python mirror); an attribute only when its base is the `toolr` module.
+  A parameter of the enclosing `def` or `lambda` shadows the name, since that is the one rebinding
+  needing no flow analysis; other local rebindings don't. So a local `def command_group`,
+  `command_group = print`, a foreign import alias and `self.command_group(...)` are not reported.
+
+A wrapper such as `def command_group(n, t, d): return _cg(n, t, d)` keeps its top-level
+`g = command_group("w", ...)` binding, but the `_cg(n, t, d)` call inside the `def` is reported.
 
 ### Error
 
 One new `UnsupportedCommandKind::GroupBinding`, reported through the existing
 `BuildError::UnsupportedCommands` ("unsupported command declarations (N):"). There is no `def` to
-name, so the name column carries the literal `command_group`:
+name, so the name column is `command_group("<name>")` when the name argument is a string literal,
+else `command_group`:
 
 ```text
 unsupported command declarations (2):
-  - tools.m::command_group: `command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it.
-  - tools.m::command_group: `command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it.
+  - tools.m::command_group("ga"): `command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it.
+  - tools.m::command_group("gb"): `command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it.
 ```
 
 One line per offending call, so `a, b = command_group(...), command_group(...)` gives two. No line
-numbers: the Rust side has byte offsets and the Python side line numbers, and keeping the two
-messages byte-identical is worth more than the pointer. The module name and the count narrow it
-enough.
+numbers: the Rust side has byte offsets and the Python side line numbers, and byte-identical messages
+are worth more than the pointer.
 
-Order: every group-binding problem (in `py_files` build order, source order within a module), then
-every command problem. Rust keeps them in a separate vector and chains it first; the Python side
-does the same. This avoids interleaving per module, which would need the tester to merge two
-differently sorted walks.
+Order: every group-binding problem (build order across modules, source order within one), then every
+command problem. Rust keeps them in a separate vector and chains it first; Python prepends them. Source
+order means position, not evaluation order: Rust walks with `SourceOrderVisitor`, Python sorts by
+`(lineno, col_offset)`, so both messages match.
 
-Where the check sits is unchanged: `BuildError::UnsupportedCommands` is returned after contradictory
-groups and name conflicts, and before type errors. `collected_command_groups` raises it first.
-
-### What counts as `command_group`
-
-Reuse each side's existing predicate, so nothing new can disagree:
-
-- Rust: `groups.rs::is_command_group_call(call, names, module_path)`.
-- Python: `testing/_groups.py::_is_command_group(func, tables, module, memo)`.
-
-That is the literal name `command_group`, an alias the import tables resolve to it, and any
-`<x>.command_group(...)`. A call to an unrelated function, including a local `def cg(...)`, isn't one.
+`BuildError::UnsupportedCommands` is returned after contradictory groups and name conflicts, and
+before type errors. `collected_command_groups` raises it first.
 
 ### Rust shape
 
-New `detect_unsupported_group_bindings(module, module_path, names) -> Vec<UnsupportedCommand>` in
-`groups.rs`, next to `extract_groups` whose statement match it must stay in step with. It walks
-`module.body` itself:
+In `groups.rs`:
 
-- A statement of a supported shape (the same match `group_binding` makes: single-`Name` `Assign`,
-  `AnnAssign` with a `Name` target and a value, `Stmt::Expr` holding a `Call`) whose call is
-  `command_group` is skipped whole.
-- Every other statement goes to a `Visitor` that, for each `Expr::Call` satisfying
-  `is_command_group_call`, records one problem, then keeps walking (so a call nested in a call counts).
-  It descends into `def` and class bodies, unlike `DocBinding`.
-
-`group_binding` and the new detector must share the supported-shape test, so extract the match into
-one helper (`supported_group_call(stmt) -> Option<&ExprCall>`) that both call. Then the two cannot
-drift: a statement is either bound or reported.
+- `supported_group_call(stmt)` is the shape match (single-`Name` `Assign`, `AnnAssign` with a `Name`
+  target and a value, `Stmt::Expr` holding a `Call`); `bound_group_call(stmt, names, module_path)`
+  adds the `is_command_group_call` test. The binding pass (`group_binding`) and the detector both
+  ask it, so a statement is bound or reported in one place.
+- `detect_unsupported_group_bindings(module, module_path, names)` skips bound statements (reporting
+  one whose name isn't a string literal) and sends every other statement to `UnboundGroupCalls`, a
+  `SourceOrderVisitor` that records each toolr `command_group` call. It descends into `def`, lambda,
+  comprehension and class bodies, and scopes parameter shadowing in `scoped`.
+- `parse_group_call` reads the name through `argument(call, NAME)`, so `name="kw"` binds.
+- `build.rs` chains `[unsupported_groups, unsupported].concat()`.
 
 ### Python shape
 
-New `_unsupported_group_bindings(tools_dir) -> list[Unsupported]` in `testing/_groups.py`, reusing its
-`_python_files`, `_ImportTable`, `_is_command_group` and the `_group_calls` statement match (factored
-the same way). It walks every node with `ast.walk`, collects the offending calls, and sorts them by
-`(lineno, col_offset)` to get source order. `_shapes._unsupported_commands` returns
-`_unsupported_group_bindings(tools_dir) + <existing list>`. The message constant `GROUP_BINDING` sits
-beside `NESTED` in `_shapes.py`, with the same "mirrors" comment.
-
-`ast.walk` reaches the call inside a supported statement too, so skip the call objects that
-`_group_calls` already returned (by `id`), not the statements.
+- `_groups.py`: `_supported_group_call`, `_bound_group_call` (used by `_group_calls` and the
+  detector), `_unbound_group_calls` (explicit stack, so a very long expression can't raise
+  `RecursionError`; sorted by position), `_is_toolr_module`, `_parameter_names`, `_import_tables`;
+  `_group_declarations` reads the name with `_argument(call, _NAME)`.
+- `_shapes.py`: `GROUP_BINDING` beside `NESTED`, `_group_call_label` and `_unsupported_group_bindings`
+  (here rather than `_groups.py` because it needs the constant and `_shapes` already imports
+  `_groups`); `_unsupported_commands` prepends its result.
 
 ## Corpus
 
-New cases under `tests/e2e/files/parity_corpus/`, each with an `m.py` that also declares a command
-on the group so a silent drop would be observable:
+Cases under `tests/e2e/files/parity_corpus/`, each declaring a command on the group so a silent drop
+would be observable. Naming conventions are in that directory's `README.md`.
 
-- `err_group_tuple_target`: `a, b = command_group(...), command_group(...)`. Two lines.
-- `err_group_chained_target`: `a = b = command_group(...)`.
-- `err_group_walrus`: `(g := command_group(...))`.
-- `err_group_in_if`: `if sys.platform:` then `g = command_group(...)`, command under `@g.command`.
-- `err_group_bare_in_if`: a bare `command_group(...)` under an `if`, a string-path `@command(group=...)`.
-- `err_group_in_try`
-- `err_group_in_with`
-- `err_group_in_function`: `def make(): return command_group(...)`, then `g = make()`; the call in
-  `make` is the finding.
-- `err_group_alias_in_if`: `from toolr import command_group as cg`, call under an `if`; pins that the
-  alias predicate is shared.
-- `err_group_binding_ordering`: `m.py` has a nested-`def` command before a tuple group, `n.py` has an
-  `if` group; the expected message lists both group lines before the command line.
-- `ok_group_local_def_in_if`: a local `def cg(...)` called under an `if` is not a group; the module's
-  real top-level group still builds.
+- Forms: `err_group_tuple_target` (two lines), `err_group_chained_target`, `err_group_walrus`,
+  `err_group_in_if`, `err_group_bare_in_if`, `err_group_in_try`, `err_group_in_with`,
+  `err_group_in_function`, `err_group_alias_in_if`, `err_group_toolr_attribute_in_if`,
+  `err_group_described_call_in_body`, `err_group_wrapper_inner_call`.
+- Name-only calls (reported): `err_group_name_only_in_body`, `err_group_name_only_creates_in_if`,
+  `err_group_name_only_desc_none_in_if`, `err_group_name_only_rebind_existing_in_if`,
+  `err_group_name_only_func_factory`, `err_group_name_only_bare_in_if_string_group`.
+- Source order: `err_group_binding_source_order`, `err_group_source_order_augassign`,
+  `err_group_source_order_ifexp`, `err_group_source_order_comprehension`,
+  `err_group_source_order_for_target`, `err_group_source_order_kwargs`.
+- Names: `ok_group_keyword_name`, `err_group_nonliteral_name`.
+- Across modules: `err_group_ordering_groups_first`.
+- Not reported: `ok_group_bound_statement_annotation`, `ok_group_local_def_in_if`,
+  `ok_group_shadowed_by_local_def`, `ok_group_shadowed_by_parameter`,
+  `ok_group_foreign_import_alias`, `ok_group_assigned_print`, `ok_group_foreign_attribute`.
 
 ## Release note
 
-Needed: a build that exited 0 now fails. Start it with `**Breaking:**`. The affected projects were
-already shipping a manifest without those groups, but their CI (`toolr self build-manifest --check`)
-and `toolr` invocations start failing until the declaration is rewritten, which is what the Breaking
-convention is for. Name each form and its fix (move to its own top-level `name = command_group(...)`
-line; hoist out of `if`/`try`/`with`).
+`**Breaking:**`, following the FU-2 duplicate-commands precedent: a build that exited 0 now fails,
+and CI `toolr self build-manifest --check` starts failing until the declaration is rewritten. The
+note names the forms and the fix (own top-level `name = command_group(...)` line; platform check
+inside the command body) and omits the shadowing detail, which the docs carry.
 
 ## Docs
 
-- `docs/writing-commands/testing.md` ("unsupported command declarations" section): add the group
-  rule and the new line to the sample output.
-- `crates/toolr-py/python/toolr/_decorators.py::command_group` docstring: one sentence, then
-  `cargo xtask build-skill-refs` to regenerate
-  `skills/toolr-command-authoring/references/*.md`. Check `skills/toolr-command-authoring/SKILL.md`
-  prose by hand.
-- `collected_command_groups` docstring: add the group-binding case to `Raises`.
+One statement of the rule: the doc comment on `detect_unsupported_group_bindings`. The `command`
+docstring in `_decorators.py`, `docs/writing-commands/testing.md` and
+`skills/toolr-command-authoring/SKILL.md` repeat it; the `command_group` docstring points at
+`command`. `cargo xtask build-skill-refs` regenerates the references. `collected_command_groups`'s
+`Raises` names the group-binding case.
 
 ## Out of scope
 
@@ -173,46 +175,3 @@ line; hoist out of `if`/`try`/`with`).
 - Reporting a `@g.command` whose `g` is unbound (it stays silent today; with groups now rejected the
   common cause is gone).
 - Line numbers in the message.
-
-## Decisions on the open questions
-
-1. Descend into `def` and class bodies, as #674 rejects commands built in factories.
-2. The release note is `**Breaking:**`, following the FU-2 duplicate-commands precedent.
-3. No line numbers: the Rust and Python messages stay byte-identical.
-
-## Deviations from this design
-
-- The Python detector sits in `testing/_shapes.py` (`_unsupported_group_bindings`), not
-  `_groups.py`, because it needs `GROUP_BINDING` and `_shapes` already imports `_groups`. The
-  helpers it uses (`_supported_group_call`, `_unbound_group_calls`, `_import_tables`) are in `_groups.py`.
-- A call among the arguments of a supported statement (`parent=command_group(...)`) isn't reported:
-  both sides skip a supported statement whole.
-- Review round 1 narrowed the detector. A callee counts only when it resolves to toolr's
-  `command_group`: a name through the import tables (a parameter of the enclosing `def` or `lambda`
-  shadows it), an attribute when its base is the `toolr` module. `group_binding`'s own, wider
-  predicate is unchanged. Both sides skip a supported statement whole, annotation included.
-- ~~A call that passes no description or docstring is a lookup and is allowed anywhere.~~ Withdrawn in
-  round 2: `command_group` creates the group when it isn't registered, so a name-only or title-only
-  call off a supported statement is reported like any other.
-- The entry's name column is `command_group("<name>")` when the name argument (positional or
-  `name=`) is a string literal, else `command_group`.
-- A wrapper such as `def command_group(n, t, d): return _cg(n, t, d)` keeps its top-level
-  `g = command_group("w", ...)` binding, but the `_cg(n, t, d)` call inside the `def` is now reported.
-
-## Review fixes (round 2)
-
-- Problems are listed in source order on both sides. Rust walks with `SourceOrderVisitor`, Python
-  sorts by `(lineno, col_offset)`; `err_group_binding_source_order` and the
-  `err_group_source_order_*` cases pin augassign, conditional expressions, comprehensions, `for`
-  targets and `*`/keyword arguments.
-- The lookup exemption (and the `module_docstring` plumbing it needed) is gone. Cases
-  `err_group_name_only_lookup_in_body` and `err_group_lookup_*` pin it.
-- The group name is read with keyword support (`name=`) in `parse_group_call` and
-  `_group_declarations`, so `g = command_group(name="kw", ...)` binds
-  (`ok_group_keyword_name`). A supported statement whose name isn't a string literal is reported
-  as `GroupBinding` (`err_group_nonliteral_name`), where it used to be dropped by `toolr` and built
-  by `CommandsTester`.
-- The Python detector walks with an explicit stack, so a very long expression can't raise
-  `RecursionError`.
-- Only function and lambda parameters shadow `command_group`; other local rebindings inside a `def`
-  are still flagged.
