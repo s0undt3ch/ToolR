@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,9 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "_prepare-release.yml"
 
 pytestmark = [
-    pytest.mark.skipif(
-        sys.platform == "win32", reason="the step runs under bash on ubuntu-latest only"
-    ),
+    pytest.mark.skip_on_windows(reason="the step runs under bash on ubuntu-latest only"),
     pytest.mark.skip_if_binaries_missing("git"),
 ]
 

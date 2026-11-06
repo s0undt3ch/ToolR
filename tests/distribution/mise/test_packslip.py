@@ -6,7 +6,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 from typing import NoReturn
@@ -94,7 +93,7 @@ def test_completion_script_generates(packslip_project: MiseProject, shell: str) 
     assert "toolr __complete" in result.stdout
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="bash completion is not exercised on Windows")
+@pytest.mark.skip_on_windows(reason="bash completion is not exercised on Windows")
 def test_bash_completion_completes(packslip_project: MiseProject, tmp_path: Path) -> None:
     bash = shutil.which("bash")
     bash_completion = next((path for path in BASH_COMPLETION_SCRIPTS if path.is_file()), None)
@@ -123,7 +122,7 @@ def test_bash_completion_completes(packslip_project: MiseProject, tmp_path: Path
     assert set(SELF_SUBCOMMANDS) <= set(result.stdout.split()), result.stderr
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="fish completion is not exercised on Windows")
+@pytest.mark.skip_on_windows(reason="fish completion is not exercised on Windows")
 def test_fish_completion_completes(packslip_project: MiseProject, tmp_path: Path) -> None:
     fish = shutil.which("fish")
     if fish is None:
@@ -144,7 +143,7 @@ def test_fish_completion_completes(packslip_project: MiseProject, tmp_path: Path
     assert set(SELF_SUBCOMMANDS) <= offered, result.stderr
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="zsh completion is not exercised on Windows")
+@pytest.mark.skip_on_windows(reason="zsh completion is not exercised on Windows")
 def test_zsh_completion_script_parses(packslip_project: MiseProject, tmp_path: Path) -> None:
     # Syntax only: driving zsh's completion system needs a pty. The engine behind it,
     # `toolr __complete`, is shared with bash and fish, which the tests above exercise.

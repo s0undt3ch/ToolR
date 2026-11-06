@@ -7,7 +7,6 @@ against a scratch repository holding a release patch.
 from __future__ import annotations
 
 import subprocess
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,9 +22,7 @@ APPLY_RELEASE_PATCH_YML = REPO_ROOT / ".github" / "actions" / "apply-release-pat
 PATCH_NAME = "toolr-9.9.9.patch"
 
 pytestmark = [
-    pytest.mark.skipif(
-        sys.platform == "win32", reason="the step runs under bash on ubuntu-latest only"
-    ),
+    pytest.mark.skip_on_windows(reason="the step runs under bash on ubuntu-latest only"),
     pytest.mark.skip_if_binaries_missing("git"),
 ]
 
