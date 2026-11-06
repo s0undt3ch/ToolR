@@ -123,7 +123,11 @@ fn quiet_suppresses_the_hint() {
 
 /// Every success message is non-error output, so `--quiet` prints none of it.
 fn assert_quiet_install_is_silent(host: &Host, shell: &str, extra: &[&str]) {
-    let args = [&["--quiet", "self", "completion", "install", shell], extra].concat();
+    assert_install_is_silent(host, "--quiet", shell, extra);
+}
+
+fn assert_install_is_silent(host: &Host, quiet: &str, shell: &str, extra: &[&str]) {
+    let args = [&[quiet, "self", "completion", "install", shell], extra].concat();
     let (stdout, stderr) = host.install(&args);
     assert_eq!(stdout, "", "{args:?}");
     assert_eq!(stderr, "", "{args:?}");
@@ -135,9 +139,13 @@ fn quiet_first_install_prints_nothing_for_every_shell() {
         let host = Host::new();
         assert_quiet_install_is_silent(&host, shell, &[]);
     }
-    // The zsh reminder is the extra line a first install adds.
+}
+
+#[test]
+fn short_quiet_flag_also_silences_install() {
     let host = Host::new();
-    assert_quiet_install_is_silent(&host, "zsh", &[]);
+    // A first zsh install is the noisiest path: it also prints the fpath reminder.
+    assert_install_is_silent(&host, "-q", "zsh", &[]);
     assert!(host.path("home/.zfunc/_toolr").is_file());
 }
 
