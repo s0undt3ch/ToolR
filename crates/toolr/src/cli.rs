@@ -160,6 +160,9 @@ fn build_root_command() -> Command {
                 .help_heading(OUTPUT_HEADING)
                 .help("Increase verbosity (also enables `DEBUG` logging)."),
         )
+        // The `-q` rule, stated once: it drops success lines, progress and advice, never
+        // errors, refusals or warnings. A warning means the result may be incomplete, and
+        // a script that hides it can't tell. Other code points here instead of restating it.
         .arg(
             Arg::new("quiet")
                 .short('q')

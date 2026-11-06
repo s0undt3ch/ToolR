@@ -14,10 +14,10 @@ use toolr_core::cache::{
     sweep_rebuild_locks,
 };
 
-/// Output of one prune run, classified so the root `--quiet` rule lives in one place.
+/// Output of one prune run. The `-q` rule is stated on the arg in `cli::build_command`.
 struct Report<'a> {
     out: &'a mut dyn Write,
-    /// Where warnings go; `None` is the process's stderr.
+    /// Test seam for where warnings go; `None` is the process's stderr.
     err: Option<&'a mut dyn Write>,
     quiet: bool,
     dry_run: bool,
@@ -48,12 +48,7 @@ impl<'a> Report<'a> {
         writeln!(self.out, "{line}")
     }
 
-    /// The command's result, which `--quiet` never drops.
-    fn result(&mut self, line: &str) -> io::Result<()> {
-        writeln!(self.out, "{line}")
-    }
-
-    /// Warnings go to stderr and print under `--quiet` too: it drops success lines, never warnings.
+    /// Warnings go to stderr, and always print.
     fn warn(&mut self, line: &str) -> io::Result<()> {
         match self.err.as_deref_mut() {
             Some(err) => writeln!(err, "toolr: warning: {line}"),
@@ -112,7 +107,7 @@ fn prune_all(
                 e.cache_dir.display(),
                 format_size(e.size_bytes, BINARY)
             );
-            report.result(&line)?;
+            report.note(&line)?;
         } else {
             remove_entry(&e.cache_dir, report)?;
         }
@@ -165,7 +160,7 @@ fn prune_classified(
                 c.entry.cache_dir.display(),
                 format_size(c.entry.size_bytes, BINARY),
             );
-            report.result(&line)?;
+            report.note(&line)?;
         } else {
             let line = format!(
                 "{tag:<7} removing {} ({})",
@@ -455,20 +450,6 @@ mod tests {
     }
 
     #[test]
-    fn remove_entry_swallows_already_missing_directory_and_warns() {
-        let tmp = TempDir::new().unwrap();
-        let missing = tmp.path().join("never-was");
-        let (mut out, mut err): (Vec<u8>, Vec<u8>) = (Vec::new(), Vec::new());
-        // `remove_dir_all` on a non-existent path returns `NotFound`; the
-        // helper writes a warning and returns Ok(()) regardless so the
-        // surrounding loop doesn't abort mid-prune.
-        let rep = &mut Report::new(&mut out, false, false).with_err(&mut err);
-        remove_entry(&missing, rep).unwrap();
-        let s = String::from_utf8(err).unwrap();
-        assert!(s.contains("warning: failed to remove"));
-    }
-
-    #[test]
     fn prune_all_quiet_real_run_removes_silently() {
         let tmp = TempDir::new().unwrap();
         let mut out: Vec<u8> = Vec::new();
@@ -638,13 +619,21 @@ mod tests {
     }
 
     #[test]
-    fn remove_entry_quiet_still_warns() {
+    fn remove_entry_swallows_already_missing_directory_and_warns_on_stderr() {
         let tmp = TempDir::new().unwrap();
-        let (mut out, mut err): (Vec<u8>, Vec<u8>) = (Vec::new(), Vec::new());
-        let rep = &mut Report::new(&mut out, true, false).with_err(&mut err);
-        remove_entry(&tmp.path().join("never-was"), rep).unwrap();
-        let s = String::from_utf8(err).unwrap();
-        assert!(s.contains("toolr: warning: failed to remove"), "got {s}");
-        assert!(out.is_empty());
+        let missing = tmp.path().join("never-was");
+        for quiet in [false, true] {
+            let (mut out, mut err): (Vec<u8>, Vec<u8>) = (Vec::new(), Vec::new());
+            // `remove_dir_all` on a non-existent path returns `NotFound`; the helper warns and
+            // returns Ok(()) regardless so the surrounding loop doesn't abort mid-prune.
+            let rep = &mut Report::new(&mut out, quiet, false).with_err(&mut err);
+            remove_entry(&missing, rep).unwrap();
+            let s = String::from_utf8(err).unwrap();
+            assert!(
+                s.contains("toolr: warning: failed to remove"),
+                "quiet={quiet}, got {s}"
+            );
+            assert!(out.is_empty(), "quiet={quiet}");
+        }
     }
 }

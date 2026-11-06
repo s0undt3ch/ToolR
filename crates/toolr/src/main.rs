@@ -54,6 +54,7 @@ fn run() -> anyhow::Result<ExitCode> {
     // completion drops the same entries in `resolve_manifest_at_tab`.
     manifest.drop_unsafe_names();
     if !bootstrap::should_skip_auto_rebuild(&argv) {
+        // Printed under `-q` too (the rule is on the `-q` arg in `cli::build_command`).
         // Build warnings come only from a manifest built on this run. When the
         // bootstrap built it, the freshness step's rebuild of the same tree
         // repeats them, so only the bootstrap's print.
@@ -105,8 +106,7 @@ fn maybe_emit_cache_hint_from_argv() {
         return;
     }
     let argv: Vec<String> = std::env::args().collect();
-    // `--quiet` promises to "suppress non-error output"; the passive
-    // hint is non-error output, so honour it here. We scan argv by hand
+    // The passive hint is advice, which `-q` drops. We scan argv by hand
     // because this runs before clap and because `--quiet` is accepted
     // both root-level and per-subcommand. Detect both `--quiet` and any
     // short cluster containing `q` (e.g. `-q`), and stop at the `--`
@@ -138,7 +138,7 @@ fn maybe_emit_cache_hint_from_argv() {
 }
 
 /// Best-effort scan of `argv` for a `--quiet` / `-q` request, used to
-/// gate the passive cache hint (advice, so `-q` drops it; warnings print under `-q`). Stops at the `--` separator so args
+/// gate the passive cache hint. Stops at the `--` separator so args
 /// belonging to a wrapped command (`toolr project venv run -- <cmd>
 /// --quiet`) are never mistaken for toolr's own quiet flag.
 fn argv_requests_quiet(argv: &[String]) -> bool {
