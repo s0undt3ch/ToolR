@@ -111,7 +111,8 @@ class ConsoleVerbosity
 Console verbosity levels, which decide which `ctx` log lines are written.
 
 - `QUIET` — drops `ctx.info` (including the `Running '…'` line `ctx.run` logs) and
-  `ctx.debug`. `ctx.print`, `ctx.warn`, `ctx.error` and the `ctx.exit` message still show.
+  `ctx.debug`. `ctx.print`, `ctx.warn`, `ctx.error` and the `ctx.exit` message still show,
+  and so does a command's own `logging.warning` or `logging.error`.
 - `NORMAL` — the default: drops only `ctx.debug`.
 - `VERBOSE` — drops nothing.
 

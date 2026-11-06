@@ -220,7 +220,7 @@ def setup_logging(verbosity: ConsoleVerbosity, timestamps: bool = False) -> None
         case ConsoleVerbosity.VERBOSE:
             logging.root.setLevel(logging.DEBUG)
         case ConsoleVerbosity.QUIET:
-            logging.root.setLevel(logging.CRITICAL + 1)
+            logging.root.setLevel(logging.WARNING)
         case _:
             logging.root.setLevel(logging.INFO)
 

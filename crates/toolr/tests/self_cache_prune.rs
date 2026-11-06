@@ -262,6 +262,11 @@ fn cache_with_kept_and_stray_lock() -> (TempDir, std::path::PathBuf, std::path::
 }
 
 fn run_prune(xdg_cache_home: &Path, args: &[&str]) -> String {
+    run_prune_both(xdg_cache_home, args).0
+}
+
+/// `(stdout, stderr)` of a `prune` run that must succeed.
+fn run_prune_both(xdg_cache_home: &Path, args: &[&str]) -> (String, String) {
     let output = common::toolr()
         .env("XDG_CACHE_HOME", xdg_cache_home)
         .env_remove("HOME")
@@ -275,7 +280,10 @@ fn run_prune(xdg_cache_home: &Path, args: &[&str]) -> String {
         "stderr:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    String::from_utf8_lossy(&output.stdout).into_owned()
+    (
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
 }
 
 #[test]
@@ -359,9 +367,13 @@ fn prune_warns_and_succeeds_when_lock_sweep_fails() {
     // A regular file where `locks/` should be makes the sweep's read_dir fail.
     fs::write(cache_root.join(LOCKS_DIR), b"").unwrap();
     for args in [&[][..], &["--all"][..]] {
-        let stdout = run_prune(tmp.path(), args);
+        let (stdout, stderr) = run_prune_both(tmp.path(), args);
         assert!(
-            stdout.contains("toolr: warning: failed to sweep rebuild locks"),
+            stderr.contains("toolr: warning: failed to sweep rebuild locks"),
+            "args {args:?}, stderr:\n{stderr}"
+        );
+        assert!(
+            !stdout.contains("warning"),
             "args {args:?}, stdout:\n{stdout}"
         );
     }
@@ -492,9 +504,10 @@ fn root_quiet_prune_sweep_failure_still_warns() {
     let cache_root = tmp.path().join("toolr");
     fs::create_dir_all(&cache_root).unwrap();
     fs::write(cache_root.join(LOCKS_DIR), b"").unwrap();
-    let (stdout, _) = run_prune_root(tmp.path(), "-q", &[]);
+    let (stdout, stderr) = run_prune_root(tmp.path(), "-q", &[]);
     assert!(
-        stdout.contains("toolr: warning: failed to sweep rebuild locks"),
-        "stdout:\n{stdout}"
+        stderr.contains("toolr: warning: failed to sweep rebuild locks"),
+        "stderr:\n{stderr}"
     );
+    assert!(stdout.is_empty(), "stdout:\n{stdout}");
 }
