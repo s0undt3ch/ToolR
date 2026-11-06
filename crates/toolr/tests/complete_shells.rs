@@ -23,7 +23,7 @@ const PATH_FILES: [&str; 8] = [
 ];
 
 /// `SENTINEL` and `SENTINEL2` stand for paths the fixture fills in.
-const CHOICES: [&str; 10] = [
+const CHOICES: [&str; 11] = [
     "fast",
     "a:b",
     "dry run",
@@ -34,6 +34,7 @@ const CHOICES: [&str; 10] = [
     "x=~root",
     "u@h",
     "a$b",
+    "wow!",
 ];
 
 struct Fixture {
@@ -1291,6 +1292,60 @@ fn bash_value_reply_is_quoted_for_an_open_quote() {
     }
 }
 
+/// Dotfiles are listed with no leading `.` typed, whatever the user's `GLOBIGNORE`.
+#[test]
+fn bash_path_lists_dotfiles() {
+    let script = print_script("bash");
+    let ignore_all = format!("GLOBIGNORE='*'\n{script}");
+    for bash in bashes() {
+        let fx = fixture();
+        let hid = fx.tmp.path().join("hid");
+        std::fs::create_dir_all(&hid).unwrap();
+        std::fs::write(hid.join(".env"), "").unwrap();
+        std::fs::write(hid.join("config"), "").unwrap();
+        for script in [&script, &ignore_all] {
+            let run = run_bash_path_split(&bash, script, &fx, "--cfg", "hid/", Split::Whole);
+            assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+            let mut got = run.reply.clone();
+            got.sort();
+            assert_eq!(got, vec!["hid/.env", "hid/config"], "{bash}");
+        }
+    }
+}
+
+/// `.` and `..` are offered only under a directory that exists.
+#[test]
+fn bash_path_dot_entries_need_an_existing_directory() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path(&bash, &fx, "nosuch/.");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+        let run = run_bash_path(&bash, &fx, "files/.");
+        let mut got = run.reply.clone();
+        got.sort();
+        assert_eq!(got, vec!["files/../", "files/./"], "{bash}");
+    }
+}
+
+/// A typed `~/` or `$NAME/` stays bare even when the rest needs `$'…'` quoting, which
+/// would otherwise stop the tilde expanding.
+#[test]
+fn bash_path_prefix_stays_bare_before_ansi_c_quoting() {
+    for bash in bashes() {
+        let fx = fixture();
+        std::fs::write(fx.tmp.path().join("files/nl\nx"), "").unwrap();
+        for (cur, want) in [
+            ("~/files/nl", r"~/$'files/nl\nx'"),
+            ("$HOME/files/nl", r"$HOME/$'files/nl\nx'"),
+        ] {
+            let run = run_bash_path(&bash, &fx, cur);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert_eq!(run.reply, vec![want.to_string()], "{bash} {cur}");
+        }
+    }
+}
+
 /// A name holding a newline is one candidate, not two.
 #[test]
 fn bash_path_name_with_a_newline_is_one_candidate() {
@@ -1546,6 +1601,33 @@ fn assert_bash_tab_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, wa
         "{bash} {typed:?}: want {want:?}\nstdout: {stdout}\nstderr: {stderr}"
     );
     assert!(!stderr.contains("command not found"), "{bash}: {stderr}");
+}
+
+/// Interactive bash history-expands a `!` even inside `"…"`, so a reply there must keep it
+/// from doing so. The earlier `echo prev` gives `!!` something to expand to.
+#[test]
+fn bash_tab_keeps_a_bang_literal_in_double_quotes_end_to_end() {
+    for bash in bashes() {
+        let fx = fixture();
+        let bang = fx.tmp.path().join("bang");
+        std::fs::create_dir_all(&bang).unwrap();
+        for name in ["h!!x", "x!y", "a!b", "a!c"] {
+            std::fs::write(bang.join(name), "").unwrap();
+        }
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, format!("{}set -H\n", bash_tab_rc(&fx))).unwrap();
+        for (typed, want) in [
+            (r#"--cfg "bang/h"#, "--cfg bang/h!!x"),
+            (r#"--cfg "bang/x"#, "--cfg bang/x!y"),
+            // The first Tab inserts the common prefix `a"\!"`; the second completes after it.
+            ("--cfg \"bang/a\tb", "--cfg bang/a!b"),
+            (r#"--mode "wo"#, "--mode wow!"),
+        ] {
+            let typed = format!("echo prev\ntoolr ci lint {typed}");
+            let want = format!("LINE:ci lint {want}");
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
+        }
+    }
 }
 
 /// Inside a live completion readline dequotes the word `compgen` gets, and it replaces only the

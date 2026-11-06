@@ -18,6 +18,12 @@ _toolr_quote() {
             _toolr_q=${_toolr_q//\"/\\\"}
             _toolr_q=${_toolr_q//\$/\\\$}
             _toolr_q=${_toolr_q//\`/\\\`}
+            # History expansion still acts on `!` inside `"…"`: close the quote around it. Readline
+            # adds no closing quote to a reply that ends in one, so a final `!` gets an empty `""`.
+            if [[ $- == *H* ]]; then
+                _toolr_q=${_toolr_q//!/\"\\!\"}
+                [[ $1 != *! ]] || _toolr_q+=\"
+            fi
             return 0
             ;;
         \')
@@ -185,9 +191,10 @@ _toolr_complete() {
 _toolr_list_paths() {
     local _toolr_dir=${2%"${2##*/}"} _toolr_leaf=${2##*/} _toolr_name
     set +f
+    # First: unsetting `GLOBIGNORE` also turns `dotglob` off.
+    unset GLOBIGNORE
     shopt -s nullglob dotglob
     shopt -u failglob nocaseglob
-    unset GLOBIGNORE
     for _toolr_name in "$2"*; do
         # Bash 5.2's `globskipdots` and older bash disagree on these; they're added below.
         case ${_toolr_name#"$_toolr_dir"} in
@@ -199,6 +206,7 @@ _toolr_list_paths() {
         printf '%s\0' "$_toolr_name"
     done
     # `compgen -f` offers `.` and `..` once the typed name starts with a dot.
+    [[ -d ${_toolr_dir:-.} ]] || return 0
     for _toolr_name in . ..; do
         if [[ $_toolr_leaf == .* && $_toolr_name == "$_toolr_leaf"* ]]; then
             printf '%s\0' "$_toolr_dir$_toolr_name"
@@ -274,13 +282,18 @@ _toolr_complete_paths() {
         else
             _toolr_rest=$_toolr_name
             if [[ -n $_toolr_bare ]]; then
-                # Put the typed `$NAME` or `~` back in place of the value the glob listed under.
-                _toolr_keep=$_toolr_bare
-                _toolr_rest=${_toolr_name#"$_toolr_value"}
+                # Put the typed `$NAME/` or `~/` back in place of the value the glob listed under,
+                # bare: a `~` followed by `$'…'` would not expand.
+                _toolr_keep=$_toolr_bare/
+                _toolr_rest=${_toolr_name#"$_toolr_value"/}
             elif ((_toolr_user_tilde)) && [[ $_toolr_name == '~'* ]]; then
                 # `compgen` echoes a typed leading `~`; it must stay bare to expand.
-                _toolr_keep='~'
-                _toolr_rest=${_toolr_name#\~}
+                _toolr_keep=${_toolr_name%%/*}
+                _toolr_rest=${_toolr_name#"$_toolr_keep"}
+                if [[ $_toolr_rest == /* ]]; then
+                    _toolr_keep+=/
+                    _toolr_rest=${_toolr_rest#/}
+                fi
             fi
             [[ -n $_toolr_rest ]] && _toolr_quote "$_toolr_rest"
         fi
