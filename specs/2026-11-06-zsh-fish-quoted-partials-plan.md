@@ -1,7 +1,7 @@
 # Plan: zsh and fish quoted partials (FU-33)
 
 Design: `specs/2026-11-06-zsh-fish-quoted-partials-design.md`. Branch `fix/zsh-fish-quoted-partials`, one PR,
-based on `main`. Rebase onto #690 if it merges first (both edit `crates/toolr/tests/complete_shells.rs`).
+based on `main`, which now includes #690.
 
 ## Files
 
@@ -28,14 +28,14 @@ Write the failing tests first.
 
 - `zsh_backslash_escaped_partial_matches_a_choice`: words `toolr ci lint --mode 'dry\ r'`; assert candidates are exactly
   `["dry run"]`.
-- `zsh_open_single_quote_partial_matches_a_choice`: `compstate[quote]=single`, word `'dry r`; assert `["dry run"]`.
-- `zsh_open_double_quote_partial_matches_a_choice`: `compstate[quote]=double`, word `"dry r`; assert `["dry run"]`.
+- `zsh_open_single_quote_partial_matches_a_choice`: `compstate[quote]="'"`, word `'dry r`; assert `["dry run"]`.
+- `zsh_open_double_quote_partial_matches_a_choice`: `compstate[quote]='"'`, word `"dry r`; assert `["dry run"]`.
 - `zsh_closed_quote_partial_matches_a_choice`: word `'dry r'`; assert `["dry run"]`.
 - `zsh_attached_option_with_escaped_value_matches`: word `--mode=dry\ r`; assert `["dry run"]` and a `COMPSET:-P 1 *=`
   line (the `attached` branch still fires on the dequoted word).
 - `zsh_earlier_escaped_words_reach_the_engine_unescaped`: words `toolr ci lint --cfg a\ b --mode 'dry\ r'`; assert
   `["dry run"]` (an escaped earlier word must not shift slot detection).
-- `zsh_backtick_quote_offers_nothing`: `compstate[quote]=backtick`; assert no `COMPADD` line.
+- `zsh_backtick_quote_offers_nothing`: `compstate[quote]` a backtick; assert no `COMPADD` line.
 - `zsh_dollars_quote_partial_matches_a_choice` (only if open question 2 resolves to support): `$'dry r`.
 - Keep `zsh_completion_never_executes_values` unchanged (still asserts no `-Q`, no `eval `).
 - Keep `zsh_path_slots_use_native_file_completion` unchanged (paths still go to `_files` with `-`/`-/`).
@@ -53,11 +53,11 @@ Write the failing tests first.
   `$(touch …)` values must still not run when the partial is quoted. Add one more case there: partial `'$(touch`
   with the sentinel asserted absent.
 
-### Manual check recorded in the PR (not in the suite)
+### Live Tab (in the suite)
 
-A one-off `zpty` run, or an interactive session, confirming that Tab on `toolr ci lint --mode dry\ w`, `'dry w` and
-`"dry w` inserts a correctly quoted `dry walk`, per open question 1. If it is reliable, add it as
-`zsh_tab_inserts_quoted_match` behind the `distribution`-style opt-in, not the default suite.
+An interactive zsh on a pty, as the bash Tab tests use, confirms that Tab on `toolr ci lint --mode dry\ w`, `'dry w`,
+`"dry w` and `$'dry w` inserts a correctly quoted `dry walk`, per open question 1. It proved reliable, so it runs in
+the default suite as `zsh_tab_completes_quoted_and_escaped_partials_end_to_end` rather than behind an opt-in.
 
 ## Tasks
 
@@ -75,7 +75,7 @@ A one-off `zpty` run, or an interactive session, confirming that Tab on `toolr c
    only the test file. No uncovered Rust lines are added.
 7. `toolr release-notes add --text "zsh and fish completion matches choices typed with a backslash or quote."`
    Run `toolr release-notes check --base main`.
-8. `git grep -i paddle`, then archive both spec files with `git mv` into `specs/archive/2026/` as the last commit.
+8. Grep the diff for employer names, then archive both spec files with `git mv` into `specs/archive/2026/` as the last commit.
 9. Self-review rounds, then open the draft PR (`git-spice branch submit --draft`).
 
 ## Done when
