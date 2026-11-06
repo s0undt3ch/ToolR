@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import ast
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from toolr.testing._groups import _MAX_REEXPORT_DEPTH
 from toolr.testing._groups import GroupDeclaration
+from toolr.testing._groups import _Binding
+from toolr.testing._groups import _binding
 from toolr.testing._groups import _format_contradictory_groups
 from toolr.testing._groups import _format_undescribed_groups
 from toolr.testing._groups import _group_declarations
 from toolr.testing._groups import _ImportTable
+from toolr.testing._groups import _Memo
 from toolr.testing._groups import _undescribed_groups
 
 
@@ -77,6 +82,8 @@ def test_paths_follow_the_parsers_resolution(make_tools_dir: Callable[..., Path]
 
 GROUP = 'g = cg("{0}", "{0}", "Described.")\n'
 
+# Hand-written table, not run against the Rust binary: the parity corpus
+# (tests/e2e/test_parser_tester_parity.py) is what proves the two resolvers agree.
 ALIAS_CASES = {
     "import as": (
         {"m.py": "from toolr import command_group as cg\n" + GROUP.format("a")},
@@ -389,31 +396,27 @@ def test_aliases_resolve_from_source_as_the_parser_does(
     assert [d.path for d in _group_declarations(tools)] == expected
 
 
-def test_resolution_is_memoised(
-    make_tools_dir: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Six modules star-importing each other fan out 5-wide per hop, eight hops deep, without a memo."""
-    count = 0
-    original = _ImportTable.local_binding_wins
-
-    def counting(self: _ImportTable, name: str) -> bool:
-        nonlocal count
-        count += 1
-        return original(self, name)
-
-    monkeypatch.setattr(_ImportTable, "local_binding_wins", counting)
-    modules = range(6)
-    tools = make_tools_dir(
-        {
-            f"m{n}.py": "".join(f"from tools.m{o} import *\n" for o in modules if o != n)
-            + f"def helper{n}():\n    pass\n"
-            + "".join(f"x{o} = helper{o}()\n" for o in modules if o != n)
-            for n in modules
-        }
-    )
-    assert _group_declarations(tools) == []
-    # One evaluation per (module, name, depth) at most; unmemoised is millions.
-    assert count < 6 * 7 * 9 * 2
+def test_resolution_is_memoised() -> None:
+    """Modules star-importing each other fan out wide per hop, up to the depth cap, without a memo."""
+    count = 6
+    names = [f"tools.m{n}" for n in range(count)]
+    tables = {
+        module: _ImportTable(
+            ast.parse(
+                "".join(f"from tools.m{o} import *\n" for o in range(count) if o != n)
+                + f"def helper{n}():\n    pass\n"
+            ),
+            module,
+            is_package=False,
+        )
+        for n, module in enumerate(names)
+    }
+    memo: _Memo = {}
+    for module in names:
+        for n in range(count):
+            assert _binding(tables, module, f"helper{n}", 0, memo) is _Binding.OTHER
+    # At most one entry per (module, name, depth in 0..=_MAX_REEXPORT_DEPTH).
+    assert len(memo) <= len(names) * count * (_MAX_REEXPORT_DEPTH + 1)
 
 
 def test_alias_of_a_package_attribute_resolves_through_its_init(
