@@ -614,6 +614,7 @@ fn print_bash_source_hint(shell: CompletionShell, path: &std::path::Path, quiet:
     }
     // Test seam: CI hosts ship bash-completion, so tests move the probe's root.
     let sysroot = non_empty_env_path("TOOLR_BASH_COMPLETION_SYSROOT").unwrap_or_else(|| "/".into());
+    // Raw on purpose: bash_completion_installed already skips empty entries.
     let xdg_data_dirs = std::env::var_os("XDG_DATA_DIRS");
     let homebrew_prefix = non_empty_env_path("HOMEBREW_PREFIX");
     if !bash_completion_installed(

@@ -203,9 +203,9 @@ pub fn toolr_data_dir() -> Option<PathBuf> {
 }
 
 /// Where toolr keeps state that must survive a cache wipe, such as repository
-/// trust. Defaults to `$XDG_STATE_HOME/toolr`, then the platform state
-/// directory, then [`toolr_data_dir`] (`dirs::state_dir()` is `None` on macOS
-/// and Windows).
+/// trust. Defaults to `$XDG_STATE_HOME/toolr` if `XDG_STATE_HOME` is unset or
+/// empty, then the platform state directory, then [`toolr_data_dir`]
+/// (`dirs::state_dir()` is `None` on macOS and Windows).
 pub fn toolr_state_dir() -> Option<PathBuf> {
     crate::env::non_empty_env_path("XDG_STATE_HOME")
         .map(|v| v.join("toolr"))
@@ -215,7 +215,7 @@ pub fn toolr_state_dir() -> Option<PathBuf> {
 
 /// Where toolr keeps cached venvs and other transient files.
 /// Defaults to `$XDG_CACHE_HOME/toolr`, falling back to
-/// `~/.cache/toolr`.
+/// `~/.cache/toolr` if `XDG_CACHE_HOME` is unset or empty.
 pub fn toolr_cache_dir() -> Option<PathBuf> {
     crate::env::non_empty_env_path("XDG_CACHE_HOME")
         .map(|v| v.join("toolr"))

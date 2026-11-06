@@ -1,11 +1,8 @@
-//! Environment-variable helpers shared by toolr's crates.
+//! Env reads that must treat an empty value as unset.
 
 use std::path::PathBuf;
 
-/// The value of `name` as a path, or `None` when it is unset or empty.
-///
-/// An empty value reads as unset, as the XDG base directory spec requires; using it would resolve
-/// relative to the cwd.
+/// Treats an empty value as unset, per the XDG spec: an empty path would resolve against the cwd.
 pub fn non_empty_env_path(name: &str) -> Option<PathBuf> {
     std::env::var_os(name)
         .filter(|v| !v.is_empty())

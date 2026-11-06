@@ -75,6 +75,7 @@ fn list_renders_entries_with_size_and_last_used() {
     assert!(stdout.contains("LAST USED"));
 }
 
+// HOME doesn't drive the dirs cache dir on Windows, so the test is Unix-only.
 #[cfg(unix)]
 #[test]
 fn empty_xdg_cache_home_uses_the_platform_default() {
