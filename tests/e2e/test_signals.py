@@ -52,7 +52,10 @@ TERMINAL_DRAIN = 0.2
 
 
 def reset_sigint() -> None:
-    """Undo a SIG_IGN inherited from a shell's `&` job, which would hide every SIGINT these tests send."""
+    """Undo a SIG_IGN inherited from a shell's `&` job, which would hide every SIGINT these tests send.
+
+    Every fixture here that starts `toolr` must call it in the child before exec.
+    """
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
@@ -84,6 +87,7 @@ def start_cleanup(
             stderr=subprocess.PIPE,
             text=True,
             start_new_session=True,
+            # A shell can't un-ignore an inherited SIG_IGN; only a pre-exec hook can.
             preexec_fn=reset_sigint,  # noqa: PLW1509
         )
         procs.append(proc)

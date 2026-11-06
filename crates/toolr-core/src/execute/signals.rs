@@ -252,7 +252,9 @@ mod tests {
 
     /// Bounded by `sleep 10`: if no signal is sent, the child exits 0 and the
     /// caller's assertion fails instead of hanging.
-    /// Resets SIGINT and SIGTERM to default so an inherited SIG_IGN cannot swallow them.
+    ///
+    /// A shell's `&` job runs the tests with SIGINT ignored, and that survives exec, so the
+    /// child resets it (SIGTERM too, for symmetry). CI never hits this, so keep the reset.
     fn sleeper_status(pending: &Pending) -> ExitStatus {
         let mut command = Command::new("sleep");
         command.arg("10");

@@ -1,6 +1,6 @@
 # Signal tests ignore an inherited SIG_IGN: implementation plan
 
-**Spec:** `specs/2026-11-06-sigint-test-inherited-ignore-design.md`
+**Spec:** `specs/archive/2026/2026-11-06-sigint-test-inherited-ignore-design.md`
 
 ## Task 1: reset dispositions in the sleeper child
 
@@ -16,6 +16,16 @@
 - [ ] Commit `fix(execute): reset inherited signal dispositions in the signal tests` with a
       `Release-Notes: skip` trailer, because nothing user-visible changes.
 
-## Task 2: archive the spec
+## Task 2: reset SIGINT in the e2e signal tests
+
+**File:** `tests/e2e/test_signals.py`.
+
+- [ ] Run `(trap '' INT; uv run pytest tests/e2e/test_signals.py)` and confirm that the two SIGINT
+      tests fail with exit 0.
+- [ ] Add `reset_sigint()`, which sets SIGINT to `SIG_DFL`. Call it through `preexec_fn` on the
+      `Popen` and in the `pty.fork` child before `execve`.
+- [ ] Run the same command again and confirm that it passes.
+
+## Task 3: archive the spec
 
 - [ ] `git mv` both spec files to `specs/archive/2026/`, then commit.
