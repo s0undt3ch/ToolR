@@ -1,6 +1,5 @@
 //! `toolr self cache prune` implementation.
 
-use std::fmt;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -32,21 +31,21 @@ impl<'a> Report<'a> {
     }
 
     /// Success chatter. A dry run's lines are its answer, so `--quiet` keeps them.
-    fn note(&mut self, args: fmt::Arguments) -> io::Result<()> {
+    fn note(&mut self, line: &str) -> io::Result<()> {
         if self.quiet && !self.dry_run {
             return Ok(());
         }
-        writeln!(self.out, "{args}")
+        writeln!(self.out, "{line}")
     }
 
     /// The command's result, which `--quiet` never drops.
-    fn result(&mut self, args: fmt::Arguments) -> io::Result<()> {
-        writeln!(self.out, "{args}")
+    fn result(&mut self, line: &str) -> io::Result<()> {
+        writeln!(self.out, "{line}")
     }
 
     /// Warnings print under `--quiet` too: it drops success lines, never warnings.
-    fn warn(&mut self, args: fmt::Arguments) -> io::Result<()> {
-        writeln!(self.out, "toolr: warning: {args}")
+    fn warn(&mut self, line: &str) -> io::Result<()> {
+        writeln!(self.out, "toolr: warning: {line}")
     }
 }
 
@@ -81,14 +80,13 @@ fn prune_all(
         // Leftover locks are empty files holding no data, so they need no confirmation.
         if sweep_locks(cache_root, &[], report)? == 0 {
             let root = cache_root.display();
-            report.note(format_args!(
-                "toolr: no cache entries to remove under {root}"
-            ))?;
+            let line = format!("toolr: no cache entries to remove under {root}");
+            report.note(&line)?;
         }
         return Ok(ExitCode::SUCCESS);
     }
     if !yes && !dry_run && !confirm(&entries)? {
-        report.note(format_args!("toolr: aborted, nothing removed"))?;
+        report.note("toolr: aborted, nothing removed")?;
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -96,22 +94,24 @@ fn prune_all(
     for e in &entries {
         total_bytes = total_bytes.saturating_add(e.size_bytes);
         if dry_run {
-            report.result(format_args!(
+            let line = format!(
                 "DRY-RUN would remove {} ({})",
                 e.cache_dir.display(),
                 format_size(e.size_bytes, BINARY)
-            ))?;
+            );
+            report.result(&line)?;
         } else {
             remove_entry(&e.cache_dir, report)?;
         }
     }
     let action = if dry_run { "would free" } else { "freed" };
-    report.note(format_args!(
+    let line = format!(
         "toolr: {action} {} across {} entr{}",
         format_size(total_bytes, BINARY),
         entries.len(),
         if entries.len() == 1 { "y" } else { "ies" },
-    ))?;
+    );
+    report.note(&line)?;
     sweep_locks(cache_root, &[], report)?;
     Ok(ExitCode::SUCCESS)
 }
@@ -134,7 +134,7 @@ fn prune_classified(
         .collect();
     if candidates.is_empty() {
         if sweep_locks(cache_root, &keep_repos, report)? == 0 {
-            report.note(format_args!("toolr: nothing to prune"))?;
+            report.note("toolr: nothing to prune")?;
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -147,27 +147,30 @@ fn prune_classified(
             PruneReason::Stale => "STALE",
         };
         if dry_run {
-            report.result(format_args!(
+            let line = format!(
                 "DRY-RUN {tag:<7} {} ({})",
                 c.entry.cache_dir.display(),
                 format_size(c.entry.size_bytes, BINARY),
-            ))?;
+            );
+            report.result(&line)?;
         } else {
-            report.note(format_args!(
+            let line = format!(
                 "{tag:<7} removing {} ({})",
                 c.entry.cache_dir.display(),
                 format_size(c.entry.size_bytes, BINARY),
-            ))?;
+            );
+            report.note(&line)?;
             remove_entry(&c.entry.cache_dir, report)?;
         }
     }
     let action = if dry_run { "would free" } else { "freed" };
-    report.note(format_args!(
+    let line = format!(
         "toolr: {action} {} across {} entr{}",
         format_size(total_bytes, BINARY),
         candidates.len(),
         if candidates.len() == 1 { "y" } else { "ies" },
-    ))?;
+    );
+    report.note(&line)?;
     sweep_locks(cache_root, &keep_repos, report)?;
     Ok(ExitCode::SUCCESS)
 }
@@ -184,12 +187,12 @@ fn sweep_locks(cache_root: &Path, keep_repos: &[PathBuf], report: &mut Report) -
             };
             let plural = if sweep.removed == 1 { "" } else { "s" };
             let n = sweep.removed;
-            report.note(format_args!("toolr: {action} {n} rebuild lock{plural}"))?;
+            report.note(&format!("toolr: {action} {n} rebuild lock{plural}"))?;
             Ok(sweep.removed)
         }
         Ok(_) => Ok(0),
         Err(e) => {
-            report.warn(format_args!("failed to sweep rebuild locks: {e}"))?;
+            report.warn(&format!("failed to sweep rebuild locks: {e}"))?;
             Ok(0)
         }
     }
@@ -199,10 +202,8 @@ fn remove_entry(cache_dir: &Path, report: &mut Report) -> Result<()> {
     match std::fs::remove_dir_all(cache_dir) {
         Ok(()) => Ok(()),
         Err(e) => {
-            report.warn(format_args!(
-                "failed to remove {}: {e}",
-                cache_dir.display()
-            ))?;
+            let line = format!("failed to remove {}: {e}", cache_dir.display());
+            report.warn(&line)?;
             Ok(())
         }
     }
@@ -261,10 +262,6 @@ mod tests {
         }
     }
 
-    fn no_prompt(_: &[CachedVenv]) -> Result<bool> {
-        panic!("the prompt must not be shown")
-    }
-
     fn orphan_candidate(dir: &Path, bytes: u64) -> Candidate {
         std::fs::create_dir_all(dir.join("venv")).unwrap();
         std::fs::write(dir.join("venv/blob"), vec![0u8; bytes as usize]).unwrap();
@@ -302,7 +299,7 @@ mod tests {
             tmp.path(),
             vec![],
             true,
-            no_prompt,
+            confirm_destroy_all,
             &mut Report::new(&mut out, false, false),
         )
         .unwrap();
@@ -324,7 +321,7 @@ mod tests {
             tmp.path(),
             entries,
             true,
-            no_prompt,
+            confirm_destroy_all,
             &mut Report::new(&mut out, false, true),
         )
         .unwrap();
@@ -352,7 +349,7 @@ mod tests {
             tmp.path(),
             entries,
             true,
-            no_prompt,
+            confirm_destroy_all,
             &mut Report::new(&mut out, false, false),
         )
         .unwrap();
@@ -462,7 +459,14 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut out: Vec<u8> = Vec::new();
         let rep = &mut Report::new(&mut out, true, false);
-        prune_all(tmp.path(), two_entries(tmp.path()), true, no_prompt, rep).unwrap();
+        prune_all(
+            tmp.path(),
+            two_entries(tmp.path()),
+            true,
+            confirm_destroy_all,
+            rep,
+        )
+        .unwrap();
         assert!(out.is_empty(), "got {}", String::from_utf8_lossy(&out));
         assert!(!tmp.path().join("repo-a").exists());
         assert!(!tmp.path().join("repo-b").exists());
@@ -473,7 +477,14 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut out: Vec<u8> = Vec::new();
         let rep = &mut Report::new(&mut out, true, true);
-        prune_all(tmp.path(), two_entries(tmp.path()), true, no_prompt, rep).unwrap();
+        prune_all(
+            tmp.path(),
+            two_entries(tmp.path()),
+            true,
+            confirm_destroy_all,
+            rep,
+        )
+        .unwrap();
         let s = String::from_utf8(out).unwrap();
         assert_eq!(s.matches("DRY-RUN would remove").count(), 2, "got {s}");
         assert!(s.contains("would free"));
@@ -485,7 +496,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut out: Vec<u8> = Vec::new();
         let rep = &mut Report::new(&mut out, true, false);
-        prune_all(tmp.path(), vec![], true, no_prompt, rep).unwrap();
+        prune_all(tmp.path(), vec![], true, confirm_destroy_all, rep).unwrap();
         assert!(out.is_empty(), "got {}", String::from_utf8_lossy(&out));
     }
 
@@ -494,7 +505,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut out: Vec<u8> = Vec::new();
         let rep = &mut Report::new(&mut out, true, true);
-        prune_all(tmp.path(), vec![], true, no_prompt, rep).unwrap();
+        prune_all(tmp.path(), vec![], true, confirm_destroy_all, rep).unwrap();
         let s = String::from_utf8(out).unwrap();
         assert!(s.contains("no cache entries to remove"), "got {s}");
     }
