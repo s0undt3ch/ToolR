@@ -1868,6 +1868,8 @@ fn dash_fixture() -> Manifest {
     use ArgumentKind::{Flag, Optional, Positional, VarPositional};
     let mut m = attached_fixture();
     m.commands = vec![
+        // `--mode` carries every dash shape (`--dash`, `-x`, bare `-`, numeric `-1`);
+        // `target` has a `--dir` choice only a post-`--` positional may offer.
         leaf(
             "lint",
             "ci",
@@ -1888,6 +1890,7 @@ fn dash_fixture() -> Manifest {
             ],
             false,
         ),
+        // A positional whose choices include a bare `-` and a `--n`.
         leaf(
             "pos",
             "ci",
@@ -1899,6 +1902,7 @@ fn dash_fixture() -> Manifest {
             )],
             false,
         ),
+        // A variadic positional keeps completing after `--`.
         leaf(
             "cat",
             "ci",
@@ -1910,12 +1914,14 @@ fn dash_fixture() -> Manifest {
             )],
             false,
         ),
+        // A path positional hands the slot to the shell after `--`.
         leaf(
             "open",
             "ci",
             vec![typed_arg("path", Positional, SupportedType::FilePath, &[])],
             false,
         ),
+        // A dispatcher and its child: clap rejects a `--` before the child name.
         leaf(
             "job",
             "ci",
@@ -1941,47 +1947,45 @@ fn dash_values(words: &[&str]) -> Vec<String> {
     values(serve_completions(&dash_fixture(), &tokens(words)))
 }
 
+/// Every case is a line clap parses as the table says; re-verify one with
+/// `TOOLR_TRUST_ALL=1 toolr <line>` against a project holding the same command.
 #[test]
-fn double_dash_stops_flag_name_completion() {
-    assert_eq!(dash_values(&["ci", "lint", "--", "--"]), vec!["--dir"]);
-    assert!(dash_values(&["ci", "lint", "--", "--m"]).is_empty());
-}
-
-#[test]
-fn double_dash_makes_flag_looking_words_positionals() {
-    for words in [
-        &["ci", "lint", "--", "--mode="][..],
-        &["ci", "lint", "--", "--mode", ""],
-        &["ci", "lint", "--", "--mode", "alpha", ""],
+fn double_dash_ends_option_parsing() {
+    let all = &["--dir", "alpha", "beta"][..];
+    for (words, want) in [
+        (&["ci", "lint", "--", "--"][..], &["--dir"][..]),
+        (&["ci", "lint", "--", ""], all),
+        (&["ci", "lint", "--mode", "fast", "--", ""], all),
+        (&["ci", "lint", "--mode=fast", "--", ""], all),
+        (&["ci", "cat", "--", "one", ""], &["one", "two"]),
+        (&["ci", "job", "run", "--", ""], &["x"]),
     ] {
-        assert!(dash_values(words).is_empty(), "{words:?}");
+        assert_eq!(dash_values(words), want, "{words:?}");
     }
 }
 
 #[test]
-fn double_dash_is_not_a_positional() {
-    assert_eq!(
-        dash_values(&["ci", "lint", "--", ""]),
-        vec!["--dir", "alpha", "beta"]
-    );
-    assert!(dash_values(&["ci", "lint", "--", "alpha", ""]).is_empty());
-    assert!(dash_values(&["ci", "lint", "alpha", "--", ""]).is_empty());
-}
-
-#[test]
-fn flags_before_double_dash_are_still_skipped() {
-    assert_eq!(
-        dash_values(&["ci", "lint", "--mode", "fast", "--", ""]),
-        vec!["--dir", "alpha", "beta"]
-    );
-}
-
-#[test]
-fn variadic_keeps_completing_after_double_dash() {
-    assert_eq!(
-        dash_values(&["ci", "cat", "--", "one", ""]),
-        vec!["one", "two"]
-    );
+fn completes_nothing_where_clap_errors_or_no_slot_is_left() {
+    for words in [
+        // Flag-looking words after `--` are positionals, so no name or value slot.
+        &["ci", "lint", "--", "--m"][..],
+        &["ci", "lint", "--", "--mode="],
+        &["ci", "lint", "--", "--mode", ""],
+        &["ci", "lint", "--", "--mode", "alpha", ""],
+        // The single positional is filled, whether before or after `--`.
+        &["ci", "lint", "--", "alpha", ""],
+        &["ci", "lint", "alpha", "--", ""],
+        // A `--` before the dispatcher's child name, and past the child's positional.
+        &["ci", "job", "--", ""],
+        &["ci", "job", "run", "x", "--", ""],
+        // clap: "a value is required for '--mode <mode>'", bare or with an empty `=`.
+        &["ci", "lint", "--mode", "--", ""],
+        &["ci", "lint", "--mode=", "--", ""],
+        &["ci", "job", "--level", "--", ""],
+        &["ci", "job", "--level=", "--", ""],
+    ] {
+        assert!(dash_values(words).is_empty(), "{words:?}");
+    }
 }
 
 #[test]
@@ -1996,75 +2000,32 @@ fn path_positional_after_double_dash_is_paths() {
     }
 }
 
+/// clap reads a dash-leading choice as a flag, except after `=` or `--`; a bare `-` is
+/// always a plain value.
 #[test]
-fn double_dash_inside_a_dispatcher() {
-    // clap rejects a `--` before the child name, so nothing is offered there.
-    assert!(dash_values(&["ci", "job", "--", ""]).is_empty());
-    assert_eq!(dash_values(&["ci", "job", "run", "--", ""]), vec!["x"]);
-    assert!(dash_values(&["ci", "job", "run", "x", "--", ""]).is_empty());
-}
-
-#[test]
-fn separate_flag_value_drops_dash_leading_choices() {
-    assert_eq!(
-        dash_values(&["ci", "lint", "--mode", ""]),
-        vec!["-", "fast", "full"]
-    );
-    // A bare `-` is a plain value to clap, and `-1` is dropped like any dash-leading choice.
-    assert_eq!(dash_values(&["ci", "lint", "--mode", "-"]), vec!["-"]);
-    assert_eq!(
-        dash_values(&["ci", "lint", "--mode", "-1"]),
-        Vec::<String>::new()
-    );
-}
-
-#[test]
-fn numeric_negative_choice_only_in_the_attached_form() {
+fn dash_leading_choices_are_offered_only_where_clap_takes_them() {
     for (words, want) in [
+        // Separate form: `--dash`, `-x` and `-1` dropped, bare `-` kept.
         (
             &["ci", "lint", "--mode", ""][..],
             &["-", "fast", "full"][..],
         ),
+        (&["ci", "lint", "--mode", "-"], &["-"]),
+        (&["ci", "lint", "--mode", "-1"], &[]),
+        // Attached form: everything is offered.
+        (
+            &["ci", "lint", "--mode="],
+            &["-", "--dash", "-1", "-x", "fast", "full"],
+        ),
         (&["ci", "lint", "--mode=-"], &["-", "--dash", "-1", "-x"]),
+        (&["ci", "lint", "--mode=--d"], &["--dash"]),
         (&["ci", "lint", "--mode=-1"], &["-1"]),
+        // Positionals: dropped before `--`, offered after it.
+        (&["ci", "lint", ""], &["alpha", "beta"]),
+        (&["ci", "lint", "--", ""], &["--dir", "alpha", "beta"]),
+        (&["ci", "pos", ""], &["-", "a"]),
+        (&["ci", "pos", "--", ""], &["-", "--n", "a"]),
     ] {
         assert_eq!(dash_values(words), want, "{words:?}");
     }
-}
-
-#[test]
-fn double_dash_right_after_a_value_flag_completes_nothing() {
-    // clap: "a value is required for '--mode <mode>'".
-    assert!(dash_values(&["ci", "lint", "--mode", "--", ""]).is_empty());
-    assert!(dash_values(&["ci", "job", "--level", "--", ""]).is_empty());
-    // An empty attached value is just as missing.
-    assert!(dash_values(&["ci", "lint", "--mode=", "--", ""]).is_empty());
-    assert!(dash_values(&["ci", "job", "--level=", "--", ""]).is_empty());
-    // A non-empty one, or a boolean flag, leaves the `--` free to end options.
-    assert_eq!(
-        dash_values(&["ci", "lint", "--mode=fast", "--", ""]),
-        vec!["--dir", "alpha", "beta"]
-    );
-}
-
-#[test]
-fn bare_dash_positional_choice_is_offered() {
-    assert_eq!(dash_values(&["ci", "pos", ""]), vec!["-", "a"]);
-    assert_eq!(dash_values(&["ci", "pos", "--", ""]), vec!["-", "--n", "a"]);
-}
-
-#[test]
-fn attached_flag_value_keeps_dash_leading_choices() {
-    for (word, want) in [
-        ("--mode=", &["-", "--dash", "-1", "-x", "fast", "full"][..]),
-        ("--mode=-", &["-", "--dash", "-1", "-x"]),
-        ("--mode=--d", &["--dash"]),
-    ] {
-        assert_eq!(dash_values(&["ci", "lint", word]), want, "{word}");
-    }
-}
-
-#[test]
-fn positional_dash_leading_choice_only_after_double_dash() {
-    assert_eq!(dash_values(&["ci", "lint", ""]), vec!["alpha", "beta"]);
 }

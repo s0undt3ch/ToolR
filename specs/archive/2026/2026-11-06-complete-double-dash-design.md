@@ -41,23 +41,36 @@ a committed `--` through, and the attached-form `--opt=` prefixing from #685 is 
 ### FU-31: a committed `--` ends option parsing
 
 ```rust
-/// Result of walking the committed argument tokens of one command.
+/// What the committed argument tokens of one command hold.
 struct ArgScan {
-    /// Indices into the walked tokens of every positional value; never the `--` itself.
+    /// Indices of the positional values, never the `--` itself.
     positionals: Vec<usize>,
     /// Index of the committed `--`, when there is one.
     terminator: Option<usize>,
+    /// A value-taking flag (`--name` or an empty `--name=`) is directly followed by `--`.
+    missing_value: bool,
+}
+
+impl ArgScan {
+    /// Whether clap rejects the line outright, so nothing completes: a flag missing its
+    /// value before `--` and, for a dispatcher, a `--` before the child name.
+    fn dead_end(&self, dispatcher: bool) -> bool;
 }
 
 fn scan_args(command: &Command, arg_tokens: &[String]) -> ArgScan;
+
+/// Flag-vs-positional decision for a word clap still parses as an option.
+fn flag_slot<'a>(command: &'a Command, arg_tokens: &[String], prefix: &str) -> Option<Slot<'a>>;
 ```
 
-`scan_args` is today's `positional_indices` loop plus one arm: a token equal to `--` records its index and
-pushes every later index as a positional, then stops. It replaces `positional_indices`; the dispatcher uses it too.
+`scan_args` is the old `positional_indices` loop plus two arms: a token equal to `--` records its index and
+pushes every later index as a positional, then stops; a value-taking flag (bare, or `--name=` with nothing
+attached) followed by a committed `--` sets `missing_value`. It replaces `positional_indices`; the dispatcher
+uses it too.
 
 `classify_leaf_args` calls `scan_args` once, up front. When `terminator.is_some()`:
 
-- skip `attached_value`, `pending_flag_value` and the `--`/`-` → `Slot::Flag` branch, so `--mode=x`,
+- skip `flag_slot` (`attached_value`, `pending_flag_value` and the `--`/`-` → `Slot::Flag` branch), so `--mode=x`,
   `--mode <TAB>` and `--` are positional words;
 - pick the positional from `positionals.len()` exactly as now (variadic keeps completing);
 - skip the final "command has flags, offer flag names" fallback; past the last positional the slot is
@@ -88,8 +101,9 @@ enum Slot<'a> {
 fn values(argument: &Argument, prefix: &str, dash_ok: bool) -> Vec<Candidate>;
 ```
 
-`values` adds `.filter(|v| dash_ok || !v.starts_with('-'))`. `candidates` passes `attached` for a
-`FlagValue` and `after_terminator` for a `Positional`. `attached_value` sets `attached: true`;
+`values` adds `.filter(|v| dash_ok || *v == "-" || !v.starts_with('-'))`, since a bare `-` is a plain value to
+clap. `candidates` binds `attached` (for a `FlagValue`) and `after_terminator` (for a `Positional`) as `dash_ok`.
+`attached_value` sets `attached: true`;
 `pending_flag_value`'s callers set `false`; the two `Slot::Positional` constructors set
 `terminator.is_some()`.
 
@@ -97,7 +111,7 @@ Consequences: `--opt <TAB>` and `--opt -<TAB>` drop `--dash`/`-x`; `--opt=<TAB>`
 them; a positional `--dir` choice shows only after `--`. Dispatcher flag values go through the same
 `pending_flag_value` call sites, so they are covered without extra code.
 
-### Round-1 review fixes
+### Review fixes
 
 - Root `--`: `raw_complete_tokens` no longer strips a leading `--`. No script sends a separator, so
   `toolr -- <TAB>` offered groups that clap rejects (`toolr -- ci`). The engine now sees the committed `--` and
@@ -107,6 +121,8 @@ them; a positional `--dir` choice shows only after `--`. Dispatcher flag values 
 - A bare `-` is a plain value to clap, so `values()` always offers it; only choices longer than one character
   that start with `-` (`--dash`, `-x`, `-1`) are dropped in the separate form.
 - Numeric negative choices such as `-1` follow the same rule, with an explicit test.
+- Round 2: an empty `--opt=` followed by `--` is the same missing value as a bare `--opt`; `scan_args` folds both
+  into one rule, and `ArgScan::dead_end` is the single gate both classifiers call.
 
 ## Tests
 
@@ -118,7 +134,7 @@ Unit tests in `crates/toolr-core/src/complete/tests.rs` and one binary-level tes
 1. Resolved: clap rejects `jenkins job -- wrapup_company 1` (`unexpected argument 'wrapup_company'`, with a tip to
    remove the `--`), while `jenkins job wrapup_company -- 1` parses. The engine returns nothing for a `--`
    before the child name, as designed.
-2. `ci lint --mode -- <TAB>` (`--` as a flag's value) is left as today: `scan_args` lets the flag consume it,
-   and clap rejects the line anyway.
+2. Resolved: `ci lint --mode -- <TAB>` completes nothing (`ArgScan::missing_value`); clap says "a value is
+   required".
 3. If the other branch's `bash.sh` rewrite starts dropping a committed `--` from the tokens it sends, FU-31
    silently stops working in bash. Worth one bash-level check after both land; not a design dependency.

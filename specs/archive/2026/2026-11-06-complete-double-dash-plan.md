@@ -15,8 +15,9 @@ Work in the `complete-double-dash` worktree. Run everything in the foreground.
 
 Add `dash_fixture()` to `tests.rs`, built with the existing `typed_arg` and `leaf` helpers, group `ci`:
 
-- `lint`: `--mode` Optional Literal `fast, full, --dash, -x`; `--verbose` Flag; positional `target`
+- `lint`: `--mode` Optional Literal `fast, full, --dash, -x, -, -1`; `--verbose` Flag; positional `target`
   Str with choices `alpha, beta, --dir`.
+- `pos`: positional `p` Str with choices `a, -, --n`.
 - `cat`: VarPositional `files` Str with choices `one, two`.
 - `open`: positional `path` `SupportedType::FilePath`.
 - `job`: dispatcher with `--level` Optional Str choices `debug, info`, child `run` (group `ci.job`) with
@@ -61,7 +62,7 @@ Run `cargo test -p toolr-core complete::` and confirm the new tests fail for the
 
 ## Task 2: implement (engine.rs only)
 
-Follow the design: `scan_args` plus `positional_indices` wrapper; early `scan_args` call in
+Follow the design: `scan_args` replacing `positional_indices`; early `scan_args` call in
 `classify_leaf_args` with the three skips; `Slot` fields `attached` and `after_terminator`; `values(…,
 dash_ok)`; dispatcher `terminator < child_index` returns `Slot::None`. Update the doc comments of
 `classify_leaf_args` and `values` to say why (clap reads words after `--` as positionals; clap rejects a
@@ -75,8 +76,8 @@ Adjust the dispatcher row of the table if clap accepts it.
 
 ```sh
 toolr release-notes add --text "Tab completion no longer offers flags, flag values or option names after a \
-bare \`--\`: everything after it is a positional, as the CLI reads it. Choices that start with \`-\` are \
-offered only where the CLI accepts them: after \`--opt=\`, or after \`--\` for a positional."
+bare \`--\`: everything after it is a positional, as the CLI reads it. Choices starting with \`-\` are \
+offered only where the CLI accepts them: after \`--opt=\`, or as a positional after \`--\`."
 ```
 
 Commit type `fix(complete)`. Check with `toolr release-notes check --base main`.

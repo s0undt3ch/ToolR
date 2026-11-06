@@ -366,13 +366,23 @@ def deploy(ctx, env: Literal["staging", "production"]):
 
     assert_eq!(
         complete(&tmp, &["ci", "deploy", "--", ""]),
-        "production\nstaging"
+        "production\nstaging",
+        "choices of the positional after `--`"
     );
-    assert_eq!(complete(&tmp, &["ci", "deploy", "--", "--"]), "");
-    assert_eq!(complete(&tmp, &["ci", "pick", "--opt", ""]), "plain");
+    assert_eq!(
+        complete(&tmp, &["ci", "deploy", "--", "--"]),
+        "",
+        "no flag names after `--`"
+    );
+    assert_eq!(
+        complete(&tmp, &["ci", "pick", "--opt", ""]),
+        "plain",
+        "dash-leading choices dropped in the separate form"
+    );
     assert_eq!(
         complete(&tmp, &["ci", "pick", "--opt="]),
-        "--dash\n-x\nplain"
+        "--dash\n-x\nplain",
+        "dash-leading choices kept after `=`"
     );
 }
 

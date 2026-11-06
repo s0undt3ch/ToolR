@@ -721,7 +721,7 @@ fn raw_complete_tokens(matches: &clap::ArgMatches) -> Option<Vec<String>> {
     let marker_pos = argv.iter().position(|a| a == "__complete")?;
     let after_marker = argv.get(marker_pos + 1..)?;
     let cwd_pos = after_marker.iter().position(|a| a == cwd)?;
-    // A leading `--` is kept: it is a committed terminator, as in `toolr -- ci`.
+    // A leading `--` is kept: it is a committed terminator, and clap rejects `toolr -- ci`.
     Some(after_marker[cwd_pos + 1..].to_vec())
 }
 
