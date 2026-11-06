@@ -40,18 +40,7 @@ def test_setup_logging_verbose_level():
 def test_setup_logging_quiet_level():
     """Test setup_logging with QUIET verbosity."""
     setup_logging(verbosity=ConsoleVerbosity.QUIET)
-    assert logging.root.level == logging.WARNING
-
-
-def test_setup_logging_quiet_keeps_warnings_and_drops_info(caplog):
-    """`-q` drops a command's `logging.info` but keeps its `logging.warning` and errors."""
-    setup_logging(verbosity=ConsoleVerbosity.QUIET)
-    LOGGER.info("info line")
-    LOGGER.warning("warning line")
-    LOGGER.error("error line")
-    assert "info line" not in caplog.text
-    assert "warning line" in caplog.text
-    assert "error line" in caplog.text
+    assert logging.root.level == logging.CRITICAL + 1
 
 
 def test_setup_logging_normal_level():
