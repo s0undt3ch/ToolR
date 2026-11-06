@@ -1369,7 +1369,7 @@ def test_wrapped_command_is_shape_checked(tools_repo: ToolsRepo) -> None:
                 "import functools\n"
                 "from toolr import command, command_group\n"
                 'GROUP = "grp"\n'
-                "command_group(GROUP, 'Grp', 'Grp')\n"
+                "command_group('grp', 'Grp', 'Grp')\n"
                 "def logged(f):\n"
                 "    @functools.wraps(f)\n"
                 "    def wrapper(*args, **kwargs):\n"
