@@ -3,6 +3,12 @@
 > **For agentic workers:** use superpowers:subagent-driven-development or superpowers:executing-plans.
 > Steps use checkbox (`- [ ]`) syntax.
 
+> **Superseded in part:** the shipped design resolves aliases in `CommandsTester` statically over the
+> `tools/` sources, not by runtime namespace, so Task 2's `_group_calls(tree, namespace)` approach
+> and the signatures listed under each task (`binds_toolr_member(all_imports, ...)`,
+> `ToolrNames::new(all_imports, module)`, `extract_groups(..., names: ToolrNames)`) did not ship as
+> written. See the design's "Python mirror" section for what did.
+
 **Goal:** the static parser and `CommandsTester` read groups bound through an aliased
 `command_group` or an annotated assignment, so their commands stop vanishing.
 
