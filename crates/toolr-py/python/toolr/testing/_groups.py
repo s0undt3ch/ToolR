@@ -176,6 +176,7 @@ class _Param(NamedTuple):
     position: int
 
 
+_NAME = _Param("name", 0)
 _DESCRIPTION = _Param("description", 2)
 _LONG_DESCRIPTION = _Param("long_description", 3)
 _DOCSTRING = _Param("docstring", 4)
@@ -641,22 +642,23 @@ def _parameter_names(args: ast.arguments) -> set[str]:
 def _unbound_group_calls(
     tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
 ) -> list[ast.Call]:
-    """Each toolr ``command_group(...)`` call that isn't the whole value of a bound statement.
+    """Each toolr ``command_group(...)`` call the manifest build can't bind, in source order.
 
-    In source order. A bound statement (one ``_group_calls`` reads) is skipped
-    whole, annotation included. A callee counts only when it resolves to toolr's
+    That is any call that isn't the whole value of a bound statement (one
+    ``_group_calls`` reads), and a bound statement whose group name isn't a
+    string literal. ``command_group`` creates a group when none is registered,
+    so no call is exempt as a mere lookup. A bound statement is skipped whole,
+    annotation included. A callee counts only when it resolves to toolr's
     ``command_group``: a name through the import tables (a parameter of the
-    enclosing ``def`` or ``lambda`` shadows it), an attribute when its base is
-    the ``toolr`` module. A call that can't create a group, because it passes no
-    description or docstring, is a lookup and is allowed anywhere. Mirrors
+    enclosing ``def`` or ``lambda`` shadows it, no other local rebinding does),
+    an attribute when its base is the ``toolr`` module. Mirrors
     ``crates/toolr-core/src/parser/groups.rs::detect_unsupported_group_bindings``:
     change both together.
     """
-    source = _Source.of(tree)
     table = tables[module]
     found: list[ast.Call] = []
 
-    def is_toolr_call(call: ast.Call, shadowed: set[str]) -> bool:
+    def is_toolr_call(call: ast.Call, shadowed: frozenset[str]) -> bool:
         func = call.func
         if isinstance(func, ast.Name):
             return (
@@ -671,32 +673,30 @@ def _unbound_group_calls(
             and _is_toolr_module(table, func.value.id)
         )
 
-    def visit(node: ast.AST, shadowed: set[str]) -> None:
+    # An explicit stack: a long expression nests deeper than Python recurses.
+    stack: list[tuple[ast.AST, frozenset[str]]] = []
+    for stmt in tree.body:
+        supported = _supported_group_call(stmt)
+        if supported and _is_command_group(supported[1].func, tables, module, memo):
+            if _literal(_argument(supported[1], _NAME)) is None:
+                found.append(supported[1])
+        else:
+            stack.append((stmt, frozenset()))
+    while stack:
+        node, shadowed = stack.pop()
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             # Decorators, defaults and annotations read the enclosing scope.
             outer: list[ast.AST] = [node.args]
             if not isinstance(node, ast.Lambda):
                 outer += [*node.decorator_list, *([node.returns] if node.returns else [])]
-            for child in outer:
-                visit(child, shadowed)
+            stack.extend((child, shadowed) for child in outer)
             inner = shadowed | _parameter_names(node.args)
-            for child in node.body if isinstance(node.body, list) else [node.body]:
-                visit(child, inner)
-            return
-        if (
-            isinstance(node, ast.Call)
-            and is_toolr_call(node, shadowed)
-            and (_describes(node, source) or _unreadable(node, source))
-        ):
-            found.append(node)
-        for child in ast.iter_child_nodes(node):
-            visit(child, shadowed)
-
-    for stmt in tree.body:
-        supported = _supported_group_call(stmt)
-        if supported and _is_command_group(supported[1].func, tables, module, memo):
+            body = node.body if isinstance(node.body, list) else [node.body]
+            stack.extend((child, inner) for child in body)
             continue
-        visit(stmt, set())
+        if isinstance(node, ast.Call) and is_toolr_call(node, shadowed):
+            found.append(node)
+        stack.extend((child, shadowed) for child in ast.iter_child_nodes(node))
     return sorted(found, key=lambda node: (node.lineno, node.col_offset))
 
 
@@ -740,7 +740,7 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
                     parent = global_vars.get(parent_var)
             if parent is None:
                 parent = _literal(_argument(call, _PARENT))
-            name = _literal(call.args[0] if call.args else None)
+            name = _literal(_argument(call, _NAME))
             if name is None:
                 continue
             if "." in name:

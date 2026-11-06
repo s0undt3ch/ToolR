@@ -14,7 +14,10 @@ from typing import Any
 
 import toolr
 from toolr._decorators import CommandGroup
+from toolr.testing._groups import _NAME
+from toolr.testing._groups import _argument
 from toolr.testing._groups import _import_tables
+from toolr.testing._groups import _literal
 from toolr.testing._groups import _Memo
 from toolr.testing._groups import _unbound_group_calls
 from toolr.testing._unknown_groups import _escape_control_chars
@@ -98,11 +101,9 @@ def _function_defs(node: ast.AST, top_level: bool) -> Iterator[tuple[FunctionNod
 
 
 def _group_call_label(call: ast.Call) -> str:
-    """``command_group("<name>")`` when the first argument is a string literal, else ``command_group``."""
-    first = call.args[0] if call.args else None
-    if isinstance(first, ast.Constant) and isinstance(first.value, str):
-        return f'command_group("{first.value}")'
-    return "command_group"
+    """``command_group("<name>")`` when the name argument is a string literal, else ``command_group``."""
+    name = _literal(_argument(call, _NAME))
+    return "command_group" if name is None else f'command_group("{name}")'
 
 
 def _unsupported_group_bindings(tools_dir: Path) -> list[Unsupported]:

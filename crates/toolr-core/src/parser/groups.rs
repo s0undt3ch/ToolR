@@ -2,6 +2,9 @@
 
 use std::collections::HashMap;
 
+use ruff_python_ast::visitor::source_order::{
+    SourceOrderVisitor, walk_expr as walk_source_expr, walk_stmt as walk_source_stmt,
+};
 use ruff_python_ast::visitor::{Visitor, walk_except_handler, walk_expr, walk_stmt};
 use ruff_python_ast::{
     Alias, ExceptHandler, Expr, ExprCall, ModModule, Parameters, Stmt, StmtAnnAssign, StmtAssign,
@@ -126,6 +129,10 @@ struct Param {
     position: usize,
 }
 
+const NAME: Param = Param {
+    keyword: "name",
+    position: 0,
+};
 const TITLE: Param = Param {
     keyword: "title",
     position: 1,
@@ -340,38 +347,39 @@ fn supported_group_call(stmt: &Stmt) -> Option<(Option<String>, &ExprCall)> {
 
 /// Every toolr `command_group(...)` call the parser can't bind, one entry
 /// each, in source order: any that isn't the whole value of a supported
-/// module-level statement. Such a group, and every command on it, would
-/// otherwise vanish without a word.
+/// module-level statement, and a supported statement whose group name isn't a
+/// string literal. Such a group, and every command on it, would otherwise
+/// vanish without a word. `command_group` creates a group when none is
+/// registered, so no call is exempt as a mere lookup.
 ///
 /// A supported statement is skipped whole, annotation included. A callee
 /// counts only when it resolves to toolr's `command_group`: a name through the
-/// import tables (a parameter of the enclosing `def` or `lambda` shadows it),
-/// an attribute when its base is the `toolr` module. A call that can't create
-/// a group, because it passes no description or docstring, is a lookup and
-/// is allowed anywhere. The entry's name is `command_group("<name>")` when
-/// the call's first argument is a string literal.
+/// import tables (a parameter of the enclosing `def` or `lambda` shadows it,
+/// no other local rebinding does), an attribute when its base is the `toolr`
+/// module. The entry's name is `command_group("<name>")` when the name
+/// argument is a string literal.
 ///
 /// Mirrored in `toolr.testing._shapes._unsupported_group_bindings` and
 /// `toolr.testing._groups._unbound_group_calls`; change all three together.
 pub fn detect_unsupported_group_bindings(
     module: &ModModule,
-    module_docstring: Option<&str>,
     module_path: &str,
     names: &ToolrNames,
 ) -> Vec<UnsupportedCommand> {
-    let source = Source::new(module, module_docstring);
     let mut finder = UnboundGroupCalls {
         names,
         module_path,
-        source: &source,
         shadowed: Vec::new(),
         out: Vec::new(),
     };
     for stmt in &module.body {
-        let bound = supported_group_call(stmt)
-            .is_some_and(|(_, call)| is_command_group_call(call, names, module_path));
-        if !bound {
-            finder.visit_stmt(stmt);
+        match supported_group_call(stmt) {
+            Some((_, call)) if is_command_group_call(call, names, module_path) => {
+                if argument(call, NAME).and_then(literal_str).is_none() {
+                    finder.report(call);
+                }
+            }
+            _ => finder.visit_stmt(stmt),
         }
     }
     finder.out
@@ -380,7 +388,6 @@ pub fn detect_unsupported_group_bindings(
 struct UnboundGroupCalls<'a> {
     names: &'a ToolrNames<'a>,
     module_path: &'a str,
-    source: &'a Source<'a>,
     /// Parameter names of the enclosing functions and lambdas.
     shadowed: Vec<String>,
     out: Vec<UnsupportedCommand>,
@@ -406,6 +413,18 @@ impl UnboundGroupCalls<'_> {
         }
     }
 
+    fn report(&mut self, call: &ExprCall) {
+        let function = match argument(call, NAME).and_then(literal_str) {
+            Some(name) => format!("command_group(\"{name}\")"),
+            None => "command_group".to_string(),
+        };
+        self.out.push(UnsupportedCommand {
+            module: self.module_path.to_string(),
+            function,
+            kind: UnsupportedCommandKind::GroupBinding,
+        });
+    }
+
     /// Visit `body` with `parameters` shadowing outer names.
     fn scoped(&mut self, parameters: Option<&Parameters>, visit: impl FnOnce(&mut Self)) {
         let depth = self.shadowed.len();
@@ -418,10 +437,10 @@ impl UnboundGroupCalls<'_> {
     }
 }
 
-impl<'a> Visitor<'a> for UnboundGroupCalls<'_> {
+impl<'a> SourceOrderVisitor<'a> for UnboundGroupCalls<'_> {
     fn visit_stmt(&mut self, stmt: &'a Stmt) {
         let Stmt::FunctionDef(func) = stmt else {
-            walk_stmt(self, stmt);
+            walk_source_stmt(self, stmt);
             return;
         };
         // Decorators, defaults and annotations read the enclosing scope.
@@ -447,19 +466,10 @@ impl<'a> Visitor<'a> for UnboundGroupCalls<'_> {
         }
         if let Expr::Call(call) = expr
             && self.is_toolr_group_call(call)
-            && (describes(call, self.source) || unreadable(call, self.source))
         {
-            let function = match call.arguments.args.first().and_then(literal_str) {
-                Some(name) => format!("command_group(\"{name}\")"),
-                None => "command_group".to_string(),
-            };
-            self.out.push(UnsupportedCommand {
-                module: self.module_path.to_string(),
-                function,
-                kind: UnsupportedCommandKind::GroupBinding,
-            });
+            self.report(call);
         }
-        walk_expr(self, expr);
+        walk_source_expr(self, expr);
     }
 }
 
@@ -587,7 +597,7 @@ fn parse_group_call(
     source: &Source<'_>,
     parent: Option<String>,
 ) -> Option<GroupBinding> {
-    let raw_name = call.arguments.args.first().and_then(literal_str)?;
+    let raw_name = argument(call, NAME).and_then(literal_str)?;
     // Dotted name form (`command_group("ci.helm-diff-pr-comment", ...)`):
     // split the leaf off the parent path. Explicit `parent=` (from the
     // earlier resolution path) takes a back seat — pick one style.
@@ -1095,7 +1105,7 @@ c = b.command_group("c", "C")
     fn unbound_raw(src: &str) -> Vec<String> {
         let m = parse_src(src);
         let all = imports(&[("tools.m", src)]);
-        detect_unsupported_group_bindings(&m, None, "tools.m", &ToolrNames::new(&all))
+        detect_unsupported_group_bindings(&m, "tools.m", &ToolrNames::new(&all))
             .into_iter()
             .map(|u| {
                 assert_eq!(u.module, "tools.m");
@@ -1229,15 +1239,38 @@ c = b.command_group("c", "C")
     }
 
     #[test]
-    fn name_only_lookups_are_allowed_anywhere() {
-        let src = "g = command_group(\"g\", \"G\", \"G.\")\ndef f():\n    command_group(\"g\")\n    command_group(\"g\", \"G\")\n    command_group(\"g\", title=\"G\")\n";
-        assert_eq!(unbound(src), Vec::<String>::new());
+    fn keyword_name_binds_a_group() {
+        let groups = groups_in(
+            "from toolr import command_group\ng = command_group(name=\"kw\", title=\"Kw\", description=\"D.\")\n",
+            &[],
+        );
+        assert_eq!(paths(&groups), [pair("g", "kw")]);
     }
 
     #[test]
-    fn calls_that_may_describe_are_reported() {
-        let src = "def f(extra):\n    command_group(\"a\", \"A\", description=\"D.\")\n    command_group(\"b\", \"B\", docstring=__doc__)\n    command_group(\"c\", \"C\", **extra)\n    command_group(\"d\", \"D\", \"\")\n";
-        assert_eq!(unbound(src), named(&["a", "b", "c"]));
+    fn lookups_are_reported_too() {
+        let src = "g = command_group(\"g\", \"G\", \"G.\")\ndef f(extra):\n    command_group(\"g\")\n    command_group(\"h\", \"H\")\n    command_group(\"i\", title=\"I\")\n    command_group(\"j\", \"J\", None)\n    command_group(\"k\", \"K\", **extra)\n";
+        assert_eq!(unbound(src), named(&["g", "h", "i", "j", "k"]));
+    }
+
+    #[test]
+    fn keyword_name_is_read_and_named() {
+        assert_eq!(
+            unbound("def f():\n    command_group(name=\"g\", description=\"D.\")\n"),
+            named(&["g"])
+        );
+    }
+
+    #[test]
+    fn bound_statement_with_a_non_literal_name_is_reported() {
+        let src = "N = \"n\"\na = command_group(N, \"T\", \"D.\")\ncommand_group(name=N)\nb: T = command_group(*args)\nok = command_group(name=\"ok\", title=\"Ok\", description=\"D.\")\n";
+        assert_eq!(unbound(src), ["command_group"; 3]);
+    }
+
+    #[test]
+    fn problems_come_in_source_order() {
+        let src = "if x:\n    d[command_group(\"a\", \"A\", \"A.\")] = command_group(\"b\", \"B\", \"B.\")\n    y = [command_group(\"c\", \"C\", \"C.\") if command_group(\"d\", \"D\", \"D.\") else 0]\n    f(x=command_group(\"e\", \"E\", \"E.\"), *[command_group(\"f\", \"F\", \"F.\")])\n";
+        assert_eq!(unbound(src), named(&["a", "b", "c", "d", "e", "f"]));
     }
 
     #[test]
@@ -1246,16 +1279,6 @@ c = b.command_group("c", "C")
             unbound("def f(n):\n    return command_group(n, \"N\", \"N.\")\n"),
             ["command_group"]
         );
-    }
-
-    #[test]
-    fn module_docstring_counts_for_a_docstring_call() {
-        let src = "\"\"\"Doc.\"\"\"\nfrom toolr import command_group\ndef f():\n    command_group(\"a\", \"A\", docstring=__doc__)\n";
-        let m = parse_src(src);
-        let all = imports(&[("tools.m", src)]);
-        let found =
-            detect_unsupported_group_bindings(&m, Some("Doc."), "tools.m", &ToolrNames::new(&all));
-        assert_eq!(found.len(), 1);
     }
 
     #[test]

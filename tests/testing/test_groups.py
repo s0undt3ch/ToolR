@@ -56,7 +56,6 @@ def test_paths_follow_the_parsers_resolution(make_tools_dir: Callable[..., Path]
                 nested = bare.command_group("kid", "Kid", "Kid.")
                 unknown = nope.command_group("orphan", "Orphan", "Orphan.")
                 call = make().command_group("deep", "Deep", "Deep.", parent="ci")
-                command_group(NAME, "Name", "Name.")
             """,
             "pkg/__init__.py": """
                 command_group("pkg", "Pkg", "Pkg.")
@@ -787,28 +786,56 @@ def test_parameter_shadows_only_the_function_body(make_tools_dir: Callable[..., 
     assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("d")')
 
 
-def test_name_only_lookups_are_allowed_anywhere(make_tools_dir: Callable[..., Path]) -> None:
+def test_lookups_are_reported_too(make_tools_dir: Callable[..., Path]) -> None:
     source = """
         g = command_group("g", "G", "G.")
-        def f():
-            command_group("g")
-            command_group("g", "G")
-            command_group("g", title="G")
-    """
-    assert _unsupported(make_tools_dir, source) == []
-
-
-def test_calls_that_may_describe_are_reported(make_tools_dir: Callable[..., Path]) -> None:
-    source = """
         def f(extra):
-            command_group("a", "A", description="D.")
-            command_group("b", "B", docstring=__doc__)
-            command_group("c", "C", **extra)
-            command_group("d", "D", "")
+            command_group("g")
+            command_group("h", "H")
+            command_group("i", title="I")
+            command_group("j", "J", None)
+            command_group("k", "K", **extra)
     """
     assert _unsupported(make_tools_dir, source) == _problems(
-        "tools.m", 'command_group("a")', 'command_group("b")', 'command_group("c")'
+        "tools.m", *(f'command_group("{name}")' for name in "ghijk")
     )
+
+
+def test_keyword_name_is_read_and_named(make_tools_dir: Callable[..., Path]) -> None:
+    source = 'def f():\n    command_group(name="g", description="D.")\n'
+    assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("g")')
+
+
+def test_bound_statement_with_a_non_literal_name_is_reported(
+    make_tools_dir: Callable[..., Path],
+) -> None:
+    source = """
+        N = "n"
+        a = command_group(N, "T", "D.")
+        command_group(name=N)
+        b: T = command_group(*args)
+        ok = command_group(name="ok", title="Ok", description="D.")
+    """
+    assert _unsupported(make_tools_dir, source) == _problems("tools.m", *["command_group"] * 3)
+
+
+def test_problems_come_in_source_order(make_tools_dir: Callable[..., Path]) -> None:
+    source = """
+        if x:
+            d[command_group("a", "A", "A.")] = command_group("b", "B", "B.")
+            y = [command_group("c", "C", "C.") if command_group("d", "D", "D.") else 0]
+            f(x=command_group("e", "E", "E."), *[command_group("f", "F", "F.")])
+    """
+    assert _unsupported(make_tools_dir, source) == _problems(
+        "tools.m", *(f'command_group("{name}")' for name in "abcdef")
+    )
+
+
+def test_a_very_long_expression_does_not_overflow_the_stack(
+    make_tools_dir: Callable[..., Path],
+) -> None:
+    source = "x = " + " + ".join(["1"] * 3000) + ' + command_group("g", "G", "G.")\n'
+    assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("g")')
 
 
 def test_non_literal_name_is_named_generically(make_tools_dir: Callable[..., Path]) -> None:
@@ -833,3 +860,10 @@ def test_group_bindings_come_before_commands(make_tools_dir: Callable[..., Path]
         *_problems("tools.m", 'command_group("w")'),
         *_problems("tools.n", 'command_group("n")'),
     ]
+
+
+def test_keyword_name_declares_a_group(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {"m.py": IMPORT + 'g = command_group(name="kw", title="Kw", description="D.")\n'}
+    )
+    assert [d.path for d in _group_declarations(tools)] == ["kw"]

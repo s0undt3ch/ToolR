@@ -193,7 +193,6 @@ fn build_commands_inner(
         );
         unsupported_groups.extend(detect_unsupported_group_bindings(
             &module,
-            module_doc.as_deref(),
             &module_path,
             &names,
         ));
@@ -2144,8 +2143,7 @@ def hello(ctx):
                  dotted = command_group(\"ci.dot\", \"Dot\", \"Dot.\", parent=\"ignored\")\n\
                  nested = bare.command_group(\"kid\", \"Kid\", \"Kid.\")\n\
                  unknown = nope.command_group(\"orphan\", \"Orphan\", \"Orphan.\")\n\
-                 call = make().command_group(\"deep\", \"Deep\", \"Deep.\", parent=\"ci\")\n\
-                 command_group(NAME, \"Name\", \"Name.\")\n";
+                 call = make().command_group(\"deep\", \"Deep\", \"Deep.\", parent=\"ci\")\n";
         let (groups, _) = redeclared(&[
             ("tools/a.py", a),
             ("tools/b.py", b),
