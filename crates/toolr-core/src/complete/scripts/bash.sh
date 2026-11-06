@@ -282,6 +282,10 @@ _toolr_complete() {
     if ((_toolr_declined)); then
         return 0
     fi
+    # `insert-completions` (`M-*`) deletes the open quote and inserts each reply as is, unquoted.
+    if [[ ${COMP_TYPE-} == 42 && -n $_toolr_qchar ]]; then
+        return 0
+    fi
 
     # Words after the cursor are dropped; `_toolr_raw_cur` stands in for the cursor's word.
     local _toolr_args=()

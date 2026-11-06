@@ -196,6 +196,15 @@ The design was a hypothesis; these parts changed once tested against bash 5.1.16
   in a run put its quoting out of step for the rest of the line. Both now offer nothing: the line up to the
   cursor goes through the same parser first, and a run closing on a `'` after a `\` is declined.
 
+- **`insert-completions`.** `M-*` (emacs) or `*` (vi command mode) runs readline's `insert_all_matches`, which
+  deletes the open quote before the cursor and inserts each reply as is, so a reply quoted for the inside of
+  `'`, `"` or `$'` landed unquoted: `'w/a` then `M-*` on a file `a;touch X;#` ran `touch X`, on `main` too
+  (found in review). Bash sets `COMP_TYPE` to 42 for it, and the script now offers nothing there inside an open
+  quote. Re-quoting for the bare context doesn't work, since readline leaves the `$` of `$'` behind. With no
+  open quote each reply is a whole quoted word, so `M-*` still inserts them.
+- **`histchars`.** Only `!` is escaped for history expansion. A user-set `histchars` with another character
+  isn't, which is harmless: expanding it only splices in the user's own history.
+
 ## Open questions (resolved)
 
 1. Names differing at the control character itself: accepted. `files/nl\nx` and `files/nl\tz` give the
