@@ -317,8 +317,8 @@ pub fn dispatch(
     if let Err(e) = touched {
         // `finalize_sync` fails on this write; dispatch only warns, as the command runs without it.
         // In-tree venvs, often under a read-only cache home (CI), warn only with --debug.
-        let in_tree = resolved.is_in_tree();
-        if (in_tree && verbose) || (!in_tree && !quiet) {
+        // `-q` doesn't silence it: warnings print under `-q`.
+        if !resolved.is_in_tree() || verbose {
             eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
         }
     }
@@ -339,9 +339,7 @@ pub fn dispatch(
         );
     }
 
-    if output_opts.verbosity != "quiet" {
-        warn_on_toolr_py_mismatch(&resolved.venv_dir);
-    }
+    warn_on_toolr_py_mismatch(&resolved.venv_dir);
 
     let mut child = spawn_runner(&python, tempfile.path(), &repo_root)
         .with_context(|| format!("spawning Python runner at {}", python.display()))?;
