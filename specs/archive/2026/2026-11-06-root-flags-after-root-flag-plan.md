@@ -6,7 +6,7 @@ Commit as `fix(complete): offer groups and root flags after a root flag`.
 
 ## Files
 
-- `crates/toolr/src/builtin_completions.rs`: add `RootScan`, `scan_root_flags`, `root_long_flags_after(seen)` (the merge's
+- `crates/toolr/src/builtin_completions.rs`: add `RootScan`, `scan_root_flags`, `RootScan::offerable_long_flags` (the merge's
   filter) and a private `root_flag_specs()`; unit tests.
 - `crates/toolr/src/dispatch.rs`: `run_complete` scans and strips; `merge_root_flags_at_top_level` becomes
   `merge_root_flags(rest, &scan, candidates)`.
@@ -48,7 +48,11 @@ Helper `scan(&["--quiet", "--"])` builds `Vec<String>`; assert on `rest`, `seen`
 | `scan_stops_at_terminator`               | `--quiet -- ""`                    | `rest == ["--", ""]`, `seen == ["quiet"]`                   |
 | `scan_stops_at_first_word`               | `--quiet ci --debug ""`            | `rest == ["ci","--debug",""]`, `seen == ["quiet"]`          |
 | `scan_stops_at_unknown_flag_or_short`    | `--bogus --quiet ""`, `-qx ""`, `- ""` | `rest` unchanged (starts at that token), not dead      |
-| `scan_conflicts_are_symmetric`           | specs                              | for every spec pair, `a` conflicts `b` iff `b` conflicts `a` (guards `get_arg_conflicts_with`) |
+| `root_flag_conflicts_are_symmetric`      | specs                              | for every spec pair, `a` conflicts `b` iff `b` conflicts `a` (guards the mirroring) |
+| `scan_accepts_attached_negative_values`  | `--timeout-secs=-1 ""`, `--nots=-1 ""`, `--timeout-secs=-1e3 ""`; `--timeout-secs=-x ""` | first three not dead, `rest == [""]`; last dead |
+| `scan_version_ends_the_line`             | `--version ""`, `-V ""`, `-qV ""`, `--quiet --version --` | each `dead_end` |
+| `version_is_still_not_offered`           | no tokens                          | `--version` not among the offerable flags                   |
+| `unknown_value_types_are_not_validated`  | String and i64 args                | `value_kind` is `None`; `accepts_value` rejects it          |
 
 Plus merge tests in `dispatch.rs` (existing test module, or one added) calling `merge_root_flags` directly:
 
@@ -87,3 +91,10 @@ Before/after: run each smoke test against the unfixed binary first; all but the 
 - Patch coverage via `cargo xtask patch-coverage --base main` on a local `cargo llvm-cov` lcov;
   every branch of `scan_root_flags` has a test row above.
 - Manual: `toolr __complete "$PWD" --quiet ""` lists groups; a shell `toolr --quiet <TAB>` in bash, zsh, fish.
+
+## Review changes
+
+- Added attached negative values, `--version` / `-V` ending the line, and value-type checking (unit tests above;
+  smoke tests `completes_after_an_attached_negative_value` and `stays_empty_after_version_or_bad_values`).
+- The specs are derived once and carried on `RootScan`; `Seen`, `scan_long` and `scan_cluster` split the scan.
+- `merge_root_flags` takes the scan alone.
