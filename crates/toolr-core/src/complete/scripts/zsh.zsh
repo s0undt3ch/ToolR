@@ -4,9 +4,12 @@
 # Install via `toolr self completion install zsh`, or place this file in
 # a directory on your $fpath under the name `_toolr` and rerun
 # `compinit`.
+#
+# Known limit: escapes inside `$'…'` (`$'dry\x20w`) don't complete, because zsh's matcher
+# compares candidates against the raw `PREFIX`.
 
 _toolr() {
-    # Inside backticks the word is a command, never a value.
+    # Defensive: inside backticks zsh completes the command itself and doesn't call us.
     [[ ${compstate[quote]-} == '`' ]] && return
     # `$words` holds each word as typed; the engine matches the text the shell would pass.
     # `(Q)` only removes quotes, it never expands or runs anything.
@@ -18,6 +21,8 @@ _toolr() {
     # zsh sets it only when the quote opens the word, so a mid-word quote tries `'` then `"`.
     if [[ $cur == "$raw" && $raw == *[\'\"]* ]]; then
         local q
+        # Unquoted, an empty `compstate[quote]` vanishes instead of trying an empty `q`; `: -1`
+        # takes the closing character of `$'`.
         for q in ${compstate[quote]: -1} \' \"; do
             if [[ ${(Q):-$raw$q} != "$raw$q" ]]; then
                 cur="${(Q):-$raw$q}"
@@ -26,7 +31,8 @@ _toolr() {
         done
     fi
 
-    # words[1] is `toolr`; pass the rest plus the in-progress word.
+    # words[1] is `toolr`; pass the rest plus the in-progress word. `@` keeps empty and quoted
+    # words as one each, and `(Q)` lets the engine see `'--mode'` as the option it is.
     local -a passthrough
     passthrough=("${(@Q)words[2,CURRENT-1]}" "$cur")
 
@@ -43,6 +49,7 @@ _toolr() {
     local attached=0
     [[ $cur == --?*=* ]] && attached=1
     # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
+    # `_files` reads the raw word: zsh's `_files` dequotes `PREFIX` itself.
     case $rc in
         0) ;;
         10) (( attached )) && compset -P 1 '*='; _files; return ;;
@@ -69,7 +76,8 @@ _toolr() {
 
     # One-per-line descriptions only pay off for a small, scannable
     # candidate list; fall back to the compact grid for large ones (e.g.
-    # long allowed-value sets) rather than a wall of text.
+    # long allowed-value sets) rather than a wall of text. No `-Q`: zsh re-quotes each match
+    # to fit the quote open at the cursor, so a value is inserted as inert text.
     if (( ${#values} <= 20 )); then
         compadd -d descriptions -a values
     else

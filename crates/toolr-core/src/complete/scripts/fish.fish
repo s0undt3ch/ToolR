@@ -2,6 +2,9 @@
 #
 # Install via `toolr self completion install fish`, or place this file
 # at ~/.config/fish/completions/toolr.fish.
+#
+# Known limits: a word ending in a lone backslash matches nothing, and a value ending in a
+# newline loses it.
 
 function __toolr_complete
     # `commandline -opc` returns the tokens already on the command line,
@@ -11,14 +14,16 @@ function __toolr_complete
     set -l raw (commandline -ct)
     # The engine matches the text the shell would pass, so take the typed quoting off;
     # fish escapes the replies again on insertion. `string unescape` never expands anything.
-    # `string collect` keeps an unescaped newline inside the one word. It also trims trailing
-    # newlines, so a value ending in one loses it; `-N` would keep unescape's own newline too.
+    # `string collect` keeps an unescaped newline inside the one word. Known limit: a value
+    # ending in a newline loses it (`-N` would also keep the newline unescape prints).
     set -l current (string unescape -- "$raw" | string collect)
-    # `string collect` fails on empty input, so check the unescape: a lone `"` is an empty word.
+    # `string collect` fails on empty input, so check the unescape's own status.
     set -l ps $pipestatus
     if test "$ps[1]" != 0
+        # Unescape fails on a lone trailing backslash; keep the word as typed.
         set current $raw
     else if not set -q current[1]
+        # A lone `"` unescapes to nothing, and collect yields no element for it.
         set current ''
     end
     # Drop the leading `toolr` token.
@@ -32,6 +37,8 @@ function __toolr_complete
     set -l rc $status
     # `--opt=value`: the engine returns bare values, but fish matches them against the
     # whole word, so put `--opt=` back. Quoted, so an empty word is still one argument.
+    # Values come from the unescaped `current`; paths from the raw word (see below), so the
+    # two prefixes differ.
     set -l opt_prefix (string match -r -- '^--[^=]+=' "$current")
     # fish's path completers parse their argument as shell text, so they get the raw word.
     set -l raw_prefix (string match -r -- '^--[^=]+=' "$raw")
@@ -42,8 +49,8 @@ function __toolr_complete
             for line in $out
                 printf '%s\n' "$opt_prefix$line"
             end
-        # fish < 3.7 globs the whole `--opt=` word, so complete the bare path instead.
         case 10
+            # fish < 3.7 globs the whole `--opt=` word, so complete the bare path instead.
             for line in (__fish_complete_path "$bare")
                 printf '%s\n' "$raw_prefix$line"
             end
