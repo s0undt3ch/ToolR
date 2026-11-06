@@ -23,7 +23,7 @@ const PATH_FILES: [&str; 8] = [
 ];
 
 /// `SENTINEL` and `SENTINEL2` stand for paths the fixture fills in.
-const CHOICES: [&str; 11] = [
+const CHOICES: [&str; 12] = [
     "fast",
     "a:b",
     "dry run",
@@ -35,6 +35,8 @@ const CHOICES: [&str; 11] = [
     "u@h",
     "a$b",
     "wow!",
+    // `"\!"…` starts with the `"` readline won't double.
+    "!;touch SENTINEL;#",
 ];
 
 struct Fixture {
@@ -1341,8 +1343,8 @@ fn bash_path_prefix_stays_bare_before_ansi_c_quoting() {
         let fx = fixture();
         std::fs::write(fx.tmp.path().join("files/nl\nx"), "").unwrap();
         for (cur, want) in [
-            ("~/files/nl", r"~/$'files/nl\nx'"),
-            ("$HOME/files/nl", r"$HOME/$'files/nl\nx'"),
+            ("~/files/nl", r"~/files/nl$'\n'x"),
+            ("$HOME/files/nl", r"$HOME/files/nl$'\n'x"),
         ] {
             assert_path_reply(&bash, &fx, cur, want);
         }
@@ -1373,7 +1375,475 @@ fn bash_path_name_with_a_newline_is_one_candidate() {
         std::fs::write(fx.tmp.path().join("files/nl\nx"), "").unwrap();
         let run = run_bash_cfg_path(&bash, &fx, "files/nl");
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
-        assert_eq!(run.reply, vec![r"$'files/nl\nx'".to_string()], "{bash}");
+        assert_eq!(run.reply, vec![r"files/nl$'\n'x".to_string()], "{bash}");
+    }
+}
+
+/// Names holding control characters, added under `files/` for the ANSI-C (`$'…'`) tests. Kept
+/// out of [`PATH_FILES`] so the other tests' listings of `files/` don't change.
+const CONTROL_FILES: [&str; 6] = [
+    "files/an\nd",
+    "files/an\nx",
+    "files/nl\nx",
+    "files/nl\tz",
+    "files/solo\nname",
+    "files/tab\there",
+];
+
+/// [`fixture`] plus [`CONTROL_FILES`] and a directory `files/nl\nd/` holding `in`.
+fn control_fixture() -> Fixture {
+    let fx = fixture();
+    for name in CONTROL_FILES {
+        std::fs::write(fx.tmp.path().join(name), "").unwrap();
+    }
+    let dir = fx.tmp.path().join("files/nl\nd");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("in"), "").unwrap();
+    fx
+}
+
+/// Names that run a command, or reach the wrong argument, if a reply's quoting goes wrong. A
+/// trailing `/` makes a directory. Each `touch` names a sentinel relative to the fixture root, the
+/// shell's working directory: a file name can't hold the absolute path `SENTINEL` stands for.
+const HOSTILE_FILES: [&str; 16] = [
+    // A quote before a substitution, or before a control character, inside `$'…'`.
+    "evil/q'$(touch sentinel-one)",
+    "evil/b'`touch sentinel-two`",
+    "evil/sq2'\u{1}",
+    "evil/dirs'/in",
+    // A reply starting with the quote the user opened.
+    "lead/ctl/\u{1};touch sentinel-one;#",
+    "lead/sub/\u{1}$(touch sentinel-one)",
+    "lead/bang/!;touch sentinel-one;#",
+    "lead/sq/';touch sentinel-one;#",
+    "rq/r'",
+    "rq/r''x",
+    // A `$'…'` run closing as `\\'` before a break.
+    "evb/b\\:z",
+    "evb/b\\:y$(touch sentinel-one)",
+    // `insert-completions` inside an open quote.
+    "w/a;touch sentinel-one;#",
+    "w/cx$(touch sentinel-one)",
+    "d/'d1/",
+    "d/'d2$(touch sentinel-one)/",
+];
+
+/// [`fixture`] plus [`HOSTILE_FILES`].
+fn hostile_fixture() -> Fixture {
+    let fx = fixture();
+    for name in HOSTILE_FILES {
+        let path = fx.tmp.path().join(name);
+        if name.ends_with('/') {
+            std::fs::create_dir_all(&path).unwrap();
+        } else {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "").unwrap();
+        }
+    }
+    fx
+}
+
+/// Asserts no sentinel exists: a command that ran is the finding, whatever the reply.
+fn assert_no_sentinels(fx: &Fixture, ctx: &str) {
+    assert!(!fx.sentinel.exists(), "{ctx}: sentinel-one command ran");
+    assert!(!fx.sentinel2.exists(), "{ctx}: sentinel-two command ran");
+    assert!(!fx.sentinel3.exists(), "{ctx}: sentinel-three command ran");
+}
+
+/// Asserts completing the path `cur` after `--cfg` with `script` offers exactly `want`, in any
+/// order.
+fn assert_path_replies(bash: &str, script: &str, fx: &Fixture, cur: &str, want: &[&str]) {
+    let run = run_bash_path_split(bash, script, fx, "--cfg", cur, Split::Whole);
+    assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+    let mut want: Vec<String> = want.iter().map(|w| (*w).to_string()).collect();
+    want.sort();
+    assert_eq!(run.sorted_reply(), want, "{bash} {cur}");
+}
+
+/// Readline replaces the text after the `'` of an open `$'`, so the reply is escaped for the
+/// inside of the run: a newline is `\n` there.
+#[test]
+fn bash_path_word_in_an_open_ansi_c_quote_is_listed() {
+    let script = print_script("bash");
+    for bash in bashes() {
+        let fx = control_fixture();
+        for (cur, want) in [
+            (r"$'files/an", &[r"files/an\nd", r"files/an\nx"][..]),
+            (r"$'files/solo\nna", &[r"files/solo\nname"][..]),
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, want);
+        }
+    }
+}
+
+/// The text before the open `$'` stays as typed, so the reply holds only what follows it.
+#[test]
+fn bash_path_open_ansi_c_quote_after_a_prefix_replies_only_the_rest() {
+    for bash in bashes() {
+        let fx = control_fixture();
+        for (cur, want) in [
+            (r"~/$'files/solo", r"files/solo\nname"),
+            (r"$HOME/$'files/solo", r"files/solo\nname"),
+            (r"files/$'solo", r"solo\nname"),
+        ] {
+            assert_path_reply(&bash, &fx, cur, want);
+        }
+    }
+}
+
+/// A closed `$'…'`, as toolr itself inserts it, decodes to the name, so Tab keeps completing
+/// under it.
+#[test]
+fn bash_path_closed_ansi_c_word_keeps_completing() {
+    let script = format!("TOOLR_TEST_DIR=$PWD\n{}", print_script("bash"));
+    for bash in bashes() {
+        let fx = control_fixture();
+        for (cur, want) in [
+            (r"$'files/nl\nd'/", r"files/nl$'\n'd/in"),
+            (r"~/$'files/nl\nd'/", r"~/files/nl$'\n'd/in"),
+            (r"$HOME/$'files/nl\nd'/", r"$HOME/files/nl$'\n'd/in"),
+            (
+                r"$TOOLR_TEST_DIR/$'files/nl\nd'/",
+                r"$TOOLR_TEST_DIR/files/nl$'\n'd/in",
+            ),
+            (r"files/$'nl\nd'/", r"files/nl$'\n'd/in"),
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, &[want]);
+        }
+    }
+}
+
+/// Each escape bash decodes in `$'…'` stands for the same character here.
+#[test]
+fn bash_path_ansi_c_escapes_decode() {
+    let script = print_script("bash");
+    let utf8 = format!("LC_ALL=C.UTF-8\n{script}");
+    for bash in bashes() {
+        let fx = control_fixture();
+        std::fs::write(fx.tmp.path().join("files/é.txt"), "").unwrap();
+        for (cur, want) in [
+            (r"$'files/tab\x09h", r"files/tab\there"),
+            (r"$'files/tab\x9h", r"files/tab\there"),
+            (r"$'files/tab\011h", r"files/tab\there"),
+            (r"$'files/tab\th", r"files/tab\there"),
+            (r"$'files/\x74ab\th", r"files/tab\there"),
+            (r"$'files/it\047s", r"files/it\047s.txt"),
+            (r#"$'files/q\"d"#, r#"files/q"d.txt"#),
+            (r"$'files/back\\s", r"files/back\\slash"),
+            (r"$'files/\u0074ab\th", r"files/tab\there"),
+            // A lone backslash at the end is an escape still being typed.
+            (r"$'files/solo\", r"files/solo\nname"),
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, &[want]);
+        }
+        assert_path_replies(&bash, &script, &fx, "$'files/é", &["files/é.txt"]);
+        for cur in [r"$'files/\u00e9", r"$'files/\U000000e9"] {
+            assert_path_replies(&bash, &utf8, &fx, cur, &["files/é.txt"]);
+            // Outside a UTF-8 locale bash can't decode it, so nothing is offered.
+            let c = format!("LC_ALL=C\n{script}");
+            assert_path_replies(&bash, &c, &fx, cur, &[]);
+        }
+    }
+}
+
+/// An escape bash would keep as typed, or one decoding to NUL, which no name holds, offers
+/// nothing, before toolr is even asked.
+#[test]
+fn bash_path_undecodable_ansi_c_escape_offers_nothing() {
+    let script = format!(
+        "toolr() {{ : > \"$PWD/engine-called\"; command toolr \"$@\"; }}\n{}",
+        print_script("bash")
+    );
+    for bash in bashes() {
+        let fx = control_fixture();
+        for cur in [
+            r"$'files/\q",
+            r"$'files/nl\x00",
+            r"$'files/\0",
+            r"$'files/\cA",
+            r"$'files/\x",
+            r"$'files/\u0000",
+            r"$'files/\400",
+            // Readline sees `$'…'` as `'…'`, where `\'` closes the quote: the two would disagree.
+            r"$'files/it\'s",
+            r"$'files/it\'s'/",
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, &[]);
+            let called = fx.tmp.path().join("engine-called");
+            assert!(!called.exists(), "{bash} {cur}: toolr was asked");
+        }
+    }
+}
+
+/// A `$` or backtick spelled as an escape is still one: the guard sees the decoded word.
+#[test]
+fn bash_path_ansi_c_word_never_runs_a_substitution() {
+    const SUB: &str = "$(touch sentinel-one)";
+    const TICK: &str = "`touch sentinel-two`";
+    let script = print_script("bash");
+    for bash in bashes() {
+        let fx = hostile_fixture();
+        literal_dir(&fx, SUB);
+        literal_dir(&fx, TICK);
+        for cur in [
+            "$'$(touch sentinel-one)",
+            "$'$(touch sentinel-one)'/",
+            r"$'\x24(touch sentinel-one)'/",
+            r"$'\x24(touch sentinel-one)",
+            r"$'\044(touch sentinel-one)'/",
+            r"$'\u0024(touch sentinel-one)'/",
+            r"~/$'\x24(touch sentinel-one)'/",
+            r"$HOME/$'\044(touch sentinel-one)'/",
+            r"~$'\x24(touch sentinel-one)'/",
+            r"--cfg=$'\x24(touch sentinel-one)'/",
+            r"$'\x60touch sentinel-two\x60'/",
+            r"$'\140touch sentinel-two\140'/",
+            "$'`touch sentinel-two`'/",
+        ] {
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", cur, Split::Whole);
+            // Checked first: a command that ran is the finding, whatever the reply.
+            assert!(!fx.sentinel.exists(), "{bash} {cur}: $(...) ran");
+            assert!(!fx.sentinel2.exists(), "{bash} {cur}: backtick ran");
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
+        }
+        for cur in [r"$'\x24(touch sentinel-one)", r"$'\x60touch sentinel-two"] {
+            let run = run_bash(&bash, &fx, cur);
+            assert!(!fx.sentinel.exists(), "{bash} --mode {cur}: $(...) ran");
+            assert!(!fx.sentinel2.exists(), "{bash} --mode {cur}: backtick ran");
+            assert_eq!(run.rc, "0", "{bash} --mode {cur}: {}", run.stderr);
+        }
+        // A name holding a quote and a substitution: the reply must keep readline's idea of the
+        // open quote in step with the script's, or readline inserts it unquoted.
+        for (cur, want) in [
+            ("$'evil/q", r"evil/q\047$(touch sentinel-one)"),
+            ("$'evil/b", r"evil/b\047`touch sentinel-two`"),
+            ("'evil/q", r"evil/q'\''$(touch sentinel-one)"),
+            (r#""evil/q"#, r"evil/q'\$(touch sentinel-one)"),
+            ("evil/q", r"evil/q\'\$\(touch\ sentinel-one\)"),
+            ("$'evil/sq2", r"evil/sq2\047\001"),
+            ("$'evil/dir", r"evil/dirs\047/"),
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, &[want]);
+            assert_no_sentinels(&fx, &format!("{bash} {cur}"));
+        }
+    }
+}
+
+/// Bash expands a variable only where its `$` and whole name are typed bare: a decoded `$`, or
+/// a name with a quoted part, is literal text, so it gets no variable treatment.
+#[test]
+fn bash_path_decoded_dollar_is_not_a_variable() {
+    let script = format!("TOOLR_TEST_DIR=$PWD\n{}", print_script("bash"));
+    for bash in bashes() {
+        let fx = control_fixture();
+        for cur in [
+            r"$'\x24TOOLR_TEST_DIR/files/an",
+            r"$'\x24TOOLR_TEST_DIR'/files/an",
+            r"$TOOLR_TEST_D$'IR'/files/an",
+            r#"$TOOLR_TEST_D"IR"/files/an"#,
+            r"$TOOLR_TEST_D\IR/files/an",
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, &[]);
+        }
+        assert_path_replies(
+            &bash,
+            &script,
+            &fx,
+            r"$TOOLR_TEST_DIR/$'files/an",
+            &[r"files/an\nd", r"files/an\nx"],
+        );
+    }
+}
+
+/// Bash expands `~` only with nothing quoted before the first `/`, and only `compgen` resolves
+/// `~user`, so a tilde word with a quoted part must never reach it.
+#[test]
+fn bash_path_tilde_with_a_quoted_part_never_reaches_compgen() {
+    let script = format!(
+        "compgen() {{ : > \"$PWD/compgen-called\"; builtin compgen \"$@\"; }}\n{}",
+        print_script("bash")
+    );
+    for bash in bashes() {
+        let fx = fixture();
+        for cur in [
+            r#"~"root"/"#,
+            "~'root'/",
+            r"~\root/",
+            r"~$'root'/",
+            r"~$'\x72oot'/",
+            r#"~r"oot"/"#,
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, &[]);
+            let called = fx.tmp.path().join("compgen-called");
+            assert!(!called.exists(), "{bash} {cur}: compgen was called");
+        }
+    }
+}
+
+/// A closed reply quotes each control character as its own `$'…'` run, so the common prefix
+/// readline inserts can't end inside one.
+#[test]
+fn bash_path_bare_reply_groups_each_control_character() {
+    let script = print_script("bash");
+    for bash in bashes() {
+        let fx = control_fixture();
+        for (cur, want) in [
+            ("files/an", &[r"files/an$'\n'd", r"files/an$'\n'x"][..]),
+            (
+                "files/nl",
+                &[r"files/nl$'\n'd/", r"files/nl$'\n'x", r"files/nl$'\t'z"][..],
+            ),
+            (
+                r"files/an$'\n'",
+                &[r"files/an$'\n'd", r"files/an$'\n'x"][..],
+            ),
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, want);
+        }
+        // Readline doesn't break at the `$` of `$'`, even with `$` in `COMP_WORDBREAKS`.
+        let dollar = format!("COMP_WORDBREAKS+='$'\n{script}");
+        assert_path_replies(
+            &bash,
+            &dollar,
+            &fx,
+            r"files/an$'\n'",
+            &[r"files/an$'\n'd", r"files/an$'\n'x"],
+        );
+    }
+}
+
+/// The longest common prefix readline would insert.
+fn common_prefix(replies: &[String]) -> String {
+    let first = replies.first().cloned().unwrap_or_default();
+    replies.iter().fold(first, |acc, r| {
+        acc.chars()
+            .zip(r.chars())
+            .take_while(|(a, b)| a == b)
+            .map(|(a, _)| a)
+            .collect()
+    })
+}
+
+/// The common prefix of grouped replies closes every `$'` it opens, except for names that
+/// differ at the control character itself: there it ends inside the run, which is accepted.
+#[test]
+fn bash_path_common_prefix_of_grouped_replies_is_closed() {
+    for bash in bashes() {
+        let fx = control_fixture();
+        let run = run_bash_cfg_path(&bash, &fx, "files/an");
+        let prefix = common_prefix(&run.reply);
+        assert_eq!(prefix, r"files/an$'\n'", "{bash}: {:?}", run.reply);
+        assert_eq!(prefix.matches("$'").count(), 1, "{bash}");
+        assert!(prefix.ends_with(r"\n'"), "{bash}");
+        // `nl\nd`, `nl\nx` and `nl\tz` differ at the control character: the documented residual.
+        let run = run_bash_cfg_path(&bash, &fx, "files/nl");
+        assert_eq!(run.reply.len(), 3, "{bash}: {:?}", run.reply);
+        assert_eq!(common_prefix(&run.reply), r"files/nl$'\", "{bash}");
+    }
+}
+
+/// Inside an open `"` or `'` a raw newline can't be inserted, so the reply closes the quote,
+/// adds the `$'…'` run and reopens it.
+#[test]
+fn bash_path_controls_in_open_double_and_single_quotes_close_and_reopen() {
+    let script = print_script("bash");
+    for bash in bashes() {
+        let fx = control_fixture();
+        for (cur, want) in [
+            (
+                r#""files/an"#,
+                &[r#"files/an"$'\n'"d"#, r#"files/an"$'\n'"x"#][..],
+            ),
+            ("'files/an", &[r"files/an'$'\n''d", r"files/an'$'\n''x"][..]),
+            (r#""files/ta"#, &[r#"files/tab"$'\t'"here"#][..]),
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, want);
+        }
+        // A C1 control is one character in a UTF-8 locale but two bytes, each escaped.
+        std::fs::write(fx.tmp.path().join("files/c1\u{85}x"), "").unwrap();
+        let utf8 = format!("LC_ALL=C.UTF-8\n{script}");
+        for (cur, want) in [
+            (r#""files/c1"#, r#"files/c1"$'\302\205'"x"#),
+            ("'files/c1", r"files/c1'$'\302\205''x"),
+            ("$'files/c1", r"files/c1\302\205x"),
+            ("files/c1", r"files/c1$'\302\205'x"),
+        ] {
+            assert_path_replies(&bash, &utf8, &fx, cur, &[want]);
+        }
+    }
+}
+
+/// Readline closes the open quote after a single reply only if the reply doesn't already end in
+/// the quote character, so a reply that does gets one more to close it.
+#[test]
+fn bash_path_reply_ending_in_the_open_quote_still_closes() {
+    let script = print_script("bash");
+    for bash in bashes() {
+        let fx = fixture();
+        let dir = fx.tmp.path().join("end");
+        std::fs::create_dir_all(dir.join("dir'")).unwrap();
+        for name in ["sq'", "nl\n", "dq\""] {
+            std::fs::write(dir.join(name), "").unwrap();
+        }
+        for (cur, want) in [
+            ("$'end/sq", r"end/sq\047"),
+            ("'end/sq", r"end/sq'\'''"),
+            (r#""end/dq"#, r#"end/dq\"""#),
+            (r#""end/nl"#, r#"end/nl"$'\n'"""#),
+            ("'end/nl", r"end/nl'$'\n'''"),
+            ("$'end/nl", r"end/nl\n"),
+            // A directory reply ends in `/`, so readline closes the quote itself.
+            ("$'end/di", r"end/dir\047/"),
+            ("'end/di", r"end/dir'\''/"),
+        ] {
+            assert_path_replies(&bash, &script, &fx, cur, &[want]);
+        }
+    }
+}
+
+/// A name equal to the text before an open quote leaves nothing to insert after it: a file is
+/// not offered, and a directory offers only its `/`.
+#[test]
+fn bash_path_exact_match_under_an_open_quote_is_not_an_empty_reply() {
+    let script = print_script("bash");
+    for bash in bashes() {
+        let fx = fixture();
+        let ex = fx.tmp.path().join("ex");
+        std::fs::create_dir_all(&ex).unwrap();
+        std::fs::write(ex.join("exact"), "").unwrap();
+        for q in ["'", "\"", "$'"] {
+            assert_path_replies(&bash, &script, &fx, &format!("ex/exact{q}"), &[]);
+            assert_path_replies(&bash, &script, &fx, &format!("files/sub{q}"), &["/"]);
+        }
+        std::fs::write(ex.join("exact2"), "").unwrap();
+        for q in ["'", "\"", "$'"] {
+            assert_path_replies(&bash, &script, &fx, &format!("ex/exact{q}"), &["2"]);
+        }
+        for cur in ["fast'", "fast\"", "fast$'"] {
+            let run = run_bash(&bash, &fx, cur);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert!(run.reply.is_empty(), "{bash} {cur}: {:?}", run.reply);
+        }
+    }
+}
+
+/// Choice values decode the same way. The engine never offers a value holding a control
+/// character, so only the decoding is exercised here.
+#[test]
+fn bash_value_completes_in_ansi_c_quotes() {
+    for bash in bashes() {
+        let fx = fixture();
+        for (cur, want) in [
+            ("$'dry r", "dry run"),
+            (r"$'\x64ry r", "dry run"),
+            ("$'wo", "wow!"),
+            ("$'a:", "a:b"),
+        ] {
+            let run = run_bash(&bash, &fx, cur);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert_eq!(run.reply, vec![want.to_string()], "{bash} {cur}");
+        }
     }
 }
 
@@ -1601,6 +2071,11 @@ fn bash_tab_rc(fx: &Fixture) -> String {
 /// Types `typed`, Tab and Enter into an interactive bash on a pty, and asserts the shim printed
 /// `want`.
 fn assert_bash_tab_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, want: &str) {
+    assert_bash_keys_line(bash, fx, rcfile, &format!("{typed}\t"), want);
+}
+
+/// Types `keys` and Enter into an interactive bash on a pty, and asserts the shim printed `want`.
+fn assert_bash_keys_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, want: &str) {
     let mut cmd = StdCommand::new(bash);
     cmd.args(["--noprofile", "--rcfile"])
         .arg(rcfile)
@@ -1612,7 +2087,7 @@ fn assert_bash_tab_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, wa
         // No escape sequences, and no user readline settings.
         .env("TERM", "dumb")
         .env("INPUTRC", "/dev/null");
-    let out = common::run_on_pty(cmd, &format!("{typed}\t\nexit\n"));
+    let out = common::run_on_pty(cmd, &format!("{typed}\nexit\n"));
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
@@ -1686,6 +2161,315 @@ fn bash_tab_completes_quoted_and_escaped_paths_end_to_end() {
         ] {
             let typed = format!("toolr ci lint {typed}");
             let want = format!("LINE:ci lint {}", want.replace("{home}", &home));
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
+        }
+    }
+}
+
+/// [`bash_tab_rc`] with a shim that prints each argument through `%q`, in the same `LINE:<args>`
+/// shape, so an argument holding a newline stays on the `LINE:` line.
+fn bash_tab_rc_quoted(fx: &Fixture) -> String {
+    let script = fx.tmp.path().join("toolr.bash");
+    std::fs::write(&script, print_script("bash")).unwrap();
+    format!(
+        "source '{}'\n\
+         toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
+         else local a; printf -v a ' %q' \"$@\"; printf 'LINE:%s\\n' \"${{a# }}\"; fi; }}\n",
+        script.display()
+    )
+}
+
+/// The common prefix readline inserts for two names differing after a newline closes its `$'`,
+/// so Enter runs the command instead of waiting for the quote to close.
+#[test]
+fn bash_tab_never_leaves_an_ansi_c_quote_open_end_to_end() {
+    for bash in bashes() {
+        let fx = control_fixture();
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc_quoted(&fx)).unwrap();
+        let typed = "toolr ci lint --cfg files/an";
+        let want = r"LINE:ci lint --cfg $'files/an\n'";
+        assert_bash_tab_line(&bash, &fx, &rcfile, typed, want);
+    }
+}
+
+/// Words in `$'…'`, open or closed, complete to the name they spell.
+#[test]
+fn bash_tab_completes_ansi_c_quoted_paths_end_to_end() {
+    for bash in bashes() {
+        let fx = control_fixture();
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc_quoted(&fx)).unwrap();
+        let home = fx.tmp.path().display().to_string();
+        // `{home}` stands for the fixture root, which is `$HOME`.
+        for (typed, want) in [
+            (r"--cfg $'files/so", r"--cfg $'files/solo\nname'"),
+            (r"--cfg files/$'so", r"--cfg $'files/solo\nname'"),
+            (r"--cfg $'files/solo\", r"--cfg $'files/solo\nname'"),
+            (r"--cfg ~/$'files/so", r"--cfg $'{home}/files/solo\nname'"),
+            (
+                r"--cfg $HOME/$'files/so",
+                r"--cfg $'{home}/files/solo\nname'",
+            ),
+            (
+                r"--cfg ~/$'files/nl\nd'/",
+                r"--cfg $'{home}/files/nl\nd/in'",
+            ),
+            (r"--cfg $'files/tab\x09", r"--cfg $'files/tab\there'"),
+            // The first Tab inserts the common prefix; the second completes after it.
+            ("--cfg files/an\td", r"--cfg $'files/an\nd'"),
+            ("--cfg $'files/an\tx", r"--cfg $'files/an\nx'"),
+            ("--cfg \"files/an\td", r"--cfg $'files/an\nd'"),
+            ("--cfg 'files/an\tx", r"--cfg $'files/an\nx'"),
+            ("--cfg files/nl\tnx", r"--cfg $'files/nl\nx'"),
+        ] {
+            let typed = format!("toolr ci lint {typed}");
+            let want = format!("LINE:ci lint {}", want.replace("{home}", &home));
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
+        }
+        // `$` as a break doesn't split a closed `$'…'`: readline replaces the whole word.
+        let dollar_rcfile = fx.tmp.path().join("bashrc-dollar");
+        std::fs::write(
+            &dollar_rcfile,
+            format!(
+                "{}COMP_WORDBREAKS=$' \\t\\n\"\\'@><=;|&(:$'\n",
+                bash_tab_rc_quoted(&fx)
+            ),
+        )
+        .unwrap();
+        let typed = r"toolr ci lint --cfg files/an$'\n'd";
+        let want = r"LINE:ci lint --cfg $'files/an\nd'";
+        assert_bash_tab_line(&bash, &fx, &dollar_rcfile, typed, want);
+    }
+}
+
+/// Readline closes an open quote after a reply that already ends in the quote character only
+/// with the extra one the reply carries.
+#[test]
+fn bash_tab_closes_a_quote_after_a_reply_ending_in_it_end_to_end() {
+    for bash in bashes() {
+        let fx = fixture();
+        let dir = fx.tmp.path().join("end");
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["sq'", "nl\n", "dq\""] {
+            std::fs::write(dir.join(name), "").unwrap();
+        }
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc_quoted(&fx)).unwrap();
+        for (typed, want) in [
+            ("--cfg $'end/sq", r"--cfg end/sq\'"),
+            ("--cfg 'end/sq", r"--cfg end/sq\'"),
+            ("--cfg \"end/dq", r#"--cfg end/dq\""#),
+            ("--cfg \"end/nl", r"--cfg $'end/nl\n'"),
+            ("--cfg 'end/nl", r"--cfg $'end/nl\n'"),
+            ("--cfg $'end/nl", r"--cfg $'end/nl\n'"),
+        ] {
+            let typed = format!("toolr ci lint {typed}");
+            let want = format!("LINE:ci lint {want}");
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
+        }
+    }
+}
+
+/// Readline knows only `'`, `"` and backslash, so inside `$'…'` it sees a plain `'…'`, where a
+/// backslash is literal. A `'` in a reply there, or a typed `\'`, would close readline's quote
+/// while the script's stays open, and readline would insert the rest of the name unquoted.
+#[test]
+fn bash_tab_never_runs_a_name_holding_a_quote_end_to_end() {
+    for bash in bashes() {
+        let fx = hostile_fixture();
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc_quoted(&fx)).unwrap();
+        for (typed, want) in [
+            ("--cfg $'evil/q", r"--cfg evil/q\'\$\(touch\ sentinel-one\)"),
+            ("--cfg 'evil/q", r"--cfg evil/q\'\$\(touch\ sentinel-one\)"),
+            ("--cfg \"evil/q", r"--cfg evil/q\'\$\(touch\ sentinel-one\)"),
+            ("--cfg evil/q", r"--cfg evil/q\'\$\(touch\ sentinel-one\)"),
+            ("--cfg $'evil/b", r"--cfg evil/b\'\`touch\ sentinel-two\`"),
+            // A typed `\'` offers nothing; the `'` typed after the Tab closes the word for bash.
+            ("--cfg $'evil/q\\'\t'", r"--cfg evil/q\'"),
+            ("--cfg $'evil/sq2", r"--cfg $'evil/sq2\'\001'"),
+            // The first Tab inserts the directory; the second completes inside it.
+            ("--cfg $'evil/dir\t", r"--cfg evil/dirs\'/in"),
+        ] {
+            let typed = format!("toolr ci lint {typed}");
+            let want = format!("LINE:ci lint {want}");
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
+            assert_no_sentinels(&fx, &format!("{bash} {typed:?}"));
+        }
+    }
+}
+
+/// Readline's `insert_match` won't double an opening quote: a reply starting with the quote the
+/// user opened overwrites it, so the reply's own quoting flips and the rest lands unquoted.
+#[test]
+fn bash_tab_reply_starting_with_the_open_quote_end_to_end() {
+    for bash in bashes() {
+        let fx = hostile_fixture();
+        let sentinel = fx.sentinel.display().to_string();
+        for history in ["set -H", "set +H"] {
+            let quoted = fx.tmp.path().join("bashrc-quoted");
+            std::fs::write(&quoted, format!("{}{history}\n", bash_tab_rc_quoted(&fx))).unwrap();
+            let plain = fx.tmp.path().join("bashrc-plain");
+            std::fs::write(&plain, format!("{}{history}\n", bash_tab_rc(&fx))).unwrap();
+            for (rcfile, typed, want) in [
+                (
+                    &quoted,
+                    "--cfg lead/ctl/'",
+                    r"LINE:ci lint --cfg $'lead/ctl/\001;touch sentinel-one;#'",
+                ),
+                (
+                    &quoted,
+                    "--cfg lead/ctl/\"",
+                    r"LINE:ci lint --cfg $'lead/ctl/\001;touch sentinel-one;#'",
+                ),
+                (
+                    &quoted,
+                    "--cfg lead/sub/'",
+                    r"LINE:ci lint --cfg $'lead/sub/\001$(touch sentinel-one)'",
+                ),
+                (
+                    &quoted,
+                    "--cfg lead/sub/\"",
+                    r"LINE:ci lint --cfg $'lead/sub/\001$(touch sentinel-one)'",
+                ),
+                (
+                    &plain,
+                    "--cfg lead/bang/\"",
+                    "LINE:ci lint --cfg lead/bang/!;touch sentinel-one;#",
+                ),
+                (
+                    &plain,
+                    "--cfg lead/sq/'",
+                    "LINE:ci lint --cfg lead/sq/';touch sentinel-one;#",
+                ),
+                // The first Tab inserts the common prefix, and Backspace (`^H`: a typed-ahead DEL
+                // is erased by the pty's line discipline) reopens the quote.
+                (&plain, "--cfg 'rq/r\t\x08", "LINE:ci lint --cfg rq/r''x"),
+                (
+                    &plain,
+                    "--mode \"!",
+                    &format!("LINE:ci lint --mode !;touch {sentinel};#"),
+                ),
+            ] {
+                let typed = format!("toolr ci lint {typed}");
+                assert_bash_tab_line(&bash, &fx, rcfile, &typed, want);
+                assert_no_sentinels(&fx, &format!("{bash} {history} {typed:?}"));
+            }
+        }
+    }
+}
+
+/// Readline misreads a `$'…'` run holding `\'`, or closing on a `'` right after a `\`, and its
+/// idea of the open quote then differs from the script's. Such a line offers nothing.
+#[test]
+fn bash_path_ansi_c_forms_readline_misreads_offer_nothing() {
+    let script = print_script("bash");
+    for bash in bashes() {
+        let fx = hostile_fixture();
+        assert_path_replies(&bash, &script, &fx, r"$'evb/b\\':z", &[]);
+        assert_path_replies(&bash, &script, &fx, r"$'evb/b\\'", &[]);
+        // A misread word earlier on the line puts readline out of step for the rest of it.
+        let run = Drive::new(&script, &["--out", r"$'a\'b'", "--cfg"], "lead/sq/").run(&bash, &fx);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+        let run =
+            Drive::new(&script, &["--out", r"$'a\047b'", "--cfg"], "lead/sq/").run(&bash, &fx);
+        assert_eq!(run.reply.len(), 1, "{bash}: {:?}", run.reply);
+    }
+}
+
+/// End to end, the misread forms leave the typed text as it was.
+#[test]
+fn bash_tab_keeps_ansi_c_forms_readline_misreads_end_to_end() {
+    for bash in bashes() {
+        let fx = hostile_fixture();
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc(&fx)).unwrap();
+        for (typed, want) in [
+            (r"--cfg $'evb/b\\':z", r"LINE:ci lint --cfg evb/b\:z"),
+            (
+                r"--out $'a\'b' --cfg lead/sq/",
+                "LINE:ci lint --out a'b --cfg lead/sq/",
+            ),
+        ] {
+            let typed = format!("toolr ci lint {typed}");
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, want);
+            assert_no_sentinels(&fx, &format!("{bash} {typed:?}"));
+        }
+    }
+}
+
+/// `insert-completions` (`M-*`, `COMP_TYPE` 42) deletes the open quote and inserts every reply as
+/// is, so a reply quoted for the inside of the quote would land unquoted: offer nothing there.
+#[test]
+fn bash_insert_completions_inside_an_open_quote_offers_nothing() {
+    let script = print_script("bash");
+    let insert_all = format!("COMP_TYPE=42\n{script}");
+    for bash in bashes() {
+        let fx = hostile_fixture();
+        for cur in ["'w/a", "\"w/a", "$'w/c", "$'d/", "w/$'c", "'d/"] {
+            assert_path_replies(&bash, &insert_all, &fx, cur, &[]);
+        }
+        // With no open quote every reply is a whole quoted word, which is safe to insert.
+        for cur in ["w/", "d/"] {
+            let want = run_bash_cfg_path(&bash, &fx, cur);
+            assert_eq!(want.reply.len(), 2, "{bash} {cur}: {:?}", want.reply);
+            let want: Vec<&str> = want.reply.iter().map(String::as_str).collect();
+            assert_path_replies(&bash, &insert_all, &fx, cur, &want);
+        }
+        assert_no_sentinels(&fx, &bash);
+    }
+}
+
+/// End to end: `ESC *` inside an open quote inserts nothing, and the `'` typed after it closes the
+/// word for bash; with no open quote it inserts each name quoted.
+#[test]
+fn bash_insert_completions_never_runs_a_name_end_to_end() {
+    for bash in bashes() {
+        let fx = hostile_fixture();
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc(&fx)).unwrap();
+        for (keys, want) in [
+            ("--cfg 'w/a\x1b*'", "LINE:ci lint --cfg w/a"),
+            ("--cfg \"w/a\x1b*\"", "LINE:ci lint --cfg w/a"),
+            ("--cfg $'w/c\x1b*'", "LINE:ci lint --cfg w/c"),
+            ("--cfg $'d/\x1b*'", "LINE:ci lint --cfg d/"),
+            (
+                "--cfg w/a\x1b*",
+                "LINE:ci lint --cfg w/a;touch sentinel-one;#",
+            ),
+        ] {
+            let keys = format!("toolr ci lint {keys}");
+            assert_bash_keys_line(&bash, &fx, &rcfile, &keys, want);
+            assert_no_sentinels(&fx, &format!("{bash} {keys:?}"));
+        }
+    }
+}
+
+/// Bash doesn't history-expand a `!` inside `$'…'`, on 5.1 to 5.3, so a reply there leaves it
+/// bare; outside it, as in a grouped reply, `%q` escapes it.
+#[test]
+fn bash_tab_keeps_a_bang_literal_in_ansi_c_quotes_end_to_end() {
+    for bash in bashes() {
+        let fx = fixture();
+        let bang = fx.tmp.path().join("bang");
+        std::fs::create_dir_all(&bang).unwrap();
+        for name in ["h!!x", "end!", "b!\nz"] {
+            std::fs::write(bang.join(name), "").unwrap();
+        }
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, format!("{}set -H\n", bash_tab_rc_quoted(&fx))).unwrap();
+        for (typed, want) in [
+            ("--cfg $'bang/h", r"--cfg bang/h\!\!x"),
+            ("--cfg bang/$'h", r"--cfg bang/h\!\!x"),
+            ("--cfg $'bang/e", r"--cfg bang/end\!"),
+            ("--cfg $'bang/b", r"--cfg $'bang/b!\nz'"),
+            ("--cfg bang/b", r"--cfg $'bang/b!\nz'"),
+            ("--mode $'wo", r"--mode wow\!"),
+        ] {
+            let typed = format!("echo prev\ntoolr ci lint {typed}");
+            let want = format!("LINE:ci lint {want}");
             assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
         }
     }
