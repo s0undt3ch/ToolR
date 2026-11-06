@@ -128,7 +128,10 @@ rename it once (`colour = not no_colour`). For more than two states, use
   `if TYPE_CHECKING:`), a `def` with two command decorators, a
   non-literal `group=`/name or a command name defined twice in a group
   fails the build, and `CommandsTester` the same way, even when the
-  surrounding code never runs.
+  surrounding code never runs. So does a `command_group(...)` call that
+  isn't a top-level `name = command_group(...)` assignment or a bare
+  statement: a tuple or chained target, a walrus, or a call under an
+  `if`, `try`, `with`, loop, `def` or class.
 - **Nested subgroups.** A dotted name (`command_group("docker.image",
   ...)`) attaches under the parent named before the last dot.
 - **Help sections.** Build an `ArgSection` at module scope via
@@ -227,7 +230,8 @@ it never imports or executes your modules to build the manifest. Declare
 `command_group(...)` at module top level and apply `@command` /
 `@group.command` to module-level functions. A decorated `def` behind
 an `if` or inside a factory fails the build, whether or not that code
-runs; put platform checks inside the command body. Commands registered
+runs, and so does a group declared that way (`a, b = command_group(...),
+command_group(...)`, a walrus, a call under an `if`); put platform checks inside the command body. Commands registered
 imperatively, such as `group.command(...)` called in a `for` loop, are
 **not** discovered and will not appear in `--help`, completion, or
 dispatch. If a command is missing, make its registration a top-level,

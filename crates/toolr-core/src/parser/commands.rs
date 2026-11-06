@@ -115,6 +115,8 @@ pub enum UnsupportedCommandKind {
     NonLiteralName,
     /// More than one toolr command decorator on the same `def`.
     Stacked,
+    /// A `command_group(...)` call that isn't a top-level assignment or bare statement.
+    GroupBinding,
 }
 
 impl std::fmt::Display for UnsupportedCommandKind {
@@ -126,6 +128,9 @@ impl std::fmt::Display for UnsupportedCommandKind {
             Self::NonLiteralGroup => "`group=` must be a string literal.",
             Self::NonLiteralName => "the command name must be a string literal.",
             Self::Stacked => "a function can carry only one command decorator.",
+            Self::GroupBinding => {
+                "`command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it."
+            }
         })
     }
 }

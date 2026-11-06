@@ -576,7 +576,10 @@ accepts ``@command``, ``@toolr.command`` (also after
 ``group=SOME_CONSTANT`` or a non-literal name fails the build with
 "unsupported command declarations", and so does
 :class:`toolr.testing.CommandsTester`, even when that code never runs.
-A group's command names must be unique within ``tools/``.
+So does a ``command_group(...)`` call that isn't a top-level
+``name = command_group(...)`` assignment or a bare statement: a tuple or
+chained target, a walrus, or a call under an ``if``, ``try``, ``with``,
+loop, ``def`` or class. A group's command names must be unique within ``tools/``.
 
 Usage::
 

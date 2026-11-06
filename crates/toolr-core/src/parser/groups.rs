@@ -7,7 +7,7 @@ use ruff_python_ast::{
     Alias, ExceptHandler, Expr, ExprCall, ModModule, Stmt, StmtAnnAssign, StmtAssign,
 };
 
-use super::commands::{Binding, ToolrNames};
+use super::commands::{Binding, ToolrNames, UnsupportedCommand, UnsupportedCommandKind};
 use super::parse_docstring;
 
 /// A group binding extracted from source. The `var` is the Python local name
@@ -304,6 +304,88 @@ fn is_doc(expr: &Expr) -> bool {
     matches!(expr, Expr::Name(n) if n.id.as_str() == "__doc__")
 }
 
+/// The call a module-level statement binds, and the name it binds it to, when
+/// the statement has a shape the parser reads: `var = call`, `var: T = call`
+/// or a bare `call`. Not yet known to be `command_group`.
+///
+/// Mirrored in `toolr.testing._groups._supported_group_call`; change both together.
+fn supported_group_call(stmt: &Stmt) -> Option<(Option<String>, &ExprCall)> {
+    match stmt {
+        Stmt::Assign(StmtAssign { targets, value, .. }) => {
+            let name = single_name_target(targets)?;
+            let Expr::Call(call) = value.as_ref() else {
+                return None;
+            };
+            Some((Some(name), call))
+        }
+        Stmt::AnnAssign(StmtAnnAssign {
+            target,
+            value: Some(value),
+            ..
+        }) => {
+            let (Expr::Name(name), Expr::Call(call)) = (target.as_ref(), value.as_ref()) else {
+                return None;
+            };
+            Some((Some(name.id.as_str().to_string()), call))
+        }
+        Stmt::Expr(expr_stmt) => {
+            let Expr::Call(call) = expr_stmt.value.as_ref() else {
+                return None;
+            };
+            Some((None, call))
+        }
+        _ => None,
+    }
+}
+
+/// Every `command_group(...)` call the parser can't bind, one entry each, in
+/// source order: anything but the whole value of a supported module-level
+/// statement. Such a group, and every command on it, would otherwise vanish
+/// without a word.
+///
+/// Mirrored in `toolr.testing._shapes._unsupported_group_bindings`; change
+/// both together.
+pub fn detect_unsupported_group_bindings(
+    module: &ModModule,
+    module_path: &str,
+    names: &ToolrNames,
+) -> Vec<UnsupportedCommand> {
+    let mut finder = UnboundGroupCalls {
+        names,
+        module_path,
+        out: Vec::new(),
+    };
+    for stmt in &module.body {
+        let bound = supported_group_call(stmt)
+            .is_some_and(|(_, call)| is_command_group_call(call, names, module_path));
+        if !bound {
+            finder.visit_stmt(stmt);
+        }
+    }
+    finder.out
+}
+
+struct UnboundGroupCalls<'a> {
+    names: &'a ToolrNames<'a>,
+    module_path: &'a str,
+    out: Vec<UnsupportedCommand>,
+}
+
+impl<'a> Visitor<'a> for UnboundGroupCalls<'_> {
+    fn visit_expr(&mut self, expr: &'a Expr) {
+        if let Expr::Call(call) = expr
+            && is_command_group_call(call, self.names, self.module_path)
+        {
+            self.out.push(UnsupportedCommand {
+                module: self.module_path.to_string(),
+                function: "command_group".to_string(),
+                kind: UnsupportedCommandKind::GroupBinding,
+            });
+        }
+        walk_expr(self, expr);
+    }
+}
+
 /// The binding `stmt` makes, when it is a `command_group(...)` call.
 fn group_binding(
     stmt: &Stmt,
@@ -320,32 +402,7 @@ fn group_binding(
     //      the string-path style. No binding var to capture
     //      (the leaf name becomes a synthetic var so `@var.command`
     //      keeps working when a user mixes styles).
-    let (var_name, call) = match stmt {
-        Stmt::Assign(StmtAssign { targets, value, .. }) => {
-            let name = single_name_target(targets)?;
-            let Expr::Call(call) = value.as_ref() else {
-                return None;
-            };
-            (Some(name), call)
-        }
-        Stmt::AnnAssign(StmtAnnAssign {
-            target,
-            value: Some(value),
-            ..
-        }) => {
-            let (Expr::Name(name), Expr::Call(call)) = (target.as_ref(), value.as_ref()) else {
-                return None;
-            };
-            (Some(name.id.as_str().to_string()), call)
-        }
-        Stmt::Expr(expr_stmt) => {
-            let Expr::Call(call) = expr_stmt.value.as_ref() else {
-                return None;
-            };
-            (None, call)
-        }
-        _ => return None,
-    };
+    let (var_name, call) = supported_group_call(stmt)?;
     if !is_command_group_call(call, names, module_path) {
         return None;
     }
@@ -953,5 +1010,111 @@ c = b.command_group("c", "C")
         assert_eq!(groups.len(), 3);
         assert_eq!(groups[2].full_path(), "a.b.c");
         assert_eq!(groups[2].parent.as_deref(), Some("a.b"));
+    }
+
+    /// What `detect_unsupported_group_bindings` reports for `src` parsed as `tools.m`.
+    fn unbound_in(src: &str) -> Vec<UnsupportedCommand> {
+        let m = parse_src(src);
+        let all = imports(&[("tools.m", src)]);
+        detect_unsupported_group_bindings(&m, "tools.m", &ToolrNames::new(&all))
+    }
+
+    fn assert_unbound(src: &str, count: usize) {
+        let found = unbound_in(src);
+        assert_eq!(found.len(), count, "{src}: {found:?}");
+        for u in &found {
+            assert_eq!(u.module, "tools.m");
+            assert_eq!(u.function, "command_group");
+            assert_eq!(u.kind, UnsupportedCommandKind::GroupBinding);
+        }
+    }
+
+    #[test]
+    fn plain_top_level_bindings_are_not_reported() {
+        assert_unbound(
+            "from toolr import command_group\na = command_group(\"a\", \"A\", \"A.\")\nb: T = command_group(\"b\", \"B\", \"B.\")\ncommand_group(\"c\", \"C\", \"C.\")\nk = a.command_group(\"k\", \"K\", \"K.\")\n",
+            0,
+        );
+    }
+
+    #[test]
+    fn tuple_target_reports_each_call() {
+        assert_unbound(
+            "a, b = command_group(\"a\", \"A\", \"A.\"), command_group(\"b\", \"B\", \"B.\")\n",
+            2,
+        );
+    }
+
+    #[test]
+    fn chained_target_is_reported() {
+        assert_unbound("a = b = command_group(\"a\", \"A\", \"A.\")\n", 1);
+    }
+
+    #[test]
+    fn walrus_is_reported() {
+        assert_unbound("(g := command_group(\"g\", \"G\", \"G.\"))\n", 1);
+    }
+
+    #[test]
+    fn compound_statement_bodies_are_reported() {
+        for head in [
+            "if x:\n    ",
+            "try:\n    pass\nfinally:\n    ",
+            "with x:\n    ",
+            "for _ in x:\n    ",
+            "while x:\n    ",
+            "match x:\n    case 1:\n        ",
+        ] {
+            let src = format!("{head}g = command_group(\"g\", \"G\", \"G.\")\n");
+            assert_unbound(&src, 1);
+        }
+        assert_unbound("if x:\n    command_group(\"g\", \"G\", \"G.\")\n", 1);
+    }
+
+    #[test]
+    fn function_and_class_bodies_are_reported() {
+        assert_unbound(
+            "def make():\n    return command_group(\"g\", \"G\", \"G.\")\n\n\nclass C:\n    g = command_group(\"h\", \"H\", \"H.\")\n",
+            2,
+        );
+    }
+
+    #[test]
+    fn call_nested_in_an_expression_is_reported() {
+        assert_unbound("command_group(\"g\", \"G\", \"G.\").command(f)\n", 1);
+        assert_unbound(
+            "g = command_group(\"g\", \"G\", \"G.\", parent=command_group(\"p\", \"P\", \"P.\"))\n",
+            0,
+        );
+    }
+
+    #[test]
+    fn aliased_call_under_an_if_is_reported() {
+        assert_unbound(
+            "from toolr import command_group as cg\nif x:\n    g = cg(\"g\", \"G\", \"G.\")\n",
+            1,
+        );
+    }
+
+    #[test]
+    fn unrelated_call_under_an_if_is_not_reported() {
+        assert_unbound("def cg(*a):\n    return a\n\n\nif x:\n    h = cg(1)\n", 0);
+    }
+
+    #[test]
+    fn supported_group_call_matches_group_binding() {
+        let src = "from toolr import command_group\na = command_group(\"a\", \"A\", \"A.\")\nb: T = command_group(\"b\", \"B\", \"B.\")\ncommand_group(\"c\", \"C\", \"C.\")\nx, y = command_group(\"d\", \"D\", \"D.\"), 1\n(w := command_group(\"e\", \"E\", \"E.\"))\nz = other(1)\n";
+        let m = parse_src(src);
+        let all = imports(&[("tools.m", src)]);
+        let names = ToolrNames::new(&all);
+        let source = Source::new(&m, None);
+        let bound: Vec<bool> = m
+            .body
+            .iter()
+            .skip(1)
+            .map(|s| group_binding(s, &source, &[], &HashMap::new(), &names, "tools.m").is_some())
+            .collect();
+        assert_eq!(bound, [true, true, true, false, false, false]);
+        assert_eq!(unbound_in(src).len(), 2);
     }
 }

@@ -19,6 +19,8 @@ from toolr.testing._groups import _group_declarations
 from toolr.testing._groups import _ImportTable
 from toolr.testing._groups import _Memo
 from toolr.testing._groups import _undescribed_groups
+from toolr.testing._shapes import GROUP_BINDING
+from toolr.testing._shapes import _unsupported_group_bindings
 
 
 @pytest.fixture
@@ -42,7 +44,6 @@ def test_paths_follow_the_parsers_resolution(make_tools_dir: Callable[..., Path]
             "a.py": """
                 ci = command_group("ci", "CI", "CI.")
                 command_group("bare", "Bare", "Bare.")
-                x, y = command_group("skipped", "S", "S.")
                 z = other("ignored")
                 z = 1
                 pass
@@ -644,3 +645,130 @@ def test_undescribed_groups_message_asks_for_a_readable_value() -> None:
         "docstring the static parser can read: a string literal, or the `__doc__` of a "
         "module with a docstring."
     )
+
+
+def _binding_problems(module: str, count: int) -> list[tuple[str, str, str]]:
+    return [(module, "command_group", GROUP_BINDING)] * count
+
+
+def test_plain_bindings_are_not_unsupported(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": """
+                from toolr import command_group
+                a = command_group("a", "A", "A.")
+                b: T = command_group("b", "B", "B.")
+                command_group("c", "C", "C.")
+                k = a.command_group("k", "K", "K.")
+                g = command_group("g", "G", "G.", parent=command_group("p", "P", "P."))
+            """,
+        }
+    )
+    assert _unsupported_group_bindings(tools) == []
+
+
+def test_tuple_target_is_an_unsupported_declaration(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {"m.py": 'a, b = command_group("a", "A", "A."), command_group("b", "B", "B.")\n'}
+    )
+    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 2)
+
+
+def test_walrus_and_chained_target_are_unsupported_declarations(
+    make_tools_dir: Callable[..., Path],
+) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": """
+                (g := command_group("g", "G", "G."))
+                a = b = command_group("a", "A", "A.")
+            """,
+        }
+    )
+    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 2)
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        "if x:",
+        "try:\n    pass\nfinally:",
+        "with x:",
+        "for _ in x:",
+        "while x:",
+        "def make():",
+        "class C:",
+    ],
+)
+def test_group_in_a_nested_body_is_an_unsupported_declaration(
+    head: str, make_tools_dir: Callable[..., Path]
+) -> None:
+    tools = make_tools_dir({"m.py": f'{head}\n    g = command_group("g", "G", "G.")\n'})
+    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 1)
+
+
+def test_bare_group_in_a_match_is_an_unsupported_declaration(
+    make_tools_dir: Callable[..., Path],
+) -> None:
+    tools = make_tools_dir(
+        {"m.py": 'match x:\n    case 1:\n        command_group("g", "G", "G.")\n'}
+    )
+    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 1)
+
+
+def test_call_nested_in_an_expression_is_an_unsupported_declaration(
+    make_tools_dir: Callable[..., Path],
+) -> None:
+    tools = make_tools_dir({"m.py": 'command_group("g", "G", "G.").command(f)\n'})
+    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 1)
+
+
+def test_alias_under_an_if_is_an_unsupported_declaration(
+    make_tools_dir: Callable[..., Path],
+) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": """
+                from toolr import command_group as cg
+                if x:
+                    g = cg("g", "G", "G.")
+            """,
+        }
+    )
+    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 1)
+
+
+def test_unrelated_call_under_an_if_is_not_reported(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": """
+                def cg(*args):
+                    return args
+                if x:
+                    h = cg(1)
+            """,
+        }
+    )
+    assert _unsupported_group_bindings(tools) == []
+
+
+def test_group_bindings_come_before_commands(make_tools_dir: Callable[..., Path]) -> None:
+    tools = make_tools_dir(
+        {
+            "m.py": """
+                import toolr
+                from toolr import command_group
+                command_group("grp", "Grp", "Grp.")
+                def register():
+                    @toolr.command(group="grp")
+                    def nested(ctx):
+                        pass
+                (g := command_group("w", "W", "W."))
+            """,
+            "n.py": 'if True:\n    command_group("n", "N", "N.")\n',
+        }
+    )
+    assert _unsupported_group_bindings(tools) == [
+        *_binding_problems("tools.m", 1),
+        *_binding_problems("tools.n", 1),
+    ]

@@ -174,8 +174,16 @@ line; hoist out of `if`/`try`/`with`).
   common cause is gone).
 - Line numbers in the message.
 
-## Open questions
+## Decisions on the open questions
 
-1. Descend into `def`/class bodies (as above), or only module-level compound statements? The first
-   catches factories; the second is closer to the literal reports. Default: descend.
-2. `**Breaking:**` prefix, or a plain fix note? Default: Breaking.
+1. Descend into `def` and class bodies, as #674 rejects commands built in factories.
+2. The release note is `**Breaking:**`, following the FU-2 duplicate-commands precedent.
+3. No line numbers: the Rust and Python messages stay byte-identical.
+
+## Deviations from this design
+
+- The Python detector sits in `testing/_shapes.py` (`_unsupported_group_bindings`), not
+  `_groups.py`, because it needs `GROUP_BINDING` and `_shapes` already imports `_groups`. The
+  helpers it uses (`_supported_group_call`, `_unbound_group_calls`, `_import_tables`) are in `_groups.py`.
+- A call among the arguments of a supported statement (`parent=command_group(...)`) isn't reported:
+  both sides skip a supported statement whole.

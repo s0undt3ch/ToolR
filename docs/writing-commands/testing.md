@@ -148,12 +148,15 @@ unknown group references (1):
 `CommandsTester` runs your code, but `toolr` reads it without running it, so the tester checks the source for what
 `toolr` can't read. `@command(...)`, `@toolr.command(...)` (also after `import toolr as t`) and an alias from
 `from toolr import command as cmd` all work, on a top-level `def` with `group=` and any name as string literals.
-Commands must be top-level `def`s: put a platform check inside the command body, not around the `def`. A command on a
-nested `def` (inside another function, a class, an `if TYPE_CHECKING:` or any other `if`), a `def` carrying two command
-decorators, a `group=SOME_CONSTANT` or a non-literal name fails both:
+Commands must be top-level `def`s: put a platform check inside the command body, not around the `def`. Groups follow
+the same rule: a `command_group(...)` call must be a top-level `name = command_group(...)` assignment or a bare
+statement, not part of a tuple or chained target, a walrus, an `if`, `try`, `with` or loop, or a `def` or class body.
+A command on a nested `def` (inside another function, a class, an `if TYPE_CHECKING:` or any other `if`), a
+`def` carrying two command decorators, a `group=SOME_CONSTANT` or a non-literal name fails both:
 
 ```text
-unsupported command declarations (2):
+unsupported command declarations (3):
+  - tools.cmds::command_group: `command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it.
   - tools.cmds::nested: `@command` must decorate a top-level `def`, which toolr reads without running it.
   - tools.cmds::check: `group=` must be a string literal.
 ```

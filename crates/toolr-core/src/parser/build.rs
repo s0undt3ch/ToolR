@@ -15,7 +15,7 @@ use crate::parser::{
         detect_name_conflicts, detect_unsupported_commands, extract_commands,
         format_missing_docstrings, missing_docstrings,
     },
-    groups::{Field, GroupFields, extract_groups},
+    groups::{Field, GroupFields, detect_unsupported_group_bindings, extract_groups},
     parse_python_file,
     symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable},
 };
@@ -177,6 +177,7 @@ fn build_commands_inner(
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
     let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
     let mut unsupported: Vec<UnsupportedCommand> = Vec::new();
+    let mut unsupported_groups: Vec<UnsupportedCommand> = Vec::new();
     let names = ToolrNames::new(&all_imports);
     for path in py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
@@ -190,6 +191,11 @@ fn build_commands_inner(
             &names,
             &module_path,
         );
+        unsupported_groups.extend(detect_unsupported_group_bindings(
+            &module,
+            &module_path,
+            &names,
+        ));
         unsupported.extend(detect_unsupported_commands(
             &module,
             &module_path,
@@ -277,6 +283,9 @@ fn build_commands_inner(
         return Err(BuildError::ConflictingCommandName(name_conflicts));
     }
 
+    // Group problems first: a dropped group hides what its commands would report.
+    unsupported_groups.extend(unsupported);
+    let unsupported = unsupported_groups;
     if !unsupported.is_empty() {
         return Err(BuildError::UnsupportedCommands(unsupported));
     }
@@ -2127,7 +2136,6 @@ def hello(ctx):
     fn group_paths_match_the_testers_port() {
         let a = "ci = command_group(\"ci\", \"CI\", \"CI.\")\n\
                  command_group(\"bare\", \"Bare\", \"Bare.\")\n\
-                 x, y = command_group(\"skipped\", \"S\", \"S.\")\n\
                  z = other(\"ignored\")\nz = 1\npass\n";
         let b = "img = ci.command_group(\"image\", \"Image\", \"Image.\")\n\
                  kw = command_group(\"kw\", \"Kw\", \"Kw.\", parent=img)\n\
@@ -2633,6 +2641,32 @@ def aliased(ctx):
             build_error_for(&[("tools/m.py", src)]),
             "unsupported command declarations (1):\n\
              \x20 - tools.m::nested: `@command` must decorate a top-level `def`, which toolr reads without running it."
+        );
+    }
+
+    const GROUP_BINDING_LINE: &str = "`command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it.";
+
+    #[test]
+    fn group_binding_forms_fail_the_build() {
+        let src = "from toolr import command_group\n\na, b = command_group(\"ga\", \"Ga\", \"Ga\"), command_group(\"gb\", \"Gb\", \"Gb\")\n\nif a:\n    c = command_group(\"gc\", \"Gc\", \"Gc\")\n";
+        assert_eq!(
+            build_error_for(&[("tools/m.py", src)]),
+            format!(
+                "unsupported command declarations (3):\n  - tools.m::command_group: {GROUP_BINDING_LINE}\n  - tools.m::command_group: {GROUP_BINDING_LINE}\n  - tools.m::command_group: {GROUP_BINDING_LINE}"
+            )
+        );
+    }
+
+    #[test]
+    fn group_bindings_are_reported_before_commands() {
+        let first = "from toolr import command, command_group\n\ncommand_group(\"grp\", \"Grp\", \"Grp\")\n\n\ndef register():\n    @command(group=\"grp\")\n    def nested(ctx):\n        \"\"\"Nested.\"\"\"\n\n\n(g := command_group(\"w\", \"W\", \"W\"))\n";
+        let second =
+            "from toolr import command_group\n\nif True:\n    command_group(\"n\", \"N\", \"N\")\n";
+        assert_eq!(
+            build_error_for(&[("tools/m.py", first), ("tools/n.py", second)]),
+            format!(
+                "unsupported command declarations (3):\n  - tools.m::command_group: {GROUP_BINDING_LINE}\n  - tools.n::command_group: {GROUP_BINDING_LINE}\n  - tools.m::nested: `@command` must decorate a top-level `def`, which toolr reads without running it."
+            )
         );
     }
 

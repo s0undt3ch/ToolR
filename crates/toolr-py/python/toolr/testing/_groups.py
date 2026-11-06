@@ -580,6 +580,27 @@ def _is_command_group(
     return isinstance(func, ast.Attribute) and func.attr == "command_group"
 
 
+def _supported_group_call(stmt: ast.stmt) -> tuple[str | None, ast.Call] | None:
+    """The call a module-level statement binds, and the name it binds it to.
+
+    Only ``var = call``, ``var: T = call`` and a bare ``call`` count; whether
+    the call is ``command_group`` is for the caller to say. Mirrors
+    ``crates/toolr-core/src/parser/groups.rs::supported_group_call``: change
+    both together.
+    """
+    var: str | None = None
+    value: ast.expr | None = None
+    if isinstance(stmt, ast.Assign):
+        if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            var, value = stmt.targets[0].id, stmt.value
+    elif isinstance(stmt, ast.AnnAssign):
+        if isinstance(stmt.target, ast.Name):
+            var, value = stmt.target.id, stmt.value
+    elif isinstance(stmt, ast.Expr):
+        value = stmt.value
+    return (var, value) if isinstance(value, ast.Call) else None
+
+
 def _group_calls(
     tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
 ) -> list[_GroupCall]:
@@ -591,19 +612,50 @@ def _group_calls(
     """
     found: list[_GroupCall] = []
     for stmt in tree.body:
-        var: str | None = None
-        value: ast.expr | None = None
-        if isinstance(stmt, ast.Assign):
-            if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
-                var, value = stmt.targets[0].id, stmt.value
-        elif isinstance(stmt, ast.AnnAssign):
-            if isinstance(stmt.target, ast.Name):
-                var, value = stmt.target.id, stmt.value
-        elif isinstance(stmt, ast.Expr):
-            value = stmt.value
-        if isinstance(value, ast.Call) and _is_command_group(value.func, tables, module, memo):
-            found.append(_GroupCall(var, value))
+        supported = _supported_group_call(stmt)
+        if supported and _is_command_group(supported[1].func, tables, module, memo):
+            found.append(_GroupCall(*supported))
     return found
+
+
+def _unbound_group_calls(
+    tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
+) -> list[ast.Call]:
+    """Each ``command_group(...)`` call ``_group_calls`` doesn't bind, in source order.
+
+    Mirrors ``crates/toolr-core/src/parser/groups.rs::detect_unsupported_group_bindings``:
+    change both together.
+    """
+    # A bound statement is skipped whole, so a call among its arguments isn't reported either.
+    bound = {
+        id(node)
+        for group in _group_calls(tree, tables, module, memo)
+        for node in ast.walk(group.call)
+    }
+    return sorted(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and id(node) not in bound
+            and _is_command_group(node.func, tables, module, memo)
+        ),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+
+
+def _import_tables(
+    tools_dir: Path,
+) -> tuple[dict[Path, ast.Module], dict[Path, str], dict[str, _ImportTable]]:
+    """Each ``tools/`` file's tree and module path, and each module's import table."""
+    files = _python_files(tools_dir)
+    trees = {file: ast.parse(file.read_bytes()) for file in files}
+    modules = {file: _module_path(tools_dir, file) for file in files}
+    tables = {
+        modules[file]: _ImportTable(trees[file], modules[file], is_package=file.stem == "__init__")
+        for file in files
+    }
+    return trees, modules, tables
 
 
 def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
@@ -617,16 +669,9 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
     """
     declarations: list[GroupDeclaration] = []
     global_vars: dict[str, str] = {}
-    files = _python_files(tools_dir)
-    trees = {file: ast.parse(file.read_bytes()) for file in files}
-    modules = {file: _module_path(tools_dir, file) for file in files}
-    tables = {
-        modules[file]: _ImportTable(trees[file], modules[file], is_package=file.stem == "__init__")
-        for file in files
-    }
+    trees, modules, tables = _import_tables(tools_dir)
     memo: _Memo = {}
-    for file in files:
-        tree = trees[file]
+    for file, tree in trees.items():
         module = modules[file]
         source = _Source.of(tree)
         local: list[tuple[str, str]] = []
