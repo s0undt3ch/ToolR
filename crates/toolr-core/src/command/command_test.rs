@@ -850,6 +850,7 @@ mod test_suite {
         }
 
         /// The pid in `path`, once the process that writes it has got that far.
+        #[cfg(unix)]
         fn wait_for_pid_file(path: &std::path::Path, within: Duration) -> Option<u32> {
             let deadline = Instant::now() + within;
             loop {
@@ -888,6 +889,8 @@ mod test_suite {
 
         /// Kills whatever matches `pattern` when the test ends, for processes whose
         /// pid the test never learns.
+        ///
+        /// Machine-wide match: build `pattern` with `unique_sleep`, never a fixed command line, or a concurrent run will kill your processes.
         #[cfg(unix)]
         struct KillMatching(String);
 
@@ -910,6 +913,8 @@ mod test_suite {
         }
 
         /// Pids whose full command line matches `pattern`.
+        ///
+        /// Machine-wide match: build `pattern` with `unique_sleep`, never a fixed command line, or a concurrent run will kill your processes.
         #[cfg(unix)]
         fn pids_matching(pattern: &str) -> Vec<u32> {
             Command::new("pgrep")
@@ -1105,8 +1110,8 @@ mod test_suite {
                 "(sh -c 'echo $$ >\"{0}.tmp\"; mv \"{0}.tmp\" \"{0}\"; while echo tick; do sleep 0.1; done' &); sleep 60",
                 pid_file.display()
             )));
-            // Start-up of the writer has been seen to take over 2.5s on a loaded machine, and
-            // it must have left the tree before the timeout; 10s leaves ~4x headroom.
+            // The writer's start-up must finish before the timeout, or it is still in the tree
+            // and hasn't escaped. It has taken over 2.5s on a loaded machine; 10s leaves ~4x headroom.
             const TIMEOUT: Duration = Duration::from_secs(10);
             config.timeout_secs = Some(TIMEOUT.as_secs_f64());
 
@@ -1115,6 +1120,7 @@ mod test_suite {
             let elapsed = start.elapsed();
             let writer = wait_for_pid_file(&pid_file, DEATH_WAIT);
             let _cleanup = KillOnDrop(writer.into_iter().collect());
+            let writer = writer.ok_or_else(|| anyhow!("the writer never printed its pid"))?;
             assert_timeout_error(result?, "timed out after");
             assert!(
                 elapsed < TIMEOUT + Duration::from_secs(20),
@@ -1123,7 +1129,6 @@ mod test_suite {
             // The drain waited out the grace, then detached.
             let floor = TIMEOUT + crate::command::KILL_GRACE;
             assert!(elapsed >= floor, "returned after {elapsed:?}");
-            let writer = writer.ok_or_else(|| anyhow!("the writer never printed its pid"))?;
             assert!(
                 wait_until_dead(writer, DEATH_WAIT),
                 "writer {writer} still running: the detached reader kept the pipe open"
