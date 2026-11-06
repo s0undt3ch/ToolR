@@ -176,6 +176,7 @@ class _Param(NamedTuple):
     position: int
 
 
+_NAME = _Param("name", 0)
 _DESCRIPTION = _Param("description", 2)
 _LONG_DESCRIPTION = _Param("long_description", 3)
 _DOCSTRING = _Param("docstring", 4)
@@ -580,6 +581,43 @@ def _is_command_group(
     return isinstance(func, ast.Attribute) and func.attr == "command_group"
 
 
+def _supported_group_call(stmt: ast.stmt) -> tuple[str | None, ast.Call] | None:
+    """The call a module-level statement binds, and the name it binds it to.
+
+    Only ``var = call``, ``var: T = call`` and a bare ``call`` count; whether
+    the call is ``command_group`` is for the caller to say. Mirrors
+    ``crates/toolr-core/src/parser/groups.rs::supported_group_call``: change
+    both together.
+    """
+    var: str | None = None
+    value: ast.expr | None = None
+    if isinstance(stmt, ast.Assign):
+        if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            var, value = stmt.targets[0].id, stmt.value
+    elif isinstance(stmt, ast.AnnAssign):
+        if isinstance(stmt.target, ast.Name):
+            var, value = stmt.target.id, stmt.value
+    elif isinstance(stmt, ast.Expr):
+        value = stmt.value
+    return (var, value) if isinstance(value, ast.Call) else None
+
+
+def _bound_group_call(
+    stmt: ast.stmt, tables: dict[str, _ImportTable], module: str, memo: _Memo
+) -> _GroupCall | None:
+    """The call and bound name of a module-level statement the parser binds as a group.
+
+    A supported shape whose call is ``command_group``. Both ``_group_calls``
+    and ``_unbound_group_calls`` ask this, so a statement is bound or reported
+    in one place. Mirrors ``crates/toolr-core/src/parser/groups.rs::bound_group_call``:
+    change both together.
+    """
+    supported = _supported_group_call(stmt)
+    if supported and _is_command_group(supported[1].func, tables, module, memo):
+        return _GroupCall(*supported)
+    return None
+
+
 def _group_calls(
     tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
 ) -> list[_GroupCall]:
@@ -589,21 +627,115 @@ def _group_calls(
     ``crates/toolr-core/src/parser/groups.rs::extract_groups`` and
     ``group_binding``.
     """
-    found: list[_GroupCall] = []
+    return [bound for stmt in tree.body if (bound := _bound_group_call(stmt, tables, module, memo))]
+
+
+def _is_toolr_module(table: _ImportTable, name: str) -> bool:
+    """Whether ``name`` is ``import toolr [as t]`` here; ``import toolr.types`` binds ``toolr`` too.
+
+    Mirrors ``ToolrNames::is_toolr_module`` in ``crates/toolr-core/src/parser/commands.rs``:
+    change both together.
+    """
+    bound = table.module_bindings.get(name)
+    return bound is not None and (
+        bound == "toolr" or (name == "toolr" and bound.startswith("toolr."))
+    )
+
+
+def _parameter_names(args: ast.arguments) -> set[str]:
+    """Names a ``def`` or ``lambda`` parameter list binds.
+
+    A parameter is the one rebinding that needs no flow analysis to know the
+    name isn't toolr's, so no other local rebinding shadows. Mirrors
+    ``UnboundGroupCalls::scoped`` in ``crates/toolr-core/src/parser/groups.rs``:
+    change both together.
+    """
+    return {
+        arg.arg
+        for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg)
+        if arg is not None
+    }
+
+
+def _unbound_group_calls(
+    tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
+) -> list[ast.Call]:
+    """Each toolr ``command_group(...)`` call the manifest build can't bind, in source order.
+
+    That is any call that isn't the whole value of a bound statement (one
+    ``_group_calls`` reads), and a bound statement whose group name isn't a
+    string literal. ``command_group`` creates a group when none is registered,
+    so no call is exempt as a mere lookup. A bound statement is skipped whole,
+    annotation included. A callee counts only when it resolves to toolr's
+    ``command_group``: a name through the import tables (a parameter of the
+    enclosing ``def`` or ``lambda`` shadows it, no other local rebinding does),
+    an attribute when its base is the ``toolr`` module. Mirrors
+    ``crates/toolr-core/src/parser/groups.rs::detect_unsupported_group_bindings``:
+    change both together.
+    """
+    table = tables[module]
+    found: list[ast.Call] = []
+
+    def is_toolr_group_call(call: ast.Call, shadowed: frozenset[str]) -> bool:
+        """Whether ``call`` is toolr's ``command_group``.
+
+        Deliberately stricter than ``_is_command_group``: this one reports, that one
+        binds. Mirrors ``UnboundGroupCalls::is_toolr_group_call`` in
+        ``crates/toolr-core/src/parser/groups.rs``: change both together.
+        """
+        func = call.func
+        if isinstance(func, ast.Name):
+            return (
+                func.id not in shadowed
+                and _binding(tables, module, func.id, 0, memo) is _Binding.TOOLR
+            )
+        return (
+            isinstance(func, ast.Attribute)
+            and func.attr == "command_group"
+            and isinstance(func.value, ast.Name)
+            and func.value.id not in shadowed
+            and _is_toolr_module(table, func.value.id)
+        )
+
+    # An explicit stack: a long expression nests deeper than Python recurses.
+    stack: list[tuple[ast.AST, frozenset[str]]] = []
     for stmt in tree.body:
-        var: str | None = None
-        value: ast.expr | None = None
-        if isinstance(stmt, ast.Assign):
-            if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
-                var, value = stmt.targets[0].id, stmt.value
-        elif isinstance(stmt, ast.AnnAssign):
-            if isinstance(stmt.target, ast.Name):
-                var, value = stmt.target.id, stmt.value
-        elif isinstance(stmt, ast.Expr):
-            value = stmt.value
-        if isinstance(value, ast.Call) and _is_command_group(value.func, tables, module, memo):
-            found.append(_GroupCall(var, value))
-    return found
+        if bound := _bound_group_call(stmt, tables, module, memo):
+            if _literal(_argument(bound.call, _NAME)) is None:
+                found.append(bound.call)
+        else:
+            stack.append((stmt, frozenset()))
+    while stack:
+        node, shadowed = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            # Decorators, defaults and annotations read the enclosing scope.
+            outer: list[ast.AST] = [node.args]
+            if not isinstance(node, ast.Lambda):
+                outer += [*node.decorator_list, *([node.returns] if node.returns else [])]
+            stack.extend((child, shadowed) for child in outer)
+            inner = shadowed | _parameter_names(node.args)
+            body = node.body if isinstance(node.body, list) else [node.body]
+            stack.extend((child, inner) for child in body)
+            continue
+        if isinstance(node, ast.Call) and is_toolr_group_call(node, shadowed):
+            found.append(node)
+        stack.extend((child, shadowed) for child in ast.iter_child_nodes(node))
+    # Source order, as the Rust walk gives, so the two messages match.
+    return sorted(found, key=lambda node: (node.lineno, node.col_offset))
+
+
+def _import_tables(
+    tools_dir: Path,
+) -> tuple[dict[Path, ast.Module], dict[Path, str], dict[str, _ImportTable]]:
+    """Each ``tools/`` file's tree and module path, and each module's import table."""
+    files = _python_files(tools_dir)
+    trees = {file: ast.parse(file.read_bytes()) for file in files}
+    modules = {file: _module_path(tools_dir, file) for file in files}
+    tables = {
+        modules[file]: _ImportTable(trees[file], modules[file], is_package=file.stem == "__init__")
+        for file in files
+    }
+    return trees, modules, tables
 
 
 def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
@@ -617,16 +749,9 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
     """
     declarations: list[GroupDeclaration] = []
     global_vars: dict[str, str] = {}
-    files = _python_files(tools_dir)
-    trees = {file: ast.parse(file.read_bytes()) for file in files}
-    modules = {file: _module_path(tools_dir, file) for file in files}
-    tables = {
-        modules[file]: _ImportTable(trees[file], modules[file], is_package=file.stem == "__init__")
-        for file in files
-    }
+    trees, modules, tables = _import_tables(tools_dir)
     memo: _Memo = {}
-    for file in files:
-        tree = trees[file]
+    for file, tree in trees.items():
         module = modules[file]
         source = _Source.of(tree)
         local: list[tuple[str, str]] = []
@@ -639,7 +764,7 @@ def _group_declarations(tools_dir: Path) -> list[GroupDeclaration]:
                     parent = global_vars.get(parent_var)
             if parent is None:
                 parent = _literal(_argument(call, _PARENT))
-            name = _literal(call.args[0] if call.args else None)
+            name = _literal(_argument(call, _NAME))
             if name is None:
                 continue
             if "." in name:

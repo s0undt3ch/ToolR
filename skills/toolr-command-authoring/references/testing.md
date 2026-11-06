@@ -61,8 +61,9 @@ def collected_command_groups(self) -> dict[str, object]:
 Get the collected command groups.
 
 Raises:
-    ValueError: A command under ``tools/`` decorates a nested
-        ``def`` or passes a non-literal ``group=`` or name; a
+    ValueError: A ``command_group(...)`` call under ``tools/`` isn't a
+        top-level assignment or bare statement; a command decorates a
+        nested ``def`` or passes a non-literal ``group=`` or name; a
         standalone ``@command(group=...)`` names a group that no
         ``command_group(...)`` declares, or passes ``group=""``;
         two functions define the same command in a group; or no

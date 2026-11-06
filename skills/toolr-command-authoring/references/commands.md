@@ -576,6 +576,23 @@ accepts ``@command``, ``@toolr.command`` (also after
 ``group=SOME_CONSTANT`` or a non-literal name fails the build with
 "unsupported command declarations", and so does
 :class:`toolr.testing.CommandsTester`, even when that code never runs.
+Placement of ``command_group`` follows the same rule. A call is supported
+only as the whole value of a module-level ``name = command_group(...)``,
+``name: T = command_group(...)`` or bare ``command_group(...)`` statement,
+with a string-literal name. Any other call to toolr's ``command_group``
+fails the build, and :class:`toolr.testing.CommandsTester`:
+
+- part of a tuple or chained target, or a walrus;
+- under ``if``, ``try``, ``with``, a loop or ``match``;
+- inside a function, lambda, comprehension or class;
+- nested in another expression, such as a decorator or call argument;
+- a group whose name isn't a string literal.
+
+``command_group`` creates a group when none is registered, so a name-only
+call such as ``command_group("ci")`` counts too. Only a parameter of the
+enclosing ``def`` or ``lambda`` shadows ``command_group``; any other local
+rebinding is still flagged.
+
 A group's command names must be unique within ``tools/``.
 
 Usage::
@@ -630,6 +647,9 @@ def command_group(
 
 ```text
 Register a new command group.
+
+Call it as a top-level statement of a ``tools/`` module; see
+:func:`toolr.command` for what toolr reads without running it.
 
 The ``name`` may be either a bare leaf name (``"ci"``) or a dotted
 path (``"ci.helm-diff-pr-comment"``). When dotted, everything

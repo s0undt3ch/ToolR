@@ -14,6 +14,12 @@ from typing import Any
 
 import toolr
 from toolr._decorators import CommandGroup
+from toolr.testing._groups import _NAME
+from toolr.testing._groups import _argument
+from toolr.testing._groups import _import_tables
+from toolr.testing._groups import _literal
+from toolr.testing._groups import _Memo
+from toolr.testing._groups import _unbound_group_calls
 from toolr.testing._unknown_groups import _escape_control_chars
 
 # Mirrors `UnsupportedCommandKind`'s `Display` in `crates/toolr-core/src/parser/commands.rs`.
@@ -21,6 +27,10 @@ NESTED = "`@command` must decorate a top-level `def`, which toolr reads without 
 NON_LITERAL_GROUP = "`group=` must be a string literal."
 NON_LITERAL_NAME = "the command name must be a string literal."
 STACKED = "a function can carry only one command decorator."
+GROUP_BINDING = (
+    "`command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, "
+    "which toolr reads without running it."
+)
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
@@ -90,8 +100,35 @@ def _function_defs(node: ast.AST, top_level: bool) -> Iterator[tuple[FunctionNod
         yield from _function_defs(child, top_level=False)
 
 
+def _group_call_label(call: ast.Call) -> str:
+    """``command_group("<name>")`` when the name argument is a string literal, else ``command_group``.
+
+    Mirrors ``UnboundGroupCalls::report`` in ``crates/toolr-core/src/parser/groups.rs``:
+    change both together.
+    """
+    name = _literal(_argument(call, _NAME))
+    return "command_group" if name is None else f'command_group("{name}")'
+
+
+def _unsupported_group_bindings(tools_dir: Path) -> list[Unsupported]:
+    """Every ``command_group(...)`` call the manifest build can't bind, in build order.
+
+    Mirrors ``crates/toolr-core/src/parser/groups.rs::detect_unsupported_group_bindings``,
+    including how it names a call.
+    """
+    trees, modules, tables = _import_tables(tools_dir)
+    memo: _Memo = {}
+    return [
+        (modules[file], _group_call_label(call), GROUP_BINDING)
+        for file, tree in trees.items()
+        for call in _unbound_group_calls(tree, tables, modules[file], memo)
+    ]
+
+
 def _unsupported_commands(tools_dir: Path) -> list[Unsupported]:
     """Every problem with the commands ``tools_dir`` declares, in build order.
+
+    Group-binding problems come first, as in the manifest build.
 
     Mirrors ``crates/toolr-core/src/parser/commands.rs::detect_unsupported_commands``.
     Each imported ``tools`` module's source is read whether or not a ``def`` ran,
@@ -106,7 +143,7 @@ def _unsupported_commands(tools_dir: Path) -> list[Unsupported]:
         path = Path(file).resolve()
         if path.is_relative_to(root):
             files.setdefault(path, (name, vars(module)))
-    found: list[Unsupported] = []
+    found: list[Unsupported] = _unsupported_group_bindings(tools_dir)
     for path in sorted(files, key=lambda path: path.relative_to(root).parts):
         name, namespace = files[path]
         for node, top_level in _function_defs(ast.parse(path.read_bytes()), top_level=True):

@@ -148,12 +148,29 @@ unknown group references (1):
 `CommandsTester` runs your code, but `toolr` reads it without running it, so the tester checks the source for what
 `toolr` can't read. `@command(...)`, `@toolr.command(...)` (also after `import toolr as t`) and an alias from
 `from toolr import command as cmd` all work, on a top-level `def` with `group=` and any name as string literals.
-Commands must be top-level `def`s: put a platform check inside the command body, not around the `def`. A command on a
-nested `def` (inside another function, a class, an `if TYPE_CHECKING:` or any other `if`), a `def` carrying two command
-decorators, a `group=SOME_CONSTANT` or a non-literal name fails both:
+Commands must be top-level `def`s: put a platform check inside the command body, not around the `def`.
+
+A `command_group(...)` call is supported only as the whole value of a module-level `name = command_group(...)`,
+`name: T = command_group(...)` or bare `command_group(...)` statement, with a string-literal name. Any other call to
+toolr's `command_group` fails the build and the tester:
+
+- part of a tuple or chained target, or a walrus;
+- under `if`, `try`, `with`, a loop or `match`;
+- inside a function, lambda, comprehension or class;
+- nested in another expression, such as a decorator or call argument;
+- a group whose name isn't a string literal.
+
+`command_group` creates a group when none is registered, so a name-only call such as `command_group("ci")` counts
+too. Only a parameter of the enclosing `def` or `lambda` named `command_group` shadows it; any other local rebinding is
+still flagged.
+
+A command on a nested `def` (inside another function, a class, an `if TYPE_CHECKING:` or any other `if`), a `def`
+carrying two command decorators, a `group=SOME_CONSTANT` or a non-literal name fails the build and the tester as well.
+Together they read:
 
 ```text
-unsupported command declarations (2):
+unsupported command declarations (3):
+  - tools.cmds::command_group("ci"): `command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it.
   - tools.cmds::nested: `@command` must decorate a top-level `def`, which toolr reads without running it.
   - tools.cmds::check: `group=` must be a string literal.
 ```

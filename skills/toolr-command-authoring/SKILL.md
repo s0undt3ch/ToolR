@@ -129,6 +129,20 @@ rename it once (`colour = not no_colour`). For more than two states, use
   non-literal `group=`/name or a command name defined twice in a group
   fails the build, and `CommandsTester` the same way, even when the
   surrounding code never runs.
+  A `command_group(...)` call is supported only as the whole value of a
+  module-level `name = command_group(...)`, `name: T = command_group(...)`
+  or bare `command_group(...)` statement, with a string-literal name. Any
+  other call to toolr's `command_group` fails the same way:
+
+    - part of a tuple or chained target, or a walrus;
+    - under `if`, `try`, `with`, a loop or `match`;
+    - inside a function, lambda, comprehension or class;
+    - nested in another expression, such as a decorator or call argument;
+    - a group whose name isn't a string literal.
+
+  `command_group` creates a group when none is registered, so a name-only
+  call such as `command_group("ci")` counts too. Only a parameter of the
+  enclosing `def` or `lambda` shadows `command_group`.
 - **Nested subgroups.** A dotted name (`command_group("docker.image",
   ...)`) attaches under the parent named before the last dot.
 - **Help sections.** Build an `ArgSection` at module scope via
@@ -227,7 +241,9 @@ it never imports or executes your modules to build the manifest. Declare
 `command_group(...)` at module top level and apply `@command` /
 `@group.command` to module-level functions. A decorated `def` behind
 an `if` or inside a factory fails the build, whether or not that code
-runs; put platform checks inside the command body. Commands registered
+runs, and so does a group declared that way (`a, b = command_group(...),
+command_group(...)`, a walrus, a call under an `if`; see "What toolr can
+read"); put platform checks inside the command body. Commands registered
 imperatively, such as `group.command(...)` called in a `for` loop, are
 **not** discovered and will not appear in `--help`, completion, or
 dispatch. If a command is missing, make its registration a top-level,
