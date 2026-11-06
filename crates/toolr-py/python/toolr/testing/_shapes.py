@@ -97,17 +97,26 @@ def _function_defs(node: ast.AST, top_level: bool) -> Iterator[tuple[FunctionNod
         yield from _function_defs(child, top_level=False)
 
 
+def _group_call_label(call: ast.Call) -> str:
+    """``command_group("<name>")`` when the first argument is a string literal, else ``command_group``."""
+    first = call.args[0] if call.args else None
+    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+        return f'command_group("{first.value}")'
+    return "command_group"
+
+
 def _unsupported_group_bindings(tools_dir: Path) -> list[Unsupported]:
     """Every ``command_group(...)`` call the manifest build can't bind, in build order.
 
-    Mirrors ``crates/toolr-core/src/parser/groups.rs::detect_unsupported_group_bindings``.
+    Mirrors ``crates/toolr-core/src/parser/groups.rs::detect_unsupported_group_bindings``,
+    including how it names a call.
     """
     trees, modules, tables = _import_tables(tools_dir)
     memo: _Memo = {}
     return [
-        (modules[file], "command_group", GROUP_BINDING)
+        (modules[file], _group_call_label(call), GROUP_BINDING)
         for file, tree in trees.items()
-        for _ in _unbound_group_calls(tree, tables, modules[file], memo)
+        for call in _unbound_group_calls(tree, tables, modules[file], memo)
     ]
 
 

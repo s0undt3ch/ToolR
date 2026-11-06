@@ -193,6 +193,7 @@ fn build_commands_inner(
         );
         unsupported_groups.extend(detect_unsupported_group_bindings(
             &module,
+            module_doc.as_deref(),
             &module_path,
             &names,
         ));
@@ -2652,7 +2653,7 @@ def aliased(ctx):
         assert_eq!(
             build_error_for(&[("tools/m.py", src)]),
             format!(
-                "unsupported command declarations (3):\n  - tools.m::command_group: {GROUP_BINDING_LINE}\n  - tools.m::command_group: {GROUP_BINDING_LINE}\n  - tools.m::command_group: {GROUP_BINDING_LINE}"
+                "unsupported command declarations (3):\n  - tools.m::command_group(\"ga\"): {GROUP_BINDING_LINE}\n  - tools.m::command_group(\"gb\"): {GROUP_BINDING_LINE}\n  - tools.m::command_group(\"gc\"): {GROUP_BINDING_LINE}"
             )
         );
     }
@@ -2665,7 +2666,7 @@ def aliased(ctx):
         assert_eq!(
             build_error_for(&[("tools/m.py", first), ("tools/n.py", second)]),
             format!(
-                "unsupported command declarations (3):\n  - tools.m::command_group: {GROUP_BINDING_LINE}\n  - tools.n::command_group: {GROUP_BINDING_LINE}\n  - tools.m::nested: `@command` must decorate a top-level `def`, which toolr reads without running it."
+                "unsupported command declarations (3):\n  - tools.m::command_group(\"w\"): {GROUP_BINDING_LINE}\n  - tools.n::command_group(\"n\"): {GROUP_BINDING_LINE}\n  - tools.m::nested: `@command` must decorate a top-level `def`, which toolr reads without running it."
             )
         );
     }

@@ -128,10 +128,12 @@ rename it once (`colour = not no_colour`). For more than two states, use
   `if TYPE_CHECKING:`), a `def` with two command decorators, a
   non-literal `group=`/name or a command name defined twice in a group
   fails the build, and `CommandsTester` the same way, even when the
-  surrounding code never runs. So does a `command_group(...)` call that
-  isn't a top-level `name = command_group(...)` assignment or a bare
-  statement: a tuple or chained target, a walrus, or a call under an
-  `if`, `try`, `with`, loop, `def` or class.
+  surrounding code never runs. So does any `command_group(...)` call that isn't the whole value of a
+  module-level assignment or bare statement, e.g. under
+  `if`/`try`/`with`/loops/`match`, inside a function, lambda,
+  comprehension or class, or nested in another expression such as a
+  decorator or call argument. A name-only lookup such as
+  `command_group("ci")` can't create a group and is fine anywhere.
 - **Nested subgroups.** A dotted name (`command_group("docker.image",
   ...)`) attaches under the parent named before the last dot.
 - **Help sections.** Build an `ArgSection` at module scope via
@@ -231,7 +233,8 @@ it never imports or executes your modules to build the manifest. Declare
 `@group.command` to module-level functions. A decorated `def` behind
 an `if` or inside a factory fails the build, whether or not that code
 runs, and so does a group declared that way (`a, b = command_group(...),
-command_group(...)`, a walrus, a call under an `if`); put platform checks inside the command body. Commands registered
+command_group(...)`, a walrus, a call under an `if`; see "What toolr can
+read"); put platform checks inside the command body. Commands registered
 imperatively, such as `group.command(...)` called in a `for` loop, are
 **not** discovered and will not appear in `--help`, completion, or
 dispatch. If a command is missing, make its registration a top-level,

@@ -647,45 +647,48 @@ def test_undescribed_groups_message_asks_for_a_readable_value() -> None:
     )
 
 
-def _binding_problems(module: str, count: int) -> list[tuple[str, str, str]]:
-    return [(module, "command_group", GROUP_BINDING)] * count
+IMPORT = "from toolr import command_group\n"
+
+
+def _problems(module: str, *labels: str) -> list[tuple[str, str, str]]:
+    return [(module, label, GROUP_BINDING) for label in labels]
+
+
+def _unsupported(make_tools_dir: Callable[..., Path], source: str, **others: str) -> list:
+    files = {"m.py": IMPORT + textwrap.dedent(source)}
+    files.update({f"{name}.py": IMPORT + textwrap.dedent(body) for name, body in others.items()})
+    return _unsupported_group_bindings(make_tools_dir(files))
 
 
 def test_plain_bindings_are_not_unsupported(make_tools_dir: Callable[..., Path]) -> None:
-    tools = make_tools_dir(
-        {
-            "m.py": """
-                from toolr import command_group
-                a = command_group("a", "A", "A.")
-                b: T = command_group("b", "B", "B.")
-                command_group("c", "C", "C.")
-                k = a.command_group("k", "K", "K.")
-                g = command_group("g", "G", "G.", parent=command_group("p", "P", "P."))
-            """,
-        }
-    )
-    assert _unsupported_group_bindings(tools) == []
+    source = """
+        a = command_group("a", "A", "A.")
+        b: T = command_group("b", "B", "B.")
+        command_group("c", "C", "C.")
+        k = a.command_group("k", "K", "K.")
+        g = command_group("g", "G", "G.", parent=command_group("p", "P", "P."))
+        h: Annotated[object, command_group("h", "H", "H.")] = command_group("h", "H", "H.")
+    """
+    assert _unsupported(make_tools_dir, source) == []
 
 
 def test_tuple_target_is_an_unsupported_declaration(make_tools_dir: Callable[..., Path]) -> None:
-    tools = make_tools_dir(
-        {"m.py": 'a, b = command_group("a", "A", "A."), command_group("b", "B", "B.")\n'}
+    source = 'a, b = command_group("a", "A", "A."), command_group("b", "B", "B.")\n'
+    assert _unsupported(make_tools_dir, source) == _problems(
+        "tools.m", 'command_group("a")', 'command_group("b")'
     )
-    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 2)
 
 
 def test_walrus_and_chained_target_are_unsupported_declarations(
     make_tools_dir: Callable[..., Path],
 ) -> None:
-    tools = make_tools_dir(
-        {
-            "m.py": """
-                (g := command_group("g", "G", "G."))
-                a = b = command_group("a", "A", "A.")
-            """,
-        }
+    source = """
+        (g := command_group("g", "G", "G."))
+        a = b = command_group("a", "A", "A.")
+    """
+    assert _unsupported(make_tools_dir, source) == _problems(
+        "tools.m", 'command_group("g")', 'command_group("a")'
     )
-    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 2)
 
 
 @pytest.mark.parametrize(
@@ -703,72 +706,130 @@ def test_walrus_and_chained_target_are_unsupported_declarations(
 def test_group_in_a_nested_body_is_an_unsupported_declaration(
     head: str, make_tools_dir: Callable[..., Path]
 ) -> None:
-    tools = make_tools_dir({"m.py": f'{head}\n    g = command_group("g", "G", "G.")\n'})
-    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 1)
+    source = f'{head}\n    g = command_group("g", "G", "G.")\n'
+    assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("g")')
+
+
+def test_group_in_a_comprehension_or_lambda_is_an_unsupported_declaration(
+    make_tools_dir: Callable[..., Path],
+) -> None:
+    source = """
+        gs = [command_group(n, "T", "D.") for n in "ab"]
+        make = lambda: command_group("l", "L", "L.")
+    """
+    assert _unsupported(make_tools_dir, source) == _problems(
+        "tools.m", "command_group", 'command_group("l")'
+    )
 
 
 def test_bare_group_in_a_match_is_an_unsupported_declaration(
     make_tools_dir: Callable[..., Path],
 ) -> None:
-    tools = make_tools_dir(
-        {"m.py": 'match x:\n    case 1:\n        command_group("g", "G", "G.")\n'}
-    )
-    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 1)
+    source = 'match x:\n    case 1:\n        command_group("g", "G", "G.")\n'
+    assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("g")')
 
 
 def test_call_nested_in_an_expression_is_an_unsupported_declaration(
     make_tools_dir: Callable[..., Path],
 ) -> None:
-    tools = make_tools_dir({"m.py": 'command_group("g", "G", "G.").command(f)\n'})
-    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 1)
+    source = """
+        command_group("g", "G", "G.").command(f)
+        @command_group("d", "D", "D.")
+        def f(): ...
+    """
+    assert _unsupported(make_tools_dir, source) == _problems(
+        "tools.m", 'command_group("g")', 'command_group("d")'
+    )
 
 
-def test_alias_under_an_if_is_an_unsupported_declaration(
+def test_aliased_and_attribute_calls_under_an_if_are_unsupported(
     make_tools_dir: Callable[..., Path],
 ) -> None:
-    tools = make_tools_dir(
-        {
-            "m.py": """
-                from toolr import command_group as cg
-                if x:
-                    g = cg("g", "G", "G.")
-            """,
-        }
-    )
-    assert _unsupported_group_bindings(tools) == _binding_problems("tools.m", 1)
+    files = {
+        "m.py": "from toolr import command_group as cg\nif x:\n    g = cg('g', 'G', 'G.')\n",
+        "n.py": "import toolr as t\nif x:\n    g = t.command_group('n', 'N', 'N.')\n",
+        "o.py": "import toolr.types\nif x:\n    g = toolr.command_group('o', 'O', 'O.')\n",
+    }
+    assert _unsupported_group_bindings(make_tools_dir(files)) == [
+        ("tools.m", 'command_group("g")', GROUP_BINDING),
+        ("tools.n", 'command_group("n")', GROUP_BINDING),
+        ("tools.o", 'command_group("o")', GROUP_BINDING),
+    ]
 
 
-def test_unrelated_call_under_an_if_is_not_reported(make_tools_dir: Callable[..., Path]) -> None:
-    tools = make_tools_dir(
-        {
-            "m.py": """
-                def cg(*args):
-                    return args
-                if x:
-                    h = cg(1)
-            """,
-        }
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def command_group(*a):\n    return a\nif x:\n    h = command_group('a', 'b', 'c')\n",
+        "def helper(command_group):\n    return command_group('a', 'b', 'c')\n",
+        "f = lambda command_group: command_group('a', 'b', 'c')\n",
+        "from pathlib import Path as command_group\nif x:\n    h = command_group('a', 'b', 'c')\n",
+        "command_group = print\nif x:\n    command_group('a', 'b', 'c')\n",
+        (
+            "class R:\n    def go(self, o):\n        self.command_group('a', 'b', 'c')\n"
+            "        o.command_group('a', 'b', 'c')\n"
+        ),
+        "import toolr\ndef f(toolr):\n    return toolr.command_group('a', 'b', 'c')\n",
+        "import other as toolr\nif x:\n    toolr.command_group('a', 'b', 'c')\n",
+    ],
+)
+def test_calls_that_are_not_toolrs_are_not_reported(
+    source: str, make_tools_dir: Callable[..., Path]
+) -> None:
+    assert _unsupported_group_bindings(make_tools_dir({"m.py": source})) == []
+
+
+def test_parameter_shadows_only_the_function_body(make_tools_dir: Callable[..., Path]) -> None:
+    source = """
+        def f(command_group, other=command_group("d", "D", "D.")):
+            return command_group("x", "X", "X.")
+    """
+    assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("d")')
+
+
+def test_name_only_lookups_are_allowed_anywhere(make_tools_dir: Callable[..., Path]) -> None:
+    source = """
+        g = command_group("g", "G", "G.")
+        def f():
+            command_group("g")
+            command_group("g", "G")
+            command_group("g", title="G")
+    """
+    assert _unsupported(make_tools_dir, source) == []
+
+
+def test_calls_that_may_describe_are_reported(make_tools_dir: Callable[..., Path]) -> None:
+    source = """
+        def f(extra):
+            command_group("a", "A", description="D.")
+            command_group("b", "B", docstring=__doc__)
+            command_group("c", "C", **extra)
+            command_group("d", "D", "")
+    """
+    assert _unsupported(make_tools_dir, source) == _problems(
+        "tools.m", 'command_group("a")', 'command_group("b")', 'command_group("c")'
     )
-    assert _unsupported_group_bindings(tools) == []
+
+
+def test_non_literal_name_is_named_generically(make_tools_dir: Callable[..., Path]) -> None:
+    source = 'def f(n):\n    return command_group(n, "N", "N.")\n'
+    assert _unsupported(make_tools_dir, source) == _problems("tools.m", "command_group")
 
 
 def test_group_bindings_come_before_commands(make_tools_dir: Callable[..., Path]) -> None:
     tools = make_tools_dir(
         {
-            "m.py": """
-                import toolr
-                from toolr import command_group
+            "m.py": IMPORT
+            + textwrap.dedent(
+                """
                 command_group("grp", "Grp", "Grp.")
-                def register():
-                    @toolr.command(group="grp")
-                    def nested(ctx):
-                        pass
                 (g := command_group("w", "W", "W."))
-            """,
-            "n.py": 'if True:\n    command_group("n", "N", "N.")\n',
+                """
+            ),
+            "n.py": IMPORT + 'if True:\n    command_group("n", "N", "N.")\n',
         }
     )
     assert _unsupported_group_bindings(tools) == [
-        *_binding_problems("tools.m", 1),
-        *_binding_problems("tools.n", 1),
+        *_problems("tools.m", 'command_group("w")'),
+        *_problems("tools.n", 'command_group("n")'),
     ]

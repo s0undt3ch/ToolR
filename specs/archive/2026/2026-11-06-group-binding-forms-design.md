@@ -187,3 +187,13 @@ line; hoist out of `if`/`try`/`with`).
   helpers it uses (`_supported_group_call`, `_unbound_group_calls`, `_import_tables`) are in `_groups.py`.
 - A call among the arguments of a supported statement (`parent=command_group(...)`) isn't reported:
   both sides skip a supported statement whole.
+- Review round 1 narrowed the detector. A callee counts only when it resolves to toolr's
+  `command_group`: a name through the import tables (a parameter of the enclosing `def` or `lambda`
+  shadows it), an attribute when its base is the `toolr` module. `group_binding`'s own, wider
+  predicate is unchanged. Both sides skip a supported statement whole, annotation included.
+- A call that passes no description or docstring (and no `*`/`**` that might) is a lookup, as in the
+  top-level title-only re-fetch rule, and is allowed anywhere.
+- The entry's name column is `command_group("<name>")` when the first argument is a string literal,
+  else `command_group`.
+- A wrapper such as `def command_group(n, t, d): return _cg(n, t, d)` keeps its top-level
+  `g = command_group("w", ...)` binding, but the `_cg(n, t, d)` call inside the `def` is now reported.

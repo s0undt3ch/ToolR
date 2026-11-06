@@ -618,30 +618,86 @@ def _group_calls(
     return found
 
 
+def _is_toolr_module(table: _ImportTable, name: str) -> bool:
+    """Whether ``name`` is ``import toolr [as t]`` here; ``import toolr.types`` binds ``toolr`` too.
+
+    Mirrors ``ToolrNames::is_toolr_module`` in ``crates/toolr-core/src/parser/commands.rs``:
+    change both together.
+    """
+    bound = table.module_bindings.get(name)
+    return bound is not None and (
+        bound == "toolr" or (name == "toolr" and bound.startswith("toolr."))
+    )
+
+
+def _parameter_names(args: ast.arguments) -> set[str]:
+    return {
+        arg.arg
+        for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg)
+        if arg is not None
+    }
+
+
 def _unbound_group_calls(
     tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
 ) -> list[ast.Call]:
-    """Each ``command_group(...)`` call ``_group_calls`` doesn't bind, in source order.
+    """Each toolr ``command_group(...)`` call that isn't the whole value of a bound statement.
 
-    Mirrors ``crates/toolr-core/src/parser/groups.rs::detect_unsupported_group_bindings``:
+    In source order. A bound statement (one ``_group_calls`` reads) is skipped
+    whole, annotation included. A callee counts only when it resolves to toolr's
+    ``command_group``: a name through the import tables (a parameter of the
+    enclosing ``def`` or ``lambda`` shadows it), an attribute when its base is
+    the ``toolr`` module. A call that can't create a group, because it passes no
+    description or docstring, is a lookup and is allowed anywhere. Mirrors
+    ``crates/toolr-core/src/parser/groups.rs::detect_unsupported_group_bindings``:
     change both together.
     """
-    # A bound statement is skipped whole, so a call among its arguments isn't reported either.
-    bound = {
-        id(node)
-        for group in _group_calls(tree, tables, module, memo)
-        for node in ast.walk(group.call)
-    }
-    return sorted(
-        (
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and id(node) not in bound
-            and _is_command_group(node.func, tables, module, memo)
-        ),
-        key=lambda node: (node.lineno, node.col_offset),
-    )
+    source = _Source.of(tree)
+    table = tables[module]
+    found: list[ast.Call] = []
+
+    def is_toolr_call(call: ast.Call, shadowed: set[str]) -> bool:
+        func = call.func
+        if isinstance(func, ast.Name):
+            return (
+                func.id not in shadowed
+                and _binding(tables, module, func.id, 0, memo) is _Binding.TOOLR
+            )
+        return (
+            isinstance(func, ast.Attribute)
+            and func.attr == "command_group"
+            and isinstance(func.value, ast.Name)
+            and func.value.id not in shadowed
+            and _is_toolr_module(table, func.value.id)
+        )
+
+    def visit(node: ast.AST, shadowed: set[str]) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            # Decorators, defaults and annotations read the enclosing scope.
+            outer: list[ast.AST] = [node.args]
+            if not isinstance(node, ast.Lambda):
+                outer += [*node.decorator_list, *([node.returns] if node.returns else [])]
+            for child in outer:
+                visit(child, shadowed)
+            inner = shadowed | _parameter_names(node.args)
+            for child in node.body if isinstance(node.body, list) else [node.body]:
+                visit(child, inner)
+            return
+        if (
+            isinstance(node, ast.Call)
+            and is_toolr_call(node, shadowed)
+            and (_describes(node, source) or _unreadable(node, source))
+        ):
+            found.append(node)
+        for child in ast.iter_child_nodes(node):
+            visit(child, shadowed)
+
+    for stmt in tree.body:
+        supported = _supported_group_call(stmt)
+        if supported and _is_command_group(supported[1].func, tables, module, memo):
+            continue
+        visit(stmt, set())
+    return sorted(found, key=lambda node: (node.lineno, node.col_offset))
 
 
 def _import_tables(
