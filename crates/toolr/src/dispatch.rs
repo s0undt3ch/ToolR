@@ -11,7 +11,7 @@ use toolr_core::complete::{
     resolve_manifest_at_tab, shell_quote, sort_and_dedup_by_value,
 };
 use toolr_core::discovery::discover_project_root;
-use toolr_core::env::non_empty_env_path;
+use toolr_core::env::{non_empty_env_path, xdg_dir_env};
 use toolr_core::execute::{ExecutionSpec, spawn_runner, wait_with_signals, write_spec_to_tempfile};
 use toolr_core::exit_status::process_exit_code;
 use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
@@ -546,8 +546,8 @@ fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Re
     let force = matches.get_flag("force");
 
     let home = dirs_home()?;
-    let xdg_data_home = non_empty_env_path("XDG_DATA_HOME");
-    let xdg_config_home = non_empty_env_path("XDG_CONFIG_HOME");
+    let xdg_data_home = xdg_dir_env("XDG_DATA_HOME");
+    let xdg_config_home = xdg_dir_env("XDG_CONFIG_HOME");
     let opts = InstallOptions {
         shell,
         xdg_data_home,

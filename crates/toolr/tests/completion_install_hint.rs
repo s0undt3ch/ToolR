@@ -205,15 +205,15 @@ fn force_reinstall_prints_the_hint() {
     );
 }
 
-/// Runs `args` with empty XDG homes from a fresh cwd, and checks nothing
+/// Runs `args` with both XDG homes set to `value` from a fresh cwd, and checks nothing
 /// lands in that cwd.
-fn install_with_empty_xdg_homes(host: &Host, args: &[&str]) -> String {
+fn install_with_xdg_homes(host: &Host, value: &str, args: &[&str]) -> String {
     let cwd = host.path("cwd");
     std::fs::create_dir_all(&cwd).unwrap();
     let out = host
         .command(args)
-        .env("XDG_DATA_HOME", "")
-        .env("XDG_CONFIG_HOME", "")
+        .env("XDG_DATA_HOME", value)
+        .env("XDG_CONFIG_HOME", value)
         .current_dir(&cwd)
         .output()
         .unwrap();
@@ -225,7 +225,7 @@ fn install_with_empty_xdg_homes(host: &Host, args: &[&str]) -> String {
 #[test]
 fn empty_xdg_data_home_reads_as_unset_for_bash() {
     let host = Host::new();
-    let stdout = install_with_empty_xdg_homes(&host, BASH);
+    let stdout = install_with_xdg_homes(&host, "", BASH);
     let script = host
         .path("home")
         .join(".local/share")
@@ -238,7 +238,24 @@ fn empty_xdg_data_home_reads_as_unset_for_bash() {
 #[test]
 fn empty_xdg_config_home_reads_as_unset_for_fish() {
     let host = Host::new();
-    install_with_empty_xdg_homes(&host, &["self", "completion", "install", "fish"]);
+    install_with_xdg_homes(&host, "", &["self", "completion", "install", "fish"]);
+    assert!(
+        host.path("home")
+            .join(".config/fish/completions/toolr.fish")
+            .is_file()
+    );
+}
+
+#[test]
+fn relative_xdg_homes_read_as_unset() {
+    let host = Host::new();
+    install_with_xdg_homes(&host, "rel", BASH);
+    install_with_xdg_homes(&host, "rel", &["self", "completion", "install", "fish"]);
+    assert!(
+        host.path("home")
+            .join(".local/share/bash-completion/completions/toolr")
+            .is_file()
+    );
     assert!(
         host.path("home")
             .join(".config/fish/completions/toolr.fish")

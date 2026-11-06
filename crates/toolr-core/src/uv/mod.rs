@@ -195,9 +195,9 @@ impl UvError {
 
 /// Where toolr keeps its private state (binaries, etc).
 /// Defaults to `$XDG_DATA_HOME/toolr`, falling back to
-/// `~/.local/share/toolr` if `XDG_DATA_HOME` is unset or empty.
+/// `~/.local/share/toolr` if `XDG_DATA_HOME` is unset, empty or relative.
 pub fn toolr_data_dir() -> Option<PathBuf> {
-    crate::env::non_empty_env_path("XDG_DATA_HOME")
+    crate::env::xdg_dir_env("XDG_DATA_HOME")
         .map(|v| v.join("toolr"))
         .or_else(|| dirs::data_dir().map(|d| d.join("toolr")))
 }
@@ -207,7 +207,7 @@ pub fn toolr_data_dir() -> Option<PathBuf> {
 /// empty, then the platform state directory, then [`toolr_data_dir`]
 /// (`dirs::state_dir()` is `None` on macOS and Windows).
 pub fn toolr_state_dir() -> Option<PathBuf> {
-    crate::env::non_empty_env_path("XDG_STATE_HOME")
+    crate::env::xdg_dir_env("XDG_STATE_HOME")
         .map(|v| v.join("toolr"))
         .or_else(|| dirs::state_dir().map(|d| d.join("toolr")))
         .or_else(toolr_data_dir)
@@ -215,9 +215,9 @@ pub fn toolr_state_dir() -> Option<PathBuf> {
 
 /// Where toolr keeps cached venvs and other transient files.
 /// Defaults to `$XDG_CACHE_HOME/toolr`, falling back to
-/// `~/.cache/toolr` if `XDG_CACHE_HOME` is unset or empty.
+/// `~/.cache/toolr` if `XDG_CACHE_HOME` is unset, empty or relative.
 pub fn toolr_cache_dir() -> Option<PathBuf> {
-    crate::env::non_empty_env_path("XDG_CACHE_HOME")
+    crate::env::xdg_dir_env("XDG_CACHE_HOME")
         .map(|v| v.join("toolr"))
         .or_else(|| dirs::cache_dir().map(|d| d.join("toolr")))
 }
@@ -318,6 +318,21 @@ mod tests {
         let p = managed_uv_path().expect("platform data dir");
         assert!(p.is_absolute());
         assert!(p.ends_with("toolr/bin/uv") || p.ends_with("toolr/bin/uv.exe"));
+    }
+
+    #[test]
+    fn relative_xdg_dirs_are_ignored() {
+        let mut env = EnvGuard::write();
+        env.remove("XDG_DATA_HOME");
+        env.remove("XDG_STATE_HOME");
+        env.remove("XDG_CACHE_HOME");
+        let (data, state, cache) = (toolr_data_dir(), toolr_state_dir(), toolr_cache_dir());
+        env.set("XDG_DATA_HOME", "rel/data");
+        env.set("XDG_STATE_HOME", "rel/state");
+        env.set("XDG_CACHE_HOME", "rel/cache");
+        assert_eq!(toolr_data_dir(), data);
+        assert_eq!(toolr_state_dir(), state);
+        assert_eq!(toolr_cache_dir(), cache);
     }
 
     #[test]
