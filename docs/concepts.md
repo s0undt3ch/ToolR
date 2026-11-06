@@ -130,7 +130,7 @@ agreed to fails, the trust is kept and toolr exits non-zero.
 whose path no longer exists. `toolr self trusted --prune` removes those.
 Records live in toolr's state directory, not in the cache, so
 `toolr self cache prune` leaves them alone. That's
-`$XDG_STATE_HOME/toolr/trust/` when `XDG_STATE_HOME` is set and not empty,
+`$XDG_STATE_HOME/toolr/trust/` when `XDG_STATE_HOME` is an absolute path,
 otherwise the platform state directory (`~/.local/state/toolr/trust/` on
 Linux), falling back to toolr's data directory where there is none
 (`~/Library/Application Support/toolr/trust/` on macOS).
