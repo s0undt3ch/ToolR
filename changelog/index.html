@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev861-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev878-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev861 - 2026-11-06
+        0.35.2-dev878 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev861 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev878 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev861-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev878-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev861 - 2026-11-06
+        0.35.2-dev878 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev861 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev878 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev861-2026-11-06">0.35.2-dev861 - 2026-11-06<a class="headerlink" href="#0352-dev861-2026-11-06" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev878-2026-11-06">0.35.2-dev878 - 2026-11-06<a class="headerlink" href="#0352-dev878-2026-11-06" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7592,6 +7592,7 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <p><strong>Breaking:</strong> <code>toolr</code> and <code>CommandsTester</code> now refuse several shapes they used to read differently. A command name defined twice in one group, in one file or across files of one <code>tools/</code> tree or plugin package, fails with "duplicate commands" listing every definition (it used to keep one silently); rename all but one, e.g. with <code>name="…"</code>. A command decorator on a nested <code>def</code> (inside another function, a class or an <code>if</code>) and a <code>group=</code> or command name that isn't a string literal fail with "unsupported command declarations"; move the <code>def</code> to module level and write the value as a literal. A local command shadowing a plugin's, or two plugins defining one command, still only warn.</p>
 <p>Both now also reject a command decorator inside <code>if TYPE_CHECKING:</code>, a platform guard or an uncalled factory, even when that code never runs, and a <code>def</code> carrying two command decorators; each command must be a top-level <code>def</code>, with platform checks inside its body. toolr recognises <code>command</code> imported from <code>toolr</code> or any <code>toolr.*</code> submodule, re-exported within <code>tools/</code>, or assigned from <code>toolr.command</code>; one imported from anywhere else, such as click, counts only when called with <code>group=</code>, and a module's own <code>def command</code> never does.</p>
 <p><strong>Breaking:</strong> the manifest build now fails when no <code>command_group</code> call for a group passes a description or docstring (an empty one counts as none, and an expression other than a string literal, such as a constant, counts as one), listing every module that declares it, and when one call passes <code>docstring=</code> together with <code>description=</code> or <code>long_description=</code>, each as a literal or the <code>__doc__</code> of a module with a docstring. Title-only calls such as <code>command_group("ci", "CI")</code> still work as long as one declaration describes the group, in any module and in any order. Before, <code>command_group</code> raised for these only when the call created the group as its module imported, so a group created in a module no command imports could build and run; such a tree now fails to build. <code>CommandsTester</code> reports both with the same text. A plugin that adds commands to a host's group must describe that group in its own declaration, or its <code>toolr self build-manifest</code> fails.</p>
+<p><strong>Breaking:</strong> a <code>command_group(...)</code> call that isn't the whole value of a module-level <code>name = command_group(...)</code> assignment or bare statement now fails the manifest build with "unsupported command declarations", and so does <code>CommandsTester</code>. That covers tuple, chained and walrus bindings, calls under an <code>if</code>, <code>try</code>, <code>with</code>, loop or <code>match</code>, calls inside a function, lambda, comprehension or class, calls nested in another expression, and a group whose name isn't a string literal. Before, toolr dropped such a group and every command on it without a word and exited 0. Give each group its own top-level <code>name = command_group("name", ...)</code> line, and move any platform check into the command body.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7727,6 +7728,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>Type checkers now accept <code>ctx.run(..., stream_output=None)</code> and treat <code>with ctx.chdir(...)</code> as a context manager. The type stub for <code>Context</code> had fallen behind the code, and it now declares <code>ctx.run</code>'s <code>interactive</code> parameter.</p>
 <p>Bash tab completion now completes paths typed with a backslash escape or a quote, such as <code>files/it\'s</code> or <code>"files/my f</code>, and inside an open quote inserts the name quoted for that quote instead of with stray backslashes (tested on bash 5.1 to 5.3). An open double quote before a leading <code>$NAME/</code> now completes too. A <code>!</code> completed inside double quotes no longer triggers history expansion, and dotfiles are listed whatever <code>GLOBIGNORE</code> is set to.</p>
 <p>Tab completion no longer offers flags, flag values or option names after a bare <code>--</code>: everything after it is a positional, as the CLI reads it. Choices starting with <code>-</code> are offered only where the CLI accepts them: after <code>--opt=</code>, or as a positional after <code>--</code>.</p>
+<p><code>toolr --quiet self completion install</code> now prints nothing on success: the <code>wrote</code>, <code>already up to date</code> and zsh <code>fpath</code> lines are suppressed along with the bash source hint. Refusals and errors still print.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7946,6 +7948,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Treat everything after -- as positional and drop dash-leading choices where the CLI rejects them (<a href="https://github.com/s0undt3ch/ToolR/commit/cfba52c54f12aff6bd52b781b1e949bc5e9de5a5"><code>cfba52c</code></a>)</li>
 <li><em>(complete)</em> Treat a root -- as a terminator and other round-1 fixes (<a href="https://github.com/s0undt3ch/ToolR/commit/fdd8e65e4339f29cd09c72491d6a7ecc70c08e82"><code>fdd8e65</code></a>)</li>
 <li><em>(complete)</em> An empty --opt= before -- also completes nothing (<a href="https://github.com/s0undt3ch/ToolR/commit/d37c129dff16cdb6139fc5bb55be44f36133bac4"><code>d37c129</code></a>)</li>
+<li><em>(parser)</em> Reject command_group calls the static parser can't bind (<a href="https://github.com/s0undt3ch/ToolR/commit/0943d281759542877e15e137e3e650aa1f1d3f57"><code>0943d28</code></a>)</li>
+<li><em>(parser)</em> Only flag toolr's own command_group calls, skip bound statements whole (<a href="https://github.com/s0undt3ch/ToolR/commit/c6141f256c3c404452c451250b5685f16128ad53"><code>c6141f2</code></a>)</li>
+<li><em>(parser)</em> Source-order problems, flag every off-statement command_group, keyword names (<a href="https://github.com/s0undt3ch/ToolR/commit/3fb95144f661cc1b1b41920a5d200206e2ec0487"><code>3fb9514</code></a>)</li>
+<li><em>(completion)</em> Honour --quiet in self completion install (<a href="https://github.com/s0undt3ch/ToolR/commit/4db11c63dab5603a5423115fdee5402562172c87"><code>4db11c6</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8029,6 +8035,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(tests)</em> Rename the _context stub check, document it (<a href="https://github.com/s0undt3ch/ToolR/commit/6f95a579f75c6b05de5747a54515cae04184b510"><code>6f95a57</code></a>)</li>
 <li><em>(complete)</em> Split the bash parser, document each quoting workaround (<a href="https://github.com/s0undt3ch/ToolR/commit/6933f565349ac4e744caebcf66d6598e5fa701fa"><code>6933f56</code></a>)</li>
 <li><em>(complete)</em> One dead-end gate for --, tidy tests and spec (<a href="https://github.com/s0undt3ch/ToolR/commit/c409efd484e367b9668b6f8519e40473f90b6ede"><code>c409efd</code></a>)</li>
+<li><em>(parser)</em> One bound-call helper per side, align mirror names (<a href="https://github.com/s0undt3ch/ToolR/commit/1f7742d21d83a169e64623aaaf77b60c3ee2942b"><code>1f7742d</code></a>)</li>
+<li><em>(completion)</em> Gate install output in one place per arm (<a href="https://github.com/s0undt3ch/ToolR/commit/933558b25512585cfd12bc45a220016894ebc55c"><code>933558b</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8269,6 +8277,12 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Sync the bash spec and release note with what shipped (<a href="https://github.com/s0undt3ch/ToolR/commit/2fd15b10e4af81a68a69e47b5fecfb2d3e48e766"><code>2fd15b1</code></a>)</li>
 <li><em>(specs)</em> Spec and plan for completion after -- and dash-leading choices (<a href="https://github.com/s0undt3ch/ToolR/commit/6b46a4a411444768d51c0a82fdee9bac658d9522"><code>6b46a4a</code></a>)</li>
 <li><em>(specs)</em> Archive the completion after -- spec (<a href="https://github.com/s0undt3ch/ToolR/commit/7b0b7d4c7ecdbaa0bf0231d4f86340c52155b9d9"><code>7b0b7d4</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for unsupported command_group binding forms (<a href="https://github.com/s0undt3ch/ToolR/commit/787682933991105ca696f6a3963e60912e338e89"><code>7876829</code></a>)</li>
+<li><em>(specs)</em> Archive the command_group binding forms spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/0ebc6e03a595da04e448b1558df06a270798239d"><code>0ebc6e0</code></a>)</li>
+<li>Command_group creates groups, so no call is a harmless lookup (<a href="https://github.com/s0undt3ch/ToolR/commit/72ed711f7427928c0a81fb31de83cdc76fb944e8"><code>72ed711</code></a>)</li>
+<li>One statement of the command_group placement rule (<a href="https://github.com/s0undt3ch/ToolR/commit/3ad4e5b6d01221f6dacb396d9fffd36d0d86b6a2"><code>3ad4e5b</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for --quiet completion install (<a href="https://github.com/s0undt3ch/ToolR/commit/8f3bb5e24dad1b58079b92e7f855ef43670964a0"><code>8f3bb5e</code></a>)</li>
+<li><em>(specs)</em> Archive quiet-completion-install spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/e37b453667b847b71da81c9951847a1d26f9353a"><code>e37b453</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8397,6 +8411,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> A positional word with an = is not an attached value (<a href="https://github.com/s0undt3ch/ToolR/commit/cc58ff9902713795a89e3c1a255d1181c89c86dc"><code>cc58ff9</code></a>)</li>
 <li><em>(toolr-py)</em> Check the _context stub with stubtest (<a href="https://github.com/s0undt3ch/ToolR/commit/c0b828cdb2d6ae73b9891a11bf4c8035ce591978"><code>c0b828c</code></a>)</li>
 <li><em>(complete)</em> Reproduce bash completion of quoted and escaped paths (<a href="https://github.com/s0undt3ch/ToolR/commit/9a3d960a808664a9ede45f7c26073c927a3a7c2b"><code>9a3d960</code></a>)</li>
+<li><em>(completion)</em> Cover -q and drop a duplicate zsh install (<a href="https://github.com/s0undt3ch/ToolR/commit/253e1094fe595716a10b13dd4cc4df74a25dbe36"><code>253e109</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
