@@ -7,20 +7,38 @@
 #
 # Every local is `_toolr_`-prefixed: `${!name}` is dynamically scoped, so it would read a
 # local of any function up the call stack that shares the user's variable name.
+#
+# Readline invariants this script relies on, each with its defence and the test that pins it:
+# 1. `insert_match` lets a reply starting with the quote the user opened overwrite that quote,
+#    so `_toolr_quote` doubles it (`bash_tab_reply_starting_with_the_open_quote_end_to_end`).
+# 2. Readline reads `$'…'` as `'…'`: `\'` closes it, and a `'` after `\` counts as escaped. So
+#    `_toolr_quote` writes `'` as `\047`, `_toolr_ansi_c_escape` declines `\'`, and
+#    `_toolr_parse_word` declines a run closing as `\\'`, on the word and on the line before it
+#    (`bash_tab_never_runs_a_name_holding_a_quote_end_to_end`,
+#    `bash_path_ansi_c_forms_readline_misreads_offer_nothing`).
+# 3. `insert_all_matches` (`M-*`, `COMP_TYPE` 42) deletes the open quote and inserts replies as
+#    is, so `_toolr_complete` offers nothing inside one
+#    (`bash_insert_completions_never_runs_a_name_end_to_end`).
+# 4. No closing quote is added after a reply that already ends in one, so `_toolr_quote` adds
+#    one and sets `_toolr_qextra` (`bash_tab_closes_a_quote_after_a_reply_ending_in_it_end_to_end`).
+# 5. Interactive bash history-expands `!` even inside `"…"`, so `_toolr_quote` escapes it
+#    outside the quote (`bash_tab_keeps_a_bang_literal_in_double_quotes_end_to_end`).
+# 6. A `$` in `COMP_WORDBREAKS` never splits a `$'…'` word, so `_toolr_parse_word` doesn't
+#    break there (`bash_tab_completes_ansi_c_quoted_paths_end_to_end`).
 
-# Sets the caller's `_toolr_e` to the `$'…'` escape for the control character `$1`: the inside
-# of its `printf %q` form, which escapes each byte, so a C1 control in UTF-8 becomes two.
+# Sets the caller's `_toolr_esc_out` to the `$'…'` escape for the control character `$1`: the
+# inside of its `printf %q` form, which escapes each byte, so a C1 control in UTF-8 becomes two.
 _toolr_ansi_c_char() {
-    printf -v _toolr_e '%q' "$1"
-    _toolr_e=${_toolr_e#\$\'}
-    _toolr_e=${_toolr_e%\'}
+    printf -v _toolr_esc_out '%q' "$1"
+    _toolr_esc_out=${_toolr_esc_out#\$\'}
+    _toolr_esc_out=${_toolr_esc_out%\'}
 }
 
 # Sets the caller's `_toolr_q` to `$1` quoted as one inert word, with no `eval`. Reads the
 # caller's `_toolr_qchar`, the quote open at the cursor: readline inserts the reply inside it.
 # Sets `_toolr_qextra` to 1 when the reply ends in an extra quote character that closes it.
 _toolr_quote() {
-    local _toolr_i _toolr_c _toolr_e _toolr_out
+    local _toolr_i _toolr_c _toolr_esc_out _toolr_out
     _toolr_qextra=0
     case ${_toolr_qchar-} in
         \")
@@ -56,20 +74,21 @@ _toolr_quote() {
             _toolr_c=${_toolr_q:_toolr_i:1}
             if [[ $_toolr_c == [[:cntrl:]] ]]; then
                 _toolr_ansi_c_char "$_toolr_c"
-                _toolr_c=$_toolr_e
+                _toolr_c=$_toolr_esc_out
                 [[ $_toolr_qchar == \$\' ]] || _toolr_c=$_toolr_qchar\$\'$_toolr_c\'$_toolr_qchar
             fi
             _toolr_out+=$_toolr_c
         done
         _toolr_q=$_toolr_out
     fi
+    # Neither rule below fires for `$'`: its reply writes `'` as `\047`, so it never starts or
+    # ends with `'`.
     # Readline's `insert_match` lets a reply starting with the quote the user opened overwrite
     # that quote rather than double it, so start the reply with two.
     if [[ ${_toolr_q:0:1} == "$_toolr_qchar" ]]; then
         _toolr_q=$_toolr_qchar$_toolr_q
     fi
-    # Readline adds no closing quote to a reply that already ends in one, so add one more. A
-    # `$'` reply never ends in `'`.
+    # Readline adds no closing quote to a reply that already ends in one, so add one more.
     if [[ -n $_toolr_q && ${_toolr_q: -1} == "${_toolr_qchar: -1}" ]]; then
         _toolr_q+=${_toolr_qchar: -1}
         _toolr_qextra=1
@@ -78,15 +97,15 @@ _toolr_quote() {
 
 # `_toolr_quote` for no open quote: `$1` as one `printf %q` word.
 _toolr_quote_bare() {
-    local _toolr_bare_tilde _toolr_i _toolr_e
+    local _toolr_bare_tilde _toolr_i _toolr_part
     printf -v _toolr_q '%q' "$1"
     # `%q` quotes a whole word holding a control character as one `$'…'` run. Quote each
     # character alone instead, so the common prefix readline inserts can't end inside a run.
     if [[ $_toolr_q == *\$\'* ]]; then
         _toolr_q=
         for ((_toolr_i = 0; _toolr_i < ${#1}; _toolr_i++)); do
-            printf -v _toolr_e '%q' "${1:_toolr_i:1}"
-            _toolr_q+=$_toolr_e
+            printf -v _toolr_part '%q' "${1:_toolr_i:1}"
+            _toolr_q+=$_toolr_part
         done
     fi
     # Bash < 5 `%q` leaves `~` bare, and bash tilde-expands it at a word start or after `=`.
@@ -146,8 +165,9 @@ _toolr_ansi_c_escape() {
                 # shellcheck disable=SC2059 # The format is `\` and three octal digits.
                 printf -v _toolr_out "\\$_toolr_digits"
             else
-                # `\u` needs a UTF-8 locale, where this two-byte `é` is one character. Outside one,
-                # bash's `printf` may leave it as typed or encode it in UTF-8 anyway.
+                # `\u` needs a UTF-8 locale, where this two-byte `é` is one character; this probes
+                # the user's locale at Tab time. Outside one, bash's `printf` may leave it as typed
+                # or encode it in UTF-8 anyway.
                 _toolr_out=$'\xc3\xa9'
                 ((${#_toolr_out} == 1 && _toolr_n <= 0x10FFFF)) || return 1
                 # shellcheck disable=SC2059 # The format is `\u` or `\U` and the hex digits.
@@ -177,7 +197,8 @@ _toolr_parse_word() {
         if [[ $_toolr_qchar == \$\' ]]; then
             if [[ $_toolr_c == "'" ]]; then
                 # Readline reads a `'` right after a `\` as escaped inside `$'…'`, though `\\'`
-                # closes the run, so it would misplace the word's start.
+                # closes the run, so it would misplace the word's start. `_toolr_i` is at least 1
+                # here: the run's opening `$'` came first.
                 if [[ ${1:_toolr_i-1:1} == \\ ]]; then
                     _toolr_declined=1
                     return 0
@@ -272,8 +293,8 @@ _toolr_complete() {
     local _toolr_cur=${_toolr_words[_toolr_n - 1]}
 
     local _toolr_raw_cur _toolr_raw_prefix _toolr_qchar _toolr_declined
-    # A `$'…'` form readline misreads, anywhere before the cursor, puts its quoting out of step
-    # with the script's for the rest of the line.
+    # Parsed only for `_toolr_declined`: a `$'…'` form readline misreads, anywhere before the
+    # cursor, puts its quoting out of step with the script's for the rest of the line.
     _toolr_parse_word "${COMP_LINE:0:COMP_POINT}"
     if ((_toolr_declined)); then
         return 0

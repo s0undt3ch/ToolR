@@ -1402,6 +1402,54 @@ fn control_fixture() -> Fixture {
     fx
 }
 
+/// Names that run a command, or reach the wrong argument, if a reply's quoting goes wrong. A
+/// trailing `/` makes a directory. Each `touch` names a sentinel relative to the fixture root, the
+/// shell's working directory: a file name can't hold the absolute path `SENTINEL` stands for.
+const HOSTILE_FILES: [&str; 16] = [
+    // A quote before a substitution, or before a control character, inside `$'…'`.
+    "evil/q'$(touch sentinel-one)",
+    "evil/b'`touch sentinel-two`",
+    "evil/sq2'\u{1}",
+    "evil/dirs'/in",
+    // A reply starting with the quote the user opened.
+    "lead/ctl/\u{1};touch sentinel-one;#",
+    "lead/sub/\u{1}$(touch sentinel-one)",
+    "lead/bang/!;touch sentinel-one;#",
+    "lead/sq/';touch sentinel-one;#",
+    "rq/r'",
+    "rq/r''x",
+    // A `$'…'` run closing as `\\'` before a break.
+    "evb/b\\:z",
+    "evb/b\\:y$(touch sentinel-one)",
+    // `insert-completions` inside an open quote.
+    "w/a;touch sentinel-one;#",
+    "w/cx$(touch sentinel-one)",
+    "d/'d1/",
+    "d/'d2$(touch sentinel-one)/",
+];
+
+/// [`fixture`] plus [`HOSTILE_FILES`].
+fn hostile_fixture() -> Fixture {
+    let fx = fixture();
+    for name in HOSTILE_FILES {
+        let path = fx.tmp.path().join(name);
+        if name.ends_with('/') {
+            std::fs::create_dir_all(&path).unwrap();
+        } else {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "").unwrap();
+        }
+    }
+    fx
+}
+
+/// Asserts no sentinel exists: a command that ran is the finding, whatever the reply.
+fn assert_no_sentinels(fx: &Fixture, ctx: &str) {
+    assert!(!fx.sentinel.exists(), "{ctx}: sentinel-one command ran");
+    assert!(!fx.sentinel2.exists(), "{ctx}: sentinel-two command ran");
+    assert!(!fx.sentinel3.exists(), "{ctx}: sentinel-three command ran");
+}
+
 /// Asserts completing the path `cur` after `--cfg` with `script` offers exactly `want`, in any
 /// order.
 fn assert_path_replies(bash: &str, script: &str, fx: &Fixture, cur: &str, want: &[&str]) {
@@ -1534,7 +1582,7 @@ fn bash_path_ansi_c_word_never_runs_a_substitution() {
     const TICK: &str = "`touch sentinel-two`";
     let script = print_script("bash");
     for bash in bashes() {
-        let fx = fixture();
+        let fx = hostile_fixture();
         literal_dir(&fx, SUB);
         literal_dir(&fx, TICK);
         for cur in [
@@ -1567,7 +1615,6 @@ fn bash_path_ansi_c_word_never_runs_a_substitution() {
         }
         // A name holding a quote and a substitution: the reply must keep readline's idea of the
         // open quote in step with the script's, or readline inserts it unquoted.
-        evil_dir(&fx);
         for (cur, want) in [
             ("$'evil/q", r"evil/q\047$(touch sentinel-one)"),
             ("$'evil/b", r"evil/b\047`touch sentinel-two`"),
@@ -1578,8 +1625,7 @@ fn bash_path_ansi_c_word_never_runs_a_substitution() {
             ("$'evil/dir", r"evil/dirs\047/"),
         ] {
             assert_path_replies(&bash, &script, &fx, cur, &[want]);
-            assert!(!fx.sentinel.exists(), "{bash} {cur}: $(...) ran");
-            assert!(!fx.sentinel2.exists(), "{bash} {cur}: backtick ran");
+            assert_no_sentinels(&fx, &format!("{bash} {cur}"));
         }
     }
 }
@@ -2120,15 +2166,15 @@ fn bash_tab_completes_quoted_and_escaped_paths_end_to_end() {
     }
 }
 
-/// [`bash_tab_rc`] with a shim that prints each argument through `%q`, so an argument holding a
-/// newline stays on the `LINE:` line.
+/// [`bash_tab_rc`] with a shim that prints each argument through `%q`, in the same `LINE:<args>`
+/// shape, so an argument holding a newline stays on the `LINE:` line.
 fn bash_tab_rc_quoted(fx: &Fixture) -> String {
     let script = fx.tmp.path().join("toolr.bash");
     std::fs::write(&script, print_script("bash")).unwrap();
     format!(
         "source '{}'\n\
          toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
-         else printf 'LINE:'; printf ' %q' \"$@\"; printf '\\n'; fi; }}\n",
+         else local a; printf -v a ' %q' \"$@\"; printf 'LINE:%s\\n' \"${{a# }}\"; fi; }}\n",
         script.display()
     )
 }
@@ -2142,7 +2188,7 @@ fn bash_tab_never_leaves_an_ansi_c_quote_open_end_to_end() {
         let rcfile = fx.tmp.path().join("bashrc");
         std::fs::write(&rcfile, bash_tab_rc_quoted(&fx)).unwrap();
         let typed = "toolr ci lint --cfg files/an";
-        let want = r"LINE: ci lint --cfg $'files/an\n'";
+        let want = r"LINE:ci lint --cfg $'files/an\n'";
         assert_bash_tab_line(&bash, &fx, &rcfile, typed, want);
     }
 }
@@ -2178,7 +2224,7 @@ fn bash_tab_completes_ansi_c_quoted_paths_end_to_end() {
             ("--cfg files/nl\tnx", r"--cfg $'files/nl\nx'"),
         ] {
             let typed = format!("toolr ci lint {typed}");
-            let want = format!("LINE: ci lint {}", want.replace("{home}", &home));
+            let want = format!("LINE:ci lint {}", want.replace("{home}", &home));
             assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
         }
         // `$` as a break doesn't split a closed `$'…'`: readline replaces the whole word.
@@ -2192,7 +2238,7 @@ fn bash_tab_completes_ansi_c_quoted_paths_end_to_end() {
         )
         .unwrap();
         let typed = r"toolr ci lint --cfg files/an$'\n'd";
-        let want = r"LINE: ci lint --cfg $'files/an\nd'";
+        let want = r"LINE:ci lint --cfg $'files/an\nd'";
         assert_bash_tab_line(&bash, &fx, &dollar_rcfile, typed, want);
     }
 }
@@ -2219,24 +2265,9 @@ fn bash_tab_closes_a_quote_after_a_reply_ending_in_it_end_to_end() {
             ("--cfg $'end/nl", r"--cfg $'end/nl\n'"),
         ] {
             let typed = format!("toolr ci lint {typed}");
-            let want = format!("LINE: ci lint {want}");
+            let want = format!("LINE:ci lint {want}");
             assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
         }
-    }
-}
-
-/// Creates `evil/` under the fixture root, holding names with a quote before a substitution, a
-/// quote before a control character, and a directory `dirs'/` holding `in`.
-fn evil_dir(fx: &Fixture) {
-    let evil = fx.tmp.path().join("evil");
-    std::fs::create_dir_all(evil.join("dirs'")).unwrap();
-    std::fs::write(evil.join("dirs'/in"), "").unwrap();
-    for name in [
-        "q'$(touch sentinel-one)",
-        "b'`touch sentinel-two`",
-        "sq2'\u{1}",
-    ] {
-        std::fs::write(evil.join(name), "").unwrap();
     }
 }
 
@@ -2246,8 +2277,7 @@ fn evil_dir(fx: &Fixture) {
 #[test]
 fn bash_tab_never_runs_a_name_holding_a_quote_end_to_end() {
     for bash in bashes() {
-        let fx = fixture();
-        evil_dir(&fx);
+        let fx = hostile_fixture();
         let rcfile = fx.tmp.path().join("bashrc");
         std::fs::write(&rcfile, bash_tab_rc_quoted(&fx)).unwrap();
         for (typed, want) in [
@@ -2263,31 +2293,10 @@ fn bash_tab_never_runs_a_name_holding_a_quote_end_to_end() {
             ("--cfg $'evil/dir\t", r"--cfg evil/dirs\'/in"),
         ] {
             let typed = format!("toolr ci lint {typed}");
-            let want = format!("LINE: ci lint {want}");
+            let want = format!("LINE:ci lint {want}");
             assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
-            // Checked after each line: a command that ran is the finding.
-            assert!(!fx.sentinel.exists(), "{bash} {typed:?}: $(...) ran");
-            assert!(!fx.sentinel2.exists(), "{bash} {typed:?}: backtick ran");
+            assert_no_sentinels(&fx, &format!("{bash} {typed:?}"));
         }
-    }
-}
-
-/// Names whose quoted reply starts with the quote the user opened, under `lead/`, plus `rq/`
-/// holding `r'` and `r''x`, and `evb/` holding `b\:z` and `b\:y$(touch sentinel-one)`.
-fn lead_quote_dirs(fx: &Fixture) {
-    for name in [
-        "lead/ctl/\u{1};touch sentinel-one;#",
-        "lead/sub/\u{1}$(touch sentinel-one)",
-        "lead/bang/!;touch sentinel-one;#",
-        "lead/sq/';touch sentinel-one;#",
-        "rq/r'",
-        "rq/r''x",
-        "evb/b\\:z",
-        "evb/b\\:y$(touch sentinel-one)",
-    ] {
-        let path = fx.tmp.path().join(name);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, "").unwrap();
     }
 }
 
@@ -2296,8 +2305,7 @@ fn lead_quote_dirs(fx: &Fixture) {
 #[test]
 fn bash_tab_reply_starting_with_the_open_quote_end_to_end() {
     for bash in bashes() {
-        let fx = fixture();
-        lead_quote_dirs(&fx);
+        let fx = hostile_fixture();
         let sentinel = fx.sentinel.display().to_string();
         for history in ["set -H", "set +H"] {
             let quoted = fx.tmp.path().join("bashrc-quoted");
@@ -2308,22 +2316,22 @@ fn bash_tab_reply_starting_with_the_open_quote_end_to_end() {
                 (
                     &quoted,
                     "--cfg lead/ctl/'",
-                    r"LINE: ci lint --cfg $'lead/ctl/\001;touch sentinel-one;#'",
+                    r"LINE:ci lint --cfg $'lead/ctl/\001;touch sentinel-one;#'",
                 ),
                 (
                     &quoted,
                     "--cfg lead/ctl/\"",
-                    r"LINE: ci lint --cfg $'lead/ctl/\001;touch sentinel-one;#'",
+                    r"LINE:ci lint --cfg $'lead/ctl/\001;touch sentinel-one;#'",
                 ),
                 (
                     &quoted,
                     "--cfg lead/sub/'",
-                    r"LINE: ci lint --cfg $'lead/sub/\001$(touch sentinel-one)'",
+                    r"LINE:ci lint --cfg $'lead/sub/\001$(touch sentinel-one)'",
                 ),
                 (
                     &quoted,
                     "--cfg lead/sub/\"",
-                    r"LINE: ci lint --cfg $'lead/sub/\001$(touch sentinel-one)'",
+                    r"LINE:ci lint --cfg $'lead/sub/\001$(touch sentinel-one)'",
                 ),
                 (
                     &plain,
@@ -2346,11 +2354,7 @@ fn bash_tab_reply_starting_with_the_open_quote_end_to_end() {
             ] {
                 let typed = format!("toolr ci lint {typed}");
                 assert_bash_tab_line(&bash, &fx, rcfile, &typed, want);
-                // Checked after each line: a command that ran is the finding.
-                assert!(
-                    !fx.sentinel.exists(),
-                    "{bash} {history} {typed:?}: command ran"
-                );
+                assert_no_sentinels(&fx, &format!("{bash} {history} {typed:?}"));
             }
         }
     }
@@ -2362,8 +2366,7 @@ fn bash_tab_reply_starting_with_the_open_quote_end_to_end() {
 fn bash_path_ansi_c_forms_readline_misreads_offer_nothing() {
     let script = print_script("bash");
     for bash in bashes() {
-        let fx = fixture();
-        lead_quote_dirs(&fx);
+        let fx = hostile_fixture();
         assert_path_replies(&bash, &script, &fx, r"$'evb/b\\':z", &[]);
         assert_path_replies(&bash, &script, &fx, r"$'evb/b\\'", &[]);
         // A misread word earlier on the line puts readline out of step for the rest of it.
@@ -2380,8 +2383,7 @@ fn bash_path_ansi_c_forms_readline_misreads_offer_nothing() {
 #[test]
 fn bash_tab_keeps_ansi_c_forms_readline_misreads_end_to_end() {
     for bash in bashes() {
-        let fx = fixture();
-        lead_quote_dirs(&fx);
+        let fx = hostile_fixture();
         let rcfile = fx.tmp.path().join("bashrc");
         std::fs::write(&rcfile, bash_tab_rc(&fx)).unwrap();
         for (typed, want) in [
@@ -2393,22 +2395,8 @@ fn bash_tab_keeps_ansi_c_forms_readline_misreads_end_to_end() {
         ] {
             let typed = format!("toolr ci lint {typed}");
             assert_bash_tab_line(&bash, &fx, &rcfile, &typed, want);
-            assert!(!fx.sentinel.exists(), "{bash} {typed:?}: command ran");
+            assert_no_sentinels(&fx, &format!("{bash} {typed:?}"));
         }
-    }
-}
-
-/// Names that run a command if `insert-completions` inserts them unquoted: `w/` holds
-/// `a;touch sentinel-one;#` and `cx$(touch sentinel-one)`, and `d/` the directories `'d1` and
-/// `'d2$(touch sentinel-one)`.
-fn insert_all_dirs(fx: &Fixture) {
-    for name in ["w/a;touch sentinel-one;#", "w/cx$(touch sentinel-one)"] {
-        let path = fx.tmp.path().join(name);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, "").unwrap();
-    }
-    for name in ["d/'d1", "d/'d2$(touch sentinel-one)"] {
-        std::fs::create_dir_all(fx.tmp.path().join(name)).unwrap();
     }
 }
 
@@ -2419,8 +2407,7 @@ fn bash_insert_completions_inside_an_open_quote_offers_nothing() {
     let script = print_script("bash");
     let insert_all = format!("COMP_TYPE=42\n{script}");
     for bash in bashes() {
-        let fx = fixture();
-        insert_all_dirs(&fx);
+        let fx = hostile_fixture();
         for cur in ["'w/a", "\"w/a", "$'w/c", "$'d/", "w/$'c", "'d/"] {
             assert_path_replies(&bash, &insert_all, &fx, cur, &[]);
         }
@@ -2431,7 +2418,7 @@ fn bash_insert_completions_inside_an_open_quote_offers_nothing() {
             let want: Vec<&str> = want.reply.iter().map(String::as_str).collect();
             assert_path_replies(&bash, &insert_all, &fx, cur, &want);
         }
-        assert!(!fx.sentinel.exists(), "{bash}: command ran");
+        assert_no_sentinels(&fx, &bash);
     }
 }
 
@@ -2440,8 +2427,7 @@ fn bash_insert_completions_inside_an_open_quote_offers_nothing() {
 #[test]
 fn bash_insert_completions_never_runs_a_name_end_to_end() {
     for bash in bashes() {
-        let fx = fixture();
-        insert_all_dirs(&fx);
+        let fx = hostile_fixture();
         let rcfile = fx.tmp.path().join("bashrc");
         std::fs::write(&rcfile, bash_tab_rc(&fx)).unwrap();
         for (keys, want) in [
@@ -2456,8 +2442,7 @@ fn bash_insert_completions_never_runs_a_name_end_to_end() {
         ] {
             let keys = format!("toolr ci lint {keys}");
             assert_bash_keys_line(&bash, &fx, &rcfile, &keys, want);
-            // Checked after each line: a command that ran is the finding.
-            assert!(!fx.sentinel.exists(), "{bash} {keys:?}: command ran");
+            assert_no_sentinels(&fx, &format!("{bash} {keys:?}"));
         }
     }
 }
@@ -2484,7 +2469,7 @@ fn bash_tab_keeps_a_bang_literal_in_ansi_c_quotes_end_to_end() {
             ("--mode $'wo", r"--mode wow\!"),
         ] {
             let typed = format!("echo prev\ntoolr ci lint {typed}");
-            let want = format!("LINE: ci lint {want}");
+            let want = format!("LINE:ci lint {want}");
             assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
         }
     }
