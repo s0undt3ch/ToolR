@@ -228,8 +228,10 @@ impl EnumTable {
     }
 }
 
-/// The right-hand side of a top-level `name = <value>` assignment, kept only
-/// when it's a plain name or `module.attr`.
+/// The right-hand side of a top-level `name = <value>` or `name: T = <value>`
+/// assignment, kept only when it's a plain name or `module.attr`.
+///
+/// Mirrored in `toolr.testing._groups._Assigned`; change both together.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Assigned {
     /// `name = other`.
@@ -271,6 +273,8 @@ pub struct ImportedFrom {
 /// command-signature resolution (see `has_star_import` and the
 /// module-binding tracking used for that rejection).
 ///
+/// Mirrored in `toolr.testing._groups._ImportTable`; change both together.
+///
 /// Used by [`EnumTable::resolve_def`] so a class imported from a
 /// different module than the one declaring it resolves to exactly that
 /// module, rather than guessing across same-named classes elsewhere.
@@ -292,8 +296,9 @@ pub struct ImportTable {
     import_positions: HashMap<String, usize>,
     /// Source modules of `from X import *`.
     star_modules: Vec<String>,
-    /// Top-level `name = other` or `name = module.attr` assignments still in
-    /// force, so `command = toolr.command` can be followed back to toolr.
+    /// Top-level `name = other` or `name = module.attr` assignments, annotated
+    /// (`name: T = other`) or not, still in force, so `command = toolr.command`
+    /// can be followed back to toolr.
     assigned: HashMap<String, Assigned>,
     /// Source-order counter shared by imports and local bindings.
     seq: usize,
@@ -308,6 +313,7 @@ impl ImportTable {
         table
     }
 
+    /// Mirrored in `toolr.testing._groups._ImportTable._collect`; change both together.
     fn collect_stmt(
         &mut self,
         stmt: &Stmt,
@@ -357,8 +363,13 @@ impl ImportTable {
                 }
             }
             Stmt::AnnAssign(assign) => {
-                if let Expr::Name(n) = assign.target.as_ref() {
+                // A bare `name: T` binds nothing.
+                if let (Expr::Name(n), Some(value)) = (assign.target.as_ref(), &assign.value) {
                     self.bind_local(n.id.to_string());
+                    // `name: T = other` copies like `name = other`.
+                    if let Some(value) = Assigned::from_expr(value) {
+                        self.assigned.insert(n.id.to_string(), value);
+                    }
                 }
             }
             Stmt::If(if_stmt) if is_type_checking_test(&if_stmt.test) => {
@@ -386,6 +397,8 @@ impl ImportTable {
         }
     }
 
+    /// Mirrored in `toolr.testing._groups._ImportTable._collect_import_from`; change both
+    /// together.
     fn collect_import_from(
         &mut self,
         import: &ruff_python_ast::StmtImportFrom,
@@ -494,6 +507,8 @@ impl ImportTable {
 /// isn't recognised — that's not the documented mypy/ruff-endorsed
 /// pattern, and treating it as "definitely a TYPE_CHECKING guard" would
 /// be guessing at intent.
+///
+/// Mirrored in `toolr.testing._groups._is_type_checking_test`; change both together.
 fn is_type_checking_test(expr: &Expr) -> bool {
     match expr {
         Expr::Name(n) => n.id.as_str() == "TYPE_CHECKING",
@@ -517,6 +532,8 @@ fn is_type_checking_test(expr: &Expr) -> bool {
 /// already collapsed the path to the package itself (no trailing
 /// `__init__` segment to drop), so one dot means "this same package,"
 /// i.e. only `level - 1` segments are popped.
+///
+/// Mirrored in `toolr.testing._groups._resolve_relative_module`; change both together.
 fn resolve_relative_module(
     level: u32,
     module: Option<&str>,
