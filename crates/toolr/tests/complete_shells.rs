@@ -1726,12 +1726,18 @@ fn fish_completion_never_executes_values() {
 }
 
 fn fish_complete(fx: &Fixture, line: &str) -> String {
+    fish_complete_with(fx, "", line)
+}
+
+/// [`fish_complete`] with `prelude` run after the script is sourced.
+fn fish_complete_with(fx: &Fixture, prelude: &str, line: &str) -> String {
     let out = StdCommand::new("fish")
         .arg("--no-config")
         .arg("-c")
-        .arg("source (echo $argv[1] | psub); complete -C $argv[2]")
+        .arg("source (echo $argv[1] | psub); eval $argv[3]; complete -C $argv[2]")
         .arg(print_script("fish"))
         .arg(line)
+        .arg(prelude)
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
         .env("XDG_CACHE_HOME", common::test_cache_home())
@@ -1794,20 +1800,18 @@ fn zsh_completion_never_executes_values() {
 /// Runs the real `_toolr` under `zsh -f` with `_files` and `compadd` stubbed
 /// to record their arguments; `words` completes the last word.
 fn zsh_complete(fx: &Fixture, words: &[&str]) -> Vec<String> {
-    zsh_run(fx, "", words)
+    zsh_run_with(fx, "", "", words)
         .into_iter()
         .filter(|l| !l.starts_with("VALUE:"))
         .collect()
 }
 
-/// Like [`zsh_complete`], with `compstate[quote]` set to `quote` (the quote character zsh reports
-/// at the cursor) and a `VALUE:` line for each candidate `compadd` gets.
-fn zsh_run(fx: &Fixture, quote: &str, words: &[&str]) -> Vec<String> {
-    zsh_run_with(fx, quote, "", words)
-}
-
-/// [`zsh_run`] with `prelude` evaluated after the script is loaded.
+/// The stub driver: it sets `compstate` states a test needs, including ones live zsh never
+/// produces; [`zsh_tab`] checks what real zsh does. `quote` is the quote character zsh reports
+/// at the cursor, `prelude` runs after the script loads, and each `compadd` candidate is a
+/// `VALUE:` line.
 fn zsh_run_with(fx: &Fixture, quote: &str, prelude: &str, words: &[&str]) -> Vec<String> {
+    // The `compadd` stub reads the script's own `values`: zsh functions see their caller's locals.
     const DRIVER: &str = r#"
 compdef() { :; }
 _files() { print -r -- "FILES:$*"; }
@@ -1845,58 +1849,56 @@ _toolr
         .collect()
 }
 
-/// The word `_toolr` hands the engine for `cur`, read back from a `toolr` shim.
-fn zsh_dequoted(fx: &Fixture, cur: &str) -> String {
-    let words = ["toolr", "ci", "lint", "--cfg", cur];
-    zsh_run_with(
-        fx,
-        "",
-        "toolr() { print -rn -- \"${@[-1]}\" > word.out; }",
-        &words,
-    );
-    std::fs::read_to_string(fx.tmp.path().join("word.out")).unwrap()
-}
-
-/// The candidates `_toolr` hands `compadd` when completing `cur` after `toolr ci lint --mode`.
-fn zsh_mode_values(fx: &Fixture, quote: &str, cur: &str) -> Vec<String> {
-    zsh_values(fx, quote, &["toolr", "ci", "lint", "--mode", cur])
-}
-
+/// The candidates `_toolr` hands `compadd`.
 fn zsh_values(fx: &Fixture, quote: &str, words: &[&str]) -> Vec<String> {
-    zsh_run(fx, quote, words)
+    zsh_run_with(fx, quote, "", words)
         .iter()
         .filter_map(|l| l.strip_prefix("VALUE:").map(str::to_string))
         .collect()
 }
 
+/// The word `_toolr` hands the engine for the last of `words`, and the candidates it gets back.
+/// The `toolr` shim writes the word to a file: its stdout is the script's `$(…)`, not ours.
+fn zsh_engine_word(fx: &Fixture, quote: &str, words: &[&str]) -> (String, Vec<String>) {
+    let shim = r#"toolr() { print -rn -- "${@[-1]}" > word.out; command toolr "$@"; }"#;
+    let values = zsh_run_with(fx, quote, shim, words)
+        .iter()
+        .filter_map(|l| l.strip_prefix("VALUE:").map(str::to_string))
+        .collect();
+    let word = std::fs::read_to_string(fx.tmp.path().join("word.out")).unwrap();
+    (word, values)
+}
+
 /// `$words` holds the word as typed; the script must take the quoting off before the engine
-/// matches it. zsh reports the open quote even after it's closed, so `'dry r'` carries `'` too.
+/// matches it. zsh reports the open quote even after it's closed, so `'dry r'` carries `'` too,
+/// and reports none for a quote opened mid-word.
 #[test]
 fn zsh_quoted_and_escaped_partials_match_a_choice() {
     if !require("zsh") {
         return;
     }
     let fx = fixture();
-    for (quote, cur) in [
-        ("", r"dry\ r"),
-        ("'", "'dry r"),
-        ("\"", "\"dry r"),
-        ("'", "'dry r'"),
-        ("$'", "$'dry r"),
-        ("", "dr'y r'"),
-        // zsh sets `compstate[quote]` only for a quote that opens the word.
-        ("", "dr'y r"),
-        ("", "d\"ry r"),
+    for (quote, cur, want) in [
+        ("", r"dry\ r", "dry r"),
+        ("'", "'dry r", "dry r"),
+        ("\"", "\"dry r", "dry r"),
+        ("'", "'dry r'", "dry r"),
+        ("$'", "$'dry r", "dry r"),
+        ("", "dr'y r'", "dry r"),
+        ("", "dr'y r", "dry r"),
+        ("", "d\"ry r", "dry r"),
+        // Both quote kinds, only one of them open.
+        ("", "it\"'", "it'"),
+        ("", "a\"b'c d", "ab'c d"),
     ] {
-        assert_eq!(
-            zsh_mode_values(&fx, quote, cur),
-            vec!["dry run".to_string()],
-            "{quote:?} {cur:?}"
-        );
-    }
-    // Both quote kinds, only one of them open.
-    for (cur, want) in [("files/it\"'", "files/it'"), ("a\"b'c d", "ab'c d")] {
-        assert_eq!(zsh_dequoted(&fx, cur), want, "{cur:?}");
+        let (word, values) = zsh_engine_word(&fx, quote, &["toolr", "ci", "lint", "--mode", cur]);
+        assert_eq!(word, want, "{quote:?} {cur:?}");
+        let matching: Vec<String> = fx
+            .choices()
+            .into_iter()
+            .filter(|c| c.starts_with(want))
+            .collect();
+        assert_eq!(values, matching, "{quote:?} {cur:?}");
     }
     let words = ["toolr", "ci", "lint", "--mode='dry r"];
     assert_eq!(zsh_values(&fx, "", &words), vec!["dry run".to_string()]);
@@ -1908,7 +1910,7 @@ fn zsh_attached_option_with_escaped_value_matches() {
         return;
     }
     let fx = fixture();
-    let calls = zsh_run(&fx, "", &["toolr", "ci", "lint", r"--mode=dry\ r"]);
+    let calls = zsh_run_with(&fx, "", "", &["toolr", "ci", "lint", r"--mode=dry\ r"]);
     assert_eq!(
         calls,
         vec![
@@ -1944,7 +1946,7 @@ fn zsh_backtick_quote_offers_nothing() {
     }
     let fx = fixture();
     let words = ["toolr", "ci", "lint", "--mode", "`dry"];
-    assert_eq!(zsh_run(&fx, "`", &words), Vec::<String>::new());
+    assert_eq!(zsh_run_with(&fx, "`", "", &words), Vec::<String>::new());
 }
 
 /// A typed `$(...)` or backtick, quoted or not, is matched as text and never runs.
@@ -1964,7 +1966,7 @@ fn zsh_quoted_substitution_partial_is_inert() {
         ("", r"\`touch", &tick),
     ] {
         assert_eq!(
-            zsh_mode_values(&fx, quote, cur),
+            zsh_values(&fx, quote, &["toolr", "ci", "lint", "--mode", cur]),
             vec![want.clone()],
             "{quote:?} {cur:?}"
         );
@@ -2283,27 +2285,21 @@ fn zsh_tab_completes_quoted_and_escaped_partials_end_to_end() {
         return;
     }
     let fx = fixture();
-    let sub = format!("$(touch {})", fx.sentinel.display());
-    for (typed, want) in [
-        (r"--mode dry\ w", "--mode dry walk".to_string()),
-        ("--mode 'dry w", "--mode dry walk".to_string()),
-        (r#"--mode "dry w"#, "--mode dry walk".to_string()),
-        ("--mode $'dry w", "--mode dry walk".to_string()),
-        (r"--mode=dry\ w", "--mode=dry walk".to_string()),
-        ("--mode='dry w", "--mode=dry walk".to_string()),
-        ("--mode dr'y w", "--mode dry walk".to_string()),
-        (
-            "--cfg='files/with s",
-            "--cfg=files/with space.txt".to_string(),
-        ),
-        ("'--mode' fa", "--mode fast".to_string()),
-        (r#"--mode "wo"#, "--mode wow!".to_string()),
-        (
-            r#"--cfg "files/with s"#,
-            "--cfg files/with space.txt".to_string(),
-        ),
-        ("--mode '$(touch", format!("--mode {sub}")),
-    ] {
+    let sub = format!("--mode $(touch {})", fx.sentinel.display());
+    let rows = [
+        (r"--mode dry\ w", "--mode dry walk"),
+        ("--mode 'dry w", "--mode dry walk"),
+        (r#"--mode "dry w"#, "--mode dry walk"),
+        ("--mode $'dry w", "--mode dry walk"),
+        (r"--mode=dry\ w", "--mode=dry walk"),
+        ("--mode='dry w", "--mode=dry walk"),
+        ("--mode dr'y w", "--mode dry walk"),
+        ("--cfg='files/with s", "--cfg=files/with space.txt"),
+        ("'--mode' fa", "--mode fast"),
+        (r#"--mode "wo"#, "--mode wow!"),
+        (r#"--cfg "files/with s"#, "--cfg files/with space.txt"),
+    ];
+    for (typed, want) in rows.into_iter().chain([("--mode '$(touch", sub.as_str())]) {
         let stdout = zsh_tab(&fx, typed, "\n");
         let want = format!("LINE:ci lint {want}");
         assert!(
@@ -2380,29 +2376,12 @@ fn fish_unescaped_newline_stays_one_word() {
         return;
     }
     let fx = fixture();
-    let out = StdCommand::new("fish")
-        .arg("--no-config")
-        .arg("-c")
-        .arg(
-            "source (echo $argv[1] | psub)\n\
-             function toolr; set -g argc (count $argv); command toolr $argv; end\n\
-             complete -C $argv[2] >/dev/null; echo \"ARGC:$argc\"",
-        )
-        .arg(print_script("fish"))
-        .arg(r"toolr ci lint --mode x\nal")
-        .current_dir(fx.tmp.path())
-        .env("PATH", path_with_toolr())
-        .env("XDG_CACHE_HOME", common::test_cache_home())
-        .output()
-        .unwrap();
-    let stdout = String::from_utf8_lossy(&out.stdout);
+    // The shim writes the count to a file: its stdout is the script's `(…)`, not ours.
+    let shim = "function toolr; count $argv > argc.out; command toolr $argv; end";
+    fish_complete_with(&fx, shim, r"toolr ci lint --mode x\nal");
+    let argc = std::fs::read_to_string(fx.tmp.path().join("argc.out")).unwrap();
     // `__complete`, the cwd, `ci`, `lint`, `--mode` and the word being completed.
-    assert_eq!(
-        stdout.trim(),
-        "ARGC:6",
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert_eq!(argc.trim(), "6");
 }
 
 /// A typed `$(...)` or backtick, quoted or not, is matched as text and never runs.
