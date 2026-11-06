@@ -18,10 +18,21 @@ and pass alone: `timeout_kills_the_shells_child`, `timeout_returns_when_an_escap
    after `timeout_secs = 2` plus the 0.5s grace. Under load `sh -c 'echo $$; ...'` can start later than
    that: the capture was empty at 2.5s and held the pid at 7.5s.
 
+## Proof of the collision
+
+Two concurrent runs of the old test binary: run B fails with `expected a timeout error: 0` while run A
+ends its `KillMatching` cleanup. Two concurrent runs of the new binary both pass.
+
 ## Fix
 
 - Make every `sleep` command line unique per test process (`sleep 999.<pid>`) so neither `pgrep` nor
-  `KillMatching` can touch another run's processes.
-- Raise the escaped-process test's timeout from 2s to 10s: the observed start-up stall was just over
-  2.5s, so 10s leaves roughly 4x headroom. The assertions still hold at any value; only the budget
-  changes, and it is the one place where the cause really is a budget that is too small.
+  `KillMatching` can touch another run's processes. The `.` in the `pgrep` pattern is escaped, so it
+  matches exactly that line.
+- The escaped writer reports its pid through a file, written atomically (`.tmp` then `mv`) and read
+  with a poll, not through the pipe under test: the detached reader may drop what arrives after the
+  call returns. The pid-file path is quoted inside the `sh -c` script.
+- Raise the escaped-process test's timeout from 2s to 10s: the writer's start-up must finish before the
+  timeout, or it is still in the tree and has not escaped. The observed stall was just over 2.5s, so
+  10s leaves roughly 4x headroom. The assertions still hold at any value; this is the one place where
+  the cause really is a budget that is too small.
+- The stress script used to reproduce and verify is local only and not committed.
