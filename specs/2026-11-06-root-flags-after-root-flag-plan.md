@@ -1,12 +1,13 @@
 # Root flags before the first group: plan
 
 Implements [`2026-11-06-root-flags-after-root-flag-design.md`](2026-11-06-root-flags-after-root-flag-design.md)
-(audit FU-39). Land after #691 (`fix/complete-double-dash`) merges, branching from `main`; the `-- --` case needs it.
+(audit FU-39). Branches from `main`; #691 (`fix/complete-double-dash`) has merged.
 Commit as `fix(complete): offer groups and root flags after a root flag`.
 
 ## Files
 
-- `crates/toolr/src/builtin_completions.rs`: add `RootScan`, `scan_root_flags`, a private `root_flag_specs()`; unit tests.
+- `crates/toolr/src/builtin_completions.rs`: add `RootScan`, `scan_root_flags`, `root_long_flags_after(seen)` (the merge's
+  filter) and a private `root_flag_specs()`; unit tests.
 - `crates/toolr/src/dispatch.rs`: `run_complete` scans and strips; `merge_root_flags_at_top_level` becomes
   `merge_root_flags(rest, &scan, candidates)`.
 - `crates/toolr/tests/complete_smoke.rs`: smoke tests below.
@@ -19,7 +20,8 @@ Commit as `fix(complete): offer groups and root flags after a root flag`.
 
 1. **`root_flag_specs()`**: from `crate::cli::build_command(&empty_manifest())`, one spec per root arg: `id`, `long`,
    `short`, `aliases` (`get_all_aliases`), `takes_value` (`get_num_args` non-zero / `get_action().takes_values()`),
-   `conflicts` (`cmd.get_arg_conflicts_with(arg)` ids).
+   `conflicts` (`cmd.get_arg_conflicts_with(arg)` ids, mirrored so the lists are symmetric: clap's own is not on an
+   unbuilt command).
 2. **`scan_root_flags(tokens)`** per the design's rules. Committed tokens are `tokens[..len-1]`; `rest` is the
    remaining committed tokens plus the last token.
 3. **`run_complete`**: after `raw_complete_tokens`, `let scan = scan_root_flags(&tokens);`; if `scan.dead_end`, return
@@ -72,7 +74,7 @@ Each splits stdout into sorted lines and compares.
 | `completes_nothing_where_clap_rejects_root_flags` | `--quiet --debug --`; `--quiet --quiet --`; `-qd ""`; `--timeout-secs --`; `--timeout-secs ""`; `--timeout-secs abc ""` | each stdout empty, status success |
 | `root_flags_stay_root_only`                   | `--quiet ci --`                 | `== [--help]` (engine only, no root flags)                                 |
 | `help_given_is_not_offered_again`             | `--help --`                     | lacks `--help`, contains `--quiet`                                         |
-| `terminator_blocks_root_flags` (after #691)   | `-- --`; `--quiet -- --`        | each stdout empty                                                          |
+| `terminator_blocks_root_flags`   | `-- --`; `--quiet -- --`        | each stdout empty                                                          |
 
 Before/after: run each smoke test against the unfixed binary first; all but the "nothing" rows must fail
 (`--quiet --debug --` already passes, which is why it stays a regression guard). Re-check any "rejected" row with
@@ -82,6 +84,6 @@ Before/after: run each smoke test against the unfixed binary first; all but the 
 
 - `cargo test -p toolr --lib builtin_completions`, `cargo test -p toolr --test complete_smoke` in the worktree.
 - `mise run test`; `prek run --all-files`.
-- Patch coverage via `cargo xtask patch-coverage --base main` on the CI lcov (do not run `cargo llvm-cov` locally);
+- Patch coverage via `cargo xtask patch-coverage --base main` on a local `cargo llvm-cov` lcov;
   every branch of `scan_root_flags` has a test row above.
 - Manual: `toolr __complete "$PWD" --quiet ""` lists groups; a shell `toolr --quiet <TAB>` in bash, zsh, fish.
