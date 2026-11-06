@@ -66,11 +66,13 @@ still print and exit non-zero.
 
 ## Other built-ins audited, left for follow-ups
 
-- `self cache prune`: its summary lines (`freed …`, `nothing to prune`, `aborted, nothing removed`, lock sweep
+- `self cache prune` (audit FU-43): its summary lines (`freed …`, `nothing to prune`, `aborted, nothing removed`, lock sweep
   counts) are success chatter, but the dry-run lines are the command's result and the writer is threaded through
   several helpers with their own unit tests. Splitting the two is a separate change.
 - `__install-uv-now` (hidden): prints `uv X.Y.Z ready at …` as its only result. Its caller is a user explicitly
   asking for the install, so the line is the answer; left alone.
+- Warning consistency (audit FU-43): on normal dispatch `-q` already silences plugin-skip warnings, while
+  these built-ins keep warnings under `-q`. Which side is right is an open question for a later change.
 
 No genuine product call came up: every case follows the rule above.
 

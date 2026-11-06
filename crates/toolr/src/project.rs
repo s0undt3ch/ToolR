@@ -13,10 +13,11 @@ use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 use toolr_core::exit_status::process_exit_code;
 use toolr_core::trust::{TrustError, TrustMode, TrustStore, require_trust, shown, trust_all_env};
 
-/// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
-/// uv install prompt; output and `venv sync`'s silent exit follow the
-/// subcommand's own `--quiet`. A new handler that may install uv must honour it
-/// and get a case in `tests/quiet_uv_consent.rs`.
+/// `root_quiet` is the root `toolr --quiet`. Handlers OR it into their own `--quiet` for
+/// output, uv's `--quiet` and the uv install prompt. It must never feed a guard that turns
+/// an error into exit 0: only the subcommand's own flag does that, for the mise hook (see
+/// `venv_sync_unattended_quiet_exit`). A new handler that may install uv must honour it and
+/// get a case in `tests/quiet_uv_consent.rs`.
 pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     match matches.subcommand() {
         Some(("init", init_m)) => project_init(init_m, root_quiet),
@@ -532,7 +533,8 @@ fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// Unattended-mode guard table for `venv_sync --quiet`. Returns
+/// Unattended-mode guard table for `venv_sync --quiet` (the subcommand flag only; the root
+/// `-q` is excluded on purpose, see `dispatch_project`). Returns
 /// `Some(ExitCode::SUCCESS)` when the failure is one of the benign rows
 /// that `--quiet` swallows (not-a-toolr-repo, missing tools/, uv-consent
 /// absent). Returns `None` to let the error propagate normally (lock
@@ -678,7 +680,7 @@ fn venv_shell(root_quiet: bool) -> Result<ExitCode> {
 
 fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let no_sync = matches.get_flag("no-sync");
-    let quiet = matches.get_flag("quiet");
+    let quiet = matches.get_flag("quiet") || root_quiet;
     let argv: Vec<String> = matches
         .get_many::<String>("command")
         .expect("clap marks command required")
@@ -695,7 +697,7 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         require_trust(
             &repo_root,
             TrustMode {
-                never_prompt: quiet || root_quiet,
+                never_prompt: quiet,
             },
         )?;
         let resolved = toolr_core::venv::resolve_venv_path(&repo_root)
@@ -721,14 +723,14 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         // Default: freshness-gated auto-sync (same path as `venv sync`,
         // and as `venv shell`), then run. `--quiet` forwards to uv's
         // --quiet inside the sync.
-        let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
+        let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
         let (resolved, _uv) = toolr_core::project::ensure_venv_ready(
             &cwd,
             consent,
             toolr_core::project::EnsureOpts::default()
-                .with_quiet(quiet || root_quiet)
+                .with_quiet(quiet)
                 .with_trust(TrustMode {
-                    never_prompt: quiet || root_quiet,
+                    never_prompt: quiet,
                 }),
         )?;
         resolved
