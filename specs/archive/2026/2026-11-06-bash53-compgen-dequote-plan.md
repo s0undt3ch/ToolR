@@ -37,10 +37,9 @@ done
 
 - [ ] Append `"files/it's.txt"` and `"files/q\"d.txt"` to `PATH_FILES` (now 8 entries). Existing `quoted[0]` and
       `quoted[2]` uses keep their meaning.
-- [ ] Extract `fn bash_tab_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str) -> (String, String)` from
-      `bash_tab_completes_words_with_a_colon_end_to_end` (the `StdCommand` setup plus `run_on_pty`; returns stdout and
-      stderr). Also extract writing the default rcfile into `fn bash_tab_rcfile(fx: &Fixture) -> PathBuf`. The colon
-      test must pass unchanged after this step.
+- [ ] Extract `fn bash_tab_rc(fx: &Fixture) -> String` (the rcfile body) and
+      `fn assert_bash_tab_line(bash, fx, rcfile, typed, want)` (the `StdCommand` setup, `run_on_pty` and the `LINE:`
+      assertion) from `bash_tab_completes_words_with_a_colon_end_to_end`. The colon test must pass unchanged.
 - [ ] Add `bash_tab_completes_quoted_and_escaped_paths_end_to_end`. For each `bashes()` entry, type
       `toolr ci lint <word>`, then Tab and Enter, and assert a `LINE:` line equal to the expected one (`H` is
       `fx.tmp.path()`):
@@ -73,7 +72,7 @@ done
     - `bash_path_dollar_in_single_quotes_offers_nothing`: cur `'$HOME/fi` gives an empty reply, rc `0`.
     - `bash_path_variable_after_a_double_quote_stays_bare`: cur `"$HOME/files/s` gives `["$HOME/files/sub/"]` and
       `compopt` `["-o nospace"]`.
-    - `bash_value_reply_is_quoted_for_an_open_double_quote`: `run_bash` with cur `"dry r` gives `["dry run"]`.
+    - `bash_value_reply_is_quoted_for_an_open_quote`: `run_bash` with cur `"dry r` or `'dry r` gives `["dry run"]`.
     - `bash_path_name_with_a_newline_is_one_candidate`: create `files/nl\nx`; cur `files/nl` gives exactly one reply,
       `$'files/nl\nx'` (`printf %q` form).
 - [ ] Run the loop from "Global constraints". Expect the new pty test to fail on every version and most new `Drive`
@@ -118,6 +117,8 @@ done
       instead that readline replaces from just after an open quote.
 - [ ] Run `shellcheck crates/toolr-core/src/complete/scripts/bash.sh` (via `prek run shellcheck --files …` if the
       hook exists).
+- [ ] `bash_script_names_its_variables_with_the_toolr_prefix` reads the word after `read`; teach it to skip the
+      argument of `-d`, so `read -r -d ''` isn't taken for a name.
 - [ ] Run the loop. Every test from Task 1 passes on 5.1.16, 5.2.37 and 5.3, and every existing `bash_` test,
       including `bash_script_names_its_variables_with_the_toolr_prefix` (new locals need the `_toolr_` prefix).
 - [ ] Commit: `fix(complete): quote bash completion replies for an open quote`.
