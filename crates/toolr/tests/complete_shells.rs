@@ -152,6 +152,13 @@ struct BashRun {
 }
 
 impl BashRun {
+    /// The reply in sorted order, for replies whose order doesn't matter.
+    fn sorted_reply(&self) -> Vec<String> {
+        let mut reply = self.reply.clone();
+        reply.sort();
+        reply
+    }
+
     /// The `printf %q` form of a [`CHOICES`] entry.
     fn quoted(&self, choice: &str) -> String {
         let i = CHOICES.iter().position(|c| *c == choice).unwrap();
@@ -519,8 +526,7 @@ fn bash_path_flag_completes_files_quoted_and_inert() {
         let mut want = run.quoted.clone();
         want.push("files/sub/".to_string());
         want.sort();
-        let mut got = run.reply.clone();
-        got.sort();
+        let got = run.sorted_reply();
         assert_eq!(got, want, "{bash}");
         assert!(!fx.sentinel3.exists(), "{bash}: file name executed");
         // Several matches: bash inserts only their common prefix, so no space to drop.
@@ -639,8 +645,7 @@ fn bash_path_keeps_a_typed_leading_variable() {
             let mut want: Vec<String> = run.quoted.iter().map(|q| format!("{var}/{q}")).collect();
             want.push(format!("{var}/files/sub/"));
             want.sort();
-            let mut got = run.reply.clone();
-            got.sort();
+            let got = run.sorted_reply();
             assert_eq!(got, want, "{bash} {var} {split:?}");
             // `:` is a word break: readline replaces only the text after it, so the reply is bare.
             let cur = format!("{var}/files/host:p");
@@ -708,8 +713,7 @@ fn bash_path_variable_value_is_a_literal_directory() {
             let cur = format!("${dir}/");
             let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, Split::Whole);
             assert_eq!(run.rc, "0", "{bash} {value}: {}", run.stderr);
-            let mut got = run.reply.clone();
-            got.sort();
+            let got = run.sorted_reply();
             assert_eq!(
                 got,
                 vec![format!("${dir}/lit.txt"), format!("${dir}/sub/")],
@@ -755,7 +759,7 @@ fn bash_script_names_its_variables_with_the_toolr_prefix() {
         if let Some(at) = words.iter().position(|w| *w == "read") {
             let mut skip = false;
             for w in &words[at + 1..] {
-                // `-d ''` takes an argument, which is not a name.
+                // Only `-d` takes an argument in this script, and `-d ''`'s is not a name.
                 if std::mem::take(&mut skip) {
                     continue;
                 }
@@ -1187,8 +1191,15 @@ fn bash_path_unescapes_a_typed_backslash() {
 }
 
 /// Completes the path `cur` after `--cfg` with the whole word in `COMP_WORDS`.
-fn run_bash_path(bash: &str, fx: &Fixture, cur: &str) -> BashRun {
+fn run_bash_cfg_path(bash: &str, fx: &Fixture, cur: &str) -> BashRun {
     run_bash_path_split(bash, &print_script("bash"), fx, "--cfg", cur, Split::Whole)
+}
+
+/// Asserts completing the path `cur` after `--cfg` offers exactly `want`.
+fn assert_path_reply(bash: &str, fx: &Fixture, cur: &str, want: &str) {
+    let run = run_bash_cfg_path(bash, fx, cur);
+    assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+    assert_eq!(run.reply, vec![want.to_string()], "{bash} {cur}");
 }
 
 /// Readline replaces the text after an open `"` and closes it, so the reply is quoted for the
@@ -1202,9 +1213,7 @@ fn bash_path_reply_is_quoted_for_an_open_double_quote() {
             (r#""files/it"#, "files/it's.txt"),
             (r#""files/q"#, r#"files/q\"d.txt"#),
         ] {
-            let run = run_bash_path(&bash, &fx, cur);
-            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
-            assert_eq!(run.reply, vec![want.to_string()], "{bash} {cur}");
+            assert_path_reply(&bash, &fx, cur, want);
         }
     }
 }
@@ -1219,9 +1228,7 @@ fn bash_path_reply_is_quoted_for_an_open_single_quote() {
             ("'files/wi", "files/with space.txt"),
             ("'files/q", r#"files/q"d.txt"#),
         ] {
-            let run = run_bash_path(&bash, &fx, cur);
-            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
-            assert_eq!(run.reply, vec![want.to_string()], "{bash} {cur}");
+            assert_path_reply(&bash, &fx, cur, want);
         }
     }
 }
@@ -1231,7 +1238,7 @@ fn bash_path_reply_is_quoted_for_an_open_single_quote() {
 fn bash_path_open_quote_mid_word_replaces_after_the_quote() {
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(&bash, &fx, r#"files/"wi"#);
+        let run = run_bash_cfg_path(&bash, &fx, r#"files/"wi"#);
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.reply, vec!["with space.txt".to_string()], "{bash}");
     }
@@ -1243,11 +1250,11 @@ fn bash_path_quoted_tilde_is_literal() {
     for bash in bashes() {
         let fx = fixture();
         // `$HOME` is the fixture root, which holds `files/` but no `lit`.
-        let run = run_bash_path(&bash, &fx, r#""~/fi"#);
+        let run = run_bash_cfg_path(&bash, &fx, r#""~/fi"#);
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
         literal_dir(&fx, "~/lit");
-        let run = run_bash_path(&bash, &fx, r#""~/l"#);
+        let run = run_bash_cfg_path(&bash, &fx, r#""~/l"#);
         assert_eq!(run.reply, vec!["~/lit/".to_string()], "{bash}");
         assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{bash}");
     }
@@ -1258,7 +1265,7 @@ fn bash_path_quoted_tilde_is_literal() {
 fn bash_path_dollar_in_single_quotes_offers_nothing() {
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(&bash, &fx, "'$HOME/fi");
+        let run = run_bash_cfg_path(&bash, &fx, "'$HOME/fi");
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
     }
@@ -1271,7 +1278,7 @@ fn bash_path_variable_after_a_double_quote_stays_bare() {
         let fx = fixture();
         for var in ["$HOME", "${HOME}"] {
             let cur = format!("\"{var}/files/s");
-            let run = run_bash_path(&bash, &fx, &cur);
+            let run = run_bash_cfg_path(&bash, &fx, &cur);
             assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
             assert_eq!(run.reply, vec![format!("{var}/files/sub/")], "{bash} {cur}");
             assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{bash} {cur}");
@@ -1306,8 +1313,7 @@ fn bash_path_lists_dotfiles() {
         for script in [&script, &ignore_all] {
             let run = run_bash_path_split(&bash, script, &fx, "--cfg", "hid/", Split::Whole);
             assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
-            let mut got = run.reply.clone();
-            got.sort();
+            let got = run.sorted_reply();
             assert_eq!(got, vec!["hid/.env", "hid/config"], "{bash}");
         }
     }
@@ -1318,12 +1324,11 @@ fn bash_path_lists_dotfiles() {
 fn bash_path_dot_entries_need_an_existing_directory() {
     for bash in bashes() {
         let fx = fixture();
-        let run = run_bash_path(&bash, &fx, "nosuch/.");
+        let run = run_bash_cfg_path(&bash, &fx, "nosuch/.");
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
-        let run = run_bash_path(&bash, &fx, "files/.");
-        let mut got = run.reply.clone();
-        got.sort();
+        let run = run_bash_cfg_path(&bash, &fx, "files/.");
+        let got = run.sorted_reply();
         assert_eq!(got, vec!["files/../", "files/./"], "{bash}");
     }
 }
@@ -1339,9 +1344,7 @@ fn bash_path_prefix_stays_bare_before_ansi_c_quoting() {
             ("~/files/nl", r"~/$'files/nl\nx'"),
             ("$HOME/files/nl", r"$HOME/$'files/nl\nx'"),
         ] {
-            let run = run_bash_path(&bash, &fx, cur);
-            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
-            assert_eq!(run.reply, vec![want.to_string()], "{bash} {cur}");
+            assert_path_reply(&bash, &fx, cur, want);
         }
     }
 }
@@ -1368,7 +1371,7 @@ fn bash_path_name_with_a_newline_is_one_candidate() {
     for bash in bashes() {
         let fx = fixture();
         std::fs::write(fx.tmp.path().join("files/nl\nx"), "").unwrap();
-        let run = run_bash_path(&bash, &fx, "files/nl");
+        let run = run_bash_cfg_path(&bash, &fx, "files/nl");
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.reply, vec![r"$'files/nl\nx'".to_string()], "{bash}");
     }
@@ -1663,40 +1666,26 @@ fn bash_tab_completes_quoted_and_escaped_paths_end_to_end() {
         let rcfile = fx.tmp.path().join("bashrc");
         std::fs::write(&rcfile, bash_tab_rc(&fx)).unwrap();
         let home = fx.tmp.path().display().to_string();
+        // `{home}` stands for the fixture root, which is `$HOME`.
         for (typed, want) in [
-            (
-                r"--cfg files/back\\s",
-                r"--cfg files/back\slash".to_string(),
-            ),
-            (r"--cfg files/it\'", "--cfg files/it's.txt".to_string()),
-            (
-                r#"--cfg "files/wi"#,
-                "--cfg files/with space.txt".to_string(),
-            ),
-            ("--cfg 'files/wi", "--cfg files/with space.txt".to_string()),
-            (
-                r#"--cfg files/"wi"#,
-                "--cfg files/with space.txt".to_string(),
-            ),
-            (r#"--cfg "files/it"#, "--cfg files/it's.txt".to_string()),
-            ("--cfg 'files/it", "--cfg files/it's.txt".to_string()),
-            ("--cfg 'files/q", r#"--cfg files/q"d.txt"#.to_string()),
+            (r"--cfg files/back\\s", r"--cfg files/back\slash"),
+            (r"--cfg files/it\'", "--cfg files/it's.txt"),
+            (r#"--cfg "files/wi"#, "--cfg files/with space.txt"),
+            ("--cfg 'files/wi", "--cfg files/with space.txt"),
+            (r#"--cfg files/"wi"#, "--cfg files/with space.txt"),
+            (r#"--cfg "files/it"#, "--cfg files/it's.txt"),
+            ("--cfg 'files/it", "--cfg files/it's.txt"),
+            ("--cfg 'files/q", r#"--cfg files/q"d.txt"#),
             (
                 r#"--cfg "$HOME/files/wi"#,
-                format!("--cfg {home}/files/with space.txt"),
+                "--cfg {home}/files/with space.txt",
             ),
-            (
-                r"--cfg=files/back\\s",
-                r"--cfg=files/back\slash".to_string(),
-            ),
-            (r#"--mode "dry r"#, "--mode dry run".to_string()),
-            (
-                "--cfg ~/files/wi",
-                format!("--cfg {home}/files/with space.txt"),
-            ),
+            (r"--cfg=files/back\\s", r"--cfg=files/back\slash"),
+            (r#"--mode "dry r"#, "--mode dry run"),
+            ("--cfg ~/files/wi", "--cfg {home}/files/with space.txt"),
         ] {
             let typed = format!("toolr ci lint {typed}");
-            let want = format!("LINE:ci lint {want}");
+            let want = format!("LINE:ci lint {}", want.replace("{home}", &home));
             assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
         }
     }
@@ -1903,8 +1892,7 @@ fn bash_attached_value_offers_the_choices() {
             assert_eq!(run.stderr, "", "{bash} {split:?}");
             let mut want = tilde_escaped(&run.quoted);
             want.sort();
-            let mut got = run.reply.clone();
-            got.sort();
+            let got = run.sorted_reply();
             assert_eq!(got, want, "{bash} {split:?}");
             assert!(
                 !fx.sentinel.exists(),
@@ -1968,8 +1956,7 @@ fn bash_attached_path_completes_the_part_after_the_equals() {
                     run.quoted.iter().map(|q| format!("{lead}{q}")).collect();
                 want.push(format!("{lead}files/sub/"));
                 want.sort();
-                let mut got = run.reply.clone();
-                got.sort();
+                let got = run.sorted_reply();
                 assert_eq!(got, want, "{at}");
                 assert!(!fx.sentinel3.exists(), "{at}: file name executed");
 
