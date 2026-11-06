@@ -1878,27 +1878,12 @@ declared group, or a standalone <code>@command</code> with no <code>group=</code
 <p><code>CommandsTester</code> runs your code, but <code>toolr</code> reads it without running it, so the tester checks the source for what
 <code>toolr</code> can't read. <code>@command(...)</code>, <code>@toolr.command(...)</code> (also after <code>import toolr as t</code>) and an alias from
 <code>from toolr import command as cmd</code> all work, on a top-level <code>def</code> with <code>group=</code> and any name as string literals.
-Commands must be top-level <code>def</code>s: put a platform check inside the command body, not around the <code>def</code>.</p>
-<p>A <code>command_group(...)</code> call is supported only as the whole value of a module-level <code>name = command_group(...)</code>,
-<code>name: T = command_group(...)</code> or bare <code>command_group(...)</code> statement, with a string-literal name. Any other call to
-toolr's <code>command_group</code> fails the build and the tester:</p>
-<ul>
-<li>part of a tuple or chained target, or a walrus;</li>
-<li>under <code>if</code>, <code>try</code>, <code>with</code>, a loop or <code>match</code>;</li>
-<li>inside a function, lambda, comprehension or class;</li>
-<li>nested in another expression, such as a decorator or call argument;</li>
-<li>a group whose name isn't a string literal.</li>
-</ul>
-<p><code>command_group</code> creates a group when none is registered, so a name-only call such as <code>command_group("ci")</code> counts
-too. Only a parameter of the enclosing <code>def</code> or <code>lambda</code> named <code>command_group</code> shadows it; any other local rebinding is
-still flagged.</p>
-<p>A command on a nested <code>def</code> (inside another function, a class, an <code>if TYPE_CHECKING:</code> or any other <code>if</code>), a <code>def</code>
-carrying two command decorators, a <code>group=SOME_CONSTANT</code> or a non-literal name fails the build and the tester as well.
-Together they read:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>unsupported command declarations (3):
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  - tools.cmds::command_group("ci"): `command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it.
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  - tools.cmds::nested: `@command` must decorate a top-level `def`, which toolr reads without running it.
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>  - tools.cmds::check: `group=` must be a string literal.
+Commands must be top-level <code>def</code>s: put a platform check inside the command body, not around the <code>def</code>. A command on a
+nested <code>def</code> (inside another function, a class, an <code>if TYPE_CHECKING:</code> or any other <code>if</code>), a <code>def</code> carrying two command
+decorators, a <code>group=SOME_CONSTANT</code> or a non-literal name fails both:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>unsupported command declarations (2):
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  - tools.cmds::nested: `@command` must decorate a top-level `def`, which toolr reads without running it.
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  - tools.cmds::check: `group=` must be a string literal.
 </span></code></pre></div>
 <p>The tester reads the source of every <code>tools</code> module, so a nested command fails it even when the code around it never
 runs, such as a factory nobody calls or an <code>if</code> that's false on this platform. A command a test body defines isn't
