@@ -278,9 +278,11 @@ mod tests {
     #[test]
     fn toolr_data_dir_uses_xdg_data_home_when_set() {
         let mut env = EnvGuard::write();
-        env.set("XDG_DATA_HOME", "/tmp/test-xdg-data");
+        // `temp_dir()` is absolute on every platform; a literal `/tmp/…` has no drive on Windows.
+        let base = std::env::temp_dir().join("test-xdg-data");
+        env.set("XDG_DATA_HOME", &base);
         let result = toolr_data_dir();
-        assert_eq!(result, Some(PathBuf::from("/tmp/test-xdg-data/toolr")));
+        assert_eq!(result, Some(base.join("toolr")));
     }
 
     #[test]
@@ -338,20 +340,22 @@ mod tests {
     #[test]
     fn toolr_cache_dir_uses_xdg_cache_home_when_set() {
         let mut env = EnvGuard::write();
-        env.set("XDG_CACHE_HOME", "/tmp/test-xdg-cache");
+        let base = std::env::temp_dir().join("test-xdg-cache");
+        env.set("XDG_CACHE_HOME", &base);
         let result = toolr_cache_dir();
-        assert_eq!(result, Some(PathBuf::from("/tmp/test-xdg-cache/toolr")));
+        assert_eq!(result, Some(base.join("toolr")));
     }
 
     #[test]
     fn managed_uv_path_lives_under_data_dir_bin() {
         let mut env = EnvGuard::write();
-        env.set("XDG_DATA_HOME", "/tmp/test-xdg-data");
+        let base = std::env::temp_dir().join("test-xdg-data");
+        env.set("XDG_DATA_HOME", &base);
         let result = managed_uv_path();
         // `uv_basename()` is platform-specific; just assert the directory
         // structure so this still passes on Windows runners.
         let p = result.expect("XDG_DATA_HOME set → Some");
-        assert!(p.starts_with("/tmp/test-xdg-data/toolr/bin"));
+        assert!(p.starts_with(base.join("toolr").join("bin")));
         let basename = p.file_name().unwrap().to_string_lossy().into_owned();
         assert!(basename == "uv" || basename == "uv.exe");
     }
