@@ -393,3 +393,151 @@ fn root_double_dash_is_a_terminator() {
     assert_eq!(complete(&tmp, &["--", ""]), "");
     assert_eq!(complete(&tmp, &["--", "ci", ""]), "");
 }
+
+fn sorted_lines(tmp: &TempDir, args: &[&str]) -> Vec<String> {
+    let mut lines: Vec<String> = complete(tmp, args).lines().map(str::to_string).collect();
+    lines.sort();
+    lines
+}
+
+#[test]
+fn completes_groups_after_a_root_flag() {
+    let tmp = fixture();
+    let lines = sorted_lines(&tmp, &["--quiet", ""]);
+    for group in ["ci", "project", "self"] {
+        assert!(lines.contains(&group.to_string()), "{lines:?}");
+    }
+    assert!(lines.iter().all(|l| !l.starts_with("--")), "{lines:?}");
+}
+
+#[test]
+fn completes_group_prefix_after_a_root_flag() {
+    let tmp = fixture();
+    assert_eq!(sorted_lines(&tmp, &["--quiet", "c"]), ["ci"]);
+}
+
+#[test]
+fn completes_commands_after_a_root_flag() {
+    let tmp = fixture();
+    let lines = sorted_lines(&tmp, &["--quiet", "ci", ""]);
+    assert!(lines.contains(&"hello".to_string()), "{lines:?}");
+    assert!(lines.contains(&"deploy".to_string()), "{lines:?}");
+}
+
+#[test]
+fn completes_further_root_flags() {
+    let tmp = fixture();
+    assert_eq!(
+        sorted_lines(&tmp, &["--quiet", "--"]),
+        [
+            "--help",
+            "--no-output-timeout-secs",
+            "--no-timestamps",
+            "--timeout-secs",
+            "--timestamps"
+        ]
+    );
+}
+
+#[test]
+fn skips_conflicting_and_given_root_flags() {
+    let tmp = fixture();
+    assert_eq!(
+        sorted_lines(&tmp, &["--quiet", "--timestamps", "--"]),
+        ["--help", "--no-output-timeout-secs", "--timeout-secs"]
+    );
+}
+
+#[test]
+fn skips_the_conflict_of_a_given_alias() {
+    let tmp = fixture();
+    assert_eq!(
+        sorted_lines(&tmp, &["--ts", "--no"]),
+        ["--no-output-timeout-secs"]
+    );
+}
+
+#[test]
+fn counts_short_and_alias_flags_as_given() {
+    let tmp = fixture();
+    let lines = sorted_lines(&tmp, &["-q", "--"]);
+    assert!(!lines.contains(&"--quiet".to_string()), "{lines:?}");
+    assert!(!lines.contains(&"--debug".to_string()), "{lines:?}");
+    assert!(lines.contains(&"--timestamps".to_string()), "{lines:?}");
+    assert_eq!(
+        sorted_lines(&tmp, &["--timeout", "5", "--t"]),
+        ["--timestamps"]
+    );
+}
+
+#[test]
+fn completes_after_a_flag_value() {
+    let tmp = fixture();
+    let lines = sorted_lines(&tmp, &["--timeout-secs", "5", ""]);
+    assert!(lines.contains(&"ci".to_string()), "{lines:?}");
+    let lines = sorted_lines(&tmp, &["--timeout-secs=5", "--"]);
+    assert!(!lines.contains(&"--timeout-secs".to_string()), "{lines:?}");
+    assert!(lines.contains(&"--quiet".to_string()), "{lines:?}");
+}
+
+#[test]
+fn completes_nothing_where_clap_rejects_root_flags() {
+    let tmp = fixture();
+    for line in [
+        &["--quiet", "--debug", "--"][..],
+        &["--quiet", "--quiet", "--"],
+        &["-qd", ""],
+        &["--timeout-secs", "--"],
+        &["--timeout-secs", ""],
+        &["--timeout-secs", "abc", ""],
+    ] {
+        assert_eq!(complete_raw(&tmp, line), "", "{line:?}");
+    }
+}
+
+#[test]
+fn root_flags_stay_root_only() {
+    let tmp = fixture();
+    assert_eq!(sorted_lines(&tmp, &["--quiet", "ci", "--"]), ["--help"]);
+}
+
+#[test]
+fn help_given_is_not_offered_again() {
+    let tmp = fixture();
+    let lines = sorted_lines(&tmp, &["--help", "--"]);
+    assert!(!lines.contains(&"--help".to_string()), "{lines:?}");
+    assert!(lines.contains(&"--quiet".to_string()), "{lines:?}");
+}
+
+#[test]
+fn terminator_blocks_root_flags() {
+    let tmp = fixture();
+    assert_eq!(complete_raw(&tmp, &["--", "--"]), "");
+    assert_eq!(complete_raw(&tmp, &["--quiet", "--", "--"]), "");
+}
+
+#[test]
+fn completes_after_an_attached_negative_value() {
+    let tmp = fixture();
+    for flag in ["--timeout-secs=-1", "--nots=-1"] {
+        let lines = sorted_lines(&tmp, &[flag, ""]);
+        assert!(lines.contains(&"ci".to_string()), "{flag}: {lines:?}");
+    }
+    let lines = sorted_lines(&tmp, &["--timeout-secs=-1", "--t"]);
+    assert_eq!(lines, ["--timestamps"]);
+}
+
+// Regression guards: these lines printed nothing before the version/value fixes too (by accident, not
+// design). `scan_version_ends_the_line` in `builtin_completions` is what proves the fix.
+#[test]
+fn stays_empty_after_version_or_bad_values() {
+    let tmp = fixture();
+    for line in [
+        &["-V", ""][..],
+        &["--version", ""],
+        &["-V", "--"],
+        &["--timeout-secs", "-1", ""],
+    ] {
+        assert_eq!(complete_raw(&tmp, line), "", "{line:?}");
+    }
+}
