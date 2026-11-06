@@ -152,19 +152,25 @@ not agree: uv (and, by recollection, cargo) drop warnings under `-q`, git keeps 
 - Cost: `-q` no longer means "no warnings", which is harder to explain and the one-line help gets longer. Needs
   discipline: a future warning must be classified, and the classification lives in prose.
 
-### Recommendation
+### Decision (user, 2026-11-06): (a)
 
-**(c).** It is the only option that changes no shipped behaviour and loses no signal, and the split is real, not
-cosmetic. Part 1 is written so that choosing (b) instead costs one gated method and a handful of test flips, so
-Part 1 can ship before the decision.
+Warnings print under `-q` everywhere. `--quiet` drops success lines, progress and advice, never errors, refusals or
+warnings, on every path, built-ins and normal dispatch alike.
 
-## Open questions (user decision)
+- Remove `!argv_requests_quiet(&argv)` from the warning gate in `main.rs`, so plugin-skip and other dispatch
+  warnings print under `-q`. Invert `quiet_suppresses_the_warning` (rename it to say warnings survive `-q`) and fix
+  its doc comments.
+- Audit every other warning gated on quiet (grep `argv_requests_quiet`, `quiet` near `warn`/`eprintln!("toolr:
+  warning`) and ungate it, with a test each.
+- `Report::warn` in Part 1 always prints.
+- Reword the root `-q` help to "Suppress non-error output except warnings, and never prompt to install uv." (or
+  equivalent wording that says warnings stay), and the `dispatch_project` doc comment to match.
+- The release note starts with `**Breaking:**`: scripts running `toolr -q` now see warnings, such as skipped
+  plugins, on stderr.
 
-1. **Warnings under `-q`: (a), (b) or (c)?** This is a product call, not a technical one. Recommendation is (c).
-   Until it is answered, implement Part 1 with `Report::warn` always printing (what #695's rule says today).
-2. Under (c), what should the root `-q` help text say? Proposed: "Suppress success output, progress and ambient
-   warnings; errors and a command's own warnings still print. Never prompt to install uv."
-3. Should `prune`'s warnings move from stdout to stderr? Not required here; separate change if wanted.
+## Open questions
+
+1. Should `prune`'s warnings move from stdout to stderr? Not required here; separate change if wanted.
 
 ## Tests
 
