@@ -11,7 +11,9 @@ function __toolr_complete
     set -l raw (commandline -ct)
     # The engine matches the text the shell would pass, so take the typed quoting off;
     # fish escapes the replies again on insertion. `string unescape` never expands anything.
-    set -l current (string unescape -- "$raw"); or set current $raw
+    # `string collect` keeps an unescaped newline inside the one word. A failed unescape prints
+    # nothing, so `string collect` fails too and the raw word is used.
+    set -l current (string unescape -- "$raw" | string collect); or set current $raw
     # Drop the leading `toolr` token.
     set -l args $tokens[2..-1]
     # Append the in-progress word as the trailing token. Do NOT use `--`

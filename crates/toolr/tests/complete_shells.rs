@@ -1865,6 +1865,9 @@ fn zsh_quoted_and_escaped_partials_match_a_choice() {
         ("'", "'dry r'"),
         ("$'", "$'dry r"),
         ("", "dr'y r'"),
+        // zsh sets `compstate[quote]` only for a quote that opens the word.
+        ("", "dr'y r"),
+        ("", "d\"ry r"),
     ] {
         assert_eq!(
             zsh_mode_values(&fx, quote, cur),
@@ -1872,6 +1875,8 @@ fn zsh_quoted_and_escaped_partials_match_a_choice() {
             "{quote:?} {cur:?}"
         );
     }
+    let words = ["toolr", "ci", "lint", "--mode='dry r"];
+    assert_eq!(zsh_values(&fx, "", &words), vec!["dry run".to_string()]);
 }
 
 #[test]
@@ -2262,6 +2267,12 @@ fn zsh_tab_completes_quoted_and_escaped_partials_end_to_end() {
         (r#"--mode "dry w"#, "--mode dry walk".to_string()),
         ("--mode $'dry w", "--mode dry walk".to_string()),
         (r"--mode=dry\ w", "--mode=dry walk".to_string()),
+        ("--mode='dry w", "--mode=dry walk".to_string()),
+        ("--mode dr'y w", "--mode dry walk".to_string()),
+        (
+            "--cfg='files/with s",
+            "--cfg=files/with space.txt".to_string(),
+        ),
         ("'--mode' fa", "--mode fast".to_string()),
         (r#"--mode "wo"#, "--mode wow!".to_string()),
         (
@@ -2320,6 +2331,38 @@ fn fish_quoted_and_escaped_path_partials_still_complete() {
         let stdout = fish_complete(&fx, &format!("toolr ci lint {cur}"));
         assert!(fish_names(&stdout).contains(&want), "{cur:?}: {stdout}");
     }
+}
+
+/// An escaped newline unescapes to one word; a command substitution alone would split it in two.
+#[test]
+fn fish_unescaped_newline_stays_one_word() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    let out = StdCommand::new("fish")
+        .arg("--no-config")
+        .arg("-c")
+        .arg(
+            "source (echo $argv[1] | psub)\n\
+             function toolr; set -g argc (count $argv); command toolr $argv; end\n\
+             complete -C $argv[2] >/dev/null; echo \"ARGC:$argc\"",
+        )
+        .arg(print_script("fish"))
+        .arg(r"toolr ci lint --mode x\nal")
+        .current_dir(fx.tmp.path())
+        .env("PATH", path_with_toolr())
+        .env("XDG_CACHE_HOME", common::test_cache_home())
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // `__complete`, the cwd, `ci`, `lint`, `--mode` and the word being completed.
+    assert_eq!(
+        stdout.trim(),
+        "ARGC:6",
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 /// A typed `$(...)` or backtick, quoted or not, is matched as text and never runs.

@@ -14,9 +14,16 @@ _toolr() {
     raw="${words[CURRENT]}"
     cur="${(Q)raw}"
     # `(Q)` leaves a word with an open quote untouched, so close it first. `compstate[quote]`
-    # is the quote at the cursor: `'`, `"` or `$'`, each closed by its last character.
-    if [[ -n ${compstate[quote]-} && $cur == "$raw" ]]; then
-        cur="${(Q):-$raw${compstate[quote]: -1}}"
+    # is the quote at the cursor (`'`, `"` or `$'`, each closed by its last character), but
+    # zsh sets it only when the quote opens the word, so a mid-word quote tries `'` then `"`.
+    if [[ $cur == "$raw" && $raw == *[\'\"]* ]]; then
+        local q
+        for q in ${compstate[quote]: -1} \' \"; do
+            if [[ ${(Q):-$raw$q} != "$raw$q" ]]; then
+                cur="${(Q):-$raw$q}"
+                break
+            fi
+        done
     fi
 
     # words[1] is `toolr`; pass the rest plus the in-progress word.

@@ -113,6 +113,13 @@ In `__toolr_complete`:
 - bash backtick and `$'…'` partials; nothing in #690's remit changed here.
 - Engine changes (#691's territory).
 
+## Known limitations
+
+- Escapes inside zsh `$'…'` (for example `$'dry\x20w`) don't complete: zsh's own matcher compares the candidates
+  against the raw `PREFIX`, so the decoded word the engine matched never lines up.
+- A word ending in a lone backslash (`dry\`): fish's `string unescape` fails on it, so the script falls back to the raw
+  word and matches nothing. zsh's `(Q)` drops the backslash, and whether the match is inserted is up to zsh's matcher.
+
 ## Open questions
 
 1. Settled: an interactive zsh on a pty (the helper the bash Tab tests use) drives a real completion reliably, so it
