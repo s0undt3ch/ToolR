@@ -328,8 +328,10 @@ def command(
     module-level assignment or bare statement, for example under ``if``,
     ``try``, ``with``, a loop or ``match``, inside a function, lambda,
     comprehension or class, or nested in another expression such as a
-    decorator or call argument. A name-only lookup such as
-    ``command_group("ci")`` can't create a group and is fine anywhere.
+    decorator or call argument. ``command_group`` creates a group when none is
+    registered, so a name-only call such as ``command_group("ci")`` counts
+    too, and so does a name that isn't a string literal. Only a function's
+    or lambda's parameters shadow ``command_group``.
     A group's command names must be unique within ``tools/``.
 
     Usage::

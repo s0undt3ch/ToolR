@@ -132,8 +132,10 @@ rename it once (`colour = not no_colour`). For more than two states, use
   module-level assignment or bare statement, e.g. under
   `if`/`try`/`with`/loops/`match`, inside a function, lambda,
   comprehension or class, or nested in another expression such as a
-  decorator or call argument. A name-only lookup such as
-  `command_group("ci")` can't create a group and is fine anywhere.
+  decorator or call argument. `command_group` creates a group when none is
+  registered, so a name-only call such as `command_group("ci")` counts
+  too, and so does a name that isn't a string literal. Only a function's
+  or lambda's parameters shadow `command_group`.
 - **Nested subgroups.** A dotted name (`command_group("docker.image",
   ...)`) attaches under the parent named before the last dot.
 - **Help sections.** Build an `ArgSection` at module scope via

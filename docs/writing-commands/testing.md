@@ -151,8 +151,10 @@ unknown group references (1):
 Commands must be top-level `def`s: put a platform check inside the command body, not around the `def`. Groups follow
 the same rule: any `command_group(...)` call that isn't the whole value of a module-level assignment or bare
 statement, e.g. under `if`/`try`/`with`/loops/`match`, inside a function, lambda, comprehension or class, or nested in
-another expression such as a decorator or call argument fails both. A name-only lookup such as `command_group("ci")`
-can't create a group, so it is fine anywhere.
+another expression such as a decorator or call argument fails both. `command_group` creates a group
+when none is registered, so a name-only call such as `command_group("ci")` counts too. So does a group whose name isn't
+a string literal, even as a plain top-level assignment. Only a function's or lambda's parameters named `command_group`
+(or `toolr`) shadow it; another local rebinding inside a `def` is still flagged.
 A command on a nested `def` (inside another function, a class, an `if TYPE_CHECKING:` or any other `if`), a
 `def` carrying two command decorators, a `group=SOME_CONSTANT` or a non-literal name fails both:
 

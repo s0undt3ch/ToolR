@@ -191,9 +191,28 @@ line; hoist out of `if`/`try`/`with`).
   `command_group`: a name through the import tables (a parameter of the enclosing `def` or `lambda`
   shadows it), an attribute when its base is the `toolr` module. `group_binding`'s own, wider
   predicate is unchanged. Both sides skip a supported statement whole, annotation included.
-- A call that passes no description or docstring (and no `*`/`**` that might) is a lookup, as in the
-  top-level title-only re-fetch rule, and is allowed anywhere.
-- The entry's name column is `command_group("<name>")` when the first argument is a string literal,
-  else `command_group`.
+- ~~A call that passes no description or docstring is a lookup and is allowed anywhere.~~ Withdrawn in
+  round 2: `command_group` creates the group when it isn't registered, so a name-only or title-only
+  call off a supported statement is reported like any other.
+- The entry's name column is `command_group("<name>")` when the name argument (positional or
+  `name=`) is a string literal, else `command_group`.
 - A wrapper such as `def command_group(n, t, d): return _cg(n, t, d)` keeps its top-level
   `g = command_group("w", ...)` binding, but the `_cg(n, t, d)` call inside the `def` is now reported.
+
+## Review fixes (round 2)
+
+- Problems are listed in source order on both sides. Rust walks with `SourceOrderVisitor`, Python
+  sorts by `(lineno, col_offset)`; `err_group_binding_source_order` and the
+  `err_group_source_order_*` cases pin augassign, conditional expressions, comprehensions, `for`
+  targets and `*`/keyword arguments.
+- The lookup exemption (and the `module_docstring` plumbing it needed) is gone. Cases
+  `err_group_name_only_lookup_in_body` and `err_group_lookup_*` pin it.
+- The group name is read with keyword support (`name=`) in `parse_group_call` and
+  `_group_declarations`, so `g = command_group(name="kw", ...)` binds
+  (`ok_group_keyword_name`). A supported statement whose name isn't a string literal is reported
+  as `GroupBinding` (`err_group_nonliteral_name`), where it used to be dropped by `toolr` and built
+  by `CommandsTester`.
+- The Python detector walks with an explicit stack, so a very long expression can't raise
+  `RecursionError`.
+- Only function and lambda parameters shadow `command_group`; other local rebindings inside a `def`
+  are still flagged.
