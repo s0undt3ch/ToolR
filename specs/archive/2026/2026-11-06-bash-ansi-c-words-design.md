@@ -147,11 +147,41 @@ themselves. Applies to `'`, `"` and `$'` contexts alike.
   as a junk entry.
 - **Escaping a newline with a backslash.** `\<newline>` is a line continuation to bash and disappears.
 
-## Open questions
+## Changes during implementation
 
-1. The residual open `$'` for names differing at a control character: accept (recommended; very rare), or
-   always reply with one candidate there and give up the listing.
-2. Whether `!` inside an open or closed `$'…'` is history-expanded on bash 5.1 to 5.3. Plan step 5 checks it with
-   `set -H`; if it expands, `!` must be escaped in the `$'` form as `\041`.
-3. `\u`/`\U` depend on the locale. Decline in a non-UTF-8 locale (as designed), or fall back to decoding only
-   when the result is a single valid character.
+The design was a hypothesis; these parts changed once tested against bash 5.1.16, 5.2.37 and 5.3.0 on a pty.
+
+- **Step 0.** On `main`, `~"root"/`, `~\root/` and `~$'root'/` all reached `compgen` (the guard checks the
+  dequoted word, which holds no quote). The tilde hardening closes it, pinned by
+  `bash_path_tilde_with_a_quoted_part_never_reaches_compgen`.
+- **`\u` locale check.** A `printf -v` result starting with `\` does not detect a non-UTF-8 locale: run as a
+  script with `LC_ALL=C`, bash's `printf '\u00e9'` emits the UTF-8 bytes anyway. The decoder now probes the
+  locale itself: a two-byte `é` (`$'\xc3\xa9'`) has length 1 only in a UTF-8 locale. The `\` check stays, for
+  code points `printf` can't encode.
+- **Variables.** `_toolr_var_ok` became a regex on the typed word that captures the typed `$NAME` or `${NAME}`,
+  and the decoded `$NAME/` must equal it. Otherwise `$HO$'ME'/`, `$HO"ME"/` or `$HO\ME/` decode to `$HOME/` and
+  would list under `$HOME`, where bash expands `$HO`. The `"` and `\` forms were already wrong on `main`.
+- **Closing a quote.** Readline appends the closing quote after a single match only if the character before
+  the cursor isn't already that quote. A reply ending in the open quote character (`dq"` under `"`, `sq'` under
+  `'` or `$'`, a trailing control character under `"` or `'`) therefore left the quote open. `_toolr_quote`
+  now appends one more quote character in that case and sets `_toolr_qextra`, which a directory reply strips
+  before its `/`. This generalises #690's `""` for a trailing `!`.
+- **C1 controls.** In a UTF-8 locale `[[:cntrl:]]` matches U+0085, and its code point in octal (`\205`) is
+  not its bytes. The escape inside a run is taken from `printf %q`, which escapes each byte (`\302\205`).
+- **`$` in `COMP_WORDBREAKS`.** With `$` added to the default breaks, readline still replaces a whole word
+  holding a closed `$'…'`. Treating that `$` as a special-prefix break doubled the text on the line, so the
+  `$` of `$'` is never a break (pinned end to end).
+- **Plan step 1's value test.** The engine drops any choice value holding a control character, so
+  `bash_value_with_a_newline_completes_in_ansi_c_quotes` can't exist. `bash_value_completes_in_ansi_c_quotes`
+  checks that choice values decode the same way instead.
+- **Exact match for values.** The `''` reply also came from choice values (`--mode fast'`); the same skip
+  applies there.
+
+## Open questions (resolved)
+
+1. Names differing at the control character itself: accepted. `files/nl\nx` and `files/nl\tz` give the
+   common prefix `files/nl$'\`, pinned by `bash_path_common_prefix_of_grouped_replies_is_closed`.
+2. `!` inside `$'…'` is not history-expanded under `set -H` on 5.1.16, 5.2.37 or 5.3.0, open or closed, so
+   no `\041` is needed. Outside a run, `printf %q` already gives `\!`. Pinned by
+   `bash_tab_keeps_a_bang_literal_in_ansi_c_quotes_end_to_end`.
+3. `\u`/`\U` outside a UTF-8 locale: declined, with the locale probe above.
