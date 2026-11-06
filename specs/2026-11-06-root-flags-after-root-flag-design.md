@@ -2,9 +2,9 @@
 
 Audit follow-up FU-39 (from #691 round 2).
 
-Written against `main` at 2ec90acf plus the open PR #691 (`fix/complete-double-dash`). #691 edits `raw_complete_tokens`
-(next to the function below) and the engine's `classify`; it does not touch `merge_root_flags_at_top_level`. #693 and #695
-edit other functions in `dispatch.rs`.
+Written against `main` at b4085bee, which includes #691 (`fix/complete-double-dash`), #693 and #695. #691 keeps a
+leading `--` as a committed token in `raw_complete_tokens` and changes the engine's `classify`; none of the three touch
+the root-flag merge.
 
 ## Problem
 
@@ -35,8 +35,8 @@ manifest-driven and has never heard of them.
 | `--help`        | `-h`  |                  | no            | none (global)     |
 
 `conflicts_with` is declared one way on `--quiet` and `--timestamps`; clap enforces it both ways
-(`--debug --quiet` and `--quiet --debug` both fail), so the design reads conflicts through
-`Command::get_arg_conflicts_with`, which is symmetric, not through the declaration.
+(`--debug --quiet` and `--quiet --debug` both fail). `Command::get_arg_conflicts_with` is not symmetric on an unbuilt
+command, so the specs mirror each declared conflict to the other side (guarded by a unit test).
 
 ## What clap accepts (the oracle)
 
@@ -94,7 +94,7 @@ completes to nothing (the rule #691 set).
 | `--quiet ci <TAB>`             | nothing                       | `hello`                                                       |
 | `--quiet ci --`                | nothing                       | `--help` (engine, group node); no root flags (not global)     |
 | `--help --`                    | nothing                       | root flags minus `--help`                                     |
-| `-- --`                        | root flags (`--` is stripped by `raw_complete_tokens` on main) | nothing once #691 lands (terminator is committed; clap rejects `toolr -- ci`) |
+| `-- --`                        | nothing (#691 keeps the terminator committed) | nothing (clap rejects `toolr -- ci`) |
 | `--quiet -- --`                | nothing                       | nothing                                                       |
 
 (`--quiet --debug --` and the other conflicting pairs already print nothing today, but for the wrong reason; the new
@@ -166,12 +166,10 @@ When `scan.dead_end`, `run_complete` prints nothing and returns `ExitCode::SUCCE
 
 ### Interaction with the open PRs
 
-- #691 keeps a leading `--` as a committed token (it removes the strip in `raw_complete_tokens`). The scan treats that
-  `--` as a stop, so `-- --` and `--quiet -- --` yield nothing. Implement on top of #691: until it lands, `-- --` still
-  offers root flags on `main` and the matching smoke test cannot pass.
+- #691 (merged) keeps a leading `--` as a committed token. The scan treats that `--` as a stop, so `-- --` and
+  `--quiet -- --` yield nothing.
 - #691's engine change is orthogonal: the engine receives the stripped tokens and applies its `--` rules to them.
-- #693 and #695 change `completion install` and the built-ins' `--quiet`, not completion; no overlap beyond textual
-  adjacency in `dispatch.rs`.
+- #693 and #695 (merged) change `completion install` and the built-ins' `--quiet`, not completion.
 
 ### Not doing
 
@@ -180,11 +178,9 @@ When `scan.dead_end`, `run_complete` prints nothing and returns `ExitCode::SUCCE
 - Completing the value of `--timeout-secs`: a free-form float has no candidates.
 - Validating a value beyond "parses as f64": range is the runner's concern.
 
-## Open questions
+## Resolved questions
 
-1. `toolr --timeout-secs <TAB>`: print nothing (chosen), or exit `COMPLETE_PATHS` so the shell completes files? A
-   number is never a path, so nothing.
-2. Should a malformed value (`--timeout-secs abc`) be a dead end (chosen: clap rejects the line) or be skipped
-   leniently so completion keeps working while the user fixes it? Chosen for consistency with #691.
-3. Merge #691 first and stack on it, or stack this branch on `fix/complete-double-dash` (git-spice)? The `-- --` row
-   needs #691. Recommended: wait for #691 to merge, then branch from `main`.
+1. `toolr --timeout-secs <TAB>` prints nothing: a line clap rejects completes to nothing (the rule #691 set), and a
+   number is never a path.
+2. A malformed value (`--timeout-secs abc`) is a dead end that prints nothing, for consistency with #691.
+3. The branch is on `main`: #691 has merged.
