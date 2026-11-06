@@ -81,18 +81,18 @@ Two changes in `bash.sh`. Both apply to every supported bash version, with no ve
 
 ### 1. List paths with a glob, not `compgen`
 
-`_toolr_complete_paths` stops passing user text to `compgen`. It splits the typed path into a directory part (up to
-and including the last `/`) and a leaf prefix, and lists `"$dir$leaf"*` in a process substitution:
+`_toolr_complete_paths` stops passing user text to `compgen`. A new `_toolr_list_paths MODE WORD`, run in the
+process substitution that feeds the reply loop, splits the typed path into a directory part (up to and including the
+last `/`) and a leaf prefix, and lists `"$WORD"*`:
 
 ```bash
-done < <(
-    shopt -s nullglob dotglob
-    shopt -u failglob nocaseglob
-    GLOBIGNORE=
-    for _toolr_name in "$_toolr_dir$_toolr_leaf"*; do
-        printf '%s\0' "$_toolr_name"
-    done
-)
+set +f
+unset GLOBIGNORE
+shopt -s nullglob dotglob
+shopt -u failglob nocaseglob
+for _toolr_name in "$_toolr_word"*; do
+    printf '%s\0' "$_toolr_name"
+done
 ```
 
 - The quoted part of a pattern is matched literally, so nothing is dequoted, expanded or run. Only the trailing `*`
@@ -104,12 +104,12 @@ done < <(
 - The `$`/backtick guard from #681 stays exactly where it is and still returns early. It no longer protects a
   `compgen` call, but keeping it means no behaviour change for those words in this fix.
 
-`~` and `~user` need the home directory, which `compgen` used to resolve. A bare `~` with `$HOME` set globs under
-`$HOME`, and the glob output is mapped back to the typed `~` (kept bare, the rest quoted) before the
-`_toolr_raw_prefix` strip. `~user`, and `~` with `HOME` unset, keep today's `compgen` path, including its `compgen -d`
-probe for directories, but only when the name matches `^[A-Za-z0-9._][A-Za-z0-9._-]*$` and the rest of the word holds
-no `\`, `'` or `"`. Then readline's dequoting has nothing to change. Any other `~user` word offers nothing. The script
-has no `eval`. The `./` hack for a `$NAME` value starting with `~` goes away: a quoted pattern never tilde-expands.
+`~` and `~user` need the home directory, which `compgen` used to resolve. A bare `~/` with `HOME` set is handled
+like a typed `$HOME/`: the glob lists under the value of `HOME`, and each name is put back as `~/` plus the quoted
+rest. `~user`, and `~` with `HOME` unset, keep today's `compgen` path, including its `compgen -d` probe for
+directories, but only when the word matches `^~([A-Za-z0-9._][A-Za-z0-9._-]*)?(/|$)` and holds no `\`, `'` or `"`.
+Then readline's dequoting has nothing to change. Any other `~user` word offers nothing. The script has no `eval`.
+The `./` hack for a `$NAME` value starting with `~` goes away: a quoted pattern never tilde-expands.
 
 ### 2. Parse quotes in the cursor word and quote replies for the open quote
 
@@ -175,6 +175,27 @@ with each one first on `PATH`.
   `bash_colon_in_a_file_name_completes_after_the_colon`, `bash_completion_survives_errexit`,
   `bash_path_completion_scales_linearly_with_the_listing`, `bash_attached_path_completes_the_part_after_the_equals`,
   `old_bash_script_offers_nothing_on_a_path_slot` and the colon end-to-end test.
+
+## Review fixes
+
+Three review rounds on the PR changed the shipped script from the design above:
+
+- **Listing.** `_toolr_list_paths` holds the glob. It runs `set +f`, then `unset GLOBIGNORE` before
+  `shopt -s nullglob dotglob`: unsetting `GLOBIGNORE` turns `dotglob` off, which had hidden every dotfile. Dotfiles are
+  now listed with no `.` typed, as `compgen -f` did, whatever the user's `GLOBIGNORE`.
+- **`.` and `..`** are added back only under a directory that exists (`[[ -d ${dir:-.} ]]`), so `nosuch/.` offers
+  nothing.
+- **Bare prefixes.** A typed `~/` or `$NAME/` is put back as typed, slash included, and only the rest is quoted. A `~`
+  followed by `$'…'` (a name holding a newline) would not tilde-expand.
+- **`~user`.** `_toolr_list_user_paths` runs `compgen` for words matching `^~([A-Za-z0-9._][A-Za-z0-9._-]*)?(/|$)` that
+  hold no backslash or quote. `compgen` prints one name per line, so lines that don't start with the typed `~user`
+  (the tail of a name holding a newline) are dropped, for the listing and the directory probe alike.
+- **`!` inside `"…"`.** Interactive bash history-expands `!` even inside double quotes, and `\!` there keeps its
+  backslash. With `set -H` on, each `!` in a reply becomes `"\!"` (close, escape, reopen). Readline adds no closing
+  quote to a reply that ends in a quote, so a name ending in `!` gets a trailing `""`. For a directory the reply ends in
+  `/` instead and readline closes the quote itself, so that `""` is stripped before the `/`.
+- **Structure.** The word parser is `_toolr_parse_word`, and `_toolr_complete_paths MODE OPT_PREFIX` derives the path
+  prefix and the `--opt=` lead itself.
 
 ## Release note
 

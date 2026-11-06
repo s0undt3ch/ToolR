@@ -75,6 +75,18 @@ done
     - `bash_value_reply_is_quoted_for_an_open_quote`: `run_bash` with cur `"dry r` or `'dry r` gives `["dry run"]`.
     - `bash_path_name_with_a_newline_is_one_candidate`: create `files/nl\nx`; cur `files/nl` gives exactly one reply,
       `$'files/nl\nx'` (`printf %q` form).
+- [ ] Tests added in review, after the first draft of the PR:
+    - `bash_path_lists_dotfiles`: `hid/` holding `.env` and `config` offers both, also with `GLOBIGNORE='*'`.
+    - `bash_path_dot_entries_need_an_existing_directory`: `nosuch/.` offers nothing; `files/.` offers `files/./` and
+      `files/../`.
+    - `bash_path_prefix_stays_bare_before_ansi_c_quoting`: `~/files/nl` gives `~/$'files/nl\nx'`, and `$HOME/files/nl`
+      gives `$HOME/$'files/nl\nx'`.
+    - `bash_tilde_user_drops_the_tail_of_a_newline_name`: a `compgen` function stands in for a real home; the line
+      that doesn't start with `~fakeuser` is dropped.
+    - `bash_tab_keeps_a_bang_literal_in_double_quotes_end_to_end`: a pty test with `set -H`. `"bang/h` gives
+      `bang/h!!x`, `"bang/x` gives `bang/x!y`, `"bang/a` Tab `b` gives `bang/a!b`, `--mode "wo` gives `wow!`,
+      `"bang/e` gives `bang/end!`, `"bang/d` gives `bang/d!/` for `--cfg` and `--out`, and a second Tab reaches
+      `bang/d!/inner.txt`.
 - [ ] Run the loop from "Global constraints". Expect the new pty test to fail on every version and most new `Drive`
       tests to fail. Note which, and keep that list for the PR body.
 - [ ] Commit: `test(complete): reproduce bash completion of quoted and escaped paths`.
