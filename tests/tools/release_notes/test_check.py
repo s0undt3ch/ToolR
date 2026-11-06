@@ -19,10 +19,9 @@ from tools.release_notes import _scan_markdown
 from tools.release_notes import check
 from tools.release_notes import clear
 
-from tests._git import git
+from tests._git import Git
 from tests.tools.release_notes.helpers import FEATURE_NOTE_PATH
 from tests.tools.release_notes.helpers import VALID_NOTE_NAME
-from tests.tools.release_notes.helpers import commit
 
 
 def test_valid_tree_no_problems(
@@ -219,66 +218,70 @@ def _gate_fails(repo: Path, base: str = "main") -> str:
     return ctx.stderr
 
 
-def test_gate_feat_without_note_fails(gate_repo: Callable[..., Path]) -> None:
+def test_gate_feat_without_note_fails(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "feat(cli): add frobnicate")
+    git.commit(repo, "feat(cli): add frobnicate")
     stderr = _gate_fails(repo)
     assert "feat(cli): add frobnicate" in stderr
     assert "toolr release-notes add" in stderr
     assert "Release-Notes: skip" in stderr
 
 
-def test_gate_feat_with_note_passes(gate_repo: Callable[..., Path]) -> None:
+def test_gate_feat_with_note_passes(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."})
+    git.commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."})
     check(make_context(repo), base="main")
 
 
-def test_gate_appended_existing_note_passes(gate_repo: Callable[..., Path]) -> None:
+def test_gate_appended_existing_note_passes(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo(main_note="Old.")
-    commit(repo, "fix: a", {f"release-notes/{VALID_NOTE_NAME}": "Old.\n\nNew."})
+    git.commit(repo, "fix: a", {f"release-notes/{VALID_NOTE_NAME}": "Old.\n\nNew."})
     check(make_context(repo), base="main")
 
 
-def test_gate_readme_only_change_fails(gate_repo: Callable[..., Path]) -> None:
+def test_gate_readme_only_change_fails(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "feat: a", {"release-notes/README.md": "how"})
+    git.commit(repo, "feat: a", {"release-notes/README.md": "how"})
     assert "feat: a" in _gate_fails(repo)
 
 
-def test_gate_breaking_needs_breaking_note(gate_repo: Callable[..., Path]) -> None:
+def test_gate_breaking_needs_breaking_note(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "feat!: drop x", {FEATURE_NOTE_PATH: "Dropped x."})
+    git.commit(repo, "feat!: drop x", {FEATURE_NOTE_PATH: "Dropped x."})
     stderr = _gate_fails(repo)
     assert "feat!: drop x" in stderr
     assert "**Breaking:**" in stderr
-    commit(
-        repo, "docs(release-notes): mark breaking", {FEATURE_NOTE_PATH: "**Breaking:** Dropped x."}
+    git.commit(
+        repo,
+        "docs(release-notes): mark breaking",
+        {FEATURE_NOTE_PATH: "**Breaking:** Dropped x."},
     )
     check(make_context(repo), base="main")
 
 
-def test_gate_revert_with_deleted_note_passes(gate_repo: Callable[..., Path]) -> None:
+def test_gate_revert_with_deleted_note_passes(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo(main_note="Added a.")
-    commit(repo, "revert: feat: a", {f"release-notes/{VALID_NOTE_NAME}": None})
+    git.commit(repo, "revert: feat: a", {f"release-notes/{VALID_NOTE_NAME}": None})
     check(make_context(repo), base="main")
 
 
-def test_gate_unconventional_breaking_footer_passes(gate_repo: Callable[..., Path]) -> None:
+def test_gate_unconventional_breaking_footer_passes(
+    gate_repo: Callable[..., Path], git: Git
+) -> None:
     repo = gate_repo()
-    commit(repo, "Some change\n\nBREAKING CHANGE: y")
+    git.commit(repo, "Some change\n\nBREAKING CHANGE: y")
     check(make_context(repo), base="main")
 
 
-def test_gate_lowercase_skip_trailer(gate_repo: Callable[..., Path]) -> None:
+def test_gate_lowercase_skip_trailer(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "feat: a\n\nrelease-notes: skip")
+    git.commit(repo, "feat: a\n\nrelease-notes: skip")
     check(make_context(repo), base="main")
 
 
-def test_gate_chore_only_passes(gate_repo: Callable[..., Path]) -> None:
+def test_gate_chore_only_passes(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "chore: tidy")
+    git.commit(repo, "chore: tidy")
     check(make_context(repo), base="main")
 
 
@@ -287,28 +290,28 @@ def test_gate_empty_range_fails(gate_repo: Callable[..., Path]) -> None:
     assert "main" in _gate_fails(repo)
 
 
-def test_gate_trailer_in_any_commit(gate_repo: Callable[..., Path]) -> None:
+def test_gate_trailer_in_any_commit(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "feat: a")
-    commit(repo, "chore: b\n\nRelease-Notes: skip")
+    git.commit(repo, "feat: a")
+    git.commit(repo, "chore: b\n\nRelease-Notes: skip")
     check(make_context(repo), base="main")
 
 
-def test_gate_ignores_base_side_commits(gate_repo: Callable[..., Path]) -> None:
+def test_gate_ignores_base_side_commits(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "chore: branch work")
+    git.commit(repo, "chore: branch work")
     git(repo, "checkout", "-q", "main")
-    commit(repo, "feat: on main")
+    git.commit(repo, "feat: on main")
     git(repo, "checkout", "-q", "feature")
     check(make_context(repo), base="main")
 
 
 @pytest.mark.parametrize("with_note", [True, False])
-def test_gate_on_pr_merge_commit(gate_repo: Callable[..., Path], with_note: bool) -> None:
+def test_gate_on_pr_merge_commit(gate_repo: Callable[..., Path], with_note: bool, git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."} if with_note else None)
+    git.commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."} if with_note else None)
     git(repo, "checkout", "-q", "main")
-    commit(repo, "chore: unrelated", {"other.txt": "x"})
+    git.commit(repo, "chore: unrelated", {"other.txt": "x"})
     base = git(repo, "rev-parse", "HEAD").strip()
     git(repo, "merge", "--no-ff", "-q", "-m", "Merge feature into main", "feature")
     if with_note:
@@ -317,22 +320,22 @@ def test_gate_on_pr_merge_commit(gate_repo: Callable[..., Path], with_note: bool
         assert "feat: a" in _gate_fails(repo, base=base)
 
 
-def test_gate_unknown_base_fails(gate_repo: Callable[..., Path]) -> None:
+def test_gate_unknown_base_fails(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "chore: x")
+    git.commit(repo, "chore: x")
     assert "nope" in _gate_fails(repo, base="nope")
 
 
-def test_gate_runs_file_checks_too(gate_repo: Callable[..., Path]) -> None:
+def test_gate_runs_file_checks_too(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "chore: x", {"release-notes/bad.md": "x"})
+    git.commit(repo, "chore: x", {"release-notes/bad.md": "x"})
     assert "bad.md" in _gate_fails(repo)
 
 
-def test_gate_git_failure_fails(gate_repo: Callable[..., Path]) -> None:
+def test_gate_git_failure_fails(gate_repo: Callable[..., Path], git: Git) -> None:
     repo = gate_repo()
-    commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."})
+    git.commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."})
     git(repo, "checkout", "-q", "--orphan", "unrelated")
-    commit(repo, "chore: unrelated root")
+    git.commit(repo, "chore: unrelated root")
     git(repo, "checkout", "-q", "feature")
     assert "git diff failed" in _gate_fails(repo, base="unrelated")

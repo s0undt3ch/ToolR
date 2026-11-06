@@ -14,17 +14,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests._git import git
+from tests._git import Git
 from tests.workflows.conftest import StepRunner
 from tests.workflows.conftest import workflow_step_script
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "_prepare-release.yml"
 
-pytestmark = [
-    pytest.mark.skip_on_windows(reason="the step runs under bash on ubuntu-latest only"),
-    pytest.mark.skip_if_binaries_missing("git"),
-]
+pytestmark = pytest.mark.skip_on_windows(reason="the step runs under bash on ubuntu-latest only")
 
 PREK_OK = "exit 0"
 PREK_FAILS = "exit 1"
@@ -95,7 +92,7 @@ def run_commit_step(
     return run
 
 
-def commit_count(repo: Path) -> int:
+def commit_count(git: Git, repo: Path) -> int:
     return int(git(repo, "rev-list", "--count", "HEAD"))
 
 
@@ -107,6 +104,7 @@ def test_commit_step_fails_when_prek_keeps_failing(
     release_repo: Path,
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     bin_dir = stub_prek([PREK_FAILS, f"echo 'strict pass failed' >&2; {PREK_FAILS}"])
 
@@ -116,20 +114,21 @@ def test_commit_step_fails_when_prek_keeps_failing(
     assert "strict pass failed" in result.stderr
     assert "+## 9.9.9" in result.stderr
     assert prek_calls(bin_dir) == 2
-    assert commit_count(release_repo) == 1
+    assert commit_count(git, release_repo) == 1
 
 
 def test_commit_step_commits_fixes_to_release_files(
     release_repo: Path,
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     bin_dir = stub_prek([f"printf '\\n' >> CHANGELOG.md; {PREK_FAILS}", PREK_OK])
 
     result = run_commit_step(release_repo, bin_dir)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert commit_count(release_repo) == 2
+    assert commit_count(git, release_repo) == 2
     assert (
         git(release_repo, "log", "-1", "--format=%s")
         == "chore(release): Prepare for 9.9.9 release\n"
@@ -145,6 +144,7 @@ def test_commit_step_rejects_fixes_outside_release_files(
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
     path: str,
+    git: Git,
 ) -> None:
     bin_dir = stub_prek([f"printf 'Fixed by a hook\\n' >> '{path}'; {PREK_FAILS}", PREK_OK])
 
@@ -154,7 +154,7 @@ def test_commit_step_rejects_fixes_outside_release_files(
     assert f"::error file={path}::" in result.stderr
     assert "+Fixed by a hook" in result.stderr
     assert "Untracked files prek created:" not in result.stderr
-    assert commit_count(release_repo) == 1
+    assert commit_count(git, release_repo) == 1
     assert prek_calls(bin_dir) == 1
 
 
@@ -164,6 +164,7 @@ def test_commit_step_rejects_new_untracked_files(
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
     path: str,
+    git: Git,
 ) -> None:
     bin_dir = stub_prek([f"mkdir -p skills && printf 'new\\n' > '{path}'; {PREK_FAILS}", PREK_OK])
 
@@ -171,7 +172,7 @@ def test_commit_step_rejects_new_untracked_files(
 
     assert result.returncode != 0, result.stdout + result.stderr
     assert f"Untracked files prek created:\n  {path}\n" in result.stderr
-    assert commit_count(release_repo) == 1
+    assert commit_count(git, release_repo) == 1
     assert prek_calls(bin_dir) == 1
 
 
@@ -179,13 +180,14 @@ def test_commit_step_ignores_preexisting_untracked(
     release_repo: Path,
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     bin_dir = stub_prek([PREK_OK, PREK_OK])
 
     result = run_commit_step(release_repo, bin_dir)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert commit_count(release_repo) == 2
+    assert commit_count(git, release_repo) == 2
     committed = git(release_repo, "show", "--name-only", "--format=", "HEAD").split()
     assert sorted(committed) == ["CHANGELOG.md", "Cargo.toml"]
     assert git(release_repo, "status", "--porcelain") == "?? release-notes.md\n"

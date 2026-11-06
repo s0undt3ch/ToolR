@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._git import git
+from tests._git import Git
 from tests.workflows.conftest import StepRunner
 from tests.workflows.conftest import action_step_script
 
@@ -21,10 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 APPLY_RELEASE_PATCH_YML = REPO_ROOT / ".github" / "actions" / "apply-release-patch" / "action.yml"
 PATCH_NAME = "toolr-9.9.9.patch"
 
-pytestmark = [
-    pytest.mark.skip_on_windows(reason="the step runs under bash on ubuntu-latest only"),
-    pytest.mark.skip_if_binaries_missing("git"),
-]
+pytestmark = pytest.mark.skip_on_windows(reason="the step runs under bash on ubuntu-latest only")
 
 
 @dataclass(frozen=True)
@@ -35,7 +32,7 @@ class PatchRepo:
 
 
 @pytest.fixture
-def patch_repo(git_repo: Callable[..., Path]) -> PatchRepo:
+def patch_repo(git_repo: Callable[..., Path], git: Git) -> PatchRepo:
     """A repository with commit A, its child B, and a release patch made on A.
 
     The patch sits untracked in the work tree as `toolr-9.9.9.patch`, where the
@@ -74,6 +71,7 @@ def run_apply_step(
 def test_apply_on_dispatched_commit(
     patch_repo: PatchRepo,
     run_apply_step: Callable[[Path, str], subprocess.CompletedProcess[str]],
+    git: Git,
 ) -> None:
     git(patch_repo.path, "checkout", "-q", patch_repo.dispatched)
 

@@ -6,7 +6,6 @@ import os
 import selectors
 import signal
 import subprocess
-import sys
 import time
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -20,7 +19,6 @@ pty = pytest.importorskip("pty")
 
 pytestmark = pytest.mark.skip_on_windows(reason="POSIX signals")
 
-IS_LINUX = sys.platform.startswith("linux")
 
 SIG_MODULE = '''
 import time
@@ -205,16 +203,15 @@ def test_ctrl_c_on_a_terminal_interrupts_once(
         pytest.param(
             os.killpg,
             id="group",
-            marks=pytest.mark.skipif(
-                IS_LINUX,
-                reason="Linux forwards a process-sent SIGINT, so a killpg one arrives twice",
+            marks=pytest.mark.skip_on_linux(
+                reason="Linux forwards a process-sent SIGINT, so a killpg one arrives twice"
             ),
         ),
         pytest.param(
             os.kill,
             id="pid-only",
-            marks=pytest.mark.skipif(
-                not IS_LINUX, reason="only Linux can tell a process-sent SIGINT from a terminal one"
+            marks=pytest.mark.skip_unless_on_linux(
+                reason="only Linux can tell a process-sent SIGINT from a terminal one"
             ),
         ),
     ],
@@ -228,7 +225,7 @@ def test_sigint_from_a_process_interrupts_once(
     assert_interrupted_once(proc.returncode, stdout, stderr)
 
 
-@pytest.mark.skipif(IS_LINUX, reason="Linux forwards a process-sent SIGINT")
+@pytest.mark.skip_on_linux(reason="Linux forwards a process-sent SIGINT")
 def test_pid_only_sigint_does_not_reach_the_command(
     start_cleanup: Callable[[], subprocess.Popen[str]],
 ) -> None:
