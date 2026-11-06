@@ -25,8 +25,10 @@ Direct-call tests use `assert_path_reply` (exactly one reply) or `run_bash_cfg_p
       with `~/` and `$HOME/` in front of the `$'…'` (replies keep `~/` / `$HOME/` bare). A user-named variable
       `$NAME/$'…'/` too.
 - [ ] `bash_path_ansi_c_escapes_decode`. Table, each offering one file: `$'files/tab\x09h` and `$'files/tab\011h`
-      and `$'files/tab\th` reply `files/tab\there`; `$'files/it\'s` replies the `it's` file with `\'`; `$'files/an\\`
-      style typed backslash matches a `back\slash` file; a dangling `$'files/solo\` replies `files/solo\nname`.
+      and `$'files/tab\th` reply `files/tab\there`; `$'files/it\'s` replies the `it's` file with `\'`
+      (superseded: a typed `\'` is declined and a reply writes `'` as `\047`; see the design's "Changes during
+      implementation"); `$'files/an\\` style typed backslash matches a `back\slash` file; a dangling
+      `$'files/solo\` replies `files/solo\nname`.
       `\u` with `LC_ALL=C.UTF-8` on a file `files/é.txt`: `$'files/é` replies it; the same under `LC_ALL=C`
       offers nothing.
 - [ ] `bash_path_undecodable_ansi_c_escape_offers_nothing`. `$'files/\q`, `$'files/nl\x00`, `$'files/\0`, `$'files/\cA`
@@ -48,7 +50,9 @@ Direct-call tests use `assert_path_reply` (exactly one reply) or `run_bash_cfg_p
 - [ ] `bash_path_exact_match_under_an_open_quote_is_not_an_empty_reply`. `files/exact'` with only `files/exact`
       present: no replies. With `files/exact2` too: exactly one, `2`. `files/sub'` replies `/`. Same under `"`
       and `$'` (`files/exact$'`). No reply is ever an empty string.
-- [ ] `bash_value_with_a_newline_completes_in_ansi_c_quotes`. A `Literal` value holding a newline: `--mode $'a` and
+- [ ] Superseded, never written: the engine drops control-character values, so
+      `bash_value_completes_in_ansi_c_quotes` replaced it. `bash_value_with_a_newline_completes_in_ansi_c_quotes`.
+      A `Literal` value holding a newline: `--mode $'a` and
       the bare form give the grouped or escaped reply as above.
 
 End-to-end (pty), using `assert_bash_tab_line` with a new `bash_tab_rc_quoted` whose `toolr` shim prints

@@ -1,5 +1,7 @@
 # Bash completion: ANSI-C quoted words (`$'…'`): design
 
+Sections 1 to 3 of the design are superseded wherever "Changes during implementation" says so.
+
 Audit follow-up FU-40, found in round 2 of PR #690. Present on `main`.
 
 **Written against PR #690's script** (branch `fix/bash53-compgen-dequote`, `bash.sh` as of its tip), which rewrote
@@ -90,8 +92,9 @@ matches literally.
 
 Two follow-ups close gaps that decoding would open:
 
-- `_toolr_var_ok` and `_toolr_tilde_ok` are computed from the typed word `_toolr_cur`, not the decoded value, and
-  `_toolr_var_ok` now needs `$` followed by a name start or `{` (not `'`). Otherwise `$'\x24HOME/files/` decodes
+- The variable check (`_toolr_typed_var`, formerly `_toolr_var_ok`) and `_toolr_tilde_ok` are computed from the
+  typed word `_toolr_cur`, not the decoded value, and the variable check now needs `$` followed by a name start or
+  `{` (not `'`). Otherwise `$'\x24HOME/files/` decodes
   to `$HOME/files/`, matches `_toolr_var_re` and is listed under `$HOME`, while bash would see a literal `$HOME`
   directory. `_toolr_tilde_ok` additionally needs the text up to the first `/` to hold no quote, backslash or
   `$'`: bash does not expand `~$'x'/`, and without this a `~user` form with a quoted part would reach
@@ -158,7 +161,8 @@ The design was a hypothesis; these parts changed once tested against bash 5.1.16
   script with `LC_ALL=C`, bash's `printf '\u00e9'` emits the UTF-8 bytes anyway. The decoder now probes the
   locale itself: a two-byte `é` (`$'\xc3\xa9'`) has length 1 only in a UTF-8 locale. The `\` check stays, for
   code points `printf` can't encode.
-- **Variables.** `_toolr_var_ok` became a regex on the typed word that captures the typed `$NAME` or `${NAME}`,
+- **Variables.** `_toolr_var_ok` became `_toolr_typed_var`: a regex on the typed word captures the typed `$NAME` or
+  `${NAME}`,
   and the decoded `$NAME/` must equal it. Otherwise `$HO$'ME'/`, `$HO"ME"/` or `$HO\ME/` decode to `$HOME/` and
   would list under `$HOME`, where bash expands `$HO`. The `"` and `\` forms were already wrong on `main`.
 - **Closing a quote.** Readline appends the closing quote after a single match only if the character before
