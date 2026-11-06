@@ -58,7 +58,9 @@ Checked with `TOOLR_TRUST_ALL=1 toolr <flags> self completion print bash`; `ACCE
 | `--timeout-secs 5 --timeout-secs 6`   | rejected: cannot be used multiple times                   |
 | `--help --help`, `-h --help`          | rejected: cannot be used multiple times                   |
 | `--timeout-secs --quiet`              | rejected: a value is required                             |
-| `--timeout-secs=`, `--timeout-secs abc`, `--timeout-secs -5` | rejected: invalid value / unexpected `-5` |
+| `--timeout-secs=-1 --quiet`, `--nots=-1` | ACCEPT (attached, so no flag ambiguity)                |
+| `--version`, `-V`, `-qV`, `--quiet --version`, `--version --version`, `-V ci` | prints the version and exits, whatever follows |
+| `--timeout-secs=`, `--timeout-secs=abc`, `--timeout-secs abc`, `--timeout-secs -5` | rejected: invalid value / unexpected `-5` |
 | `--quiet -- ci`, `-- ci`              | rejected: unexpected argument `ci`                        |
 | `ci --quiet hello`, `--quiet ci hello --quiet` | rejected: root flags are not global            |
 
@@ -142,8 +144,13 @@ the start:
 - `--name` or an alias: resolve to a spec. Already in `seen` or conflicting with one in `seen` is a dead end. A
   value-taking flag consumes the next committed token as its value; no next committed token means the in-progress word is
   the value, which is a dead end for flag and group candidates alike. The value must `parse::<f64>()` (the same
-  `FromStr` clap's `value_parser!(f64)` uses) and, as a side effect, may not start with `-`; otherwise dead end.
+  `FromStr` clap's `value_parser!(f64)` uses) and, when detached, may not start with `-` (it reads as a flag);
+  otherwise dead end. An attached value (`--timeout-secs=-1`) is unambiguous, so only the parse applies.
+  The type is read from each flag's clap value parser (`ValueKind`); a type the scan does not know never passes,
+  so the line dead-ends instead of being checked as a float.
 - `--name=value`: same, value in the token. An empty or non-float value is a dead end.
+- `--version` / `-V`: clap prints and exits, so the line is a dead end wherever it appears in the leading run. It is
+  not offered as a completion.
 - `-xyz` cluster: every char must be a known short bool flag (`d`, `q`, `h`); each goes through the duplicate and
   conflict checks. An unknown char stops the scan at that token (it stays in `rest`; the engine finds no group and
   prints nothing).
@@ -184,3 +191,12 @@ When `scan.dead_end`, `run_complete` prints nothing and returns `ExitCode::SUCCE
    number is never a path.
 2. A malformed value (`--timeout-secs abc`) is a dead end that prints nothing, for consistency with #691.
 3. The branch is on `main`: #691 has merged.
+
+## Review changes
+
+- An attached negative value (`--timeout-secs=-1`) is accepted; only the detached form rejects a leading `-`.
+- `--version` / `-V` are recognised (the scan builds a clone of the clap command, since the arg is added at build
+  time) and end the line.
+- Value validation goes through `ValueKind`, read from each flag's parser; unknown types dead-end.
+- The specs are derived once per completion and carried on `RootScan`, which also yields the offerable long flags.
+  `get_arg_conflicts_with` stays one-sided even after `build()`, so the conflicts are still mirrored.
