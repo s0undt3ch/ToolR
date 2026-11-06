@@ -334,3 +334,62 @@ fn symlinked_module_offers_only_built_ins_silently() {
     assert!(values.contains(&"self"), "{stdout}");
     assert!(!values.contains(&"ci"), "{stdout}");
 }
+
+#[test]
+fn double_dash_and_dash_choices_through_the_binary() {
+    let tmp = TempDir::new().unwrap();
+    let tools = common::write_project(tmp.path());
+    std::fs::write(
+        tools.join("ci.py"),
+        r#""""CI utilities."""
+from typing import Literal
+
+group = command_group("ci", "CI utilities", docstring=__doc__)
+
+@group.command
+def pick(ctx, opt: Literal["--dash", "-x", "plain"] = "plain"):
+    """Pick one."""
+    pass
+
+@group.command
+def deploy(ctx, env: Literal["staging", "production"]):
+    """Deploy something."""
+    pass
+"#,
+    )
+    .unwrap();
+    common::toolr()
+        .current_dir(tmp.path())
+        .arg("__build-static-manifest")
+        .assert()
+        .success();
+
+    assert_eq!(
+        complete(&tmp, &["ci", "deploy", "--", ""]),
+        "production\nstaging",
+        "choices of the positional after `--`"
+    );
+    assert_eq!(
+        complete(&tmp, &["ci", "deploy", "--", "--"]),
+        "",
+        "no flag names after `--`"
+    );
+    assert_eq!(
+        complete(&tmp, &["ci", "pick", "--opt", ""]),
+        "plain",
+        "dash-leading choices dropped in the separate form"
+    );
+    assert_eq!(
+        complete(&tmp, &["ci", "pick", "--opt="]),
+        "--dash\n-x\nplain",
+        "dash-leading choices kept after `=`"
+    );
+}
+
+#[test]
+fn root_double_dash_is_a_terminator() {
+    let tmp = fixture();
+    // clap rejects `toolr -- ci`, so nothing completes after a committed root `--`.
+    assert_eq!(complete(&tmp, &["--", ""]), "");
+    assert_eq!(complete(&tmp, &["--", "ci", ""]), "");
+}
