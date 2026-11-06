@@ -786,7 +786,7 @@ def test_parameter_shadows_only_the_function_body(make_tools_dir: Callable[..., 
     assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("d")')
 
 
-def test_lookups_are_reported_too(make_tools_dir: Callable[..., Path]) -> None:
+def test_name_only_calls_are_reported_too(make_tools_dir: Callable[..., Path]) -> None:
     source = """
         g = command_group("g", "G", "G.")
         def f(extra):
@@ -799,24 +799,6 @@ def test_lookups_are_reported_too(make_tools_dir: Callable[..., Path]) -> None:
     assert _unsupported(make_tools_dir, source) == _problems(
         "tools.m", *(f'command_group("{name}")' for name in "ghijk")
     )
-
-
-def test_keyword_name_is_read_and_named(make_tools_dir: Callable[..., Path]) -> None:
-    source = 'def f():\n    command_group(name="g", description="D.")\n'
-    assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("g")')
-
-
-def test_bound_statement_with_a_non_literal_name_is_reported(
-    make_tools_dir: Callable[..., Path],
-) -> None:
-    source = """
-        N = "n"
-        a = command_group(N, "T", "D.")
-        command_group(name=N)
-        b: T = command_group(*args)
-        ok = command_group(name="ok", title="Ok", description="D.")
-    """
-    assert _unsupported(make_tools_dir, source) == _problems("tools.m", *["command_group"] * 3)
 
 
 def test_problems_come_in_source_order(make_tools_dir: Callable[..., Path]) -> None:
@@ -838,11 +820,6 @@ def test_a_very_long_expression_does_not_overflow_the_stack(
     assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("g")')
 
 
-def test_non_literal_name_is_named_generically(make_tools_dir: Callable[..., Path]) -> None:
-    source = 'def f(n):\n    return command_group(n, "N", "N.")\n'
-    assert _unsupported(make_tools_dir, source) == _problems("tools.m", "command_group")
-
-
 def test_group_bindings_come_before_commands(make_tools_dir: Callable[..., Path]) -> None:
     tools = make_tools_dir(
         {
@@ -862,8 +839,22 @@ def test_group_bindings_come_before_commands(make_tools_dir: Callable[..., Path]
     ]
 
 
-def test_keyword_name_declares_a_group(make_tools_dir: Callable[..., Path]) -> None:
-    tools = make_tools_dir(
-        {"m.py": IMPORT + 'g = command_group(name="kw", title="Kw", description="D.")\n'}
-    )
+def test_keyword_name_declares_and_names_a_group(make_tools_dir: Callable[..., Path]) -> None:
+    source = 'g = command_group(name="kw", title="Kw", description="D.")\n'
+    tools = make_tools_dir({"m.py": IMPORT + source})
     assert [d.path for d in _group_declarations(tools)] == ["kw"]
+    named = 'def f():\n    command_group(name="g", description="D.")\n'
+    assert _unsupported(make_tools_dir, named) == _problems("tools.m", 'command_group("g")')
+
+
+def test_non_literal_name_is_reported_generically(make_tools_dir: Callable[..., Path]) -> None:
+    source = """
+        N = "n"
+        a = command_group(N, "T", "D.")
+        command_group(name=N)
+        b: T = command_group(*args)
+        ok = command_group(name="ok", title="Ok", description="D.")
+        def f(n):
+            return command_group(n, "N", "N.")
+    """
+    assert _unsupported(make_tools_dir, source) == _problems("tools.m", *["command_group"] * 4)

@@ -101,7 +101,11 @@ def _function_defs(node: ast.AST, top_level: bool) -> Iterator[tuple[FunctionNod
 
 
 def _group_call_label(call: ast.Call) -> str:
-    """``command_group("<name>")`` when the name argument is a string literal, else ``command_group``."""
+    """``command_group("<name>")`` when the name argument is a string literal, else ``command_group``.
+
+    Mirrors ``UnboundGroupCalls::report`` in ``crates/toolr-core/src/parser/groups.rs``:
+    change both together.
+    """
     name = _literal(_argument(call, _NAME))
     return "command_group" if name is None else f'command_group("{name}")'
 

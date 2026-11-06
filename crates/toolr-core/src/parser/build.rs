@@ -284,8 +284,7 @@ fn build_commands_inner(
     }
 
     // Group problems first: a dropped group hides what its commands would report.
-    unsupported_groups.extend(unsupported);
-    let unsupported = unsupported_groups;
+    let unsupported = [unsupported_groups, unsupported].concat();
     if !unsupported.is_empty() {
         return Err(BuildError::UnsupportedCommands(unsupported));
     }

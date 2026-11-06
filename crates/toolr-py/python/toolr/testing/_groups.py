@@ -602,6 +602,22 @@ def _supported_group_call(stmt: ast.stmt) -> tuple[str | None, ast.Call] | None:
     return (var, value) if isinstance(value, ast.Call) else None
 
 
+def _bound_group_call(
+    stmt: ast.stmt, tables: dict[str, _ImportTable], module: str, memo: _Memo
+) -> _GroupCall | None:
+    """The call and bound name of a module-level statement the parser binds as a group.
+
+    A supported shape whose call is ``command_group``. Both ``_group_calls``
+    and ``_unbound_group_calls`` ask this, so a statement is bound or reported
+    in one place. Mirrors ``crates/toolr-core/src/parser/groups.rs::bound_group_call``:
+    change both together.
+    """
+    supported = _supported_group_call(stmt)
+    if supported and _is_command_group(supported[1].func, tables, module, memo):
+        return _GroupCall(*supported)
+    return None
+
+
 def _group_calls(
     tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
 ) -> list[_GroupCall]:
@@ -611,12 +627,7 @@ def _group_calls(
     ``crates/toolr-core/src/parser/groups.rs::extract_groups`` and
     ``group_binding``.
     """
-    found: list[_GroupCall] = []
-    for stmt in tree.body:
-        supported = _supported_group_call(stmt)
-        if supported and _is_command_group(supported[1].func, tables, module, memo):
-            found.append(_GroupCall(*supported))
-    return found
+    return [bound for stmt in tree.body if (bound := _bound_group_call(stmt, tables, module, memo))]
 
 
 def _is_toolr_module(table: _ImportTable, name: str) -> bool:
@@ -632,6 +643,13 @@ def _is_toolr_module(table: _ImportTable, name: str) -> bool:
 
 
 def _parameter_names(args: ast.arguments) -> set[str]:
+    """Names a ``def`` or ``lambda`` parameter list binds.
+
+    A parameter is the one rebinding that needs no flow analysis to know the
+    name isn't toolr's, so no other local rebinding shadows. Mirrors
+    ``UnboundGroupCalls::scoped`` in ``crates/toolr-core/src/parser/groups.rs``:
+    change both together.
+    """
     return {
         arg.arg
         for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg)
@@ -658,7 +676,13 @@ def _unbound_group_calls(
     table = tables[module]
     found: list[ast.Call] = []
 
-    def is_toolr_call(call: ast.Call, shadowed: frozenset[str]) -> bool:
+    def is_toolr_group_call(call: ast.Call, shadowed: frozenset[str]) -> bool:
+        """Whether ``call`` is toolr's ``command_group``.
+
+        Deliberately stricter than ``_is_command_group``: this one reports, that one
+        binds. Mirrors ``UnboundGroupCalls::is_toolr_group_call`` in
+        ``crates/toolr-core/src/parser/groups.rs``: change both together.
+        """
         func = call.func
         if isinstance(func, ast.Name):
             return (
@@ -676,10 +700,9 @@ def _unbound_group_calls(
     # An explicit stack: a long expression nests deeper than Python recurses.
     stack: list[tuple[ast.AST, frozenset[str]]] = []
     for stmt in tree.body:
-        supported = _supported_group_call(stmt)
-        if supported and _is_command_group(supported[1].func, tables, module, memo):
-            if _literal(_argument(supported[1], _NAME)) is None:
-                found.append(supported[1])
+        if bound := _bound_group_call(stmt, tables, module, memo):
+            if _literal(_argument(bound.call, _NAME)) is None:
+                found.append(bound.call)
         else:
             stack.append((stmt, frozenset()))
     while stack:
@@ -694,9 +717,10 @@ def _unbound_group_calls(
             body = node.body if isinstance(node.body, list) else [node.body]
             stack.extend((child, inner) for child in body)
             continue
-        if isinstance(node, ast.Call) and is_toolr_call(node, shadowed):
+        if isinstance(node, ast.Call) and is_toolr_group_call(node, shadowed):
             found.append(node)
         stack.extend((child, shadowed) for child in ast.iter_child_nodes(node))
+    # Source order, as the Rust walk gives, so the two messages match.
     return sorted(found, key=lambda node: (node.lineno, node.col_offset))
 
 

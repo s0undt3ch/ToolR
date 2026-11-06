@@ -6,6 +6,6 @@ g = command_group("grp", "Grp", "Group.")
 @g.command
 def one(ctx):
     """One."""
-    lookup = command_group("grp")
+    bare = command_group("grp")
     titled = command_group("grp", "Grp")
-    ctx.print(lookup, titled)
+    ctx.print(bare, titled)

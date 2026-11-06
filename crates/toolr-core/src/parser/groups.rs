@@ -345,19 +345,44 @@ fn supported_group_call(stmt: &Stmt) -> Option<(Option<String>, &ExprCall)> {
     }
 }
 
-/// Every toolr `command_group(...)` call the parser can't bind, one entry
-/// each, in source order: any that isn't the whole value of a supported
-/// module-level statement, and a supported statement whose group name isn't a
-/// string literal. Such a group, and every command on it, would otherwise
-/// vanish without a word. `command_group` creates a group when none is
-/// registered, so no call is exempt as a mere lookup.
+/// The call and bound name of a module-level statement the parser binds as a
+/// group: a supported shape whose call is `command_group`. Both the binding
+/// pass and the detector below ask this, so a statement is bound or reported
+/// in one place.
 ///
-/// A supported statement is skipped whole, annotation included. A callee
-/// counts only when it resolves to toolr's `command_group`: a name through the
-/// import tables (a parameter of the enclosing `def` or `lambda` shadows it,
-/// no other local rebinding does), an attribute when its base is the `toolr`
-/// module. The entry's name is `command_group("<name>")` when the name
-/// argument is a string literal.
+/// Mirrored in `toolr.testing._groups._bound_group_call`; change both together.
+fn bound_group_call<'a>(
+    stmt: &'a Stmt,
+    names: &ToolrNames,
+    module_path: &str,
+) -> Option<(Option<String>, &'a ExprCall)> {
+    supported_group_call(stmt).filter(|(_, call)| is_command_group_call(call, names, module_path))
+}
+
+/// Every toolr `command_group(...)` call the parser can't bind, one entry each,
+/// in source order. This is the one statement of the placement rule; the
+/// user-facing docs repeat it.
+///
+/// A `command_group(...)` call is supported only as the whole value of a
+/// module-level `name = command_group(...)`, `name: T = command_group(...)` or
+/// bare `command_group(...)` statement, with a string-literal name (positional
+/// or `name=`). Any other call to toolr's `command_group` is reported:
+///
+/// - part of a tuple or chained target, or a walrus;
+/// - under `if`, `try`, `with`, a loop or `match`;
+/// - inside a function, lambda, comprehension or class;
+/// - nested in another expression, such as a decorator or call argument;
+/// - a supported statement whose name isn't a string literal.
+///
+/// Such a group, and every command on it, would otherwise vanish without a
+/// word. `command_group` creates a group when none is registered, so a
+/// name-only call is reported too. A supported statement is skipped whole,
+/// annotation included.
+///
+/// A callee is toolr's when a name resolves to it through the import tables, or
+/// an attribute's base is the `toolr` module. Only a parameter of the enclosing
+/// `def` or `lambda` shadows the name; no other local rebinding does. The entry's
+/// name is `command_group("<name>")` when the name argument is a string literal.
 ///
 /// Mirrored in `toolr.testing._shapes._unsupported_group_bindings` and
 /// `toolr.testing._groups._unbound_group_calls`; change all three together.
@@ -373,13 +398,13 @@ pub fn detect_unsupported_group_bindings(
         out: Vec::new(),
     };
     for stmt in &module.body {
-        match supported_group_call(stmt) {
-            Some((_, call)) if is_command_group_call(call, names, module_path) => {
+        match bound_group_call(stmt, names, module_path) {
+            Some((_, call)) => {
                 if argument(call, NAME).and_then(literal_str).is_none() {
                     finder.report(call);
                 }
             }
-            _ => finder.visit_stmt(stmt),
+            None => finder.visit_stmt(stmt),
         }
     }
     finder.out
@@ -398,6 +423,10 @@ impl UnboundGroupCalls<'_> {
         self.shadowed.iter().any(|s| s == name)
     }
 
+    /// Whether `call` is toolr's `command_group`. Deliberately stricter than
+    /// [`is_command_group_call`]: this one reports, that one binds.
+    ///
+    /// Mirrored in `toolr.testing._groups._unbound_group_calls` (`is_toolr_group_call`); change both together.
     fn is_toolr_group_call(&self, call: &ExprCall) -> bool {
         match call.func.as_ref() {
             Expr::Name(n) => {
@@ -413,6 +442,7 @@ impl UnboundGroupCalls<'_> {
         }
     }
 
+    /// Mirrored in `toolr.testing._shapes._group_call_label`; change both together.
     fn report(&mut self, call: &ExprCall) {
         let function = match argument(call, NAME).and_then(literal_str) {
             Some(name) => format!("command_group(\"{name}\")"),
@@ -425,7 +455,12 @@ impl UnboundGroupCalls<'_> {
         });
     }
 
-    /// Visit `body` with `parameters` shadowing outer names.
+    /// Visit `body` with `parameters` shadowing outer names. A parameter is the one
+    /// rebinding that needs no flow analysis to know the name isn't toolr's, so
+    /// no other local rebinding shadows.
+    ///
+    /// Mirrored in `toolr.testing._groups._parameter_names` and the stack walk of
+    /// `_unbound_group_calls`; change both together.
     fn scoped(&mut self, parameters: Option<&Parameters>, visit: impl FnOnce(&mut Self)) {
         let depth = self.shadowed.len();
         if let Some(parameters) = parameters {
@@ -437,6 +472,8 @@ impl UnboundGroupCalls<'_> {
     }
 }
 
+// Source order, not evaluation order, so the message lists problems as
+// `toolr.testing._groups._unbound_group_calls` does, which sorts by position.
 impl<'a> SourceOrderVisitor<'a> for UnboundGroupCalls<'_> {
     fn visit_stmt(&mut self, stmt: &'a Stmt) {
         let Stmt::FunctionDef(func) = stmt else {
@@ -482,17 +519,7 @@ fn group_binding(
     names: &ToolrNames,
     module_path: &str,
 ) -> Option<GroupBinding> {
-    // Two recognised shapes:
-    //   1. `var = command_group(...)` or `var: T = command_group(...)` —
-    //      group-binding style.
-    //   2. `command_group("path", ...)` — bare expression-statement,
-    //      the string-path style. No binding var to capture
-    //      (the leaf name becomes a synthetic var so `@var.command`
-    //      keeps working when a user mixes styles).
-    let (var_name, call) = supported_group_call(stmt)?;
-    if !is_command_group_call(call, names, module_path) {
-        return None;
-    }
+    let (var_name, call) = bound_group_call(stmt, names, module_path)?;
     // Parent path can come from three source patterns:
     //   1. Method-call style: `child = parent.command_group(...)` —
     //      look up `parent` locally first, then in the global
@@ -1239,22 +1266,12 @@ c = b.command_group("c", "C")
     }
 
     #[test]
-    fn keyword_name_binds_a_group() {
+    fn keyword_name_binds_and_names_a_group() {
         let groups = groups_in(
             "from toolr import command_group\ng = command_group(name=\"kw\", title=\"Kw\", description=\"D.\")\n",
             &[],
         );
         assert_eq!(paths(&groups), [pair("g", "kw")]);
-    }
-
-    #[test]
-    fn lookups_are_reported_too() {
-        let src = "g = command_group(\"g\", \"G\", \"G.\")\ndef f(extra):\n    command_group(\"g\")\n    command_group(\"h\", \"H\")\n    command_group(\"i\", title=\"I\")\n    command_group(\"j\", \"J\", None)\n    command_group(\"k\", \"K\", **extra)\n";
-        assert_eq!(unbound(src), named(&["g", "h", "i", "j", "k"]));
-    }
-
-    #[test]
-    fn keyword_name_is_read_and_named() {
         assert_eq!(
             unbound("def f():\n    command_group(name=\"g\", description=\"D.\")\n"),
             named(&["g"])
@@ -1262,23 +1279,25 @@ c = b.command_group("c", "C")
     }
 
     #[test]
-    fn bound_statement_with_a_non_literal_name_is_reported() {
+    fn non_literal_name_is_reported_generically() {
         let src = "N = \"n\"\na = command_group(N, \"T\", \"D.\")\ncommand_group(name=N)\nb: T = command_group(*args)\nok = command_group(name=\"ok\", title=\"Ok\", description=\"D.\")\n";
         assert_eq!(unbound(src), ["command_group"; 3]);
+        assert_eq!(
+            unbound("def f(n):\n    return command_group(n, \"N\", \"N.\")\n"),
+            ["command_group"]
+        );
+    }
+
+    #[test]
+    fn name_only_calls_are_reported_too() {
+        let src = "g = command_group(\"g\", \"G\", \"G.\")\ndef f(extra):\n    command_group(\"g\")\n    command_group(\"h\", \"H\")\n    command_group(\"i\", title=\"I\")\n    command_group(\"j\", \"J\", None)\n    command_group(\"k\", \"K\", **extra)\n";
+        assert_eq!(unbound(src), named(&["g", "h", "i", "j", "k"]));
     }
 
     #[test]
     fn problems_come_in_source_order() {
         let src = "if x:\n    d[command_group(\"a\", \"A\", \"A.\")] = command_group(\"b\", \"B\", \"B.\")\n    y = [command_group(\"c\", \"C\", \"C.\") if command_group(\"d\", \"D\", \"D.\") else 0]\n    f(x=command_group(\"e\", \"E\", \"E.\"), *[command_group(\"f\", \"F\", \"F.\")])\n";
         assert_eq!(unbound(src), named(&["a", "b", "c", "d", "e", "f"]));
-    }
-
-    #[test]
-    fn non_literal_name_is_named_generically() {
-        assert_eq!(
-            unbound("def f(n):\n    return command_group(n, \"N\", \"N.\")\n"),
-            ["command_group"]
-        );
     }
 
     #[test]

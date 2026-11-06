@@ -441,6 +441,8 @@ impl<'a> ToolrNames<'a> {
     }
 
     /// `import toolr [as t]` in `module`; `import toolr.types` binds `toolr` too.
+    ///
+    /// Mirrored in `toolr.testing._groups._is_toolr_module`; change both together.
     pub(super) fn is_toolr_module(&self, module: &str, name: &str) -> bool {
         self.all_imports
             .get(module)
