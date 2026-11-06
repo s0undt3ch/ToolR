@@ -33,6 +33,13 @@ FULL_BUILD_LABEL = "full-build"
 # (`_run_full_bench`), rather than being hardcoded in workflow YAML.
 FULL_BENCH_LABEL = "full-bench"
 
+# A PR that only changes these paths skips the build, test, docs and bench
+# jobs: no build, test or docs input reads them. Pre-commit still lints them.
+CI_INERT_DIRS = ("specs/", ".claude/")
+CI_INERT_FILES = frozenset(
+    {"CLAUDE.md", "SECURITY.md", "renovate.json5", "typos.toml", ".rumdl.toml"}
+)
+
 # tools/ci.py → repo root (two parents up resolves the `tools/` directory).
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -214,23 +221,100 @@ _WHEEL_PLATFORM_MATRIX: dict[str, list[dict[str, str]]] = {
 }
 
 
-def _pr_labels() -> set[str]:
-    """Return the label names attached to the PR in the current GitHub event payload.
+def _pr_payload() -> dict[str, object]:
+    """Return the `pull_request` object of the current GitHub event payload.
 
     Reads `$GITHUB_EVENT_PATH` (the action payload JSON). Returns an
-    empty set when the env var is unset, the file is missing, the JSON
+    empty dict when the env var is unset, the file is missing, the JSON
     is malformed, or the event isn't a `pull_request`-shaped payload.
     """
     event_path = os.environ.get("GITHUB_EVENT_PATH")
     if not event_path:
-        return set()
+        return {}
     try:
         with open(event_path, encoding="utf-8") as f:
             event = json.load(f)
     except (OSError, json.JSONDecodeError):
+        return {}
+    pr = event.get("pull_request") if isinstance(event, dict) else None
+    return pr if isinstance(pr, dict) else {}
+
+
+def _pr_labels() -> set[str]:
+    """Return the label names attached to the PR in the current GitHub event payload."""
+    labels = _pr_payload().get("labels")
+    if not isinstance(labels, list):
         return set()
-    labels = event.get("pull_request", {}).get("labels", []) or []
     return {label.get("name", "") for label in labels if isinstance(label, dict)}
+
+
+def _pr_changed_paths(ctx: Context) -> list[str] | None:
+    """Return the paths the PR changes, or `None` when they can't be listed.
+
+    Diffs the payload's base and head SHAs from their merge base, the same
+    file list GitHub shows on the PR. The checkout needs both commits, so
+    `prepare-ci` checks out with `fetch-depth: 0`.
+    """
+    pr = _pr_payload()
+    shas = []
+    for side in ("base", "head"):
+        ref = pr.get(side)
+        sha = ref.get("sha") if isinstance(ref, dict) else None
+        if not sha:
+            return None
+        shas.append(sha)
+    ret = ctx.run(
+        "git",
+        "-C",
+        str(ctx.repo_root),
+        "diff",
+        "--name-only",
+        f"{shas[0]}...{shas[1]}",
+        capture_output=True,
+        stream_output=False,
+    )
+    if ret.returncode:
+        return None
+    output: str = ret.stdout.read()  # type: ignore[assignment]
+    return output.splitlines()
+
+
+def _is_ci_inert(path: str) -> bool:
+    """Return whether no build, test or docs job reads `path`."""
+    return path in CI_INERT_FILES or path.startswith(CI_INERT_DIRS)
+
+
+def _run_full_ci(ctx: Context) -> tuple[bool, str]:
+    """Decide whether the build, test, docs and bench jobs run.
+
+    Returns ``(run, reason)``; the reason is rendered into the job step
+    summary.
+
+    Rules (first match wins):
+
+    1. Anything but a ``pull_request`` event → run.
+    2. A PR carrying the ``full-build`` label → run.
+    3. A PR whose changed paths can't be listed → run. Fail open: a wrong
+       skip hides breakage, a wrong run only costs runner minutes.
+    4. A PR that only changes CI-inert paths (``_is_ci_inert``) → skip.
+    5. Everything else → run.
+
+    Pre-commit and the pipeline gate run regardless.
+    """
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event_name != "pull_request":
+        return True, f"event=`{event_name or '(unset)'}` — full CI."
+    if FULL_BUILD_LABEL in _pr_labels():
+        return True, f"PR carries the `{FULL_BUILD_LABEL}` label — full CI."
+    paths = _pr_changed_paths(ctx)
+    if paths is None:
+        return True, "couldn't list the PR's changed paths — full CI to be safe."
+    if paths and all(_is_ci_inert(path) for path in paths):
+        return False, (
+            "PR only changes paths no build, test or docs job reads — those jobs skipped. "
+            f"Apply the `{FULL_BUILD_LABEL}` label and re-run to force them."
+        )
+    return True, "PR changes paths CI builds or tests — full CI."
 
 
 def _select_workflow_mode() -> tuple[Literal["ci", "release"], str]:
@@ -326,7 +410,7 @@ def generate_build_matrix(
     """
     Emit the CI matrix configuration consumed by `prepare-ci` jobs.
 
-    Writes six GITHUB_OUTPUT keys:
+    Writes these GITHUB_OUTPUT keys:
 
       - `platform-matrix` — wheel platform map per OS (used by _build.yml).
       - `binary-archive-triples` — list of triple+runner+archive objects
@@ -346,6 +430,10 @@ def generate_build_matrix(
       - `run-full-bench` — `true`/`false`: whether ci.yml's macOS + Windows
         bench jobs run (push to `main` or a `full-bench`-labelled PR). The
         Linux bench always runs; this only gates the other two.
+      - `run-full-ci` — `true`/`false`: whether ci.yml's build, test, docs
+        and bench jobs run. `false` only for a PR that changes nothing
+        but CI-inert paths (`specs/`, agent docs, lint configs) and carries
+        no `full-build` label.
 
     Centralising these in one place (vs. hardcoded YAML across multiple
     workflow files) keeps the binary-wheel/py-wheel/binary-archive matrices
@@ -366,6 +454,7 @@ def generate_build_matrix(
         reason = f"caller forced `--workflow {workflow}`."
 
     run_full_bench, bench_reason = _run_full_bench()
+    run_full_ci, full_ci_reason = _run_full_ci(ctx)
 
     if workflow == Workflow.RELEASE:
         binary_archive_triples: list[dict[str, object]] = list(_BINARY_ARCHIVE_TRIPLES)
@@ -384,6 +473,7 @@ def generate_build_matrix(
         "test-pythons": TEST_PYTHONS,
         "test-pythons-narrow": test_pythons_narrow,
         "run-full-bench": run_full_bench,
+        "run-full-ci": run_full_ci,
     }
 
     github_output = os.environ.get("GITHUB_OUTPUT")
@@ -398,6 +488,7 @@ def generate_build_matrix(
     with open(github_step_summary, "a", encoding="utf-8") as wfh:
         wfh.write(f"## Build matrix ({workflow})\n\n")
         wfh.write(f"_{reason}_\n\n")
+        wfh.write(f"Full CI: `{json.dumps(run_full_ci)}` — {full_ci_reason}\n\n")
         wfh.write("### Wheels\n\n")
         wfh.write("| Platform | cibuildwheel platform | GH runner |\n")
         wfh.write("|----------|----------------------|-----------|\n")
