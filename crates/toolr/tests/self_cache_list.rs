@@ -74,3 +74,29 @@ fn list_renders_entries_with_size_and_last_used() {
     assert!(stdout.contains("SIZE"));
     assert!(stdout.contains("LAST USED"));
 }
+
+#[cfg(unix)]
+#[test]
+fn empty_xdg_cache_home_uses_the_platform_default() {
+    let home = TempDir::new().unwrap();
+    let cwd = TempDir::new().unwrap();
+    let output = common::toolr()
+        .current_dir(cwd.path())
+        .env("HOME", home.path())
+        .env("XDG_CACHE_HOME", "")
+        .env("TOOLR_NO_CACHE_HINT", "1")
+        .args(["self", "cache", "list"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(&*home.path().to_string_lossy()),
+        "stdout:\n{stdout}"
+    );
+    assert!(!cwd.path().join("toolr").exists());
+}

@@ -289,3 +289,18 @@ fn hint_names_no_path_when_home_is_not_utf8() {
     assert!(hint.contains("a `source` line"), "{hint}");
     assert!(!hint.contains("`source /"), "{hint}");
 }
+
+#[test]
+fn empty_home_fails_completion_install() {
+    let host = Host::new();
+    let output = host
+        .command(&["self", "completion", "install", "bash"])
+        .env("HOME", "")
+        .env_remove("XDG_DATA_HOME")
+        .env_remove("XDG_CONFIG_HOME")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("$HOME is not set"), "stderr:\n{stderr}");
+}

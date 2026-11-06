@@ -11,6 +11,7 @@ use toolr_core::complete::{
     resolve_manifest_at_tab, shell_quote, sort_and_dedup_by_value,
 };
 use toolr_core::discovery::discover_project_root;
+use toolr_core::env::non_empty_env_path;
 use toolr_core::execute::{ExecutionSpec, spawn_runner, wait_with_signals, write_spec_to_tempfile};
 use toolr_core::exit_status::process_exit_code;
 use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
@@ -637,19 +638,9 @@ fn bash_source_hint(path: &std::path::Path) -> String {
     )
 }
 
-/// An empty value reads as unset, as the XDG base directory spec and
-/// bash-completion do; using it would install or probe relative to the cwd.
-fn non_empty_env_path(name: &str) -> Option<PathBuf> {
-    std::env::var_os(name)
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-}
-
 fn dirs_home() -> anyhow::Result<PathBuf> {
-    // Avoid taking on a new crate dep — read $HOME directly.
-    let home = std::env::var_os("HOME")
-        .ok_or_else(|| anyhow::anyhow!("$HOME is not set; cannot pick install path"))?;
-    Ok(PathBuf::from(home))
+    non_empty_env_path("HOME")
+        .ok_or_else(|| anyhow::anyhow!("$HOME is not set; cannot pick install path"))
 }
 
 fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
