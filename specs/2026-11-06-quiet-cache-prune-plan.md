@@ -57,18 +57,15 @@ over `-q` and `--quiet`.
   stdout contains `warning: failed to sweep rebuild locks`.
 - Regression guard: the existing un-quiet tests stay untouched and green.
 
-## Task 2: warning rule (blocked on the user's decision)
+## Task 2: warning rule, decided (a): warnings print under `-q` everywhere
 
-- (c), recommended: reword the rule in the #695 design's successor note and the `dispatch_project` doc comment, and
-  the root `-q` help string in `cli.rs`. Regenerate doc snippets (`toolr pre-commit regen-doc-snippets`) and
-  skill refs (`cargo xtask build-skill-refs`) if the help text is captured. Add, if #695 lacks them,
-  `plugin_warnings::quiet_keeps_manifest_rebuild_warning` (`-q project manifest rebuild` with a skipped plugin:
-  stderr contains `warning: skipping plugin`) beside the existing `quiet_suppresses_the_warning`, so both sides of
-  the split are pinned.
-- (b): make `Report::warn` honour `quiet`; gate the warning loops in `run_self_build_manifest`, `manifest_rebuild`,
-  `project_init`; flip `remove_entry_quiet_still_warns` and the matching integration test; reword the rule.
-- (a): drop `!argv_requests_quiet(&argv)` from the `main.rs` warning gate; invert `quiet_suppresses_the_warning`
-  into `quiet_keeps_the_warning`; add a `**Breaking:**` release note; update the `argv_requests_quiet` comment.
+- Drop `!argv_requests_quiet(&argv)` from the `main.rs` warning gate. Invert `quiet_suppresses_the_warning` into
+  `quiet_keeps_the_warning`, and update the `argv_requests_quiet` comment.
+- Find any other warning gated on quiet and ungate it, each with a test.
+- Reword the root `-q` help in `cli.rs` and the `dispatch_project` doc comment to say warnings stay. Regenerate doc
+  snippets (`toolr pre-commit regen-doc-snippets`) and skill refs (`cargo xtask build-skill-refs`) if the help text
+  is captured.
+- Add a `**Breaking:**` release note: scripts running `toolr -q` now see warnings, such as skipped plugins.
 
 ## Task 3: finish
 
