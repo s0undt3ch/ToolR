@@ -302,5 +302,8 @@ fn empty_home_fails_completion_install() {
         .unwrap();
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("$HOME is not set"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("$HOME is not set or empty"),
+        "stderr:\n{stderr}"
+    );
 }

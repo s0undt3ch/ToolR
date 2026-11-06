@@ -640,7 +640,7 @@ fn bash_source_hint(path: &std::path::Path) -> String {
 
 fn dirs_home() -> anyhow::Result<PathBuf> {
     non_empty_env_path("HOME")
-        .ok_or_else(|| anyhow::anyhow!("$HOME is not set; cannot pick install path"))
+        .ok_or_else(|| anyhow::anyhow!("$HOME is not set or empty; cannot pick install path"))
 }
 
 fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
