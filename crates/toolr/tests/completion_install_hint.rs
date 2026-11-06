@@ -1,5 +1,5 @@
-//! `self completion install bash` tells the user to source the script when
-//! bash-completion isn't there to load it.
+//! `self completion install`'s output: the bash source hint when bash-completion
+//! isn't there to load the script, and what `--quiet` leaves out.
 
 mod common;
 
@@ -113,21 +113,9 @@ fn no_hint_when_xdg_data_dirs_holds_bash_completion() {
     assert!(!stdout.contains(HINT), "{stdout}");
 }
 
-#[test]
-fn quiet_suppresses_the_hint() {
-    let host = Host::new();
-    let (stdout, _) = host.install(&["--quiet", "self", "completion", "install", "bash"]);
-    assert!(!stdout.contains(HINT), "{stdout}");
-    assert!(host.installed_bash_script().is_file());
-}
-
 /// Every success message is non-error output, so `--quiet` prints none of it.
-fn assert_quiet_install_is_silent(host: &Host, shell: &str, extra: &[&str]) {
-    assert_install_is_silent(host, "--quiet", shell, extra);
-}
-
-fn assert_install_is_silent(host: &Host, quiet: &str, shell: &str, extra: &[&str]) {
-    let args = [&[quiet, "self", "completion", "install", shell], extra].concat();
+fn assert_install_is_silent(host: &Host, flag: &str, shell: &str, extra: &[&str]) {
+    let args = [&[flag, "self", "completion", "install", shell], extra].concat();
     let (stdout, stderr) = host.install(&args);
     assert_eq!(stdout, "", "{args:?}");
     assert_eq!(stderr, "", "{args:?}");
@@ -137,7 +125,7 @@ fn assert_install_is_silent(host: &Host, quiet: &str, shell: &str, extra: &[&str
 fn quiet_first_install_prints_nothing_for_every_shell() {
     for shell in ["bash", "zsh", "fish"] {
         let host = Host::new();
-        assert_quiet_install_is_silent(&host, shell, &[]);
+        assert_install_is_silent(&host, "--quiet", shell, &[]);
     }
 }
 
@@ -154,7 +142,7 @@ fn quiet_repeat_install_prints_nothing() {
     for shell in ["bash", "zsh", "fish"] {
         let host = Host::new();
         host.install(&["self", "completion", "install", shell]);
-        assert_quiet_install_is_silent(&host, shell, &[]);
+        assert_install_is_silent(&host, "--quiet", shell, &[]);
     }
 }
 
@@ -162,7 +150,7 @@ fn quiet_repeat_install_prints_nothing() {
 fn quiet_force_rewrite_prints_nothing() {
     let host = Host::new();
     host.install(&["self", "completion", "install", "zsh"]);
-    assert_quiet_install_is_silent(&host, "zsh", &["--force"]);
+    assert_install_is_silent(&host, "--quiet", "zsh", &["--force"]);
 }
 
 #[test]
@@ -171,7 +159,7 @@ fn quiet_force_replace_prints_nothing() {
     let script = host.installed_bash_script();
     std::fs::create_dir_all(script.parent().unwrap()).unwrap();
     std::fs::write(&script, "# edited by hand\n").unwrap();
-    assert_quiet_install_is_silent(&host, "bash", &["--force"]);
+    assert_install_is_silent(&host, "--quiet", "bash", &["--force"]);
     assert_ne!(
         std::fs::read_to_string(&script).unwrap(),
         "# edited by hand\n"
