@@ -1102,7 +1102,7 @@ mod test_suite {
             let dir = tempfile::tempdir()?;
             let pid_file = dir.path().join("writer.pid");
             let (mut config, stdout_file, _stderr) = capturing_config(sh(&format!(
-                "(sh -c 'echo $$ >{0}.tmp; mv {0}.tmp {0}; while echo tick; do sleep 0.1; done' &); sleep 60",
+                "(sh -c 'echo $$ >\"{0}.tmp\"; mv \"{0}.tmp\" \"{0}\"; while echo tick; do sleep 0.1; done' &); sleep 60",
                 pid_file.display()
             )));
             // Start-up of the writer has been seen to take over 2.5s on a loaded machine, and
