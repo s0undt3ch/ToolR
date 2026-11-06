@@ -52,8 +52,7 @@ fn scan_args(command: &Command, arg_tokens: &[String]) -> ArgScan;
 ```
 
 `scan_args` is today's `positional_indices` loop plus one arm: a token equal to `--` records its index and
-pushes every later index as a positional, then stops. `positional_indices` stays as a thin wrapper
-(`scan_args(..).positionals`) for `classify_dispatcher`, so it keeps one caller and one meaning.
+pushes every later index as a positional, then stops. It replaces `positional_indices`; the dispatcher uses it too.
 
 `classify_leaf_args` calls `scan_args` once, up front. When `terminator.is_some()`:
 
@@ -67,8 +66,8 @@ pushes every later index as a positional, then stops. `positional_indices` stays
 
 A `--` that is the in-progress word (`ci lint --<TAB>`) is not committed, so it still lists flags.
 
-`classify_dispatcher`: if `terminator` falls before the child name, return `Slot::None` (conservative; clap's
-handling of `--` before a grafted subcommand is not verified, see open questions). A `--` after the child
+`classify_dispatcher`: if `terminator` falls before the child name (or there is no child yet), return
+`Slot::None`; clap rejects that line (verified, see open questions). A `--` after the child
 name reaches the child through the existing `&arg_tokens[child_index + 1..]` slice, where
 `classify_leaf_args` handles it.
 
@@ -104,9 +103,9 @@ Unit tests in `crates/toolr-core/src/complete/tests.rs` and one binary-level tes
 
 ## Open questions
 
-1. `toolr dispatcher -- child …`: how does clap treat `--` before a grafted subcommand? The design returns
-   nothing; the implementer should probe it once with the dev binary and, if clap accepts it, recurse into the
-   child with the terminator state instead.
+1. Resolved: clap rejects `jenkins job -- wrapup_company 1` (`unexpected argument 'wrapup_company'`, with a tip to
+   remove the `--`), while `jenkins job wrapup_company -- 1` parses. The engine returns nothing for a `--`
+   before the child name, as designed.
 2. `ci lint --mode -- <TAB>` (`--` as a flag's value) is left as today: `scan_args` lets the flag consume it,
    and clap rejects the line anyway.
 3. If the other branch's `bash.sh` rewrite starts dropping a committed `--` from the tokens it sends, FU-31

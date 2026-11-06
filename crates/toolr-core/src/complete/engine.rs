@@ -92,8 +92,16 @@ fn candidates(manifest: &Manifest, slot: Slot<'_>) -> Vec<Candidate> {
             }
         }
         Slot::Flag { command, prefix } => flags(command, &prefix),
-        Slot::FlagValue { argument, prefix } => values(argument, &prefix),
-        Slot::Positional { argument, prefix } => values(argument, &prefix),
+        Slot::FlagValue {
+            argument,
+            prefix,
+            attached,
+        } => values(argument, &prefix, attached),
+        Slot::Positional {
+            argument,
+            prefix,
+            after_terminator,
+        } => values(argument, &prefix, after_terminator),
         Slot::None => Vec::new(),
     };
     // Every candidate source in the engine passes here; names are already
@@ -145,10 +153,14 @@ enum Slot<'a> {
     FlagValue {
         argument: &'a Argument,
         prefix: String,
+        /// `--name=partial`: clap accepts a dash-leading value only in this form.
+        attached: bool,
     },
     Positional {
         argument: &'a Argument,
         prefix: String,
+        /// A committed `--` precedes the cursor: clap then takes dash-leading words as values.
+        after_terminator: bool,
     },
     None,
 }
@@ -236,23 +248,33 @@ fn classify<'a>(manifest: &'a Manifest, tokens: &[String]) -> Slot<'a> {
 /// Factored out so the dispatcher branch can reuse it after recursing
 /// into a chosen grafted child.
 fn classify_leaf_args<'a>(command: &'a Command, arg_tokens: &[String], prefix: String) -> Slot<'a> {
-    if let Some(slot) = attached_value(command, &prefix) {
-        return slot;
-    }
-    if let Some(argument) = pending_flag_value(command, arg_tokens) {
-        return Slot::FlagValue { argument, prefix };
+    // After a committed `--` clap reads every word as a positional, so flag
+    // names, `--name=value` and `--name <value>` no longer mean anything.
+    let scan = scan_args(command, arg_tokens);
+    let after_terminator = scan.terminator.is_some();
+    if !after_terminator {
+        if let Some(slot) = attached_value(command, &prefix) {
+            return slot;
+        }
+        if let Some(argument) = pending_flag_value(command, arg_tokens) {
+            return Slot::FlagValue {
+                argument,
+                prefix,
+                attached: false,
+            };
+        }
+
+        // Otherwise: if the in-progress word starts with `--`, complete to a
+        // flag name. If not, treat it as the next positional value.
+        if is_flag_prefix(&prefix) {
+            return Slot::Flag { command, prefix };
+        }
     }
 
-    // Otherwise: if the in-progress word starts with `--`, complete to a
-    // flag name. If not, treat it as the next positional value.
-    if prefix.starts_with("--") || prefix == "-" {
-        return Slot::Flag { command, prefix };
-    }
-
-    // Positional path: count how many positional values have already
-    // been provided in `arg_tokens` (skipping `--flag value` pairs and
-    // bare `--flag` boolean flags) and pick the matching Argument.
-    let positional_index = positional_indices(command, arg_tokens).len();
+    // Positional path: the next positional is the one after those already
+    // provided in `arg_tokens` (`scan` skipped `--flag value` pairs and bare
+    // `--flag` boolean flags).
+    let positional_index = scan.positionals.len();
     let positional_args: Vec<&Argument> = command
         .arguments
         .iter()
@@ -262,6 +284,7 @@ fn classify_leaf_args<'a>(command: &'a Command, arg_tokens: &[String], prefix: S
         return Slot::Positional {
             argument: arg,
             prefix,
+            after_terminator,
         };
     }
     // If the user is past the last fixed positional but there's a
@@ -272,6 +295,7 @@ fn classify_leaf_args<'a>(command: &'a Command, arg_tokens: &[String], prefix: S
         return Slot::Positional {
             argument: arg,
             prefix,
+            after_terminator,
         };
     }
 
@@ -279,8 +303,9 @@ fn classify_leaf_args<'a>(command: &'a Command, arg_tokens: &[String], prefix: S
     // fall back to flag-name completion so the user has SOMETHING to
     // Tab into — particularly useful for argparse-style commands whose
     // entire surface is `--flag value` pairs (no positionals at all),
-    // and for the trailing position past every fixed positional.
-    if command.arguments.iter().any(|a| !is_positional(a)) {
+    // and for the trailing position past every fixed positional. Not after
+    // `--`, where a flag name can't be typed.
+    if !after_terminator && command.arguments.iter().any(|a| !is_positional(a)) {
         return Slot::Flag { command, prefix };
     }
 
@@ -310,7 +335,14 @@ fn classify_dispatcher<'a>(
     // flag values, and positional completions from here on belong to
     // the *child*, not the dispatcher. Checking this first prevents
     // the dispatcher's flag-name fallback from masking the child's.
-    if let Some(&child_index) = positional_indices(command, arg_tokens).first() {
+    let scan = scan_args(command, arg_tokens);
+    // clap rejects a `--` before the child name, so nothing completes there.
+    if let Some(t) = scan.terminator
+        && scan.positionals.first().is_none_or(|&child| t < child)
+    {
+        return Slot::None;
+    }
+    if let Some(&child_index) = scan.positionals.first() {
         let child_name = &arg_tokens[child_index];
         let Some(child) = manifest
             .commands
@@ -328,9 +360,13 @@ fn classify_dispatcher<'a>(
         return slot;
     }
     if let Some(argument) = pending_flag_value(command, arg_tokens) {
-        return Slot::FlagValue { argument, prefix };
+        return Slot::FlagValue {
+            argument,
+            prefix,
+            attached: false,
+        };
     }
-    if prefix.starts_with("--") || prefix == "-" {
+    if is_flag_prefix(&prefix) {
         return Slot::Flag { command, prefix };
     }
 
@@ -398,30 +434,49 @@ fn attached_value<'a>(command: &'a Command, word: &str) -> Option<Slot<'a>> {
         Some(argument) => Slot::FlagValue {
             argument,
             prefix: partial.to_string(),
+            attached: true,
         },
         None => Slot::None,
     })
 }
 
-/// Indices of the positional values in `arg_tokens`, skipping each known
-/// flag and, when it takes one, its value. An unknown `--flag` skips just
-/// itself; `--flag=value` is one token, so it lands there too.
-fn positional_indices(command: &Command, arg_tokens: &[String]) -> Vec<usize> {
-    let mut out = Vec::new();
+/// What the committed argument tokens of one command hold.
+struct ArgScan {
+    /// Indices of the positional values, never the `--` itself.
+    positionals: Vec<usize>,
+    /// Index of the committed `--`, when there is one.
+    terminator: Option<usize>,
+}
+
+/// Walk `arg_tokens`, skipping each known flag and, when it takes one, its
+/// value. An unknown `--flag` skips just itself; `--flag=value` is one token,
+/// so it lands there too. The first `--` ends option parsing, as in clap:
+/// every later token is a positional.
+fn scan_args(command: &Command, arg_tokens: &[String]) -> ArgScan {
+    let mut positionals = Vec::new();
+    let mut terminator = None;
     let mut i = 0usize;
     while i < arg_tokens.len() {
         let token = &arg_tokens[i];
+        if token == "--" {
+            terminator = Some(i);
+            positionals.extend(i + 1..arg_tokens.len());
+            break;
+        }
         match find_flag(command, token) {
             Some(arg) if takes_value(arg) => i += 2,
             Some(_) => i += 1,
             None if token.starts_with("--") => i += 1,
             None => {
-                out.push(i);
+                positionals.push(i);
                 i += 1;
             }
         }
     }
-    out
+    ArgScan {
+        positionals,
+        terminator,
+    }
 }
 
 /// Top-level group names matching `prefix`, described by their `title`.
@@ -481,10 +536,13 @@ fn flags(command: &Command, prefix: &str) -> Vec<Candidate> {
     out
 }
 
-fn values(argument: &Argument, prefix: &str) -> Vec<Candidate> {
+/// Choices matching `prefix`. A choice starting with `-` is offered only when
+/// `dash_ok`: clap reads it as a flag anywhere else and rejects the line.
+fn values(argument: &Argument, prefix: &str, dash_ok: bool) -> Vec<Candidate> {
     argument
         .allowed_values
         .iter()
+        .filter(|v| dash_ok || !v.starts_with('-'))
         .filter(|v| v.starts_with(prefix))
         .map(|v| Candidate::bare(v.clone()))
         .collect()
