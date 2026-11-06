@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev843-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev854-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev843 - 2026-11-06
+        0.35.2-dev854 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev843 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev854 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev843-2026-11-06" class="md-nav__link">
+  <a href="#0352-dev854-2026-11-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev843 - 2026-11-06
+        0.35.2-dev854 - 2026-11-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev843 - 2026-11-06">
+    <nav class="md-nav" aria-label="0.35.2-dev854 - 2026-11-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev843-2026-11-06">0.35.2-dev843 - 2026-11-06<a class="headerlink" href="#0352-dev843-2026-11-06" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev854-2026-11-06">0.35.2-dev854 - 2026-11-06<a class="headerlink" href="#0352-dev854-2026-11-06" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7725,6 +7725,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>A bare annotation (<code>cg: object</code>) no longer hides an imported <code>command</code> or <code>command_group</code>, and a self-copy (<code>cg = cg</code>) now resolves to the import.</p>
 <p>An empty <code>XDG_DATA_HOME</code>, <code>XDG_STATE_HOME</code> or <code>XDG_CACHE_HOME</code> now falls back to the platform default, as the XDG spec says, instead of resolving to a <code>toolr</code> directory under the current directory. An empty <code>HOME</code> now makes <code>toolr self completion install</code> fail with "$HOME is not set or empty".</p>
 <p>Type checkers now accept <code>ctx.run(..., stream_output=None)</code> and treat <code>with ctx.chdir(...)</code> as a context manager. The type stub for <code>Context</code> had fallen behind the code, and it now declares <code>ctx.run</code>'s <code>interactive</code> parameter.</p>
+<p>Bash tab completion now completes paths typed with a backslash escape or a quote, such as <code>files/it\'s</code> or <code>"files/my f</code>, and inside an open quote inserts the name quoted for that quote instead of with stray backslashes (tested on bash 5.1 to 5.3). An open double quote before a leading <code>$NAME/</code> now completes too. A <code>!</code> completed inside double quotes no longer triggers history expansion, and dotfiles are listed whatever <code>GLOBIGNORE</code> is set to.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7938,6 +7939,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(tests)</em> Fail the stub check in CI without the extension, correct the note (<a href="https://github.com/s0undt3ch/ToolR/commit/527ad4c8b5ffe35e8c34e4dff4dd4972ca6c7d20"><code>527ad4c</code></a>)</li>
 <li><em>(env)</em> Treat empty XDG_* variables as unset (<a href="https://github.com/s0undt3ch/ToolR/commit/3c54bd5ee6dc4202075ab4859ae2057b7b96bef0"><code>3c54bd5</code></a>)</li>
 <li><em>(cli)</em> Say $HOME is unset or empty when completion install can't use it (<a href="https://github.com/s0undt3ch/ToolR/commit/6e3a35ad656b5438c9fcca6759eee1e3351d47ae"><code>6e3a35a</code></a>)</li>
+<li><em>(complete)</em> Complete quoted and escaped paths in bash (<a href="https://github.com/s0undt3ch/ToolR/commit/c52aa14ba5e69542cfa75fefadee982f19606a21"><code>c52aa14</code></a>)</li>
+<li><em>(complete)</em> Keep dotfiles, escape ! in double quotes, and two edge cases (<a href="https://github.com/s0undt3ch/ToolR/commit/6d4d5ecf6ab354fbda65dfdb83e420c367b63075"><code>6d4d5ec</code></a>)</li>
+<li><em>(complete)</em> Balance quotes for a !-ending directory, filter ~user newline splits (<a href="https://github.com/s0undt3ch/ToolR/commit/f5a9dbba403e16232da5751b995f3125ef49345c"><code>f5a9dbb</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8019,6 +8023,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(parser)</em> Share one ToolrNames and memo per build, resolve through methods (<a href="https://github.com/s0undt3ch/ToolR/commit/d5fd6bde74ea033f1a356a651fb506f70abff2c5"><code>d5fd6bd</code></a>)</li>
 <li><em>(testing)</em> Drop the unused member parameter and align _binding argument order (<a href="https://github.com/s0undt3ch/ToolR/commit/aabd2f3facf3664cdeab76b57ac04cbfadf33cfa"><code>aabd2f3</code></a>)</li>
 <li><em>(tests)</em> Rename the _context stub check, document it (<a href="https://github.com/s0undt3ch/ToolR/commit/6f95a579f75c6b05de5747a54515cae04184b510"><code>6f95a57</code></a>)</li>
+<li><em>(complete)</em> Split the bash parser, document each quoting workaround (<a href="https://github.com/s0undt3ch/ToolR/commit/6933f565349ac4e744caebcf66d6598e5fa701fa"><code>6933f56</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8253,6 +8258,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Archive the empty XDG_DATA_HOME spec (<a href="https://github.com/s0undt3ch/ToolR/commit/a801e4c34d9d353afc67e97e0fbf65b2b47472d9"><code>a801e4c</code></a>)</li>
 <li>An empty XDG_* variable counts as unset (<a href="https://github.com/s0undt3ch/ToolR/commit/e8cbf21c8085a0af39af3ed33a463ae3117a1ede"><code>e8cbf21</code></a>)</li>
 <li><em>(env)</em> Explain the empty-means-unset reads (<a href="https://github.com/s0undt3ch/ToolR/commit/584e6dc7508674a90249c589e0320c45cddc73ea"><code>584e6dc</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for bash 5.3 compgen dequoting (<a href="https://github.com/s0undt3ch/ToolR/commit/dc49dc16ae296cc8e125bdc41dc1cd3bcafca200"><code>dc49dc1</code></a>)</li>
+<li><em>(specs)</em> Record the bash compgen dequoting decisions (<a href="https://github.com/s0undt3ch/ToolR/commit/7f50aba948163ffd11198882243bc40cad6f2e0a"><code>7f50aba</code></a>)</li>
+<li><em>(specs)</em> Archive the bash compgen dequoting spec (<a href="https://github.com/s0undt3ch/ToolR/commit/c278a300b2b4f6532df99b3229b845e9b3c881a4"><code>c278a30</code></a>)</li>
+<li><em>(complete)</em> Sync the bash spec and release note with what shipped (<a href="https://github.com/s0undt3ch/ToolR/commit/2fd15b10e4af81a68a69e47b5fecfb2d3e48e766"><code>2fd15b1</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8380,6 +8389,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Cover --opt=value through __complete (<a href="https://github.com/s0undt3ch/ToolR/commit/ae62b8dfbdfa774209054371316b1e83384e907b"><code>ae62b8d</code></a>)</li>
 <li><em>(complete)</em> A positional word with an = is not an attached value (<a href="https://github.com/s0undt3ch/ToolR/commit/cc58ff9902713795a89e3c1a255d1181c89c86dc"><code>cc58ff9</code></a>)</li>
 <li><em>(toolr-py)</em> Check the _context stub with stubtest (<a href="https://github.com/s0undt3ch/ToolR/commit/c0b828cdb2d6ae73b9891a11bf4c8035ce591978"><code>c0b828c</code></a>)</li>
+<li><em>(complete)</em> Reproduce bash completion of quoted and escaped paths (<a href="https://github.com/s0undt3ch/ToolR/commit/9a3d960a808664a9ede45f7c26073c927a3a7c2b"><code>9a3d960</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
