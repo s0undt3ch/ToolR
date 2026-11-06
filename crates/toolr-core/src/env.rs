@@ -1,12 +1,20 @@
-//! Env reads that must treat an empty value as unset.
+//! Path env reads that must treat an empty value as unset. Use [`xdg_dir_env`] for `XDG_*_HOME`
+//! and [`non_empty_env_path`] for other path variables (`HOME`, prefixes), which no spec requires
+//! to be absolute.
 
 use std::path::PathBuf;
 
-/// Treats an empty value as unset, per the XDG spec: an empty path would resolve against the cwd.
+/// Treats an empty value as unset, since an empty path would resolve against the cwd.
 pub fn non_empty_env_path(name: &str) -> Option<PathBuf> {
     std::env::var_os(name)
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
+}
+
+/// An `XDG_*_HOME` value counts only when it is an absolute path; the spec says to ignore relative
+/// ones, as `dirs` does, so they never resolve against the cwd.
+pub fn xdg_dir_env(name: &str) -> Option<PathBuf> {
+    non_empty_env_path(name).filter(|p| p.is_absolute())
 }
 
 #[cfg(test)]
@@ -36,5 +44,24 @@ mod tests {
             non_empty_env_path("TOOLR_TEST_VAR"),
             Some(PathBuf::from("/some/dir"))
         );
+    }
+
+    #[test]
+    fn xdg_dir_env_rejects_unset_empty_and_relative() {
+        let mut env = EnvGuard::write();
+        env.remove("TOOLR_TEST_VAR");
+        assert_eq!(xdg_dir_env("TOOLR_TEST_VAR"), None);
+        env.set("TOOLR_TEST_VAR", "");
+        assert_eq!(xdg_dir_env("TOOLR_TEST_VAR"), None);
+        env.set("TOOLR_TEST_VAR", "relative/dir");
+        assert_eq!(xdg_dir_env("TOOLR_TEST_VAR"), None);
+    }
+
+    #[test]
+    fn xdg_dir_env_accepts_absolute() {
+        let mut env = EnvGuard::write();
+        let abs = std::env::temp_dir();
+        env.set("TOOLR_TEST_VAR", &abs);
+        assert_eq!(xdg_dir_env("TOOLR_TEST_VAR"), Some(abs));
     }
 }

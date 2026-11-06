@@ -29,7 +29,7 @@ pub enum HelpMode {
 /// `$COLUMNS`, and non-TTY stdout.
 pub fn print(cmd: &Command, bin_path: &str, mode: HelpMode) {
     let is_tty = std::io::stdout().is_terminal();
-    let no_color = std::env::var_os("NO_COLOR").is_some();
+    let no_color = no_color_requested(std::env::var_os("NO_COLOR").as_deref());
     let width = resolve_width();
     let md = render_markdown(cmd, bin_path, mode, width);
     let skin = skin_for(is_tty, no_color);
@@ -41,9 +41,14 @@ pub fn print(cmd: &Command, bin_path: &str, mode: HelpMode) {
 // Skin + width helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// no-color.org: `NO_COLOR` disables colour only when present and non-empty.
+fn no_color_requested(value: Option<&std::ffi::OsStr>) -> bool {
+    value.is_some_and(|v| !v.is_empty())
+}
+
 /// Pick a `MadSkin` for the given output context. Caller decides
 /// `is_tty` (from `std::io::stdout().is_terminal()`) and `no_color`
-/// (from `NO_COLOR` env presence). Non-TTY or `NO_COLOR` set ⇒ plain
+/// (from a non-empty `NO_COLOR`). Non-TTY or a non-empty `NO_COLOR` ⇒ plain
 /// skin (no ANSI; markdown structure still renders).
 fn skin_for(is_tty: bool, no_color: bool) -> MadSkin {
     if !is_tty || no_color {
@@ -543,6 +548,14 @@ mod tests {
         let s = skin_for(true, true);
         let plain = MadSkin::no_style();
         assert_eq!(s.bold, plain.bold);
+    }
+
+    #[test]
+    fn no_color_requires_a_non_empty_value() {
+        use std::ffi::OsStr;
+        assert!(!no_color_requested(None));
+        assert!(!no_color_requested(Some(OsStr::new(""))));
+        assert!(no_color_requested(Some(OsStr::new("1"))));
     }
 
     #[test]

@@ -125,7 +125,7 @@ Toolr uses the first uv it finds:
    `PATH` entries (`.`, `bin`, `~/bin`), so a `uv` inside the repository
    never runs by accident.
 2. A toolr-managed copy at `$XDG_DATA_HOME/toolr/bin/uv` (`uv.exe` on
-   Windows). When `XDG_DATA_HOME` is unset or empty, toolr uses the platform data
+   Windows). When `XDG_DATA_HOME` isn't an absolute path, toolr uses the platform data
    directory: `~/.local/share` on Linux, `~/Library/Application Support`
    on macOS and `%APPDATA%` on Windows.
 
