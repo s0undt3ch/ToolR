@@ -1346,6 +1346,22 @@ fn bash_path_prefix_stays_bare_before_ansi_c_quoting() {
     }
 }
 
+/// `compgen` lists `~user/` one name per line, so the tail of a name holding a newline is not a
+/// candidate. A `compgen` function stands in for a real user's home, which a test can't write to.
+#[test]
+fn bash_tilde_user_drops_the_tail_of_a_newline_name() {
+    let script = format!(
+        "compgen() {{ [[ $1 == -d ]] && return 1; printf '%s\\n' '~fakeuser/nl' 'x' '~fakeuser/ok'; }}\n{}",
+        print_script("bash")
+    );
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "~fakeuser/", Split::Whole);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["~fakeuser/nl", "~fakeuser/ok"], "{bash}");
+    }
+}
+
 /// A name holding a newline is one candidate, not two.
 #[test]
 fn bash_path_name_with_a_newline_is_one_candidate() {
@@ -1611,9 +1627,11 @@ fn bash_tab_keeps_a_bang_literal_in_double_quotes_end_to_end() {
         let fx = fixture();
         let bang = fx.tmp.path().join("bang");
         std::fs::create_dir_all(&bang).unwrap();
-        for name in ["h!!x", "x!y", "a!b", "a!c"] {
+        for name in ["h!!x", "x!y", "a!b", "a!c", "end!"] {
             std::fs::write(bang.join(name), "").unwrap();
         }
+        std::fs::create_dir_all(bang.join("d!")).unwrap();
+        std::fs::write(bang.join("d!/inner.txt"), "").unwrap();
         let rcfile = fx.tmp.path().join("bashrc");
         std::fs::write(&rcfile, format!("{}set -H\n", bash_tab_rc(&fx))).unwrap();
         for (typed, want) in [
@@ -1622,6 +1640,11 @@ fn bash_tab_keeps_a_bang_literal_in_double_quotes_end_to_end() {
             // The first Tab inserts the common prefix `a"\!"`; the second completes after it.
             ("--cfg \"bang/a\tb", "--cfg bang/a!b"),
             (r#"--mode "wo"#, "--mode wow!"),
+            (r#"--cfg "bang/e"#, "--cfg bang/end!"),
+            // A directory reply ends in `/`, not `!`, so readline closes the quote itself.
+            (r#"--cfg "bang/d"#, "--cfg bang/d!/"),
+            (r#"--out "bang/d"#, "--out bang/d!/"),
+            ("--cfg \"bang/d\t", "--cfg bang/d!/inner.txt"),
         ] {
             let typed = format!("echo prev\ntoolr ci lint {typed}");
             let want = format!("LINE:ci lint {want}");

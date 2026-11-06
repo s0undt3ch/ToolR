@@ -268,7 +268,7 @@ _toolr_complete_paths() {
         # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
         if [[ $_toolr_mode == -f ]]; then
             while IFS= read -r _toolr_name; do
-                _toolr_tilde_dirs[$_toolr_name]=1
+                [[ $_toolr_name != "${_toolr_raw_cur%%/*}"* ]] || _toolr_tilde_dirs[$_toolr_name]=1
             done < <(compgen -d -- "$_toolr_raw_cur" || :)
         fi
     fi
@@ -308,14 +308,17 @@ _toolr_complete_paths() {
             [[ -d $_toolr_name ]] && _toolr_is_dir=1
         fi
         if ((_toolr_is_dir)); then
+            # Readline closes the quote after the `/`, so the `""` closing a final `!` must go.
+            [[ $_toolr_qchar != \" || $_toolr_name != *! ]] || _toolr_q=${_toolr_q%\"}
             _toolr_q+=/
             _toolr_dirs=$((_toolr_dirs + 1))
         fi
         COMPREPLY+=("$_toolr_q")
     done < <(
         if ((_toolr_user_tilde)); then
+            # `compgen` prints one name per line: drop the tail of a name holding a newline.
             compgen "$_toolr_mode" -- "$_toolr_raw_cur" | while IFS= read -r _toolr_name; do
-                printf '%s\0' "$_toolr_name"
+                [[ $_toolr_name != "${_toolr_raw_cur%%/*}"* ]] || printf '%s\0' "$_toolr_name"
             done
         else
             _toolr_list_paths "$_toolr_mode" "$_toolr_raw_cur"
