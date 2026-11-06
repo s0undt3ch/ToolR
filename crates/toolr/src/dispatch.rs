@@ -560,40 +560,46 @@ fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Re
     let outcome = install_script(&opts)?;
     match outcome {
         InstallOutcome::Wrote { path, prior } => {
-            let msg = match prior {
-                PriorState::None => format!(
-                    "toolr: wrote {} completion script to {}",
-                    shell,
-                    path.display()
-                ),
-                PriorState::Identical => format!(
-                    "toolr: rewrote {} completion script at {} (--force; content unchanged)",
-                    shell,
-                    path.display()
-                ),
-                PriorState::Differed => format!(
-                    "toolr: replaced existing {} completion script at {}",
-                    shell,
-                    path.display()
-                ),
-            };
-            println!("{msg}");
-            if matches!(shell, CompletionShell::Zsh) {
-                println!(
-                    "toolr: ensure your ~/.zshrc includes `fpath=(~/.zfunc $fpath)` and \
-                     `autoload -Uz compinit && compinit`."
-                );
+            // --quiet drops success lines and advice (the zsh reminder, the bash hint),
+            // never refusals or errors.
+            if !quiet {
+                let msg = match prior {
+                    PriorState::None => format!(
+                        "toolr: wrote {} completion script to {}",
+                        shell,
+                        path.display()
+                    ),
+                    PriorState::Identical => format!(
+                        "toolr: rewrote {} completion script at {} (--force; content unchanged)",
+                        shell,
+                        path.display()
+                    ),
+                    PriorState::Differed => format!(
+                        "toolr: replaced existing {} completion script at {}",
+                        shell,
+                        path.display()
+                    ),
+                };
+                println!("{msg}");
+                if matches!(shell, CompletionShell::Zsh) {
+                    println!(
+                        "toolr: ensure your ~/.zshrc includes `fpath=(~/.zfunc $fpath)` and \
+                         `autoload -Uz compinit && compinit`."
+                    );
+                }
+                print_bash_source_hint(shell, &path);
             }
-            print_bash_source_hint(shell, &path, quiet);
             Ok(ExitCode::SUCCESS)
         }
         InstallOutcome::AlreadyInstalled { path } => {
-            println!(
-                "toolr: {} completion already up to date at {}",
-                shell,
-                path.display()
-            );
-            print_bash_source_hint(shell, &path, quiet);
+            if !quiet {
+                println!(
+                    "toolr: {} completion already up to date at {}",
+                    shell,
+                    path.display()
+                );
+                print_bash_source_hint(shell, &path);
+            }
             Ok(ExitCode::SUCCESS)
         }
         InstallOutcome::SkippedNeedsForce { path } => {
@@ -608,8 +614,8 @@ fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Re
 
 /// Only bash-completion loads the bash install directory; without it, tell
 /// the user to source the script themselves.
-fn print_bash_source_hint(shell: CompletionShell, path: &std::path::Path, quiet: bool) {
-    if quiet || !matches!(shell, CompletionShell::Bash) {
+fn print_bash_source_hint(shell: CompletionShell, path: &std::path::Path) {
+    if !matches!(shell, CompletionShell::Bash) {
         return;
     }
     // Test seam: CI hosts ship bash-completion, so tests move the probe's root.
