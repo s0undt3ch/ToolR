@@ -605,7 +605,14 @@ def test_run_keeps_unresolved_warning_under_quiet(
     tmp_path: Path,
 ) -> None:
     """`-q` doesn't hide the unresolved-type warning: warnings print under `-q`."""
-    mod = make_tools_module("def _fn(ctx, x: DoesNotExist, n: int) -> None: ...\n")
+    # Lazy annotations, so the unresolved name only fails when toolr resolves it (eager before 3.14).
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+
+        def _fn(ctx, x: DoesNotExist, n: int) -> None: ...
+        """
+    )
     spec = _runner_spec(
         module=mod.__name__,
         function="_fn",
