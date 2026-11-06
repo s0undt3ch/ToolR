@@ -5,23 +5,25 @@
 mod common;
 
 use std::ffi::CStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 /// Files under the fixture root that path slots complete. `files/sub/` is a directory.
-const PATH_FILES: [&str; 6] = [
+const PATH_FILES: [&str; 8] = [
     "files/with space.txt",
     "files/$(touch sentinel-three)",
     "files/back\\slash",
     "files/host:port.txt",
     "files/a:b c.txt",
     "files/v@2x.png",
+    "files/it's.txt",
+    "files/q\"d.txt",
 ];
 
 /// `SENTINEL` and `SENTINEL2` stand for paths the fixture fills in.
-const CHOICES: [&str; 10] = [
+const CHOICES: [&str; 11] = [
     "fast",
     "a:b",
     "dry run",
@@ -32,6 +34,7 @@ const CHOICES: [&str; 10] = [
     "x=~root",
     "u@h",
     "a$b",
+    "wow!",
 ];
 
 struct Fixture {
@@ -149,6 +152,13 @@ struct BashRun {
 }
 
 impl BashRun {
+    /// The reply in sorted order, for replies whose order doesn't matter.
+    fn sorted_reply(&self) -> Vec<String> {
+        let mut reply = self.reply.clone();
+        reply.sort();
+        reply
+    }
+
     /// The `printf %q` form of a [`CHOICES`] entry.
     fn quoted(&self, choice: &str) -> String {
         let i = CHOICES.iter().position(|c| *c == choice).unwrap();
@@ -516,8 +526,7 @@ fn bash_path_flag_completes_files_quoted_and_inert() {
         let mut want = run.quoted.clone();
         want.push("files/sub/".to_string());
         want.sort();
-        let mut got = run.reply.clone();
-        got.sort();
+        let got = run.sorted_reply();
         assert_eq!(got, want, "{bash}");
         assert!(!fx.sentinel3.exists(), "{bash}: file name executed");
         // Several matches: bash inserts only their common prefix, so no space to drop.
@@ -636,8 +645,7 @@ fn bash_path_keeps_a_typed_leading_variable() {
             let mut want: Vec<String> = run.quoted.iter().map(|q| format!("{var}/{q}")).collect();
             want.push(format!("{var}/files/sub/"));
             want.sort();
-            let mut got = run.reply.clone();
-            got.sort();
+            let got = run.sorted_reply();
             assert_eq!(got, want, "{bash} {var} {split:?}");
             // `:` is a word break: readline replaces only the text after it, so the reply is bare.
             let cur = format!("{var}/files/host:p");
@@ -705,8 +713,7 @@ fn bash_path_variable_value_is_a_literal_directory() {
             let cur = format!("${dir}/");
             let run = run_bash_path_split(&bash, &script, &fx, "--cfg", &cur, Split::Whole);
             assert_eq!(run.rc, "0", "{bash} {value}: {}", run.stderr);
-            let mut got = run.reply.clone();
-            got.sort();
+            let got = run.sorted_reply();
             assert_eq!(
                 got,
                 vec![format!("${dir}/lit.txt"), format!("${dir}/sub/")],
@@ -750,8 +757,14 @@ fn bash_script_names_its_variables_with_the_toolr_prefix() {
             names.push((target.to_string(), line));
         }
         if let Some(at) = words.iter().position(|w| *w == "read") {
+            let mut skip = false;
             for w in &words[at + 1..] {
+                // Only `-d` takes an argument in this script, and `-d ''`'s is not a name.
+                if std::mem::take(&mut skip) {
+                    continue;
+                }
                 if w.starts_with('-') {
+                    skip = *w == "-d";
                     continue;
                 }
                 let name = w.trim_end_matches(';');
@@ -1177,6 +1190,193 @@ fn bash_path_unescapes_a_typed_backslash() {
     }
 }
 
+/// Completes the path `cur` after `--cfg` with the whole word in `COMP_WORDS`.
+fn run_bash_cfg_path(bash: &str, fx: &Fixture, cur: &str) -> BashRun {
+    run_bash_path_split(bash, &print_script("bash"), fx, "--cfg", cur, Split::Whole)
+}
+
+/// Asserts completing the path `cur` after `--cfg` offers exactly `want`.
+fn assert_path_reply(bash: &str, fx: &Fixture, cur: &str, want: &str) {
+    let run = run_bash_cfg_path(bash, fx, cur);
+    assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+    assert_eq!(run.reply, vec![want.to_string()], "{bash} {cur}");
+}
+
+/// Readline replaces the text after an open `"` and closes it, so the reply is quoted for the
+/// inside of `"…"`: a `\ ` there would be a literal backslash.
+#[test]
+fn bash_path_reply_is_quoted_for_an_open_double_quote() {
+    for bash in bashes() {
+        let fx = fixture();
+        for (cur, want) in [
+            (r#""files/wi"#, "files/with space.txt"),
+            (r#""files/it"#, "files/it's.txt"),
+            (r#""files/q"#, r#"files/q\"d.txt"#),
+        ] {
+            assert_path_reply(&bash, &fx, cur, want);
+        }
+    }
+}
+
+/// Inside `'…'` nothing is escaped, and a `'` in the name closes, escapes and reopens the quote.
+#[test]
+fn bash_path_reply_is_quoted_for_an_open_single_quote() {
+    for bash in bashes() {
+        let fx = fixture();
+        for (cur, want) in [
+            ("'files/it", r"files/it'\''s.txt"),
+            ("'files/wi", "files/with space.txt"),
+            ("'files/q", r#"files/q"d.txt"#),
+        ] {
+            assert_path_reply(&bash, &fx, cur, want);
+        }
+    }
+}
+
+/// A quote opened mid-word is where readline starts replacing, so the reply drops what precedes it.
+#[test]
+fn bash_path_open_quote_mid_word_replaces_after_the_quote() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_cfg_path(&bash, &fx, r#"files/"wi"#);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["with space.txt".to_string()], "{bash}");
+    }
+}
+
+/// A quoted `~` is a literal directory name, never the home directory.
+#[test]
+fn bash_path_quoted_tilde_is_literal() {
+    for bash in bashes() {
+        let fx = fixture();
+        // `$HOME` is the fixture root, which holds `files/` but no `lit`.
+        let run = run_bash_cfg_path(&bash, &fx, r#""~/fi"#);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+        literal_dir(&fx, "~/lit");
+        let run = run_bash_cfg_path(&bash, &fx, r#""~/l"#);
+        assert_eq!(run.reply, vec!["~/lit/".to_string()], "{bash}");
+        assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{bash}");
+    }
+}
+
+/// A `$` inside `'…'` is literal, so the substitution guard drops the word.
+#[test]
+fn bash_path_dollar_in_single_quotes_offers_nothing() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_cfg_path(&bash, &fx, "'$HOME/fi");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+    }
+}
+
+/// `$NAME` expands inside `"…"`, so it is read like a bare one and kept as typed.
+#[test]
+fn bash_path_variable_after_a_double_quote_stays_bare() {
+    for bash in bashes() {
+        let fx = fixture();
+        for var in ["$HOME", "${HOME}"] {
+            let cur = format!("\"{var}/files/s");
+            let run = run_bash_cfg_path(&bash, &fx, &cur);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert_eq!(run.reply, vec![format!("{var}/files/sub/")], "{bash} {cur}");
+            assert_eq!(run.compopt, vec!["-o nospace".to_string()], "{bash} {cur}");
+        }
+    }
+}
+
+/// Choice values are quoted for the open quote too.
+#[test]
+fn bash_value_reply_is_quoted_for_an_open_quote() {
+    for bash in bashes() {
+        let fx = fixture();
+        for (cur, want) in [(r#""dry r"#, "dry run"), ("'dry r", "dry run")] {
+            let run = run_bash(&bash, &fx, cur);
+            assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+            assert_eq!(run.reply, vec![want.to_string()], "{bash} {cur}");
+        }
+    }
+}
+
+/// Dotfiles are listed with no leading `.` typed, whatever the user's `GLOBIGNORE`.
+#[test]
+fn bash_path_lists_dotfiles() {
+    let script = print_script("bash");
+    let ignore_all = format!("GLOBIGNORE='*'\n{script}");
+    for bash in bashes() {
+        let fx = fixture();
+        let hid = fx.tmp.path().join("hid");
+        std::fs::create_dir_all(&hid).unwrap();
+        std::fs::write(hid.join(".env"), "").unwrap();
+        std::fs::write(hid.join("config"), "").unwrap();
+        for script in [&script, &ignore_all] {
+            let run = run_bash_path_split(&bash, script, &fx, "--cfg", "hid/", Split::Whole);
+            assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+            let got = run.sorted_reply();
+            assert_eq!(got, vec!["hid/.env", "hid/config"], "{bash}");
+        }
+    }
+}
+
+/// `.` and `..` are offered only under a directory that exists.
+#[test]
+fn bash_path_dot_entries_need_an_existing_directory() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_cfg_path(&bash, &fx, "nosuch/.");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+        let run = run_bash_cfg_path(&bash, &fx, "files/.");
+        let got = run.sorted_reply();
+        assert_eq!(got, vec!["files/../", "files/./"], "{bash}");
+    }
+}
+
+/// A typed `~/` or `$NAME/` stays bare even when the rest needs `$'…'` quoting, which
+/// would otherwise stop the tilde expanding.
+#[test]
+fn bash_path_prefix_stays_bare_before_ansi_c_quoting() {
+    for bash in bashes() {
+        let fx = fixture();
+        std::fs::write(fx.tmp.path().join("files/nl\nx"), "").unwrap();
+        for (cur, want) in [
+            ("~/files/nl", r"~/$'files/nl\nx'"),
+            ("$HOME/files/nl", r"$HOME/$'files/nl\nx'"),
+        ] {
+            assert_path_reply(&bash, &fx, cur, want);
+        }
+    }
+}
+
+/// `compgen` lists `~user/` one name per line, so the tail of a name holding a newline is not a
+/// candidate. A `compgen` function stands in for a real user's home, which a test can't write to.
+#[test]
+fn bash_tilde_user_drops_the_tail_of_a_newline_name() {
+    let script = format!(
+        "compgen() {{ [[ $1 == -d ]] && return 1; printf '%s\\n' '~fakeuser/nl' 'x' '~fakeuser/ok'; }}\n{}",
+        print_script("bash")
+    );
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "~fakeuser/", Split::Whole);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["~fakeuser/nl", "~fakeuser/ok"], "{bash}");
+    }
+}
+
+/// A name holding a newline is one candidate, not two.
+#[test]
+fn bash_path_name_with_a_newline_is_one_candidate() {
+    for bash in bashes() {
+        let fx = fixture();
+        std::fs::write(fx.tmp.path().join("files/nl\nx"), "").unwrap();
+        let run = run_bash_cfg_path(&bash, &fx, "files/nl");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec![r"$'files/nl\nx'".to_string()], "{bash}");
+    }
+}
+
 /// The bash script shipped before path completion, as an installed copy would hold it.
 /// Frozen on purpose: the next test checks a new binary is harmless to an old installed script.
 const OLD_BASH_SCRIPT: &str = r#"# shellcheck shell=bash
@@ -1309,14 +1509,7 @@ fn bash_older_than_4_4_warns_once_when_interactive_and_registers_nothing() {
 fn bash_tab_completes_words_with_a_colon_end_to_end() {
     for bash in bashes() {
         let fx = fixture();
-        let script = fx.tmp.path().join("toolr.bash");
-        std::fs::write(&script, print_script("bash")).unwrap();
-        let rc = format!(
-            "source '{}'\n\
-             toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
-             else printf 'LINE:%s\\n' \"$*\"; fi; }}\n",
-            script.display()
-        );
+        let rc = bash_tab_rc(&fx);
         let rcfile = fx.tmp.path().join("bashrc");
         std::fs::write(&rcfile, &rc).unwrap();
         // `$` isn't a default break, but a user may add it. The whole value, since `+=` in a
@@ -1387,25 +1580,113 @@ fn bash_tab_completes_words_with_a_colon_end_to_end() {
                 "LINE:ci lint --cfg=files/with space.txt",
             ),
         ] {
-            let mut cmd = StdCommand::new(&bash);
-            cmd.args(["--noprofile", "--rcfile"])
-                .arg(rcfile)
-                .arg("-i")
-                .current_dir(fx.tmp.path())
-                .env("PATH", path_with_toolr())
-                .env("HOME", fx.tmp.path())
-                .env("XDG_CACHE_HOME", common::test_cache_home())
-                // No escape sequences, and no user readline settings.
-                .env("TERM", "dumb")
-                .env("INPUTRC", "/dev/null");
-            let out = common::run_on_pty(cmd, &format!("{typed}\t\nexit\n"));
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            assert!(
-                stdout.lines().any(|l| l.trim_end_matches('\r') == want),
-                "{bash} {typed:?}: want {want:?}\nstdout: {stdout}\nstderr: {stderr}"
-            );
-            assert!(!stderr.contains("command not found"), "{bash}: {stderr}");
+            assert_bash_tab_line(&bash, &fx, rcfile, typed, want);
+        }
+    }
+}
+
+/// The rcfile body for the pty tests: it sources the script, and a `toolr()` shim prints
+/// each submitted line, after shell parsing, as `LINE:<args>`.
+fn bash_tab_rc(fx: &Fixture) -> String {
+    let script = fx.tmp.path().join("toolr.bash");
+    std::fs::write(&script, print_script("bash")).unwrap();
+    format!(
+        "source '{}'\n\
+         toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
+         else printf 'LINE:%s\\n' \"$*\"; fi; }}\n",
+        script.display()
+    )
+}
+
+/// Types `typed`, Tab and Enter into an interactive bash on a pty, and asserts the shim printed
+/// `want`.
+fn assert_bash_tab_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, want: &str) {
+    let mut cmd = StdCommand::new(bash);
+    cmd.args(["--noprofile", "--rcfile"])
+        .arg(rcfile)
+        .arg("-i")
+        .current_dir(fx.tmp.path())
+        .env("PATH", path_with_toolr())
+        .env("HOME", fx.tmp.path())
+        .env("XDG_CACHE_HOME", common::test_cache_home())
+        // No escape sequences, and no user readline settings.
+        .env("TERM", "dumb")
+        .env("INPUTRC", "/dev/null");
+    let out = common::run_on_pty(cmd, &format!("{typed}\t\nexit\n"));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stdout.lines().any(|l| l.trim_end_matches('\r') == want),
+        "{bash} {typed:?}: want {want:?}\nstdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(!stderr.contains("command not found"), "{bash}: {stderr}");
+}
+
+/// Interactive bash history-expands a `!` even inside `"…"`, so a reply there must keep it
+/// from doing so. The earlier `echo prev` gives `!!` something to expand to.
+#[test]
+fn bash_tab_keeps_a_bang_literal_in_double_quotes_end_to_end() {
+    for bash in bashes() {
+        let fx = fixture();
+        let bang = fx.tmp.path().join("bang");
+        std::fs::create_dir_all(&bang).unwrap();
+        for name in ["h!!x", "x!y", "a!b", "a!c", "end!"] {
+            std::fs::write(bang.join(name), "").unwrap();
+        }
+        std::fs::create_dir_all(bang.join("d!")).unwrap();
+        std::fs::write(bang.join("d!/inner.txt"), "").unwrap();
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, format!("{}set -H\n", bash_tab_rc(&fx))).unwrap();
+        for (typed, want) in [
+            (r#"--cfg "bang/h"#, "--cfg bang/h!!x"),
+            (r#"--cfg "bang/x"#, "--cfg bang/x!y"),
+            // The first Tab inserts the common prefix `a"\!"`; the second completes after it.
+            ("--cfg \"bang/a\tb", "--cfg bang/a!b"),
+            (r#"--mode "wo"#, "--mode wow!"),
+            (r#"--cfg "bang/e"#, "--cfg bang/end!"),
+            // A directory reply ends in `/`, not `!`, so readline closes the quote itself.
+            (r#"--cfg "bang/d"#, "--cfg bang/d!/"),
+            (r#"--out "bang/d"#, "--out bang/d!/"),
+            ("--cfg \"bang/d\t", "--cfg bang/d!/inner.txt"),
+        ] {
+            let typed = format!("echo prev\ntoolr ci lint {typed}");
+            let want = format!("LINE:ci lint {want}");
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
+        }
+    }
+}
+
+/// Inside a live completion readline dequotes the word `compgen` gets, and it replaces only the
+/// text after an open quote, so a backslash or quote in the typed path must survive both.
+/// Words that should offer nothing are left out: with an open quote, Enter would wait for more.
+#[test]
+fn bash_tab_completes_quoted_and_escaped_paths_end_to_end() {
+    for bash in bashes() {
+        let fx = fixture();
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc(&fx)).unwrap();
+        let home = fx.tmp.path().display().to_string();
+        // `{home}` stands for the fixture root, which is `$HOME`.
+        for (typed, want) in [
+            (r"--cfg files/back\\s", r"--cfg files/back\slash"),
+            (r"--cfg files/it\'", "--cfg files/it's.txt"),
+            (r#"--cfg "files/wi"#, "--cfg files/with space.txt"),
+            ("--cfg 'files/wi", "--cfg files/with space.txt"),
+            (r#"--cfg files/"wi"#, "--cfg files/with space.txt"),
+            (r#"--cfg "files/it"#, "--cfg files/it's.txt"),
+            ("--cfg 'files/it", "--cfg files/it's.txt"),
+            ("--cfg 'files/q", r#"--cfg files/q"d.txt"#),
+            (
+                r#"--cfg "$HOME/files/wi"#,
+                "--cfg {home}/files/with space.txt",
+            ),
+            (r"--cfg=files/back\\s", r"--cfg=files/back\slash"),
+            (r#"--mode "dry r"#, "--mode dry run"),
+            ("--cfg ~/files/wi", "--cfg {home}/files/with space.txt"),
+        ] {
+            let typed = format!("toolr ci lint {typed}");
+            let want = format!("LINE:ci lint {}", want.replace("{home}", &home));
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, &want);
         }
     }
 }
@@ -1611,8 +1892,7 @@ fn bash_attached_value_offers_the_choices() {
             assert_eq!(run.stderr, "", "{bash} {split:?}");
             let mut want = tilde_escaped(&run.quoted);
             want.sort();
-            let mut got = run.reply.clone();
-            got.sort();
+            let got = run.sorted_reply();
             assert_eq!(got, want, "{bash} {split:?}");
             assert!(
                 !fx.sentinel.exists(),
@@ -1676,8 +1956,7 @@ fn bash_attached_path_completes_the_part_after_the_equals() {
                     run.quoted.iter().map(|q| format!("{lead}{q}")).collect();
                 want.push(format!("{lead}files/sub/"));
                 want.sort();
-                let mut got = run.reply.clone();
-                got.sort();
+                let got = run.sorted_reply();
                 assert_eq!(got, want, "{at}");
                 assert!(!fx.sentinel3.exists(), "{at}: file name executed");
 
