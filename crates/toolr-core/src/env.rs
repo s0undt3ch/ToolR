@@ -1,8 +1,10 @@
-//! Env reads that must treat an empty value as unset.
+//! Path env reads that must treat an empty value as unset. Use [`xdg_dir_env`] for `XDG_*_HOME`
+//! and [`non_empty_env_path`] for other path variables (`HOME`, prefixes), which no spec requires
+//! to be absolute.
 
 use std::path::PathBuf;
 
-/// Treats an empty value as unset, per the XDG spec: an empty path would resolve against the cwd.
+/// Treats an empty value as unset, since an empty path would resolve against the cwd.
 pub fn non_empty_env_path(name: &str) -> Option<PathBuf> {
     std::env::var_os(name)
         .filter(|v| !v.is_empty())

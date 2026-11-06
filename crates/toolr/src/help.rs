@@ -48,7 +48,7 @@ fn no_color_requested(value: Option<&std::ffi::OsStr>) -> bool {
 
 /// Pick a `MadSkin` for the given output context. Caller decides
 /// `is_tty` (from `std::io::stdout().is_terminal()`) and `no_color`
-/// (from a non-empty `NO_COLOR`). Non-TTY or `NO_COLOR` set ⇒ plain
+/// (from a non-empty `NO_COLOR`). Non-TTY or a non-empty `NO_COLOR` ⇒ plain
 /// skin (no ANSI; markdown structure still renders).
 fn skin_for(is_tty: bool, no_color: bool) -> MadSkin {
     if !is_tty || no_color {

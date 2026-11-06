@@ -203,8 +203,8 @@ pub fn toolr_data_dir() -> Option<PathBuf> {
 }
 
 /// Where toolr keeps state that must survive a cache wipe, such as repository
-/// trust. Defaults to `$XDG_STATE_HOME/toolr` if `XDG_STATE_HOME` is unset or
-/// empty, then the platform state directory, then [`toolr_data_dir`]
+/// trust. Defaults to `$XDG_STATE_HOME/toolr` unless `XDG_STATE_HOME` is unset,
+/// empty or relative, then the platform state directory, then [`toolr_data_dir`]
 /// (`dirs::state_dir()` is `None` on macOS and Windows).
 pub fn toolr_state_dir() -> Option<PathBuf> {
     crate::env::xdg_dir_env("XDG_STATE_HOME")
