@@ -1693,6 +1693,17 @@ fn bash_path_controls_in_open_double_and_single_quotes_close_and_reopen() {
         ] {
             assert_path_replies(&bash, &script, &fx, cur, want);
         }
+        // A C1 control is one character in a UTF-8 locale but two bytes, each escaped.
+        std::fs::write(fx.tmp.path().join("files/c1\u{85}x"), "").unwrap();
+        let utf8 = format!("LC_ALL=C.UTF-8\n{script}");
+        for (cur, want) in [
+            (r#""files/c1"#, r#"files/c1"$'\302\205'"x"#),
+            ("'files/c1", r"files/c1'$'\302\205''x"),
+            ("$'files/c1", r"files/c1\302\205x"),
+            ("files/c1", r"files/c1$'\302\205'x"),
+        ] {
+            assert_path_replies(&bash, &utf8, &fx, cur, &[want]);
+        }
     }
 }
 

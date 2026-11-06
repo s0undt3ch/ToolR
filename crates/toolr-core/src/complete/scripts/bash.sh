@@ -8,19 +8,12 @@
 # Every local is `_toolr_`-prefixed: `${!name}` is dynamically scoped, so it would read a
 # local of any function up the call stack that shares the user's variable name.
 
-# Sets the caller's `_toolr_e` to the `$'…'` escape for the control character `$1`.
+# Sets the caller's `_toolr_e` to the `$'…'` escape for the control character `$1`: the inside
+# of its `printf %q` form, which escapes each byte, so a C1 control in UTF-8 becomes two.
 _toolr_ansi_c_char() {
-    case $1 in
-        $'\a') _toolr_e='\a' ;;
-        $'\b') _toolr_e='\b' ;;
-        $'\e') _toolr_e='\e' ;;
-        $'\f') _toolr_e='\f' ;;
-        $'\n') _toolr_e='\n' ;;
-        $'\r') _toolr_e='\r' ;;
-        $'\t') _toolr_e='\t' ;;
-        $'\v') _toolr_e='\v' ;;
-        *) printf -v _toolr_e '\\%03o' "'$1" ;;
-    esac
+    printf -v _toolr_e '%q' "$1"
+    _toolr_e=${_toolr_e#\$\'}
+    _toolr_e=${_toolr_e%\'}
 }
 
 # Sets the caller's `_toolr_q` to `$1` quoted as one inert word, with no `eval`. Reads the
@@ -215,8 +208,8 @@ _toolr_parse_word() {
             _toolr_before_quote=$_toolr_raw_cur
             continue
         fi
-        # `$'` opens an ANSI-C run; its `$` is not part of the name. Readline doesn't break at
-        # it even with `$` in `COMP_WORDBREAKS`.
+        # `$'` opens an ANSI-C run; its `$` is not part of the name. With `$` added to the
+        # default `COMP_WORDBREAKS`, readline still replaces the whole word, so it isn't a break.
         if [[ $_toolr_c == \$ && ${1:_toolr_i+1:1} == "'" ]]; then
             _toolr_i=$((_toolr_i + 1))
             _toolr_qchar=\$\'
