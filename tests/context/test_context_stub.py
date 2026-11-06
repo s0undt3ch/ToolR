@@ -1,9 +1,5 @@
-"""Check the hand-written `_context.pyi` against the real `_context` module with mypy's stubtest.
-
-mypy prefers a `.pyi` over its `.py`, so a missing or stale stub entry is invisible to the runtime
-and to any test that imports the module. stubtest imports the runtime and compares signatures,
-names and defaults, which an AST comparison of the two files cannot do.
-"""
+"""mypy prefers `_context.pyi` over `_context.py`, so stub drift is invisible to runtime tests
+and stubtest checks it."""
 
 from __future__ import annotations
 
@@ -18,9 +14,7 @@ import pytest
 REPO_ROOT = Path(__file__).parents[2]
 ALLOWLIST = Path(__file__).parent / "files" / "stubtest_allowlist.txt"
 
-# `toolr._context` imports the compiled extension through `toolr.utils`; without it stubtest
-# could only report an import error, which says nothing about the stub. CI always builds it, so
-# there a missing extension fails the test rather than skipping it silently.
+# CI builds the extension, so a missing one there is a failure, not a skip.
 pytestmark = pytest.mark.skipif(
     find_spec("toolr.utils._rust_utils") is None and not os.environ.get("CI"),
     reason="the compiled toolr-py extension is not built, so stubtest cannot import toolr._context",

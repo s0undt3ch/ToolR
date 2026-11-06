@@ -52,11 +52,11 @@ Root cause:
 
 1. Sync the stub with the runtime: declare `status_to_exit_code`, add `interactive` and fix `stream_output` on
    `run`, and decorate `chdir` with `@contextmanager`.
-2. Replace the drift guard with `tests/context/test_stub_parity.py`, which runs
+2. Replace the drift guard with `tests/context/test_context_stub.py`, which runs
    `python -m mypy.stubtest toolr._context --allowlist tests/context/files/stubtest_allowlist.txt` in a
    subprocess from the repo root and asserts exit 0, printing stubtest's output on failure. The allowlist holds
-   only the msgspec `__init__` noise. The test is skipped when `toolr.utils._rust_utils` is not importable, since
-   stubtest could then only report an import error.
+   only the msgspec `__init__` noise. The test skips locally when `toolr.utils._rust_utils` is not importable,
+   since stubtest could then only report an import error. In CI a missing extension fails it.
 
 Why stubtest and not an `ast` comparison: the first implementation compared declared names only. Review found it
 missed `async def`, nested bodies, re-exports, stub-only names and every signature difference, and it let the
