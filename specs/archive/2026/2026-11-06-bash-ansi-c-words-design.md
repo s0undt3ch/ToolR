@@ -184,6 +184,18 @@ The design was a hypothesis; these parts changed once tested against bash 5.1.16
   `\047`, and a typed `\'` is declined. Residual: names differing at `'` and `\001` share the prefix `\0`,
   which then decodes to NUL and offers nothing.
 
+- **A reply starting with the open quote.** Readline's `insert_match` won't double an opening quote: a reply
+  starting with the quote the user opened just before the replaced text overwrites that quote, so the reply's
+  quoting flips and the rest lands unquoted. The `'`/`"` forms of a leading control character
+  (`'$'\001''…`) hit it, so `dir/'` Tab Enter on a file `\001;touch X;#` ran `touch X` (found in review). On
+  `main` the same rule let a file `!;touch X;#` run under `"` with `set -H` (reply `"\!"…`), gave the wrong
+  argv for `';…` under `'`, and garbled `r'`/`r''x` after Tab, Backspace, Tab. `_toolr_quote` now starts such
+  a reply with the quote doubled.
+- **`$'…'` forms readline misreads.** Readline treats a `'` right after a `\` as escaped inside `$'…'`, so a
+  run closing as `\\'` misplaced the word start (`$'b\\':z` Tab became `z`), and an earlier word holding `\'`
+  in a run put its quoting out of step for the rest of the line. Both now offer nothing: the line up to the
+  cursor goes through the same parser first, and a run closing on a `'` after a `\` is declined.
+
 ## Open questions (resolved)
 
 1. Names differing at the control character itself: accepted. `files/nl\nx` and `files/nl\tz` give the

@@ -63,6 +63,11 @@ _toolr_quote() {
         done
         _toolr_q=$_toolr_out
     fi
+    # Readline's `insert_match` lets a reply starting with the quote the user opened overwrite
+    # that quote rather than double it, so start the reply with two.
+    if [[ ${_toolr_q:0:1} == "$_toolr_qchar" ]]; then
+        _toolr_q=$_toolr_qchar$_toolr_q
+    fi
     # Readline adds no closing quote to a reply that already ends in one, so add one more. A
     # `$'` reply never ends in `'`.
     if [[ -n $_toolr_q && ${_toolr_q: -1} == "${_toolr_qchar: -1}" ]]; then
@@ -171,6 +176,12 @@ _toolr_parse_word() {
         _toolr_c=${1:_toolr_i:1}
         if [[ $_toolr_qchar == \$\' ]]; then
             if [[ $_toolr_c == "'" ]]; then
+                # Readline reads a `'` right after a `\` as escaped inside `$'…'`, though `\\'`
+                # closes the run, so it would misplace the word's start.
+                if [[ ${1:_toolr_i-1:1} == \\ ]]; then
+                    _toolr_declined=1
+                    return 0
+                fi
                 _toolr_qchar=
             elif [[ $_toolr_c == \\ ]]; then
                 if ! _toolr_ansi_c_escape "$1"; then
@@ -261,6 +272,12 @@ _toolr_complete() {
     local _toolr_cur=${_toolr_words[_toolr_n - 1]}
 
     local _toolr_raw_cur _toolr_raw_prefix _toolr_qchar _toolr_declined
+    # A `$'…'` form readline misreads, anywhere before the cursor, puts its quoting out of step
+    # with the script's for the rest of the line.
+    _toolr_parse_word "${COMP_LINE:0:COMP_POINT}"
+    if ((_toolr_declined)); then
+        return 0
+    fi
     _toolr_parse_word "$_toolr_cur"
     if ((_toolr_declined)); then
         return 0

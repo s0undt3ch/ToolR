@@ -23,7 +23,7 @@ const PATH_FILES: [&str; 8] = [
 ];
 
 /// `SENTINEL` and `SENTINEL2` stand for paths the fixture fills in.
-const CHOICES: [&str; 11] = [
+const CHOICES: [&str; 12] = [
     "fast",
     "a:b",
     "dry run",
@@ -35,6 +35,8 @@ const CHOICES: [&str; 11] = [
     "u@h",
     "a$b",
     "wow!",
+    // `"\!"…` starts with the `"` readline won't double.
+    "!;touch SENTINEL;#",
 ];
 
 struct Fixture {
@@ -2261,6 +2263,132 @@ fn bash_tab_never_runs_a_name_holding_a_quote_end_to_end() {
             // Checked after each line: a command that ran is the finding.
             assert!(!fx.sentinel.exists(), "{bash} {typed:?}: $(...) ran");
             assert!(!fx.sentinel2.exists(), "{bash} {typed:?}: backtick ran");
+        }
+    }
+}
+
+/// Names whose quoted reply starts with the quote the user opened, under `lead/`, plus `rq/`
+/// holding `r'` and `r''x`, and `evb/` holding `b\:z` and `b\:y$(touch sentinel-one)`.
+fn lead_quote_dirs(fx: &Fixture) {
+    for name in [
+        "lead/ctl/\u{1};touch sentinel-one;#",
+        "lead/sub/\u{1}$(touch sentinel-one)",
+        "lead/bang/!;touch sentinel-one;#",
+        "lead/sq/';touch sentinel-one;#",
+        "rq/r'",
+        "rq/r''x",
+        "evb/b\\:z",
+        "evb/b\\:y$(touch sentinel-one)",
+    ] {
+        let path = fx.tmp.path().join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "").unwrap();
+    }
+}
+
+/// Readline's `insert_match` won't double an opening quote: a reply starting with the quote the
+/// user opened overwrites it, so the reply's own quoting flips and the rest lands unquoted.
+#[test]
+fn bash_tab_reply_starting_with_the_open_quote_end_to_end() {
+    for bash in bashes() {
+        let fx = fixture();
+        lead_quote_dirs(&fx);
+        let sentinel = fx.sentinel.display().to_string();
+        for history in ["set -H", "set +H"] {
+            let quoted = fx.tmp.path().join("bashrc-quoted");
+            std::fs::write(&quoted, format!("{}{history}\n", bash_tab_rc_quoted(&fx))).unwrap();
+            let plain = fx.tmp.path().join("bashrc-plain");
+            std::fs::write(&plain, format!("{}{history}\n", bash_tab_rc(&fx))).unwrap();
+            for (rcfile, typed, want) in [
+                (
+                    &quoted,
+                    "--cfg lead/ctl/'",
+                    r"LINE: ci lint --cfg $'lead/ctl/\001;touch sentinel-one;#'",
+                ),
+                (
+                    &quoted,
+                    "--cfg lead/ctl/\"",
+                    r"LINE: ci lint --cfg $'lead/ctl/\001;touch sentinel-one;#'",
+                ),
+                (
+                    &quoted,
+                    "--cfg lead/sub/'",
+                    r"LINE: ci lint --cfg $'lead/sub/\001$(touch sentinel-one)'",
+                ),
+                (
+                    &quoted,
+                    "--cfg lead/sub/\"",
+                    r"LINE: ci lint --cfg $'lead/sub/\001$(touch sentinel-one)'",
+                ),
+                (
+                    &plain,
+                    "--cfg lead/bang/\"",
+                    "LINE:ci lint --cfg lead/bang/!;touch sentinel-one;#",
+                ),
+                (
+                    &plain,
+                    "--cfg lead/sq/'",
+                    "LINE:ci lint --cfg lead/sq/';touch sentinel-one;#",
+                ),
+                // The first Tab inserts the common prefix, and Backspace (`^H`: a typed-ahead DEL
+                // is erased by the pty's line discipline) reopens the quote.
+                (&plain, "--cfg 'rq/r\t\x08", "LINE:ci lint --cfg rq/r''x"),
+                (
+                    &plain,
+                    "--mode \"!",
+                    &format!("LINE:ci lint --mode !;touch {sentinel};#"),
+                ),
+            ] {
+                let typed = format!("toolr ci lint {typed}");
+                assert_bash_tab_line(&bash, &fx, rcfile, &typed, want);
+                // Checked after each line: a command that ran is the finding.
+                assert!(
+                    !fx.sentinel.exists(),
+                    "{bash} {history} {typed:?}: command ran"
+                );
+            }
+        }
+    }
+}
+
+/// Readline misreads a `$'…'` run holding `\'`, or closing on a `'` right after a `\`, and its
+/// idea of the open quote then differs from the script's. Such a line offers nothing.
+#[test]
+fn bash_path_ansi_c_forms_readline_misreads_offer_nothing() {
+    let script = print_script("bash");
+    for bash in bashes() {
+        let fx = fixture();
+        lead_quote_dirs(&fx);
+        assert_path_replies(&bash, &script, &fx, r"$'evb/b\\':z", &[]);
+        assert_path_replies(&bash, &script, &fx, r"$'evb/b\\'", &[]);
+        // A misread word earlier on the line puts readline out of step for the rest of it.
+        let run = Drive::new(&script, &["--out", r"$'a\'b'", "--cfg"], "lead/sq/").run(&bash, &fx);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+        let run =
+            Drive::new(&script, &["--out", r"$'a\047b'", "--cfg"], "lead/sq/").run(&bash, &fx);
+        assert_eq!(run.reply.len(), 1, "{bash}: {:?}", run.reply);
+    }
+}
+
+/// End to end, the misread forms leave the typed text as it was.
+#[test]
+fn bash_tab_keeps_ansi_c_forms_readline_misreads_end_to_end() {
+    for bash in bashes() {
+        let fx = fixture();
+        lead_quote_dirs(&fx);
+        let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, bash_tab_rc(&fx)).unwrap();
+        for (typed, want) in [
+            (r"--cfg $'evb/b\\':z", r"LINE:ci lint --cfg evb/b\:z"),
+            (
+                r"--out $'a\'b' --cfg lead/sq/",
+                "LINE:ci lint --out a'b --cfg lead/sq/",
+            ),
+        ] {
+            let typed = format!("toolr ci lint {typed}");
+            assert_bash_tab_line(&bash, &fx, &rcfile, &typed, want);
+            assert!(!fx.sentinel.exists(), "{bash} {typed:?}: command ran");
         }
     }
 }
