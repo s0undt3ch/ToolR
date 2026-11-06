@@ -2,12 +2,11 @@
 
 Status: proposed. Audit follow-up FU-33, found in #685 round 2 and pre-existing.
 
-Written against two open PRs, not `main` alone:
+Written against `main`, which now includes:
 
-- #690 (`fix/bash53-compgen-dequote`) rewrites `bash.sh` with a quote-aware word parser
+- #690 (`fix/bash53-compgen-dequote`), which rewrote `bash.sh` with a quote-aware word parser
   (`_toolr_parse_word`) and quote-aware replies.
-- #691 (`fix/complete-double-dash`) changes `engine.rs`. This design does not touch the engine, so the two
-  don't conflict.
+- #691 (`fix/complete-double-dash`), which changed `engine.rs`. This design does not touch the engine.
 
 ## Problem
 
@@ -49,8 +48,10 @@ There is no bash remainder. One bash-adjacent gap stays out of scope: backtick a
 - **zsh.** `$words[CURRENT]` and the earlier `$words` entries are raw: backslashes and quotes intact.
   `${(Q)…}` removes one level of quoting from a *closed* word.
   It leaves an *unterminated* quote untouched (`${(Q)"'dry r"}` is `'dry r`), so `'dry r` and `"dry r` need the
-  closing quote appended before `(Q)`. `compstate[quote]` (`single`, `double`, `dollars`, `backtick`, empty) says which
-  quote is open at the cursor.
+  closing quote appended before `(Q)`.
+  `compstate[quote]` holds the quote character at the cursor (`'`, `"`, `$'`, a backtick, or empty);
+  zsh reports it even once the quote is closed. A live Tab shows zsh never calls `_toolr` inside backticks or
+  after `"…$`, since it completes the command or parameter itself.
 - **fish.** `commandline -ct` returns the raw token (`dry\ r`, `'dry r`). `commandline -opc` returns the *earlier*
   tokens already unescaped. `string unescape` handles an unterminated quote.
   `__fish_complete_path` and `__fish_complete_directories` re-parse their argument as shell text
@@ -77,8 +78,8 @@ script to say which shell it came from.
 In `_toolr`:
 
 - Dequote the current word and every earlier word with `(Q)`: `${(@Q)words[2,CURRENT-1]}`.
-- For the current word, if `compstate[quote]` is `single`, `double` or `dollars`, append the matching closing
-  character before `(Q)`, so the open quote is stripped. For `backtick`, offer nothing.
+- For the current word, if `compstate[quote]` is set and `(Q)` left the word unchanged (an open quote), append
+  the quote's last character (`'`, `"`, or `'` for `$'`) and apply `(Q)` again. For a backtick, offer nothing.
 - The `--opt=value` test (`attached`) runs on the dequoted word.
 - The `10`/`11` exits still call `_files` untouched: zsh's `_files` dequotes the word itself.
 
@@ -87,11 +88,10 @@ quote state at the cursor (backslash outside quotes, inside `'…'` or `"…"` a
 `-Q` would insert the raw value and break on spaces, `$`, `'`. The existing test
 `zsh_completion_never_executes_values` already forbids `-Q`; it stays.
 
-Unverified premise, to be settled first in the plan: zsh removes the quotes from `PREFIX` before `_toolr` runs and
-re-quotes through `compadd`. This is documented behaviour and it is how `_files` works. My attempt to confirm it
-with a `zpty` session in this environment was inconclusive (the harness never reached a completion), so the first
-plan task tries again and falls back to the stub driver plus the documented guarantee if `zpty` can't be made
-reliable.
+Premise, settled with a live Tab in an interactive zsh on a pty: `$words` is raw in every case, and `PREFIX` is
+dequoted only inside quotes (`dry\ w` stays escaped). `compadd` without `-Q` re-quotes each inserted match
+(`dry\ `, `wow\!`, `x=\~root`). The suite keeps that pty run as
+`zsh_tab_completes_quoted_and_escaped_partials_end_to_end`.
 
 ## fish
 
@@ -115,10 +115,7 @@ In `__toolr_complete`:
 
 ## Open questions
 
-1. Is a `zpty` test stable enough for CI, or do we keep the stub driver and rely on documented zsh behaviour for the
-   reply-quoting half? Recommendation: stub driver in the suite, a one-off manual `zpty` check recorded in the PR.
-2. zsh `dollars` quoting (`$'dry r`): close with `'` and `(Q)` handles `$'…'`? Needs a stub test; if not, treat as
-   `backtick` (offer nothing).
-3. Should a stacked order matter? #690 only touches `bash.sh` and its tests; this work touches `zsh.zsh`, `fish.fish`
-   and new tests in `complete_shells.rs`. Both edit `complete_shells.rs`, so expect a textual conflict in that file
-   if neither merges first. Rebase on whichever lands first.
+1. Settled: an interactive zsh on a pty (the helper the bash Tab tests use) drives a real completion reliably, so it
+   runs in the default suite next to the stub-driver tests.
+2. Settled: `$'dry r` closed with `'` then `(Q)` gives `dry r`, so `$'…'` is supported.
+3. Stacked order: settled. #690 merged first and this branch is rebased on `main`.
