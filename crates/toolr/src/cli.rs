@@ -644,7 +644,7 @@ fn build_self_subcommand() -> Command {
                     Arg::new("prune")
                         .long("prune")
                         .action(ArgAction::SetTrue)
-                        .help("Forget repositories whose path no longer exists"),
+                        .help("Forget records whose repository no longer exists"),
                 ),
         )
         .subcommand(build_self_completion_subcommand())

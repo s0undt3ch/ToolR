@@ -233,9 +233,11 @@ toolr project manifest rebuild --help
 ### `toolr project trust [PATH]` {#project-trust}
 
 Trust the repository at `PATH` (default: the current directory's project
-root) and print the trusted root, then offer to sync its tools venv if it
-needs one. `--no-sync` only records the trust. When it asks, syncs or exits
-non-zero is in [Repository trust](concepts.md#repository-trust).
+root) and print the repository path: the main checkout, or a bare
+repository's `foo.git` directory. This covers every worktree of it. Then it
+offers to sync its tools venv if it needs one. `--no-sync` only records the
+trust. When it asks, syncs or exits non-zero is in
+[Repository trust](concepts.md#repository-trust).
 
 ```sh
 toolr project trust --help
@@ -247,8 +249,9 @@ toolr project trust --help
 
 ### `toolr project untrust [PATH]` {#project-untrust}
 
-Remove the trust record for the repository at `PATH`. Prints the root when a
-record was removed; says so on stderr when there was none.
+Remove the trust record for the repository at `PATH`, which untrusts every
+worktree of it. Prints the repository path when a record was removed; says
+so on stderr when there was none.
 
 ```sh
 toolr project untrust --help
@@ -349,7 +352,7 @@ toolr self cache prune --help
 
 ### `toolr self trusted` {#self-trusted}
 
-List the trusted repositories. A root whose path no longer exists is marked
+List the trusted repositories. A repository that no longer exists is marked
 `(missing)`; `--prune` removes those records instead.
 
 ```sh

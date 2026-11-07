@@ -453,15 +453,15 @@ fn run_self_trusted(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<E
     let store = toolr_core::trust::TrustStore::open_default()?;
     let prune = matches.get_flag("prune");
     for record in store.list()? {
-        let root = &record.repo_path;
-        if root.exists() {
-            println!("{}", shown(root));
+        let repo = &record.repo_path;
+        if record.key.exists() {
+            println!("{}", shown(repo));
         } else if prune {
-            if store.untrust(root)? && !quiet {
-                eprintln!("toolr: pruned {}", shown(root));
+            if store.untrust_key(&record.key)? && !quiet {
+                eprintln!("toolr: pruned {}", shown(repo));
             }
         } else {
-            println!("{} (missing)", shown(root));
+            println!("{} (missing)", shown(repo));
         }
     }
     Ok(ExitCode::SUCCESS)

@@ -76,10 +76,11 @@ fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
 fn project_untrust(matches: &ArgMatches) -> Result<ExitCode> {
     let root = root_from_path_arg(matches)?;
     let store = TrustStore::open_default()?;
-    if store.untrust(&root)? {
-        println!("{}", shown(&root));
+    let (repo, existed) = store.untrust(&root)?;
+    if existed {
+        println!("{}", shown(&repo));
     } else {
-        eprintln!("toolr: {} was not trusted", shown(&root));
+        eprintln!("toolr: {} was not trusted", shown(&repo));
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -828,7 +829,10 @@ mod tests {
     fn trust_refusal_is_never_a_benign_quiet_exit() {
         let path = PathBuf::from("/x/locating project root/resolving the tools venv path");
         for err in [
-            TrustError::Untrusted(path.clone()),
+            TrustError::Untrusted {
+                repo: path.clone(),
+                repair: None,
+            },
             TrustError::StoreInsideRepo(path.clone()),
         ] {
             let bare: Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> =
