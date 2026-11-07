@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::uv::toolr_state_dir;
 
 mod repo_key;
-pub use repo_key::RepoKey;
+pub use repo_key::{KeyKind, RepoKey};
 
 const RECORD_SCHEMA_VERSION: u32 = 1;
 

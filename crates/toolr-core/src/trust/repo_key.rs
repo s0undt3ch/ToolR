@@ -6,18 +6,31 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
+/// Records match only within a kind: a forged `worktrees/` layout inside a
+/// directory trusted per-path resolves to that directory's path as a
+/// repository key, which must not match its per-path record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KeyKind {
+    Repository,
+    PerPath,
+}
+
 /// Where a project root's trust is recorded and what to show for it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepoKey {
     /// The canonical git common dir, or the canonical project root (per-path).
     pub key: PathBuf,
+    pub kind: KeyKind,
     /// The repository path shown to the user.
     pub display: PathBuf,
     /// The canonical project root, or the input unchanged when it can't be
     /// canonicalised.
     pub project_root: PathBuf,
-    /// `.git` is a linked worktree's file whose back-link doesn't name this
-    /// checkout: `git worktree repair` would restore the repository key.
+    /// `.git` is a linked worktree's file whose back-link names a `.git` that no
+    /// longer points at the same gitdir: `git worktree repair` would restore
+    /// the repository key without taking it from a live worktree.
     pub repair_hint: bool,
 }
 
@@ -48,17 +61,20 @@ fn resolve_as(project_root: &Path, home: Option<&Path>, euid: Option<u32>) -> Re
         }
         Err(_) => (project_root.to_path_buf(), Lookup::PerPath),
     };
-    let (key, repair_hint) = match lookup {
-        Lookup::Repo(key) => (key, false),
-        Lookup::PerPath => (project_root.clone(), false),
-        Lookup::StaleBackLink => (project_root.clone(), true),
+    let (key, kind, repair_hint) = match lookup {
+        Lookup::Repo(key) => (key, KeyKind::Repository, false),
+        Lookup::PerPath => (project_root.clone(), KeyKind::PerPath, false),
+        Lookup::StaleBackLink => (project_root.clone(), KeyKind::PerPath, true),
     };
     let display = match key.file_name() {
-        Some(name) if name == ".git" => key.parent().unwrap_or(&key).to_path_buf(),
+        Some(name) if kind == KeyKind::Repository && name == ".git" => {
+            key.parent().unwrap_or(&key).to_path_buf()
+        }
         _ => key.clone(),
     };
     RepoKey {
         key,
+        kind,
         display,
         project_root,
         repair_hint,
@@ -105,11 +121,7 @@ fn classify(dir: &Path, dot_git: &Path, meta: &fs::Metadata, euid: Option<u32>) 
 }
 
 fn linked_worktree(dir: &Path, dot_git: &Path) -> Lookup {
-    let target = fs::read_to_string(dot_git).ok().and_then(|content| {
-        let path = content.strip_prefix("gitdir: ")?.trim();
-        (!path.is_empty()).then(|| dir.join(path))
-    });
-    let Some(gitdir) = target.and_then(|path| fs::canonicalize(path).ok()) else {
+    let Some(gitdir) = gitfile_target(dot_git) else {
         return Lookup::PerPath;
     };
     // Git keeps every linked worktree's gitdir in `<common dir>/worktrees/`,
@@ -121,27 +133,38 @@ fn linked_worktree(dir: &Path, dot_git: &Path) -> Lookup {
     let Some(common_dir) = common_dir else {
         return Lookup::PerPath;
     };
-    if back_link_names(&gitdir, dir) {
+    // The back-link git writes when it creates a worktree. Without checking it
+    // a crafted `.git` file could name a live worktree's gitdir.
+    let Ok(content) = fs::read_to_string(gitdir.join("gitdir")) else {
+        return Lookup::PerPath;
+    };
+    let link = gitdir.join(content.trim());
+    let names_this_checkout = link.file_name() == Some(".git".as_ref())
+        && link
+            .parent()
+            .and_then(|parent| fs::canonicalize(parent).ok())
+            .as_deref()
+            == Some(dir);
+    if names_this_checkout {
         Lookup::Repo(common_dir.to_path_buf())
+    } else if gitfile_target(&link).as_ref() == Some(&gitdir) {
+        // A copy of a live worktree's `.git`: repairing would hand it that
+        // worktree's trust.
+        Lookup::PerPath
     } else {
         Lookup::StaleBackLink
     }
 }
 
-/// Whether `<gitdir>/gitdir`, the link git writes back to a worktree it
-/// created, names `dir/.git`. Without it a crafted `.git` file could name a
-/// live worktree's gitdir.
-fn back_link_names(gitdir: &Path, dir: &Path) -> bool {
-    let Ok(content) = fs::read_to_string(gitdir.join("gitdir")) else {
-        return false;
-    };
-    let link = gitdir.join(content.trim());
-    link.file_name() == Some(".git".as_ref())
-        && link
-            .parent()
-            .and_then(|parent| fs::canonicalize(parent).ok())
-            .as_deref()
-            == Some(dir)
+/// The canonical gitdir a `gitdir: <path>` file names, relative paths resolved
+/// against the file's directory.
+fn gitfile_target(gitfile: &Path) -> Option<PathBuf> {
+    let content = fs::read_to_string(gitfile).ok()?;
+    let path = content.strip_prefix("gitdir: ")?.trim();
+    if path.is_empty() {
+        return None;
+    }
+    fs::canonicalize(gitfile.parent()?.join(path)).ok()
 }
 
 #[cfg(test)]
@@ -219,6 +242,7 @@ mod tests {
         let got = resolve(path);
         let root = canon(path);
         assert_eq!(got.key, root);
+        assert_eq!(got.kind, KeyKind::PerPath);
         assert_eq!(got.display, root);
         assert_eq!(got.project_root, root);
         assert_eq!(got.repair_hint, repair_hint);
@@ -230,6 +254,7 @@ mod tests {
         let repo = init_repo(&tmp.path().join("repo"));
         let got = resolve(&repo);
         assert_eq!(got.key, repo.join(".git"));
+        assert_eq!(got.kind, KeyKind::Repository);
         assert_eq!(got.display, repo);
         assert_eq!(got.project_root, repo);
         assert!(!got.repair_hint);
@@ -245,6 +270,7 @@ mod tests {
         for wt in [inside, sibling] {
             let got = resolve(&wt);
             assert_eq!(got.key, repo.join(".git"));
+            assert_eq!(got.kind, KeyKind::Repository);
             assert_eq!(got.display, repo);
             assert_eq!(got.project_root, wt);
             assert!(!got.repair_hint);
@@ -352,6 +378,7 @@ mod tests {
         let wt = add_worktree(&bare, &tmp.path().join("wt"));
         let got = resolve(&wt);
         assert_eq!(got.key, bare);
+        assert_eq!(got.kind, KeyKind::Repository);
         assert_eq!(got.display, bare);
     }
 
@@ -398,6 +425,7 @@ mod tests {
         let wt = add_worktree(&sup.join("mod"), &tmp.path().join("mod-wt"));
         let got = resolve(&wt);
         assert_eq!(got.key, sup.join(".git/modules/mod"));
+        assert_eq!(got.kind, KeyKind::Repository);
         assert_eq!(got.key, rev_parse_common_dir(&wt));
     }
 
@@ -462,6 +490,8 @@ mod tests {
         let got = resolve(&c.attacker);
         assert_ne!(got.key, c.trusted_key());
         assert_eq!(got.key, c.attacker);
+        assert_eq!(got.kind, KeyKind::PerPath);
+        assert!(!got.repair_hint);
     }
 
     #[test]
@@ -493,6 +523,47 @@ mod tests {
         let got = resolve(&c.attacker);
         assert_ne!(got.key, c.trusted_key());
         assert_eq!(got.key, c.attacker.join("x"));
+        assert_eq!(got.kind, KeyKind::Repository);
+    }
+
+    #[test]
+    fn forged_worktree_under_per_path_dir_is_a_different_kind() {
+        let tmp = TempDir::new().unwrap();
+        let trusted = tmp.path().join("p");
+        fs::create_dir_all(trusted.join("worktrees/proj")).unwrap();
+        fs::create_dir_all(trusted.join("worktrees/g")).unwrap();
+        fs::write(trusted.join("worktrees/proj/.git"), "gitdir: ../g\n").unwrap();
+        fs::write(trusted.join("worktrees/g/gitdir"), "../proj/.git\n").unwrap();
+        let per_path = resolve(&trusted);
+        assert_eq!(per_path.kind, KeyKind::PerPath);
+        let forged = resolve(&trusted.join("worktrees/proj"));
+        assert_eq!(forged.key, per_path.key);
+        assert_eq!(forged.kind, KeyKind::Repository);
+        assert_ne!(forged.kind, per_path.kind);
+    }
+
+    #[test]
+    fn deleted_worktree_recreated_at_same_path_keeps_key() {
+        // The spec's accepted residual: stale bookkeeping until `git worktree prune`.
+        let tmp = TempDir::new().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let wt = add_worktree(&repo, &tmp.path().join("wt"));
+        let gitfile = fs::read_to_string(wt.join(".git")).unwrap();
+        fs::remove_dir_all(&wt).unwrap();
+        fs::create_dir(&wt).unwrap();
+        fs::write(wt.join(".git"), gitfile).unwrap();
+        let got = resolve(&wt);
+        assert_eq!(got.key, repo.join(".git"));
+        assert_eq!(got.kind, KeyKind::Repository);
+    }
+
+    #[test]
+    fn per_path_key_named_dot_git_displays_itself() {
+        let tmp = TempDir::new().unwrap();
+        let missing = tmp.path().join("x/.git");
+        let got = resolve(&missing);
+        assert_eq!(got.kind, KeyKind::PerPath);
+        assert_eq!(got.display, missing);
     }
 
     #[test]
@@ -521,11 +592,11 @@ mod tests {
     }
 
     #[test]
-    fn worktree_without_back_link_is_per_path_with_hint() {
+    fn worktree_without_back_link_is_per_path_without_hint() {
         let c = Crafted::new();
         let gitdir = c.trusted.join(".git/worktrees/live");
         fs::remove_file(gitdir.join("gitdir")).unwrap();
-        assert_per_path(&c.live_wt, true);
+        assert_per_path(&c.live_wt, false);
     }
 
     #[test]
@@ -572,7 +643,11 @@ mod tests {
         assert_eq!(resolve_as(&repo, None, Some(euid)).key, repo.join(".git"));
         let got = resolve_as(&repo, None, Some(euid.wrapping_add(1)));
         assert_eq!(got.key, repo);
+        assert_eq!(got.kind, KeyKind::PerPath);
         assert!(!got.repair_hint);
+        let got = resolve_as(&repo.join(".git"), None, Some(euid.wrapping_add(1)));
+        assert_eq!(got.key, repo.join(".git"));
+        assert_eq!(got.display, repo.join(".git"));
     }
 
     #[cfg(unix)]
