@@ -100,23 +100,50 @@ own and borrows nothing. (My call: fail closed to per-path trust, not to an erro
   check.
 - **`E` is a directory** (a main checkout): key = `E`, canonicalised. A
   `commondir` file inside it is ignored; a main checkout's git dir is its own
-  common dir. (My call: git would honour a planted `commondir`, but following it
-  would let a crafted `.git` directory point at another repository.)
+  common dir. (Following a planted `commondir` would let a crafted `.git`
+  directory point at another repository. Git 2.56 refuses such a directory as
+  "not a git repository", so ignoring it costs nothing.)
 - **`E` is a regular file** (`gitdir: <path>`, relative paths resolved against
-  `D`): let `G` be the gitdir it names, canonicalised, and `C` = `G/commondir`
-  resolved relative to `G`, canonicalised. The key is `C` only when **all** hold:
-  1. `G/commondir` exists and resolves;
-  2. `G`'s parent is exactly `C/worktrees` — git keeps every linked worktree's
-     gitdir there, and an attacker can't create a directory inside another
-     repository's git dir (without this, an archive could ship its own `G` whose
-     `commondir` names a trusted repository);
-  3. `G/gitdir` exists and names `D/.git` (compare its canonicalised parent
-     directory joined with `.git` against `D/.git`; don't canonicalise through
-     `E` itself). Git writes this back-link when it creates a worktree.
+  `D`): let `G` be the gitdir it names, canonicalised. The key is `G`'s
+  grandparent, canonicalised, only when **both** hold:
+  1. `G`'s parent directory is named exactly `worktrees`. Git keeps every linked
+     worktree's gitdir in `<common dir>/worktrees/`, and an attacker can't create
+     a directory inside another repository's git dir. Without this, an archive
+     could ship its own `G` naming a trusted repository. Because of this rule the
+     key is `G`'s grandparent directly; `G/commondir` is not read. (Reviewer's
+     simplification: same result for every layout tested, one file fewer.)
+  2. `G/gitdir` exists and names `D/.git`. Resolve its content **relative to
+     `G`** when relative (git ≥ 2.48 writes relative back-links with
+     `worktree.useRelativePaths`), then compare its canonicalised parent joined
+     with `.git` against `D/.git`; don't canonicalise through `E` itself. Git
+     writes this back-link when it creates a worktree; it is the only thing that
+     stops a crafted `.git` file naming a live worktree's gitdir, which git
+     itself accepts.
 
   Anything else is per-path. That covers a submodule (its gitdir sits in
   `.git/modules/<name>`, not under `worktrees/`), an unreadable or malformed
-  `.git` file, and a crafted `.git` file.
+  `.git` file, and a crafted `.git` file. A worktree created *inside* a submodule
+  has its gitdir under `.git/modules/<name>/worktrees/` and keys on the
+  submodule's own git dir, as it should.
+
+  **A worktree moved with plain `mv`** keeps a stale back-link: git still works,
+  rule 2 fails, and the user is prompted again. The prompt and the `Untrusted`
+  error, when `E` is a `.git` file that failed rule 2 only, hint
+  `git worktree repair`.
+
+**Walk details.** The `.git` walk starts at the project root and stops at the
+first `.git` entry or at `$HOME`. With no home directory (`dirs::home_dir()` is
+`None`) it continues to `/`. A `~/.git` that is itself a file (`$HOME` is a
+linked worktree) changes nothing: projects below `~` are per-path, `~/tools`
+follows the file rules.
+
+**Residual risk: stale worktree paths.** A worktree deleted with `rm -rf` leaves
+its gitdir and back-link until `git worktree prune` (or gc, three months by
+default). An archive unpacked at that exact path with a matching `.git` file
+passes every rule, as it does for git itself. The attacker needs the exact path;
+documented, not engineered around. The ownership check doesn't help here (the
+user owns what they unpack); rules 1 and 2 carry the defence against same-user
+archives.
 
 Bare repositories with worktrees (`git clone --bare` + `git worktree add`) take
 the worktree branch: the common dir is the bare repository directory.
@@ -142,7 +169,9 @@ The key may be a `.git` directory, which is a poor thing to show. Wherever a
 path is shown (the trust prompt, the `Untrusted` error, `toolr project trust`,
 `toolr project untrust`, `toolr self trusted`), show the **repository path**:
 
-- key ends in `.git` and its parent exists → the parent (the main checkout);
+- key's file name is exactly `.git` → its parent (the main checkout). Not "ends
+  in": bare repositories are conventionally `foo.git`, and their parent is just
+  the directory holding them;
 - otherwise (bare repository, non-git project) → the key itself.
 
 (My call.) Commands that print the path to stdout keep printing exactly one path,
@@ -168,10 +197,15 @@ mention that worktrees are covered, e.g. the prompt line
   The `$HOME` exemption applies to any of those paths that equals the home
   directory: `~/tools` with a `~/.git` has displayed path `~`, which always holds
   the default store.
-- `Trusted` proofs cover a key. `Trusted::covers(root)` resolves `root` to its key
-  and compares keys, so a proof made in one worktree covers the project in
-  another worktree of the same repository. Proofs still only come from this
-  module.
+- `Trusted` proofs carry **both** the key and the project root.
+  `Trusted::covers(root)` resolves `root` to its key and compares keys, so a
+  proof made in one worktree covers the project in another worktree of the same
+  repository. `Trusted::root()` stays the project root: `sync_after_trust` and
+  `ensure_venv_ready` (`crates/toolr-core/src/project.rs:171`, `:205`) use it to
+  find the venv. Proofs still only come from this module.
+- `toolr self trusted --prune` and anything else working from a stored record
+  operate on the stored key directly (e.g. an `untrust_key`), never by
+  re-resolving the key as if it were a project root.
 - `toolr project init` trusts the directory it scaffolds; it goes through the
   same resolution, so `init` inside a worktree trusts the whole repository.
 - Every `trust.rs` entry point (`is_trusted`, `trust`/`grant`, `untrust`,
@@ -202,6 +236,14 @@ mention that worktrees are covered, e.g. the prompt line
   worktrees' `.git` files → not trusted.
 - (Unix) A `.git` owned by another user → per-path.
 - A `--separate-git-dir` main checkout gets per-path trust.
+- A worktree made with `worktree.useRelativePaths=true` shares the main
+  checkout's trust.
+- A worktree moved with plain `mv` falls to per-path and the prompt hints
+  `git worktree repair`.
+- A bare `foo.git` with a worktree: `toolr self trusted` shows `…/foo.git`, not
+  its parent.
+- A proof made from a worktree syncs that worktree's venv, not the main
+  checkout's.
 - With a trusted `~/.git` (use a fake `HOME`): a git-less `~/x/tools` is not
   trusted; `~/foo` with its own `.git` is keyed on `~/foo/.git`; `~/tools` is
   keyed on `~/.git` and the store guard doesn't refuse it.
