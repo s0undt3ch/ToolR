@@ -282,7 +282,7 @@ def bump(
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         ctx.info("Writing release-version and release-patch-name to GitHub output file ...")
-        with open(github_output, "a") as f:
+        with open(github_output, "a", encoding="utf-8") as f:
             f.write(f"release-version={cargo_version}\n")
             f.write(f"release-patch-name=toolr-{cargo_version}.patch\n")
             # Only a pre-release segment counts, not `is_prerelease` (true for
@@ -296,12 +296,12 @@ def bump(
     github_env = os.environ.get("GITHUB_ENV")
     if github_env:
         ctx.info("Writing RELEASE_VERSION to GitHub environment file ...")
-        with open(github_env, "a") as f:
+        with open(github_env, "a", encoding="utf-8") as f:
             f.write(f"RELEASE_VERSION={cargo_version}\n")
 
     github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if github_step_summary:
-        with open(github_step_summary, "a") as f:
+        with open(github_step_summary, "a", encoding="utf-8") as f:
             f.write(f"Releasing version: `{cargo_version}`\n")
 
     if write:

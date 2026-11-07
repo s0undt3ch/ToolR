@@ -19,7 +19,7 @@ from tests._git import require_git
 
 def workflow_step(path: Path, job: str, step_id: str) -> dict[str, Any]:
     """Return step `step_id` in job `job` of the workflow at `path`."""
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     for step in data["jobs"][job]["steps"]:
         if step.get("id") == step_id:
             return step
@@ -33,7 +33,7 @@ def workflow_step_script(path: Path, job: str, step_id: str) -> str:
 
 def action_step_script(path: Path, step_id: str) -> str:
     """Return the `run:` body of step `step_id` in the composite action at `path`."""
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     for step in data["runs"]["steps"]:
         if step.get("id") == step_id:
             return str(step["run"])

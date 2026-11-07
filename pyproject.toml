@@ -103,7 +103,10 @@ extend-include = [
 ]
 
 [tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
 select = ["ALL"]
+extend-select = ["PLW1514"]
 ignore = [
   # D* pydocstyle
   "ANN",     # Don't complain about annotations
