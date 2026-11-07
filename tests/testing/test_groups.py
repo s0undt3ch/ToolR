@@ -18,6 +18,7 @@ from toolr.testing._groups import _format_undescribed_groups
 from toolr.testing._groups import _group_declarations
 from toolr.testing._groups import _ImportTable
 from toolr.testing._groups import _Memo
+from toolr.testing._groups import _unbound_group_calls
 from toolr.testing._groups import _undescribed_groups
 from toolr.testing._shapes import GROUP_BINDING
 from toolr.testing._shapes import _unsupported_group_bindings
@@ -813,11 +814,22 @@ def test_problems_come_in_source_order(make_tools_dir: Callable[..., Path]) -> N
     )
 
 
-def test_a_very_long_expression_does_not_overflow_the_stack(
-    make_tools_dir: Callable[..., Path],
-) -> None:
-    source = "x = " + " + ".join(["1"] * 3000) + ' + command_group("g", "G", "G.")\n'
-    assert _unsupported(make_tools_dir, source) == _problems("tools.m", 'command_group("g")')
+def test_a_very_long_expression_does_not_overflow_the_stack() -> None:
+    # Built node by node: CPython's own parser recurses on a long expression, at a depth
+    # that varies by version and platform, so parsing one would fail before the walk runs.
+    tree = ast.parse(IMPORT + 'x = 1 + command_group("g", "G", "G.")\n')
+    assign = tree.body[1]
+    assert isinstance(assign, ast.Assign)
+    assert isinstance(assign.value, ast.BinOp)
+    chain: ast.expr = ast.Constant(value=1)
+    for _ in range(3000):
+        chain = ast.BinOp(left=chain, op=ast.Add(), right=ast.Constant(value=1))
+    assign.value.left = chain
+    tables = {"m": _ImportTable(tree, "m", is_package=False)}
+
+    calls = _unbound_group_calls(tree, tables, "m", {})
+
+    assert [call.lineno for call in calls] == [2]
 
 
 def test_group_bindings_come_before_commands(make_tools_dir: Callable[..., Path]) -> None:
