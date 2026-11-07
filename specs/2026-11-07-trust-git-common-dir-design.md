@@ -120,6 +120,19 @@ own and borrows nothing. (My call: fail closed to per-path trust, not to an erro
      stops a crafted `.git` file naming a live worktree's gitdir, which git
      itself accepts.
 
+  **Worktrees may live anywhere; only git's own bookkeeping location is
+  checked.** `git worktree add <path>` checks out at any `<path>` (`.worktrees/`,
+  a sibling directory, another disk) but always writes its bookkeeping to
+  `<common dir>/worktrees/<name>`, so every worktree git creates passes rule 1.
+  toolr imposes no layout on users. Rule 1 is stricter than git on read: git
+  accepts a hand-built gitdir anywhere whose `commondir` names a repository
+  (verified with git 2.56: `rev-parse --git-common-dir` reports the named
+  repository, while that repository's `git worktree list` doesn't show it). Git
+  never creates that shape; a forged archive would. For it toolr's key
+  deliberately differs from git's output: per-path. A checkout made by the old
+  `git-new-workdir` contrib script (a `.git` directory of symlinks) is keyed on
+  its own `.git`: one extra prompt, nothing breaks (reasoning, untested).
+
   Anything else is per-path. That covers a submodule (its gitdir sits in
   `.git/modules/<name>`, not under `worktrees/`), an unreadable or malformed
   `.git` file, and a crafted `.git` file. A worktree created *inside* a submodule
