@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::uv::toolr_state_dir;
 
 mod repo_key;
-pub use repo_key::{KeyKind, RepoKey};
+pub use repo_key::{KeyKind, RepairHint, RepoKey};
 
 const RECORD_SCHEMA_VERSION: u32 = 2;
 
@@ -83,12 +83,13 @@ impl Trusted {
 
 #[derive(Debug, thiserror::Error)]
 pub enum TrustError {
-    #[error("{}", untrusted_message(.repo, .repair.as_deref()))]
+    #[error("{}", untrusted_message(.repo, .repair.as_ref()))]
     Untrusted {
         /// The repository path shown to the user.
         repo: PathBuf,
-        /// The worktree to pass to `git worktree repair` from the main checkout.
-        repair: Option<PathBuf>,
+        /// The worktree `git worktree repair` would bind, if the directory
+        /// looks like a moved one.
+        repair: Option<RepairHint>,
     },
     #[error(
         "refusing to use a trust store inside the repository being checked: {}\n\
@@ -98,16 +99,21 @@ pub enum TrustError {
     StoreInsideRepo(PathBuf),
 }
 
-fn untrusted_message(repo: &Path, repair: Option<&Path>) -> String {
+fn untrusted_message(repo: &Path, repair: Option<&RepairHint>) -> String {
     let mut msg = format!(
         "refusing to run code from an untrusted repository: {}\n\
          Run `toolr project trust` there once to allow it, or set TOOLR_TRUST_ALL=1 for automation.",
         shown(repo)
     );
-    if let Some(worktree) = repair {
+    // A moved worktree and a forged `.git` file look the same on disk, and the
+    // repair hands the directory the repository's trust.
+    if let Some(hint) = repair {
         msg.push_str(&format!(
-            "\nIf this worktree was moved, run `git worktree repair {}` from the main checkout.",
-            shown(worktree)
+            "\nThis directory claims to be worktree `{}` of {}. Only if you moved that \
+             worktree yourself, run `git worktree repair {}` from the main checkout.",
+            shown(&hint.worktree),
+            shown(&hint.repo),
+            shown(&hint.worktree_top)
         ));
     }
     msg
@@ -165,12 +171,13 @@ impl TrustStore {
     }
 
     /// Checks the key, the shown repository path (a worktree outside the
-    /// repository would otherwise let a store sit in the main checkout) and the
-    /// project root. A `~/tools` makes the home directory one of them, and the
-    /// default store always lives under it. Nobody clones a hostile repository
-    /// as `$HOME`.
+    /// repository would otherwise let a store sit in the main checkout), the
+    /// project root and the worktree top above a nested project root. A
+    /// `~/tools` makes the home directory one of them, and the default store
+    /// always lives under it. Nobody clones a hostile repository as `$HOME`.
     fn guard_with_home(&self, key: &RepoKey, home: Option<&Path>) -> Result<(), TrustError> {
-        for path in [&key.key, &key.display, &key.project_root] {
+        let paths = [&key.key, &key.display, &key.project_root];
+        for path in paths.into_iter().chain(key.worktree_top.as_ref()) {
             if home != Some(path.as_path()) && self.is_inside(path) {
                 return Err(TrustError::StoreInsideRepo(self.dir.clone()));
             }
@@ -389,7 +396,7 @@ fn decide(
         return Ok(trusted(true));
     }
     Err(TrustError::Untrusted {
-        repair: key.repair_hint.then(|| key.project_root.clone()),
+        repair: key.repair,
         repo: key.display,
     })
 }
@@ -964,23 +971,68 @@ mod tests {
     }
 
     #[test]
+    fn store_in_worktree_top_above_nested_project_refused() {
+        let tmp = TempDir::new().unwrap();
+        let main = init_repo(&tmp.path().join("main"));
+        let wt = add_worktree(&main, &tmp.path().join("wt"));
+        fs::create_dir(wt.join("sub")).unwrap();
+        let store = TrustStore::at(wt.join("state"));
+        let (r, _) = decide_at(&store, &wt.join("sub"), None);
+        assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
+        assert!(!wt.join("state").exists());
+    }
+
+    #[test]
     fn untrusted_error_carries_repair_hint() {
         let f = Fixture::new();
         let tmp = TempDir::new().unwrap();
         let main = init_repo(&tmp.path().join("main"));
-        add_worktree(&main, &tmp.path().join("wt"));
-        fs::rename(tmp.path().join("wt"), tmp.path().join("moved")).unwrap();
+        let wt = add_worktree(&main, &tmp.path().join("wt"));
+        fs::create_dir(wt.join("sub")).unwrap();
+        fs::rename(&wt, tmp.path().join("moved")).unwrap();
         let moved = fs::canonicalize(tmp.path().join("moved")).unwrap();
         let store = f.store();
-        let (r, _) = decide_at(&store, &moved, None);
+        let (r, _) = decide_at(&store, &moved.join("sub"), None);
         let err = r.unwrap_err();
         assert!(matches!(
             &err,
-            TrustError::Untrusted { repair: Some(w), .. } if *w == moved
+            TrustError::Untrusted { repair: Some(h), .. } if h.worktree_top == moved
         ));
         let text = err.to_string();
-        assert!(text.contains("git worktree repair"), "{text}");
-        assert!(text.contains(&moved.display().to_string()), "{text}");
+        let expected = format!(
+            "This directory claims to be worktree `wt` of {}. Only if you moved that \
+             worktree yourself, run `git worktree repair {}` from the main checkout.",
+            main.display(),
+            moved.display()
+        );
+        assert!(text.contains(&expected), "{text}");
+        let nested = format!("git worktree repair {}`", moved.join("sub").display());
+        assert!(!text.contains(&nested), "{text}");
+    }
+
+    #[test]
+    fn deleted_unpruned_worktree_gets_cautious_hint() {
+        let f = Fixture::new();
+        let tmp = TempDir::new().unwrap();
+        let main = init_repo(&tmp.path().join("main"));
+        let wt = add_worktree(&main, &tmp.path().join("feature"));
+        fs::remove_dir_all(&wt).unwrap();
+        let evil = tmp.path().join("evil");
+        fs::create_dir(&evil).unwrap();
+        let gitdir = main.join(".git/worktrees/feature");
+        fs::write(evil.join(".git"), format!("gitdir: {}\n", gitdir.display())).unwrap();
+        let evil = fs::canonicalize(evil).unwrap();
+        let (r, _) = decide_at(&f.store(), &evil, None);
+        let text = r.unwrap_err().to_string();
+        assert!(
+            text.contains(&format!(
+                "claims to be worktree `feature` of {}. Only if you moved that worktree yourself, \
+                 run `git worktree repair {}`",
+                main.display(),
+                evil.display()
+            )),
+            "{text}"
+        );
     }
 
     #[test]

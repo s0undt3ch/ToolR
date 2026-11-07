@@ -226,20 +226,59 @@ fn git_env_does_not_change_trust() {
         .stderr(contains(REFUSAL));
 }
 
+/// `git worktree repair <path>`, quoted the way the refusal prints it.
+fn repair_command(path: &Path) -> String {
+    format!("`git worktree repair {}`", path.display())
+}
+
 #[test]
 fn moved_worktree_refusal_hints_repair() {
     let env = TrustEnv::new();
     let tmp = TempDir::new().unwrap();
     let main = init_repo(&tmp.path().join("main"));
+    let tools = common::write_project(&main.join("sub"));
+    fs::write(tools.join("greet.py"), common::GREET).unwrap();
+    git(&main, &["add", "-A"]);
+    git(&main, &["commit", "-m", "nested project"]);
     let wt = add_worktree(&main, &tmp.path().join("wt"), "wt");
     trust(&env, &main);
-    let moved = tmp.path().join("moved");
-    fs::rename(&wt, &moved).unwrap();
-    env.toolr(&moved)
+    fs::rename(&wt, tmp.path().join("moved")).unwrap();
+    let moved = fs::canonicalize(tmp.path().join("moved")).unwrap();
+    env.toolr(&moved.join("sub"))
         .args(["greet", "hi"])
         .assert()
         .failure()
         .stderr(contains(REFUSAL))
-        .stderr(contains("git worktree repair"))
-        .stderr(contains(shown(&moved).trim_end()));
+        .stderr(contains(format!(
+            "claims to be worktree `wt` of {}. Only if you moved that worktree yourself, run {}",
+            main.display(),
+            repair_command(&moved)
+        )))
+        .stderr(contains(repair_command(&moved.join("sub"))).not());
+}
+
+#[test]
+fn deleted_worktree_claimed_elsewhere_gets_cautious_hint() {
+    let env = TrustEnv::new();
+    let tmp = TempDir::new().unwrap();
+    let main = init_repo(&tmp.path().join("main"));
+    let wt = add_worktree(&main, &tmp.path().join("feature"), "feature");
+    trust(&env, &main);
+    fs::remove_dir_all(&wt).unwrap();
+    let evil = tmp.path().join("Downloads/evil");
+    let tools = common::write_project(&evil);
+    fs::write(tools.join("greet.py"), common::GREET).unwrap();
+    let gitdir = main.join(".git/worktrees/feature");
+    fs::write(evil.join(".git"), format!("gitdir: {}\n", gitdir.display())).unwrap();
+    let evil = fs::canonicalize(evil).unwrap();
+    env.toolr(&evil)
+        .args(["greet", "hi"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL))
+        .stderr(contains(format!(
+            "claims to be worktree `feature` of {}. Only if you moved that worktree yourself, run {}",
+            main.display(),
+            repair_command(&evil)
+        )));
 }
