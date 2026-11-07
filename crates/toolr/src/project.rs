@@ -37,7 +37,7 @@ pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCo
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("trust", trust_m)) => project_trust(trust_m, root_quiet),
-        Some(("untrust", untrust_m)) => project_untrust(untrust_m),
+        Some(("untrust", untrust_m)) => project_untrust(untrust_m, root_quiet),
         _ => unreachable!("clap enforces subcommand_required"),
     }
 }
@@ -50,13 +50,23 @@ fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
     Ok(toolr_core::discovery::discover_project_root(&start)?)
 }
 
-/// Trust first, then sync: stdout stays the trusted root alone, and a declined
-/// sync keeps the trust and exits 0. The root `-q` means the same as `--quiet`.
+/// Trust first, then sync: stdout stays the trusted root alone (the human
+/// confirmation goes to stderr), and a declined sync keeps the trust and exits
+/// 0. The root `-q` means the same as `--quiet`.
 fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let quiet = matches.get_flag("quiet") || root_quiet;
     let root = root_from_path_arg(matches)?;
+    let was_trusted = TrustStore::open_default()?.is_trusted(&root)?;
     let (record, trusted) = toolr_core::trust::grant_trust(&root)?;
-    println!("{}", shown(&record.repo_path));
+    let repo = shown(&record.repo_path);
+    println!("{repo}");
+    if !quiet {
+        if was_trusted {
+            eprintln!("toolr: {repo} was already trusted");
+        } else {
+            eprintln!("toolr: trusted {repo}");
+        }
+    }
     if matches.get_flag("no-sync") {
         return Ok(ExitCode::SUCCESS);
     }
@@ -73,11 +83,14 @@ fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn project_untrust(matches: &ArgMatches) -> Result<ExitCode> {
+fn project_untrust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let root = root_from_path_arg(matches)?;
     let store = TrustStore::open_default()?;
     if store.untrust(&root)? {
         println!("{}", shown(&root));
+        if !root_quiet {
+            eprintln!("toolr: untrusted {}", shown(&root));
+        }
     } else {
         eprintln!("toolr: {} was not trusted", shown(&root));
     }

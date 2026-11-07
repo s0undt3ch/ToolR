@@ -233,8 +233,9 @@ toolr project manifest rebuild --help
 ### `toolr project trust [PATH]` {#project-trust}
 
 Trust the repository at `PATH` (default: the current directory's project
-root) and print the trusted root, then offer to sync its tools venv if it
-needs one. `--no-sync` only records the trust. When it asks, syncs or exits
+root) and print the trusted root on stdout, then offer to sync its tools venv
+if it needs one. stderr says `toolr: trusted <root>`, or
+`toolr: <root> was already trusted`; `--quiet` drops that line. `--no-sync` only records the trust. When it asks, syncs or exits
 non-zero is in [Repository trust](concepts.md#repository-trust).
 
 ```sh
@@ -247,8 +248,9 @@ toolr project trust --help
 
 ### `toolr project untrust [PATH]` {#project-untrust}
 
-Remove the trust record for the repository at `PATH`. Prints the root when a
-record was removed; says so on stderr when there was none.
+Remove the trust record for the repository at `PATH`. Prints the root on
+stdout and `toolr: untrusted <root>` on stderr when a record was removed (the
+root `-q` drops the stderr line); says so on stderr when there was none.
 
 ```sh
 toolr project untrust --help
