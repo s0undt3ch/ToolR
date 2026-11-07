@@ -74,28 +74,58 @@ where git and toolr agree a key is inherited. Tests should compare against real
 
 From the canonical project root, walk up to the nearest ancestor (inclusive) that
 contains a `.git` entry. No `.git` anywhere up to the filesystem root means a
-non-git project: key = canonical project root.
+non-git project: key = canonical project root. Let `D` be the directory holding
+the `.git` entry, canonicalised, and `E` = `D/.git` **uncanonicalised**.
 
-- **`.git` is a directory** (a main checkout): key = that directory, canonicalised.
-  A `commondir` file inside it is ignored; a main checkout's git dir is its own
+Every rule below that doesn't name a key falls back to **per-path**: key =
+canonical project root. That is today's behaviour: the checkout is trusted on its
+own and borrows nothing. (My call: fail closed to per-path trust, not to an error.)
+
+- **Classify `E` without following it** (`symlink_metadata`). A symlinked `.git`
+  → per-path. (My call. Archives keep symlinks: `.git -> ~/trusted/.git` would
+  otherwise resolve to the trusted key. Git accepts a symlinked `.git`; toolr is
+  deliberately stricter.)
+- **Ownership (Unix).** `E` not owned by the current user → per-path. (My call,
+  the same idea as git's `safe.directory`: another user's `/tmp/.git` or a stale
+  worktree path they recreated can't borrow anything.) On Windows, skip this
+  check.
+- **`E` is a directory** (a main checkout): key = `E`, canonicalised. A
+  `commondir` file inside it is ignored; a main checkout's git dir is its own
   common dir. (My call: git would honour a planted `commondir`, but following it
   would let a crafted `.git` directory point at another repository.)
-- **`.git` is a file** (`gitdir: <path>`, relative paths resolved against the
-  file's directory): let `G` be the gitdir it names.
-  - Accept `G` only if it **links back**: `G/gitdir` exists and names this `.git`
-    file (compare canonicalised). Git writes that back-link when it creates a
-    worktree. An attacker can't write into another repository's git dir, so a
-    crafted `.git` file fails this check.
-  - If it links back and `G/commondir` exists: key = `G/commondir` resolved
-    (relative to `G`), canonicalised. This is the worktree case.
-  - Anything else (no back-link, a missing or unreadable `G`, a submodule whose
-    gitdir lives in `.git/modules/<name>` and has no `gitdir` back-link file,
-    a malformed `.git` file): key = canonical project root. That is today's
-    per-path behaviour: the checkout is trusted on its own and borrows nothing.
-    (My call: failing closed to per-path trust rather than to an error.)
+- **`E` is a regular file** (`gitdir: <path>`, relative paths resolved against
+  `D`): let `G` be the gitdir it names, canonicalised, and `C` = `G/commondir`
+  resolved relative to `G`, canonicalised. The key is `C` only when **all** hold:
+  1. `G/commondir` exists and resolves;
+  2. `G`'s parent is exactly `C/worktrees` — git keeps every linked worktree's
+     gitdir there, and an attacker can't create a directory inside another
+     repository's git dir (without this, an archive could ship its own `G` whose
+     `commondir` names a trusted repository);
+  3. `G/gitdir` exists and names `D/.git` (compare its canonicalised parent
+     directory joined with `.git` against `D/.git`; don't canonicalise through
+     `E` itself). Git writes this back-link when it creates a worktree.
+
+  Anything else is per-path. That covers a submodule (its gitdir sits in
+  `.git/modules/<name>`, not under `worktrees/`), an unreadable or malformed
+  `.git` file, and a crafted `.git` file.
 
 Bare repositories with worktrees (`git clone --bare` + `git worktree add`) take
 the worktree branch: the common dir is the bare repository directory.
+
+**Known gap: `--separate-git-dir`.** A main checkout created with
+`git init --separate-git-dir` (and some dotfile managers) has a `.git` file
+pointing at its git dir, with no back-link and no `commondir`. That is exactly the
+shape of a crafted `gitdir:` attack, so it gets per-path trust, while its linked
+worktrees get key `G`. Trusting one does not cover the other. (My call: rare
+layout, and no safe rule tells it apart from the attack.)
+
+**Accepted consequence: the whole work tree is trusted.** Any `tools/` root under
+a trusted repository's work tree inherits trust, tracked or not: an unpacked
+archive, a gitignored directory, a test fixture. Today each would be prompted for.
+Getting files into a trusted work tree already lets someone edit the `tools/*.py`
+the user trusts, so this adds no new power. Restricting trust to tracked roots
+would mean reading the git index on every dispatch and would break
+`toolr project init` before the first commit.
 
 ## What users see
 
@@ -122,8 +152,10 @@ mention that worktrees are covered, e.g. the prompt line
 ## Constraints
 
 - The store guard (`TrustStore::guard`: the store must not resolve inside the
-  repository whose trust it holds) checks against the **key**, and also against
-  the project root when the two differ. The `$HOME`-as-root exemption stays as
+  repository whose trust it holds) checks against the **key**, the **displayed
+  repository path** (the main checkout's work tree, see *What users see*) and the
+  project root, whichever differ. (My call: from a worktree outside the
+  repository, a store inside the main checkout's work tree would otherwise pass.) The `$HOME`-as-root exemption stays as
   it is, applied to the project root.
 - `Trusted` proofs cover a key. `Trusted::covers(root)` resolves `root` to its key
   and compares keys, so a proof made in one worktree covers the project in
@@ -153,6 +185,12 @@ mention that worktrees are covered, e.g. the prompt line
   its `.git/worktrees/<name>` directories → not trusted.
 - **Crafted `.git` directory** with a `commondir` file pointing at a trusted
   repository → not trusted.
+- **Crafted self-contained worktree**: `.git` file → `./g`, `g/gitdir` naming the
+  `.git` file, `g/commondir` naming a trusted repository → not trusted.
+- **Symlinked `.git`** to a trusted repository's `.git`, and to one of its
+  worktrees' `.git` files → not trusted.
+- (Unix) A `.git` owned by another user → per-path.
+- A `--separate-git-dir` main checkout gets per-path trust.
 - A non-git project keeps exact-path trust.
 - Setting `GIT_DIR` / `GIT_COMMON_DIR` doesn't change the outcome.
 - The key matches `git rev-parse --git-common-dir` for main checkout, linked
