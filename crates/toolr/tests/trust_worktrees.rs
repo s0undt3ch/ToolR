@@ -19,7 +19,12 @@ const REFUSAL: &str = "refusing to run code from an untrusted repository";
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
         .args(["-c", "user.name=t", "-c", "user.email=t@t"])
-        .args(["-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false"])
+        .args([
+            "-c",
+            "init.defaultBranch=main",
+            "-c",
+            "commit.gpgsign=false",
+        ])
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -40,11 +45,9 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 /// Make `root` a committed git repository holding a toolr project.
-fn init_repo(root: &Path, extra_init: &[&str]) -> PathBuf {
+fn init_repo(root: &Path) -> PathBuf {
     fs::create_dir_all(root).unwrap();
-    let mut args = vec!["init"];
-    args.extend_from_slice(extra_init);
-    git(root, &args);
+    git(root, &["init"]);
     let tools = common::write_project(root);
     fs::write(tools.join("greet.py"), common::GREET).unwrap();
     git(root, &["add", "-A"]);
@@ -54,7 +57,10 @@ fn init_repo(root: &Path, extra_init: &[&str]) -> PathBuf {
 
 fn add_worktree(repo: &Path, at: &Path, branch: &str) -> PathBuf {
     fs::create_dir_all(at.parent().unwrap()).unwrap();
-    git(repo, &["worktree", "add", "-b", branch, at.to_str().unwrap()]);
+    git(
+        repo,
+        &["worktree", "add", "-b", branch, at.to_str().unwrap()],
+    );
     fs::canonicalize(at).unwrap()
 }
 
@@ -73,7 +79,7 @@ fn trust(env: &TrustEnv, at: &Path) {
 fn trust_main_covers_worktrees() {
     let env = TrustEnv::new();
     let tmp = TempDir::new().unwrap();
-    let main = init_repo(&tmp.path().join("main"), &[]);
+    let main = init_repo(&tmp.path().join("main"));
     let inside = add_worktree(&main, &main.join(".worktrees/inner"), "inner");
     let outside = add_worktree(&main, &tmp.path().join("outer"), "outer");
 
@@ -91,7 +97,7 @@ fn trust_main_covers_worktrees() {
 fn trust_from_worktree_prints_main_path() {
     let env = TrustEnv::new();
     let tmp = TempDir::new().unwrap();
-    let main = init_repo(&tmp.path().join("main"), &[]);
+    let main = init_repo(&tmp.path().join("main"));
     let wt = add_worktree(&main, &tmp.path().join("wt"), "wt");
     env.toolr(&wt)
         .args(["project", "trust", "--no-sync"])
@@ -109,17 +115,16 @@ fn trust_from_worktree_prints_main_path() {
 fn self_trusted_shows_repo_path_and_prunes_by_key() {
     let env = TrustEnv::new();
     let tmp = TempDir::new().unwrap();
-    let main = init_repo(&tmp.path().join("main"), &[]);
+    let main = init_repo(&tmp.path().join("main"));
     let gitdir = main.join(".git");
     let wt = add_worktree(&main, &tmp.path().join("wt"), "wt");
     trust(&env, &main);
-    let listed = env
-        .toolr(tmp.path())
+    let before = shown(&main);
+    env.toolr(tmp.path())
         .args(["self", "trusted"])
-        .output()
-        .unwrap();
-    let before = String::from_utf8(listed.stdout).unwrap();
-    assert!(!before.contains("(missing)"), "{before}");
+        .assert()
+        .success()
+        .stdout(before.clone());
 
     // Drop the main checkout's files but keep the common dir the worktree needs.
     for entry in fs::read_dir(&main).unwrap() {
@@ -137,8 +142,22 @@ fn self_trusted_shows_repo_path_and_prunes_by_key() {
         .assert()
         .success()
         .stdout(before.clone());
+    env.toolr(&wt)
+        .args(["self", "trusted", "--prune"])
+        .assert()
+        .success()
+        .stdout(before.clone())
+        .stderr(contains("pruned").not());
+    env.toolr(&wt)
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout(before.clone());
 
-    git(&wt, &["worktree", "remove", "--force", wt.to_str().unwrap()]);
+    git(
+        &wt,
+        &["worktree", "remove", "--force", wt.to_str().unwrap()],
+    );
     fs::remove_dir_all(&gitdir).unwrap();
     let missing = format!("{} (missing)\n", before.trim_end());
     env.toolr(tmp.path())
@@ -162,11 +181,16 @@ fn self_trusted_shows_repo_path_and_prunes_by_key() {
 fn bare_repo_listed_as_bare_dir() {
     let env = TrustEnv::new();
     let tmp = TempDir::new().unwrap();
-    let main = init_repo(&tmp.path().join("main"), &[]);
+    let main = init_repo(&tmp.path().join("main"));
     let bare = tmp.path().join("foo.git");
     git(
         tmp.path(),
-        &["clone", "--bare", main.to_str().unwrap(), bare.to_str().unwrap()],
+        &[
+            "clone",
+            "--bare",
+            main.to_str().unwrap(),
+            bare.to_str().unwrap(),
+        ],
     );
     let wt = tmp.path().join("wt");
     git(&bare, &["worktree", "add", wt.to_str().unwrap(), "main"]);
@@ -183,17 +207,18 @@ fn bare_repo_listed_as_bare_dir() {
 fn git_env_does_not_change_trust() {
     let env = TrustEnv::new();
     let tmp = TempDir::new().unwrap();
-    let main = init_repo(&tmp.path().join("main"), &[]);
-    let other = init_repo(&tmp.path().join("other"), &[]);
+    let main = init_repo(&tmp.path().join("main"));
+    let other = init_repo(&tmp.path().join("other"));
     let wt = add_worktree(&main, &tmp.path().join("wt"), "wt");
     trust(&env, &main);
     let other_git = other.join(".git");
     env.toolr(&wt)
-        .args(["greet", "hi"])
+        .args(["project", "untrust"])
         .env("GIT_DIR", &other_git)
         .env("GIT_COMMON_DIR", &other_git)
         .assert()
-        .stderr(contains(REFUSAL).not());
+        .success()
+        .stdout(shown(&main));
     env.toolr(&other)
         .args(["greet", "hi"])
         .assert()
@@ -205,7 +230,7 @@ fn git_env_does_not_change_trust() {
 fn moved_worktree_refusal_hints_repair() {
     let env = TrustEnv::new();
     let tmp = TempDir::new().unwrap();
-    let main = init_repo(&tmp.path().join("main"), &[]);
+    let main = init_repo(&tmp.path().join("main"));
     let wt = add_worktree(&main, &tmp.path().join("wt"), "wt");
     trust(&env, &main);
     let moved = tmp.path().join("moved");
@@ -215,5 +240,6 @@ fn moved_worktree_refusal_hints_repair() {
         .assert()
         .failure()
         .stderr(contains(REFUSAL))
-        .stderr(contains("git worktree repair"));
+        .stderr(contains("git worktree repair"))
+        .stderr(contains(shown(&moved).trim_end()));
 }
