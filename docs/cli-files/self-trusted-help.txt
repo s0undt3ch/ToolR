@@ -4,6 +4,6 @@ Usage: toolr self trusted [OPTIONS]
 
 Options:
       --prune
-          Forget repositories whose path no longer exists
+          Forget records whose repository no longer exists
   -h, --help
           Print help

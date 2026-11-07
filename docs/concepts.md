@@ -116,9 +116,10 @@ A few cases differ from what you might expect:
   by its own path.
 - A main checkout made with `git init --separate-git-dir` is trusted
   separately from its worktrees.
-- A worktree moved with plain `mv` asks again. Run `git worktree repair <path>`
-  from the main checkout to restore its trust. `git worktree move` keeps it
-  trusted.
+- A worktree moved with plain `mv` asks again. If you moved it yourself, run
+  `git worktree repair <worktree top>` from the main checkout to restore its
+  trust, where the worktree top is the directory holding its `.git` file.
+  `git worktree move` keeps it trusted.
 
 Trust a repository in either of two ways:
 
@@ -145,8 +146,8 @@ including with `--quiet` or no terminal, so the sync runs.
 `toolr project trust --no-sync` only records the trust. If a sync you
 agreed to fails, the trust is kept and toolr exits non-zero.
 
-`toolr self trusted` lists the trusted repositories and marks the ones
-whose path no longer exists. `toolr self trusted --prune` removes those.
+`toolr self trusted` lists the trusted repositories and marks the records
+whose repository no longer exists. `toolr self trusted --prune` removes those.
 Records live in toolr's state directory, not in the cache, so
 `toolr self cache prune` leaves them alone. That's
 `$XDG_STATE_HOME/toolr/trust/` when `XDG_STATE_HOME` is an absolute path,
@@ -162,7 +163,8 @@ personal `~/tools/`: the default store always lives under it.
 
 Trust starts empty. A venv an older toolr built doesn't make its
 repository trusted, and neither does a run under `TOOLR_TRUST_ALL=1`.
-`toolr project init` trusts the directory it writes to.
+`toolr project init` trusts the directory it writes to. Inside a git
+repository that's the whole repository, with all its worktrees.
 
 These never need trust, because nothing executes: `--help`, bare
 `toolr`, tab completion, `toolr project manifest rebuild` and
@@ -185,12 +187,15 @@ from `CI=true`.
 
 Trust doesn't cover:
 
-- A different non-git project placed at the path of a trusted one. Trust
-  follows the path there, so run `toolr project untrust` before you delete a
-  project you won't recreate.
+- A different project placed at the path of a trusted one: a different
+  repository cloned to a trusted repository's path, a directory placed at a
+  deleted worktree's path before `git worktree prune`, or a non-git
+  project at a trusted project's path. Trust follows the path there, so run
+  `toolr project untrust` before you delete a checkout you won't recreate.
 - A trusted repository that later pulls hostile `tools/*.py` or
   `[tool.uv]` changes.
 - Editor and LSP integrations that import `tools/*.py` themselves.
 - A compromised package index used by a trusted repository.
 - `toolr project init` in a directory that already holds someone else's
-  files. It records trust for content you didn't write.
+  files. It records trust for content you didn't write, and inside a git
+  repository it trusts that whole repository.

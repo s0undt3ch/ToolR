@@ -352,7 +352,7 @@ toolr self cache prune --help
 
 ### `toolr self trusted` {#self-trusted}
 
-List the trusted repositories. A root whose path no longer exists is marked
+List the trusted repositories. A repository that no longer exists is marked
 `(missing)`; `--prune` removes those records instead.
 
 ```sh
