@@ -98,8 +98,27 @@ repository once. Running a command imports `tools/*.py`, and syncing the
 venv runs `uv` against `tools/pyproject.toml`. Both are code the
 repository controls.
 
-Trust is keyed on the repository's canonical root path. Content isn't
-hashed, so a dependency bump never asks again.
+Trust is keyed on the git repository. A repository and all its worktrees
+share one trust record, wherever the worktrees live. Trusting or untrusting
+any checkout of a repository trusts or untrusts all of them, and a worktree
+made later needs no new prompt. Every separate repository, such as a nested
+clone or a submodule, is asked for on its own. A project outside git is
+trusted by its own path. Content isn't hashed, so a dependency bump never
+asks again.
+
+A few cases differ from what you might expect:
+
+- A home directory under git, such as a dotfiles repository at `~/.git`, is
+  not the repository for projects below it. Trusting `~` never trusts
+  `~/Downloads/foo`, which asks on its own. A project with its own `.git`
+  is unaffected.
+- A `.git` that is a symlink, or one owned by another user, is trusted only
+  by its own path.
+- A main checkout made with `git init --separate-git-dir` is trusted
+  separately from its worktrees.
+- A worktree moved with plain `mv` asks again. Run `git worktree repair <path>`
+  from the main checkout to restore its trust. `git worktree move` keeps it
+  trusted.
 
 Trust a repository in either of two ways:
 
@@ -166,9 +185,9 @@ from `CI=true`.
 
 Trust doesn't cover:
 
-- A different repository cloned to the path of a trusted one. Trust
-  follows the path, so run `toolr project untrust` before you delete a
-  checkout you won't recreate.
+- A different non-git project placed at the path of a trusted one. Trust
+  follows the path there, so run `toolr project untrust` before you delete a
+  project you won't recreate.
 - A trusted repository that later pulls hostile `tools/*.py` or
   `[tool.uv]` changes.
 - Editor and LSP integrations that import `tools/*.py` themselves.
