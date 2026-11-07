@@ -81,6 +81,15 @@ Every rule below that doesn't name a key falls back to **per-path**: key =
 canonical project root. That is today's behaviour: the checkout is trusted on its
 own and borrows nothing. (My call: fail closed to per-path trust, not to an error.)
 
+- **The walk stops at `$HOME`.** (User's decision.) If `D` is the canonical home
+  directory and the project root is not the home directory itself → per-path. A
+  dotfiles repository at `~/.git` therefore never covers a project below `~` that
+  has no `.git` of its own: each such project gets its own prompt. A project with
+  its own `.git` (`~/foo/.git`) is found first and is unaffected, as is any
+  repository whose work tree isn't `$HOME`. `~/tools` itself still resolves to
+  `~/.git` normally. This reuses the home directory the store guard already
+  resolves, so it adds a path comparison and no filesystem access.
+
 - **Classify `E` without following it** (`symlink_metadata`). A symlinked `.git`
   → per-path. (My call. Archives keep symlinks: `.git -> ~/trusted/.git` would
   otherwise resolve to the trusted key. Git accepts a symlinked `.git`; toolr is
@@ -155,8 +164,10 @@ mention that worktrees are covered, e.g. the prompt line
   repository whose trust it holds) checks against the **key**, the **displayed
   repository path** (the main checkout's work tree, see *What users see*) and the
   project root, whichever differ. (My call: from a worktree outside the
-  repository, a store inside the main checkout's work tree would otherwise pass.) The `$HOME`-as-root exemption stays as
-  it is, applied to the project root.
+  repository, a store inside the main checkout's work tree would otherwise pass.)
+  The `$HOME` exemption applies to any of those paths that equals the home
+  directory: `~/tools` with a `~/.git` has displayed path `~`, which always holds
+  the default store.
 - `Trusted` proofs cover a key. `Trusted::covers(root)` resolves `root` to its key
   and compares keys, so a proof made in one worktree covers the project in
   another worktree of the same repository. Proofs still only come from this
@@ -191,6 +202,9 @@ mention that worktrees are covered, e.g. the prompt line
   worktrees' `.git` files → not trusted.
 - (Unix) A `.git` owned by another user → per-path.
 - A `--separate-git-dir` main checkout gets per-path trust.
+- With a trusted `~/.git` (use a fake `HOME`): a git-less `~/x/tools` is not
+  trusted; `~/foo` with its own `.git` is keyed on `~/foo/.git`; `~/tools` is
+  keyed on `~/.git` and the store guard doesn't refuse it.
 - A non-git project keeps exact-path trust.
 - Setting `GIT_DIR` / `GIT_COMMON_DIR` doesn't change the outcome.
 - The key matches `git rev-parse --git-common-dir` for main checkout, linked
@@ -203,6 +217,13 @@ mention that worktrees are covered, e.g. the prompt line
 - Update the trust sections in `docs/concepts.md`, `docs/cli.md` and
   `docs/quickstart.md`, and regenerate doc snippets
   (`toolr pre-commit regen-doc-snippets`).
+- `docs/concepts.md` states the trust unit plainly: the git repository and all
+  its worktrees; every separate repository (nested clone, submodule) is asked for
+  on its own; a project outside git is trusted by its path. It has a short
+  `~/.git` note: a home directory under git (dotfiles) is not treated as the
+  repository for projects below it, so trusting `~` never trusts
+  `~/Downloads/foo`. It also names the `--separate-git-dir` gap and the
+  ownership and symlink rules, one line each.
 - Trust is unreleased, so append to the existing queued note
   (`release-notes/2026-11-01.00-00-12.repository-trust.md`) instead of adding a
   breaking note: trust covers the whole git repository and its worktrees.
