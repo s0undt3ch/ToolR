@@ -1771,8 +1771,28 @@ venv + a <code>meta.json</code> sidecar with timestamps. Inspect with
 repository once. Running a command imports <code>tools/*.py</code>, and syncing the
 venv runs <code>uv</code> against <code>tools/pyproject.toml</code>. Both are code the
 repository controls.</p>
-<p>Trust is keyed on the repository's canonical root path. Content isn't
-hashed, so a dependency bump never asks again.</p>
+<p>Trust is keyed on the git repository. A repository and all its worktrees
+share one trust record, wherever the worktrees live. Trusting or untrusting
+any checkout of a repository trusts or untrusts all of them, and a worktree
+made later needs no new prompt. Every separate repository, such as a nested
+clone or a submodule, is asked for on its own. A project outside git is
+trusted by its own path. Content isn't hashed, so a dependency bump never
+asks again.</p>
+<p>A few cases differ from what you might expect:</p>
+<ul>
+<li>A home directory under git, such as a dotfiles repository at <code>~/.git</code>, is
+  not the repository for projects below it. Trusting <code>~</code> never trusts
+  <code>~/Downloads/foo</code>, which asks on its own. A project with its own <code>.git</code>
+  is unaffected.</li>
+<li>A <code>.git</code> that is a symlink, or one owned by another user, is trusted only
+  by its own path.</li>
+<li>A main checkout made with <code>git init --separate-git-dir</code> is trusted
+  separately from its worktrees.</li>
+<li>A worktree moved with plain <code>mv</code> asks again. If you moved it yourself, run
+  <code>git worktree repair &lt;worktree top&gt;</code> from the main checkout to restore its
+  trust, where the worktree top is the directory holding its <code>.git</code> file.
+  <code>git worktree move</code> keeps it trusted.</li>
+</ul>
 <p>Trust a repository in either of two ways:</p>
 <ul>
 <li>Run <code>toolr project trust [PATH]</code>. <code>toolr project untrust [PATH]</code>
@@ -1796,8 +1816,8 @@ toolr doesn't ask and doesn't sync. <code>TOOLR_AUTO_INSTALL_UV=1</code> answers
 including with <code>--quiet</code> or no terminal, so the sync runs.
 <code>toolr project trust --no-sync</code> only records the trust. If a sync you
 agreed to fails, the trust is kept and toolr exits non-zero.</p>
-<p><code>toolr self trusted</code> lists the trusted repositories and marks the ones
-whose path no longer exists. <code>toolr self trusted --prune</code> removes those.
+<p><code>toolr self trusted</code> lists the trusted repositories and marks the records
+whose repository no longer exists. <code>toolr self trusted --prune</code> removes those.
 Records live in toolr's state directory, not in the cache, so
 <code>toolr self cache prune</code> leaves them alone. That's
 <code>$XDG_STATE_HOME/toolr/trust/</code> when <code>XDG_STATE_HOME</code> is an absolute path,
@@ -1811,7 +1831,8 @@ repository rooted at your home directory, for example because of a
 personal <code>~/tools/</code>: the default store always lives under it.</p>
 <p>Trust starts empty. A venv an older toolr built doesn't make its
 repository trusted, and neither does a run under <code>TOOLR_TRUST_ALL=1</code>.
-<code>toolr project init</code> trusts the directory it writes to.</p>
+<code>toolr project init</code> trusts the directory it writes to. Inside a git
+repository that's the whole repository, with all its worktrees.</p>
 <p>These never need trust, because nothing executes: <code>--help</code>, bare
 <code>toolr</code>, tab completion, <code>toolr project manifest rebuild</code> and
 <code>toolr self build-manifest</code>.</p>
@@ -1830,15 +1851,18 @@ anything you can, including editing the trust store.</p>
 </div>
 <p>Trust doesn't cover:</p>
 <ul>
-<li>A different repository cloned to the path of a trusted one. Trust
-  follows the path, so run <code>toolr project untrust</code> before you delete a
-  checkout you won't recreate.</li>
+<li>A different project placed at the path of a trusted one: a different
+  repository cloned to a trusted repository's path, a directory placed at a
+  deleted worktree's path before <code>git worktree prune</code>, or a non-git
+  project at a trusted project's path. Trust follows the path there, so run
+  <code>toolr project untrust</code> before you delete a checkout you won't recreate.</li>
 <li>A trusted repository that later pulls hostile <code>tools/*.py</code> or
   <code>[tool.uv]</code> changes.</li>
 <li>Editor and LSP integrations that import <code>tools/*.py</code> themselves.</li>
 <li>A compromised package index used by a trusted repository.</li>
 <li><code>toolr project init</code> in a directory that already holds someone else's
-  files. It records trust for content you didn't write.</li>
+  files. It records trust for content you didn't write, and inside a git
+  repository it trusts that whole repository.</li>
 </ul>
 
 

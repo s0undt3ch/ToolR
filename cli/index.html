@@ -2433,9 +2433,11 @@ reportable.</p>
 </span></code></pre></div>
 <h3 id="project-trust"><code>toolr project trust [PATH]</code><a class="headerlink" href="#project-trust" title="Permanent link">&para;</a></h3>
 <p>Trust the repository at <code>PATH</code> (default: the current directory's project
-root) and print the trusted root, then offer to sync its tools venv if it
-needs one. <code>--no-sync</code> only records the trust. When it asks, syncs or exits
-non-zero is in <a href="../concepts/#repository-trust">Repository trust</a>.</p>
+root) and print the repository path: the main checkout, or a bare
+repository's <code>foo.git</code> directory. This covers every worktree of it. Then it
+offers to sync its tools venv if it needs one. <code>--no-sync</code> only records the
+trust. When it asks, syncs or exits non-zero is in
+<a href="../concepts/#repository-trust">Repository trust</a>.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>trust<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>Allow toolr to run this repository's code, then sync its tools venv
@@ -2454,8 +2456,9 @@ non-zero is in <a href="../concepts/#repository-trust">Repository trust</a>.</p>
 </span><span id="__span-24-14"><a id="__codelineno-24-14" name="__codelineno-24-14" href="#__codelineno-24-14"></a>          Print help
 </span></code></pre></div>
 <h3 id="project-untrust"><code>toolr project untrust [PATH]</code><a class="headerlink" href="#project-untrust" title="Permanent link">&para;</a></h3>
-<p>Remove the trust record for the repository at <code>PATH</code>. Prints the root when a
-record was removed; says so on stderr when there was none.</p>
+<p>Remove the trust record for the repository at <code>PATH</code>, which untrusts every
+worktree of it. Prints the repository path when a record was removed; says
+so on stderr when there was none.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>untrust<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>Revoke trust in this repository
@@ -2573,7 +2576,7 @@ remaining entry uses.</p>
 </span><span id="__span-34-16"><a id="__codelineno-34-16" name="__codelineno-34-16" href="#__codelineno-34-16"></a>          Print help
 </span></code></pre></div>
 <h3 id="self-trusted"><code>toolr self trusted</code><a class="headerlink" href="#self-trusted" title="Permanent link">&para;</a></h3>
-<p>List the trusted repositories. A root whose path no longer exists is marked
+<p>List the trusted repositories. A repository that no longer exists is marked
 <code>(missing)</code>; <code>--prune</code> removes those records instead.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>trusted<span class="w"> </span>--help
 </span></code></pre></div>
@@ -2583,7 +2586,7 @@ remaining entry uses.</p>
 </span><span id="__span-36-4"><a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a>
 </span><span id="__span-36-5"><a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>Options:
 </span><span id="__span-36-6"><a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a>      --prune
-</span><span id="__span-36-7"><a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a>          Forget repositories whose path no longer exists
+</span><span id="__span-36-7"><a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a>          Forget records whose repository no longer exists
 </span><span id="__span-36-8"><a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a>  -h, --help
 </span><span id="__span-36-9"><a id="__codelineno-36-9" name="__codelineno-36-9" href="#__codelineno-36-9"></a>          Print help
 </span></code></pre></div>

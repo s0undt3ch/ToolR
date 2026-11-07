@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev897-2026-11-07" class="md-nav__link">
+  <a href="#0352-dev919-2026-11-07" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev897 - 2026-11-07
+        0.35.2-dev919 - 2026-11-07
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev897 - 2026-11-07">
+    <nav class="md-nav" aria-label="0.35.2-dev919 - 2026-11-07">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev897-2026-11-07" class="md-nav__link">
+  <a href="#0352-dev919-2026-11-07" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev897 - 2026-11-07
+        0.35.2-dev919 - 2026-11-07
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev897 - 2026-11-07">
+    <nav class="md-nav" aria-label="0.35.2-dev919 - 2026-11-07">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev897-2026-11-07">0.35.2-dev897 - 2026-11-07<a class="headerlink" href="#0352-dev897-2026-11-07" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev919-2026-11-07">0.35.2-dev919 - 2026-11-07<a class="headerlink" href="#0352-dev919-2026-11-07" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7570,7 +7570,8 @@ older pinned action run with a newer <code>version:</code> doesn't, so set <code
 that case. <code>--help</code>, tab completion and manifest builds never need trust. The mise <code>enter</code> hook
 (<code>toolr project venv sync --quiet</code>) never prompts, so in an untrusted repository it prints the
 refusal, while a directory with no <code>tools/pyproject.toml</code> still exits silently. The interpreter
-provenance check is removed; repository trust replaces it.</p>
+provenance check is removed; repository trust replaces it. Trust covers the whole git repository,
+including all its worktrees, and untrusting from any checkout untrusts all of them.</p>
 <p><strong>Breaking:</strong> a <code>tools/</code> directory is a toolr project only if it contains <code>pyproject.toml</code>. toolr
 finds the project by walking up to the nearest <code>tools/pyproject.toml</code>, and ignores any <code>tools/</code>
 without one. An unrelated <code>tools/</code> package below the repo root, such as <code>src/pkg/tools/</code>, used to
@@ -7752,6 +7753,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> Hint to source the bash script when bash-completion is missing (<a href="https://github.com/s0undt3ch/ToolR/commit/9a1f6098b1c2be398740014b4ed4933880351ebf"><code>9a1f609</code></a>)</li>
 <li><em>(complete)</em> Complete the value of --opt=value (<a href="https://github.com/s0undt3ch/ToolR/commit/ccdc6059831ca79a3010a2f57c18c9d41738f877"><code>ccdc605</code></a>)</li>
 <li><em>(complete)</em> Complete --opt=value in bash, zsh and fish (<a href="https://github.com/s0undt3ch/ToolR/commit/ac3678ccff8c60dbf746b4e137a0939f3457e39c"><code>ac3678c</code></a>)</li>
+<li><em>(trust)</em> Resolve a project root to its git repository key (<a href="https://github.com/s0undt3ch/ToolR/commit/d69bac81d598ebf251b54606b125b6269f316a75"><code>d69bac8</code></a>)</li>
+<li><em>(trust)</em> Key records and proofs on the repository (<a href="https://github.com/s0undt3ch/ToolR/commit/abb1d305ebccbea0c945d678f6df3318e13c0cc7"><code>abb1d30</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7959,6 +7962,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(env)</em> Honour an empty NO_COLOR and ignore relative XDG dirs (<a href="https://github.com/s0undt3ch/ToolR/commit/30c764815d6be7bc7bc681542b0d5c482591b9c4"><code>30c7648</code></a>)</li>
 <li><em>(cli)</em> Honour the root --quiet in the other self and project built-ins (<a href="https://github.com/s0undt3ch/ToolR/commit/0819664e78cb70fe0cbaad393d5afb80ede01146"><code>0819664</code></a>)</li>
 <li><em>(cli)</em> Quiet uv auto-sync in venv shell and run under root -q (<a href="https://github.com/s0undt3ch/ToolR/commit/e124a8a063a520bc9a568511b4680dac93a45458"><code>e124a8a</code></a>)</li>
+<li><em>(trust)</em> Keep key kinds apart and narrow the repair hint (<a href="https://github.com/s0undt3ch/ToolR/commit/76f8a104414c69a19d6d4f647d70edd76e5b45c7"><code>76f8a10</code></a>)</li>
+<li><em>(trust)</em> Resolve the key once per decision (<a href="https://github.com/s0undt3ch/ToolR/commit/381fbac4a9c7e767bbcdf7e82b6596f103f302fe"><code>381fbac</code></a>)</li>
+<li><em>(trust)</em> Bound git file reads and name the worktree top in the repair hint (<a href="https://github.com/s0undt3ch/ToolR/commit/e8078ec01148b5160cfc4a947421b94738850b61"><code>e8078ec</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8298,6 +8304,19 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Spec and plan for root --quiet in the other built-ins (<a href="https://github.com/s0undt3ch/ToolR/commit/6f0b7aa3720d0cd5f97e041d847ce9bb75a06c59"><code>6f0b7aa</code></a>)</li>
 <li><em>(specs)</em> Archive the root --quiet specs (<a href="https://github.com/s0undt3ch/ToolR/commit/593f1c9d41af74d1b522804c558ef8e606f0b089"><code>593f1c9</code></a>)</li>
 <li><em>(specs)</em> Drop a stray private check from two archived plans (<a href="https://github.com/s0undt3ch/ToolR/commit/7ff3dd4dc6596f2ec90d0495b9dd9ea7d8ade912"><code>7ff3dd4</code></a>)</li>
+<li><em>(specs)</em> Design for trust keyed on the git common dir (<a href="https://github.com/s0undt3ch/ToolR/commit/e3611513605e56e43beb0a411f1557b1da05dd2d"><code>e361151</code></a>)</li>
+<li><em>(specs)</em> Close crafted-gitdir holes in the trust design (<a href="https://github.com/s0undt3ch/ToolR/commit/b0c4b98e8d52b5683e3b79c21e60dd05ebe21a54"><code>b0c4b98</code></a>)</li>
+<li><em>(specs)</em> Stop the trust walk at $HOME (<a href="https://github.com/s0undt3ch/ToolR/commit/d11a5c5c899cec96214ee307907c2831e5651941"><code>d11a5c5</code></a>)</li>
+<li><em>(specs)</em> Fold the independent review into the trust design (<a href="https://github.com/s0undt3ch/ToolR/commit/46cedfde8d9fc0241994e90f39f3a5e55577b62c"><code>46cedfd</code></a>)</li>
+<li><em>(specs)</em> State that trust imposes no worktree layout (<a href="https://github.com/s0undt3ch/ToolR/commit/f06ecf376ed5d46c6c1911d87e9fcfa794811e55"><code>f06ecf3</code></a>)</li>
+<li><em>(specs)</em> Apply the second review of the trust design (<a href="https://github.com/s0undt3ch/ToolR/commit/5929828045ced0c6220fa5c3c5788feaee537c36"><code>5929828</code></a>)</li>
+<li><em>(specs)</em> Plan for trust keyed on the git common dir (<a href="https://github.com/s0undt3ch/ToolR/commit/6e0ca43f95fc96c66a910da3677fcc113946aaac"><code>6e0ca43</code></a>)</li>
+<li><em>(specs)</em> Drop a repo-wide rule from the trust plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b6eb7beb753a25215bbcde5190c53d1e141bbb5c"><code>b6eb7be</code></a>)</li>
+<li><em>(specs)</em> Separate key kinds and narrow the repair hint (<a href="https://github.com/s0undt3ch/ToolR/commit/d3522b5a131bc9dc3638a48435b0bc742d2236f5"><code>d3522b5</code></a>)</li>
+<li><em>(trust)</em> Describe repository-wide trust and its worktrees (<a href="https://github.com/s0undt3ch/ToolR/commit/4e5fd29c749f89b840e2210860b7265688faccbb"><code>4e5fd29</code></a>)</li>
+<li><em>(specs)</em> Name the worktree top in a cautious repair hint (<a href="https://github.com/s0undt3ch/ToolR/commit/8dca40a04d141af6fd2d485049aba23e529883aa"><code>8dca40a</code></a>)</li>
+<li><em>(trust)</em> Restore the same-path caveat for git repositories (<a href="https://github.com/s0undt3ch/ToolR/commit/49c9bda7d62662b70522f7ff97359608257b8bcd"><code>49c9bda</code></a>)</li>
+<li><em>(specs)</em> Archive the trust common-dir spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b74d4deca9c7d56fe1a7a5f531fbb2dc28d90c08"><code>b74d4de</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8430,6 +8449,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(registry)</em> Give the wrapped-command fixture a literal group name (<a href="https://github.com/s0undt3ch/ToolR/commit/e1c28dd978b68b2a90ab63a4166d72c392587d33"><code>e1c28dd</code></a>)</li>
 <li><em>(testing)</em> Build the deep-expression tree without tripping CPython's parser limit (<a href="https://github.com/s0undt3ch/ToolR/commit/624887520cd7c32732d1ef8e58c710520a880a76"><code>6248875</code></a>)</li>
 <li><em>(uv)</em> Use platform-absolute XDG paths in the dir tests (<a href="https://github.com/s0undt3ch/ToolR/commit/36108922fae1ebeb6dff2dd704e2006c3027b619"><code>3610892</code></a>)</li>
+<li><em>(cli)</em> Cover worktree trust end to end (<a href="https://github.com/s0undt3ch/ToolR/commit/43ec4d96dc4420ff140ab000c4946697fdc08347"><code>43ec4d9</code></a>)</li>
+<li><em>(cli)</em> Pin prune and git-env trust behaviour (<a href="https://github.com/s0undt3ch/ToolR/commit/bf70ffb4f18d800ea935086c764d0a2b08f9e0a6"><code>bf70ffb</code></a>)</li>
+<li><em>(trust)</em> Run git on non-verbatim paths and drop dead helper branches (<a href="https://github.com/s0undt3ch/ToolR/commit/958369c9e0c1c790e231e53c5c1ad02375df7346"><code>958369c</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
