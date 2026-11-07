@@ -141,7 +141,10 @@ own and borrows nothing. (My call: fail closed to per-path trust, not to an erro
 
   **A worktree moved with plain `mv`** keeps a stale back-link: git still works,
   rule 2 fails, and the user is prompted again. The prompt and the `Untrusted`
-  error, when `E` is a `.git` file that failed rule 2 only, hint running
+  error, when `E` is a `.git` file that failed rule 2 only **and the back-link's
+  target `.git` no longer points at `G`** (otherwise this is a copy of a live
+  worktree's `.git`, and following the hint would hand that worktree's trust to
+  the copy), hint running
   `git worktree repair <this worktree's path>` from the main checkout. (A bare
   `git worktree repair` from inside the worktree fails when the main repository
   moved.)
@@ -151,6 +154,13 @@ first `.git` entry or at `$HOME`. With no home directory (`dirs::home_dir()` is
 `None`) it continues to `/`. A `~/.git` that is itself a file (`$HOME` is a
 linked worktree) changes nothing: projects below `~` are per-path, `~/tools`
 follows the file rules.
+
+**Key kinds never mix.** A key is either a repository key or a per-path key, and
+records match only within their kind. Otherwise a forged `worktrees/` layout
+unpacked into a directory trusted per-path (`P/worktrees/proj/.git` →
+`gitdir: ../g`, `P/worktrees/g/gitdir` → `../proj/.git`) would resolve to `P`,
+that directory's own per-path key. The `.git` → parent display rule applies to
+repository keys only.
 
 **Residual risk: stale worktree paths.** A worktree deleted with `rm -rf` leaves
 its gitdir and back-link until `git worktree prune` (or gc, three months by
