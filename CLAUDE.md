@@ -157,6 +157,13 @@ to dodge the metric.
 - **Conventional Commits** (`feat(cli): …`, `fix(parser): …`, `docs(internals): …`).
   `git-cliff` reads these on release.
 - **No `--no-verify`** without a stated reason in the commit body. Pre-commit failures are signals.
+- **Always run checks through prek** (`prek run <hook-id-or-alias> --all-files`, or
+  `prek run --all-files` for the lot), never the tool directly: not `ruff`, `uv run ruff`,
+  `cargo fmt`, `cargo clippy`, `uv run mypy` and so on. prek runs the tools mise installs from
+  `mise.toml`, with the hook's file selection, flags and feature sets. A direct call picks those
+  wrong: `ruff format .` also rewrites Markdown code blocks, and `cargo clippy` skips the lean
+  `toolr-core`/`toolr-py` pass. Tests (`cargo test`, `pytest`, `mise run test`) aren't hooks; run
+  them directly.
 - **Python tests: factory fixtures over bare helpers** for `tmp_path`-based setup. Keep test
   imports top-of-file.
 - **Python tests run in random order** (pytest-randomly; replay with
