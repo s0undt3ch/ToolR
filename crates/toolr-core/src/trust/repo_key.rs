@@ -265,6 +265,12 @@ mod tests {
 
     use super::*;
 
+    /// git can't create directories under a verbatim (`\\?\`) path on Windows.
+    fn git_path(path: &Path) -> &str {
+        let s = path.to_str().unwrap();
+        s.strip_prefix(r"\\?\").unwrap_or(s)
+    }
+
     fn git(dir: &Path, args: &[&str]) -> String {
         let out = Command::new("git")
             .args(["-c", "user.name=t", "-c", "user.email=t@t"])
@@ -285,12 +291,8 @@ mod tests {
             .env_remove("GIT_CEILING_DIRECTORIES")
             .output()
             .unwrap();
-        assert!(
-            out.status.success(),
-            "git {args:?} in {}: {}",
-            dir.display(),
-            String::from_utf8_lossy(&out.stderr)
-        );
+        let (at, stderr) = (dir.display(), String::from_utf8_lossy(&out.stderr));
+        assert!(out.status.success(), "git {args:?} in {at}: {stderr}");
         String::from_utf8(out.stdout).unwrap()
     }
 
@@ -307,10 +309,7 @@ mod tests {
     }
 
     fn add_worktree(repo: &Path, wt: &Path) -> PathBuf {
-        git(
-            repo,
-            &["worktree", "add", "-q", "--detach", wt.to_str().unwrap()],
-        );
+        git(repo, &["worktree", "add", "-q", "--detach", git_path(wt)]);
         canon(wt)
     }
 
@@ -474,7 +473,7 @@ mod tests {
         fs::rename(&repo, tmp.path().join("repo2")).unwrap();
         let moved = canon(&tmp.path().join("repo2"));
         assert_per_path(&wt);
-        git(&moved, &["worktree", "repair", wt.to_str().unwrap()]);
+        git(&moved, &["worktree", "repair", git_path(&wt)]);
         assert_eq!(resolve(&wt).key, moved.join(".git"));
         assert_eq!(resolve(&wt).display, moved);
     }
@@ -548,7 +547,7 @@ mod tests {
                 "submodule",
                 "add",
                 "-q",
-                src.to_str().unwrap(),
+                git_path(&src),
                 "mod",
             ],
         );

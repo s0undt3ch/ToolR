@@ -752,6 +752,12 @@ mod tests {
         assert!(!f.store_dir.path().join("toolr").exists());
     }
 
+    /// git can't create directories under a verbatim (`\\?\`) path on Windows.
+    fn git_path(path: &Path) -> &str {
+        let s = path.to_str().unwrap();
+        s.strip_prefix(r"\\?\").unwrap_or(s)
+    }
+
     fn git(dir: &Path, args: &[&str]) -> String {
         let out = std::process::Command::new("git")
             .args(["-c", "user.name=t", "-c", "user.email=t@t"])
@@ -772,11 +778,8 @@ mod tests {
             .env_remove("GIT_CEILING_DIRECTORIES")
             .output()
             .unwrap();
-        assert!(
-            out.status.success(),
-            "git {args:?}: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "git {args:?}: {stderr}");
         String::from_utf8(out.stdout).unwrap()
     }
 
@@ -788,27 +791,12 @@ mod tests {
     }
 
     fn add_worktree(repo: &Path, wt: &Path) -> PathBuf {
-        git(
-            repo,
-            &["worktree", "add", "-q", "--detach", wt.to_str().unwrap()],
-        );
+        git(repo, &["worktree", "add", "-q", "--detach", git_path(wt)]);
         fs::canonicalize(wt).unwrap()
     }
 
-    fn decide_at(
-        store: &TrustStore,
-        root: &Path,
-        input: Option<&str>,
-    ) -> (Result<Trusted, TrustError>, String) {
-        let mut err = Vec::new();
-        let result = match input {
-            Some(text) => {
-                let mut cursor = Cursor::new(text.as_bytes().to_vec());
-                decide(root, store, false, PROMPT, Some((&mut cursor, &mut err)))
-            }
-            None => decide(root, store, false, PROMPT, None),
-        };
-        (result, String::from_utf8(err).unwrap())
+    fn decide_at(store: &TrustStore, root: &Path) -> Result<Trusted, TrustError> {
+        decide(root, store, false, PROMPT, None)
     }
 
     #[test]
@@ -835,7 +823,7 @@ mod tests {
         store.trust(&main).unwrap();
         assert!(store.is_trusted(&inside).unwrap());
         assert!(store.is_trusted(&outside).unwrap());
-        let (r, _) = decide_at(&store, &outside, None);
+        let r = decide_at(&store, &outside);
         assert_eq!(r.unwrap().root(), outside);
     }
 
@@ -930,7 +918,7 @@ mod tests {
         let main = init_repo(&tmp.path().join("main"));
         let wt = add_worktree(&main, &tmp.path().join("wt"));
         let store = TrustStore::at(main.join("state"));
-        let (r, _) = decide_at(&store, &wt, None);
+        let r = decide_at(&store, &wt);
         assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
         assert!(!main.join("state").exists());
     }
@@ -953,7 +941,7 @@ mod tests {
         let main = init_repo(&tmp.path().join("main"));
         let wt = add_worktree(&main, &tmp.path().join("wt"));
         let store = TrustStore::at(wt.join("state/trust"));
-        let (r, _) = decide_at(&store, &wt, None);
+        let r = decide_at(&store, &wt);
         assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
         assert!(!wt.join("state").exists());
     }
@@ -977,7 +965,7 @@ mod tests {
         let wt = add_worktree(&main, &tmp.path().join("wt"));
         fs::create_dir(wt.join("sub")).unwrap();
         let store = TrustStore::at(wt.join("state"));
-        let (r, _) = decide_at(&store, &wt.join("sub"), None);
+        let r = decide_at(&store, &wt.join("sub"));
         assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
         assert!(!wt.join("state").exists());
     }
@@ -992,7 +980,7 @@ mod tests {
         fs::rename(&wt, tmp.path().join("moved")).unwrap();
         let moved = fs::canonicalize(tmp.path().join("moved")).unwrap();
         let store = f.store();
-        let (r, _) = decide_at(&store, &moved.join("sub"), None);
+        let r = decide_at(&store, &moved.join("sub"));
         let err = r.unwrap_err();
         assert!(matches!(
             &err,
@@ -1022,7 +1010,7 @@ mod tests {
         let gitdir = main.join(".git/worktrees/feature");
         fs::write(evil.join(".git"), format!("gitdir: {}\n", gitdir.display())).unwrap();
         let evil = fs::canonicalize(evil).unwrap();
-        let (r, _) = decide_at(&f.store(), &evil, None);
+        let r = decide_at(&f.store(), &evil);
         let text = r.unwrap_err().to_string();
         assert!(
             text.contains(&format!(
