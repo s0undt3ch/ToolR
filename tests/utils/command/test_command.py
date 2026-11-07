@@ -238,7 +238,7 @@ def test_stream_output_both_fd_required(echo_command):
         )
 
 
-@pytest.mark.skipif(IS_WINDOWS, reason="a closed fd aborts the Windows CRT")
+@pytest.mark.skip_on_windows(reason="a closed fd aborts the Windows CRT")
 def test_closed_fd_is_an_error_naming_the_argument(echo_command):
     # Far above any fd the process opens, so nothing can reuse it mid-test.
     closed_fd = 2**31 - 1
@@ -269,7 +269,7 @@ def test_timeout(sleep_command):
     assert elapsed < 1.0  # Verify timeout happened quickly
 
 
-@pytest.mark.skipif(IS_WINDOWS, reason="POSIX signals")
+@pytest.mark.skip_on_windows(reason="POSIX signals")
 def test_signal_killed_child_returncode_matches_subprocess():
     argv = ["sh", "-c", "kill -TERM $$"]
     result = run(argv)
@@ -277,7 +277,7 @@ def test_signal_killed_child_returncode_matches_subprocess():
     assert result.returncode == subprocess.run(argv, check=False).returncode  # noqa: S603
 
 
-@pytest.mark.skipif(IS_WINDOWS, reason="needs a POSIX shell")
+@pytest.mark.skip_on_windows(reason="needs a POSIX shell")
 def test_timeout_never_writes_into_a_reused_fd():
     # After the timeout, `run` closes its capture files; the background `echo` must not
     # land in whatever file reuses their fd numbers.
@@ -408,7 +408,7 @@ def test_interactive_incompatible_with_input(stdin_cat_command):
         run(stdin_cat_command, interactive=True, input="test")
 
 
-@pytest.mark.skipif(IS_WINDOWS, reason="pty is POSIX-only")
+@pytest.mark.skip_on_windows(reason="pty is POSIX-only")
 def test_interactive_inherits_a_real_tty():
     """#485: an interactive child must see a real TTY on stdin/stdout/stderr."""
     import pty  # POSIX-only module; importing at module level breaks Windows collection

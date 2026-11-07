@@ -12,9 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tests._git import git_env
-from tests._git import make_repo
-from tests._git import require_git
+from tests._git import Git
 
 
 def workflow_step(path: Path, job: str, step_id: str) -> dict[str, Any]:
@@ -41,12 +39,11 @@ def action_step_script(path: Path, step_id: str) -> str:
 
 
 @pytest.fixture
-def git_repo(tmp_path: Path) -> Callable[..., Path]:
+def git_repo(tmp_path: Path, git: Git) -> Callable[..., Path]:
     """Return a factory that creates a git repository with one commit holding `files`."""
-    require_git()
 
     def make(files: dict[str, str], name: str = "repo") -> Path:
-        return make_repo(tmp_path / name, files=files)
+        return git.make_repo(tmp_path / name, files=files)
 
     return make
 
@@ -59,7 +56,7 @@ def bash_step(tmp_path: Path) -> Callable[[str], StepRunner]:
     """Return a factory that turns a step's `run:` body into a runner.
 
     The runner takes the working directory and the step's environment, laid over
-    `git_env()`, and runs the body the way `shell: bash` does on a runner.
+    `Git.env()`, and runs the body the way `shell: bash` does on a runner.
     """
     bash = shutil.which("bash")
     if bash is None:
@@ -75,7 +72,7 @@ def bash_step(tmp_path: Path) -> Callable[[str], StepRunner]:
             return subprocess.run(  # noqa: S603  # bash + script path are test-controlled
                 [bash, "--noprofile", "--norc", "-eo", "pipefail", str(script)],
                 cwd=cwd,
-                env={**git_env(), **env},
+                env={**Git.env(), **env},
                 capture_output=True,
                 text=True,
                 check=False,

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -39,9 +38,7 @@ from tools.version import _read_workspace_version
 from tools.version import _set_action_yml_default_version
 from tools.version import bump
 
-from tests._git import git
-from tests._git import make_repo
-from tests._git import require_git
+from tests._git import Git
 
 GITHUB_FILES = ("GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_STEP_SUMMARY")
 
@@ -174,7 +171,9 @@ def test_cargo_version_maps_back_to_pep440(pep440: str, cargo: str) -> None:
 
 @pytest.fixture
 def release_repo(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    git: Git,
 ) -> Callable[..., ContextForTesting]:
     """Factory: a git repo with an optional tag and ``commits`` commits after it.
 
@@ -187,10 +186,8 @@ def release_repo(
     for name in ("GITHUB_EVENT_NAME", *GITHUB_FILES):
         monkeypatch.delenv(name, raising=False)
 
-    require_git()
-
     def make(*tags: str, commits: int = 0) -> ContextForTesting:
-        repo = make_repo(
+        repo = git.make_repo(
             tmp_path / "repo",
             commits=["initial", *(f"change {index}" for index in range(commits))],
             tags=dict.fromkeys(tags, 0),
@@ -215,7 +212,7 @@ def _dev_version(ctx: ContextForTesting) -> str:
     return _cargo_version(_compute_dev_version(ctx))
 
 
-def _short_sha(ctx: ContextForTesting) -> str:
+def _short_sha(git: Git, ctx: ContextForTesting) -> str:
     return git(ctx.repo_root, "rev-parse", "--short", "HEAD").strip()
 
 
@@ -228,12 +225,14 @@ def test_compute_dev_version_after_final_tag(
 
 
 def test_compute_dev_version_pull_request_appends_sha(
-    release_repo: Callable[..., ContextForTesting], monkeypatch: pytest.MonkeyPatch
+    release_repo: Callable[..., ContextForTesting],
+    monkeypatch: pytest.MonkeyPatch,
+    git: Git,
 ) -> None:
     """Pull-request builds append ``+g<sha>`` so concurrent PRs don't collide."""
     ctx = release_repo("v0.11.0", commits=7)
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
-    assert _dev_version(ctx) == f"0.11.1-dev7+g{_short_sha(ctx)}"
+    assert _dev_version(ctx) == f"0.11.1-dev7+g{_short_sha(git, ctx)}"
 
 
 @pytest.mark.parametrize(
@@ -258,11 +257,13 @@ def test_compute_dev_version_after_prerelease_tag(
 
 
 def test_compute_dev_version_prerelease_tag_pull_request(
-    release_repo: Callable[..., ContextForTesting], monkeypatch: pytest.MonkeyPatch
+    release_repo: Callable[..., ContextForTesting],
+    monkeypatch: pytest.MonkeyPatch,
+    git: Git,
 ) -> None:
     ctx = release_repo("v1.0.0-rc.1", commits=5)
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
-    assert _dev_version(ctx) == f"1.0.0-rc.2.dev5+g{_short_sha(ctx)}"
+    assert _dev_version(ctx) == f"1.0.0-rc.2.dev5+g{_short_sha(git, ctx)}"
 
 
 def test_compute_dev_version_on_the_tag(release_repo: Callable[..., ContextForTesting]) -> None:
@@ -386,7 +387,7 @@ def test_bump_finds_existing_tag_in_any_spelling(
     assert not any(path.exists() for path in github_files.values())
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="the `cargo` stub is a POSIX shell script")
+@pytest.mark.skip_on_windows(reason="the `cargo` stub is a POSIX shell script")
 def test_bump_write_sets_cargo_and_action_versions(
     release_repo: Callable[..., ContextForTesting],
     tmp_path: Path,

@@ -18,10 +18,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tests._git import git
-from tests._git import git_env
-from tests._git import make_repo
-from tests._git import require_git
+from tests._git import Git
 from tests.workflows.conftest import workflow_step
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -56,13 +53,12 @@ def test_release_prerelease_is_exported() -> None:
 
 
 @pytest.fixture
-def rc_history(tmp_path: Path) -> Path:
+def rc_history(tmp_path: Path, git: Git) -> Path:
     """A repository with `v0.35.1`, then `v1.0.0-rc.1`, then one more fix.
 
     Each tag sits on a release commit worded as `_prepare-release.yml` words it.
     """
-    require_git()
-    return make_repo(
+    return git.make_repo(
         tmp_path / "repo",
         commits=[
             "feat: base feature",
@@ -85,7 +81,7 @@ def _git_cliff(repo: Path, *args: str) -> str:
     return subprocess.run(  # noqa: S603  # git-cliff binary + args are test-controlled
         [git_cliff, "--offline", "--config", str(CLIFF_TOML), *args],
         cwd=repo,
-        env=git_env(),
+        env=Git.env(),
         capture_output=True,
         # cliff.toml's group headings carry emoji; Windows' locale codec can't decode them.
         encoding="utf-8",
@@ -112,7 +108,7 @@ def test_prerelease_body_skips_release_commits(rc_history: Path) -> None:
     assert "Prepare for" not in body
 
 
-def test_tagged_history_has_no_prerelease_section(rc_history: Path) -> None:
+def test_tagged_history_has_no_prerelease_section(rc_history: Path, git: Git) -> None:
     git(rc_history, "tag", "-a", "-m", "v1.0.0", "v1.0.0")
     changelog = _git_cliff(rc_history)
     assert "## 1.0.0 " in changelog

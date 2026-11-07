@@ -28,6 +28,8 @@ from tests.attestation_stub import WORKFLOWS
 from tests.attestation_stub import subject
 from tests.attestation_stub import write_gh_stub
 
+pytestmark = pytest.mark.skip_if_binaries_missing("bash", "jq")
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ACTION_YML = REPO_ROOT / "action.yml"
 
@@ -47,12 +49,6 @@ def _step(step_id: str) -> dict[str, Any]:
 def _static_env(step: dict[str, Any]) -> dict[str, str]:
     """The step's `env:` entries that hold no `${{ }}` expression."""
     return {k: v for k, v in step.get("env", {}).items() if "${{" not in v}
-
-
-@pytest.fixture(autouse=True)
-def _skip_if_no_bash_or_jq() -> None:
-    if shutil.which("bash") is None or shutil.which("jq") is None:
-        pytest.skip("bash and jq are required")
 
 
 @pytest.fixture

@@ -166,7 +166,7 @@ def test_runner_propagates_nonzero_exit_via_ctx_exit(
     assert result.returncode == 7
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX signals")
+@pytest.mark.skip_on_windows(reason="POSIX signals")
 def test_runner_exits_128_plus_signal_for_signal_killed_ctx_run(
     tools_module: Callable[[str], Path],
     spec_file: Callable[..., Path],
