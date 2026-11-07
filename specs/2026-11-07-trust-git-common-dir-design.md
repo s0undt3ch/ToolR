@@ -101,8 +101,8 @@ own and borrows nothing. (My call: fail closed to per-path trust, not to an erro
 - **`E` is a directory** (a main checkout): key = `E`, canonicalised. A
   `commondir` file inside it is ignored; a main checkout's git dir is its own
   common dir. (Following a planted `commondir` would let a crafted `.git`
-  directory point at another repository. Git 2.56 refuses such a directory as
-  "not a git repository", so ignoring it costs nothing.)
+  directory point at another repository. toolr ignores it regardless of what
+  git does; git 2.56 happens to refuse such a directory.)
 - **`E` is a regular file** (`gitdir: <path>`, relative paths resolved against
   `D`): let `G` be the gitdir it names, canonicalised. The key is `G`'s
   grandparent, canonicalised, only when **both** hold:
@@ -141,8 +141,10 @@ own and borrows nothing. (My call: fail closed to per-path trust, not to an erro
 
   **A worktree moved with plain `mv`** keeps a stale back-link: git still works,
   rule 2 fails, and the user is prompted again. The prompt and the `Untrusted`
-  error, when `E` is a `.git` file that failed rule 2 only, hint
-  `git worktree repair`.
+  error, when `E` is a `.git` file that failed rule 2 only, hint running
+  `git worktree repair <this worktree's path>` from the main checkout. (A bare
+  `git worktree repair` from inside the worktree fails when the main repository
+  moved.)
 
 **Walk details.** The `.git` walk starts at the project root and stops at the
 first `.git` entry or at `$HOME`. With no home directory (`dirs::home_dir()` is
@@ -163,7 +165,7 @@ the worktree branch: the common dir is the bare repository directory.
 
 **Known gap: `--separate-git-dir`.** A main checkout created with
 `git init --separate-git-dir` (and some dotfile managers) has a `.git` file
-pointing at its git dir, with no back-link and no `commondir`. That is exactly the
+pointing at its git dir, with no back-link. That is exactly the
 shape of a crafted `gitdir:` attack, so it gets per-path trust, while its linked
 worktrees get key `G`. Trusting one does not cover the other. (My call: rare
 layout, and no safe rule tells it apart from the attack.)
@@ -225,8 +227,8 @@ mention that worktrees are covered, e.g. the prompt line
   `decide`, `is_trusted_now`, `require_trust`) resolves the key the same way.
   One function does the resolution; nothing else canonicalises roots for trust.
 - `crates/toolr-core` rules apply: no new dependency unless `optional = true` and
-  listed under `full` (see `CONTRIBUTING.md`). Parsing two small text files
-  needs none.
+  listed under `full` (see `CONTRIBUTING.md`). Reading the `.git` file and one
+  back-link file needs none.
 - Windows: canonicalised paths there carry the `\\?\` prefix; the `.git` file's
   `gitdir:` uses forward slashes. Compare canonicalised forms on both sides.
 
@@ -252,7 +254,11 @@ mention that worktrees are covered, e.g. the prompt line
 - A worktree made with `worktree.useRelativePaths=true` shares the main
   checkout's trust.
 - A worktree moved with plain `mv` falls to per-path and the prompt hints
-  `git worktree repair`.
+  `git worktree repair <path>`.
+- A worktree moved with `git worktree move` stays trusted.
+- Main repository moved, then `git worktree repair` run from it: trust restored.
+- Two worktrees with the same basename (`p1/same`, `p2/same`; git names their
+  bookkeeping `same` and `same1`) both share the repository's trust.
 - A bare `foo.git` with a worktree: `toolr self trusted` shows `…/foo.git`, not
   its parent.
 - A proof made from a worktree syncs that worktree's venv, not the main
