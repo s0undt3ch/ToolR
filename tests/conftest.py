@@ -164,6 +164,8 @@ class ToolsProject:
             env=self.env,
             capture_output=True,
             text=True,
+            # toolr writes UTF-8; Windows would otherwise decode with the ANSI code page.
+            encoding="utf-8",
             check=False,
         )
 
