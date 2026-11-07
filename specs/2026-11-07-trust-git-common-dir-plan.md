@@ -18,7 +18,6 @@
 - Every failed rule falls back to per-path (key = canonical project root), never to an error.
 - Trust is unreleased: no migration. Bump `RECORD_SCHEMA_VERSION` to `2`; records with another version are skipped as unreadable.
 - 99% patch coverage (`cargo xtask patch-coverage --base main`). Close gaps with real tests.
-- Lint and format checks run through prek (`prek run --all-files`), never `uv run ruff`.
 - Conventional Commits; no `Co-Authored-By` or session trailers.
 - British English in prose, comments and commit messages.
 
