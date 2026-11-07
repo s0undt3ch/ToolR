@@ -145,7 +145,11 @@ own and borrows nothing. (My call: fail closed to per-path trust, not to an erro
   target `.git` no longer points at `G`** (otherwise this is a copy of a live
   worktree's `.git`, and following the hint would hand that worktree's trust to
   the copy), hint running
-  `git worktree repair <this worktree's path>` from the main checkout. (A bare
+  `git worktree repair <worktree top>` from the main checkout, where the worktree
+  top is the directory holding the `.git` file (not the project root). A moved
+  worktree and a forged one look the same on disk, so the hint names the
+  repository and the worktree the directory claims to be and says to run it only
+  for a worktree the user moved themselves. (A bare
   `git worktree repair` from inside the worktree fails when the main repository
   moved.)
 
