@@ -113,8 +113,9 @@ fn untrusted_message(repo: &Path, repair: Option<&Path>) -> String {
     msg
 }
 
-/// Canonical form, or the path unchanged when it can't be resolved (the
-/// canonical home directory is only used for comparisons).
+/// Canonical form, or the path unchanged when it can't be resolved. Used to
+/// canonicalise the home directory that key resolution and the guard compare
+/// against.
 fn canonical(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
@@ -156,7 +157,8 @@ impl TrustStore {
         self.dir.join(format!("{}.json", digest.to_hex()))
     }
 
-    /// Every store operation passes through here: the store must not resolve
+    /// Every store operation that enters a repository passes through here (not
+    /// `untrust_key`, which only deletes a record by its stored key): the store must not resolve
     /// inside the repository whose trust it holds.
     fn guard(&self, key: &RepoKey) -> Result<(), TrustError> {
         self.guard_with_home(key, dirs::home_dir().map(|h| canonical(&h)).as_deref())
@@ -179,6 +181,11 @@ impl TrustStore {
     pub fn is_trusted(&self, root: &Path) -> Result<bool> {
         let key = resolve_key(root);
         self.guard(&key)?;
+        self.is_trusted_key(&key)
+    }
+
+    /// Neither resolves nor guards: the caller already did, for this `key`.
+    fn is_trusted_key(&self, key: &RepoKey) -> Result<bool> {
         let bytes = match fs::read(self.record_path(&key.key, key.kind)) {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -200,6 +207,11 @@ impl TrustStore {
     fn grant(&self, root: &Path) -> Result<(TrustRecord, Trusted)> {
         let key = resolve_key(root);
         self.guard(&key)?;
+        self.grant_key(&key)
+    }
+
+    /// Neither resolves nor guards: the caller already did, for this `key`.
+    fn grant_key(&self, key: &RepoKey) -> Result<(TrustRecord, Trusted)> {
         let record = TrustRecord {
             schema_version: RECORD_SCHEMA_VERSION,
             key: key.key.clone(),
@@ -223,7 +235,7 @@ impl TrustStore {
         }
         let tmp = tmp.into_temp_path();
         fs::rename(&tmp, self.record_path(&key.key, key.kind)).context("writing trust record")?;
-        Ok((record, Trusted::from_key(&key, false)))
+        Ok((record, Trusted::from_key(key, false)))
     }
 
     /// Returns the repository path to show and whether a record existed. A
@@ -361,7 +373,7 @@ fn decide(
         return Ok(trusted(false));
     }
     store.guard(&key)?;
-    match store.is_trusted(root) {
+    match store.is_trusted_key(&key) {
         Ok(true) => return Ok(trusted(false)),
         Ok(false) => {}
         Err(e) => eprintln!("toolr: warning: could not read the trust store: {e:#}"),
@@ -371,7 +383,7 @@ fn decide(
         && let Some((input, out)) = prompt_io
         && confirm(input, out, &key.display)
     {
-        if let Err(e) = store.trust(root) {
+        if let Err(e) = store.grant_key(&key) {
             let _ = writeln!(out, "warning: could not record trust: {e:#}");
         }
         return Ok(trusted(true));
@@ -907,7 +919,6 @@ mod tests {
 
     #[test]
     fn store_in_main_checkout_refused_from_external_worktree() {
-        let f = Fixture::new();
         let tmp = TempDir::new().unwrap();
         let main = init_repo(&tmp.path().join("main"));
         let wt = add_worktree(&main, &tmp.path().join("wt"));
@@ -915,12 +926,10 @@ mod tests {
         let (r, _) = decide_at(&store, &wt, None);
         assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
         assert!(!main.join("state").exists());
-        drop(f);
     }
 
     #[test]
     fn home_dotgit_project_not_refused_by_guard() {
-        let f = Fixture::new();
         let tmp = TempDir::new().unwrap();
         let home = init_repo(&tmp.path().join("home"));
         let store = TrustStore::at(home.join("state/trust"));
@@ -929,7 +938,29 @@ mod tests {
         assert_eq!(key.display, home);
         assert!(store.guard_with_home(&key, Some(&home)).is_ok());
         assert!(store.guard_with_home(&key, None).is_err());
-        drop(f);
+    }
+
+    #[test]
+    fn store_in_external_worktree_refused() {
+        let tmp = TempDir::new().unwrap();
+        let main = init_repo(&tmp.path().join("main"));
+        let wt = add_worktree(&main, &tmp.path().join("wt"));
+        let store = TrustStore::at(wt.join("state/trust"));
+        let (r, _) = decide_at(&store, &wt, None);
+        assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
+        assert!(!wt.join("state").exists());
+    }
+
+    #[test]
+    fn home_exemption_is_per_path() {
+        let tmp = TempDir::new().unwrap();
+        let home = init_repo(&tmp.path().join("home"));
+        let key = RepoKey::resolve(&home, Some(&home));
+        let store = TrustStore::at(home.join(".git/state"));
+        assert!(matches!(
+            store.guard_with_home(&key, Some(&home)),
+            Err(TrustError::StoreInsideRepo(_))
+        ));
     }
 
     #[test]
