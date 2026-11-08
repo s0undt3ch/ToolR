@@ -108,6 +108,16 @@ def lint(
         verbose: Say more.
     """
     pass
+
+@group.command
+def pos(ctx, target: Literal["alpha", "beta"], flavour: str = "plain"):
+    """A positional and a flag.
+
+    Args:
+        target: What to act on.
+        flavour: Which kind.
+    """
+    pass
 "#
     );
     std::fs::write(fx.tmp.path().join("tools/ci.py"), src).unwrap();
@@ -3185,6 +3195,18 @@ fn zsh_tab_completes_quoted_and_escaped_partials_end_to_end() {
             "{typed:?}: want {want:?}\n{stdout}"
         );
     }
+    // `pos` has a positional, so a raw `'--fla'` or `\-\-fla` reads as that positional and the
+    // engine would return `alpha`/`beta`, no flags. Dequoted it is a flag word, which only
+    // `cur="${(Q)raw}"` gives the engine.
+    for typed in ["'--fla'", r#""--fla""#, r"\-\-fla"] {
+        let (stdout, _) = zsh_session(&fx, "", &format!("toolr ci pos {typed}\t\nexit\n"));
+        assert!(
+            stdout
+                .lines()
+                .any(|l| l.trim_end_matches('\r') == "LINE:ci pos --flavour"),
+            "{typed:?}: {stdout}"
+        );
+    }
     // zsh completes the command inside these itself; nothing toolr offers may land or run.
     for typed in [r#"--mode "$(to"#, "--mode `to"] {
         let stdout = zsh_tab(&fx, typed, "\x18d");
@@ -3359,7 +3381,10 @@ fn zsh_command_slot_offers_all_commands_for_any_partial() {
     for want in ["ci", "project", "self"] {
         assert!(groups.iter().any(|g| g == want), "{want} not in {groups:?}");
     }
-    assert_eq!(zsh_values(&fx, "", &["toolr", "ci", "ZZ"]), vec!["lint"]);
+    assert_eq!(
+        zsh_values(&fx, "", &["toolr", "ci", "ZZ"]),
+        vec!["lint", "pos"]
+    );
 }
 
 /// Descriptions line up with their values: a missing one shows the value itself.
@@ -3375,7 +3400,9 @@ fn zsh_descriptions_follow_their_values() {
         vec![
             "COMPADD:-d descriptions -a values".to_string(),
             "VALUE:lint".to_string(),
+            "VALUE:pos".to_string(),
             "DESC:Lint things.".to_string(),
+            "DESC:A positional and a flag.".to_string(),
         ]
     );
     let lines = zsh_run_with(&fx, "", "", &["toolr", "ci", "lint", "--mode", ""]);
@@ -3451,6 +3478,30 @@ fn zsh_tab_lists_descriptions_when_the_matches_are_few() {
                 assert!(!tty.contains("Summary number"), "{typed:?}: {tty}");
             }
         }
+    }
+}
+
+/// A live Tab with a `descriptions` format: one neutral `toolr` header over groups, commands,
+/// flags and values alike, never a `value` header and never the `values` tag.
+#[test]
+fn zsh_tab_header_is_neutral_for_every_slot_kind() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let rc = "zstyle ':completion:*:descriptions' format 'HDR<%d>'\n\
+              zstyle ':completion:*:values' format 'VALUES<%d>'\n\
+              unsetopt LIST_AMBIGUOUS";
+    for typed in [
+        "toolr ci ",
+        "toolr ci lint --",
+        "toolr ci lint --mode ",
+        "toolr ",
+    ] {
+        let (_, tty) = zsh_session(&fx, rc, &format!("{typed}\t\x18dexit\n"));
+        assert!(tty.contains("HDR<toolr>"), "{typed:?}: {tty}");
+        assert!(!tty.contains("HDR<value>"), "{typed:?}: {tty}");
+        assert!(!tty.contains("VALUES<"), "{typed:?}: {tty}");
     }
 }
 

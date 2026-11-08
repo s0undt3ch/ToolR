@@ -67,9 +67,11 @@ _toolr() {
     fi
 
     # A bare `compadd` ignores the `matcher-list` style; `_description` puts its matcher (and
-    # the user's other styles for the tag) into `expl`.
+    # the user's other styles for the tag) into `expl`. The reply doesn't say whether the slot
+    # holds commands, flags or values, so the tag and its `%d` header are neutral rather than
+    # a `values` that would also restyle command and flag names.
     local -a expl
-    _description values expl value
+    _description toolr expl toolr
 
     # One-per-line descriptions only pay off for a small, scannable list of matches; fall back
     # to the compact grid for large ones rather than a wall of text. The engine returns the
