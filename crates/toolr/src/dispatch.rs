@@ -700,7 +700,8 @@ fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> 
 
 /// `toolr __complete` exits with this, printing nothing, to have the shell
 /// complete file system paths. Old scripts treat it as "no candidates".
-/// The scripts in `crates/toolr-core/src/complete/scripts/` (`bash.sh`, `fish.fish`, `zsh.zsh`)
+/// The scripts in `crates/toolr-core/src/complete/scripts/` (`bash.sh`, `fish.fish`, `zsh.zsh`,
+/// `powershell.ps1`)
 /// and the exit-code table in `docs/cli.md` must match both values.
 const COMPLETE_PATHS: u8 = 10;
 /// As [`COMPLETE_PATHS`], for directories only.

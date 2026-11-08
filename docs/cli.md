@@ -272,7 +272,7 @@ Operations on toolr itself (not on the project).
 Print the completion script for `<shell>` to stdout. Useful for piping
 into your own dotfiles management.
 
-**`<shell>`:** `bash`, `zsh`, or `fish`.
+**`<shell>`:** `bash`, `zsh`, `fish`, or `powershell` (alias `pwsh`).
 
 ```sh
 toolr self completion print --help
@@ -285,8 +285,9 @@ toolr self completion print --help
 ### `toolr self completion install <shell> [--force]` {#self-completion-install}
 
 Write the completion script for `<shell>` into its standard location
-(`~/.local/share/bash-completion/completions/`, `~/.zfunc/`, or
-`~/.config/fish/completions/`). `--force` overwrites an existing file
+(`~/.local/share/bash-completion/completions/`, `~/.zfunc/`,
+`~/.config/fish/completions/`, or `toolr/completions/toolr.ps1` under the
+data directory for PowerShell). `--force` overwrites an existing file
 without prompting.
 
 Bash completion needs bash 4.4 or newer; on an older bash, sourcing the
@@ -309,6 +310,34 @@ In bash, a word with an unclosed quote (`--cfg 'a:b`) completes nothing.
 
 An aliased toolr (`alias t=toolr`) gets no completion by default; run
 `complete -F _toolr_complete t` to register it.
+
+PowerShell completion works in Windows PowerShell 5.1 and PowerShell 7;
+below 5.1 the script prints one warning and registers nothing. PowerShell
+has no completion directory, so toolr writes the script to
+`toolr/completions/toolr.ps1` under `$XDG_DATA_HOME` when it's set, else
+under the platform data directory (`%APPDATA%` on Windows,
+`~/Library/Application Support` on macOS, `~/.local/share` on Linux), and
+prints the line to load it:
+
+- Add `. '<installed path>'` to your profile
+  (`$PROFILE.CurrentUserAllHosts`); toolr doesn't edit the profile itself.
+- On Windows the execution policy must allow local scripts:
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+- Or load it on every shell start without a file or a policy change:
+  `Invoke-Expression (& toolr self completion print powershell | Out-String)`.
+- Register an alias with
+  `Register-ArgumentCompleter -Native -CommandName t -ScriptBlock ${function:_toolr_complete}`.
+
+Known limits in PowerShell:
+
+- When toolr has no candidates, PowerShell falls back to its own file-name
+  completion.
+- A cursor inside a word completes the whole word.
+- A word holding a variable, sub-expression or array (`$x`, `"a$(x)"`,
+  `a,b`) completes nothing, and neither does anything after one or after
+  `--%`.
+- A toolr reached only through a `.cmd` or `.bat` shim completes nothing.
+- PowerShell ISE isn't supported.
 
 ```sh
 toolr self completion install --help

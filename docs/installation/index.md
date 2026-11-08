@@ -95,7 +95,7 @@ After the binary is on `$PATH`:
 ```sh
 toolr project init                  # writes tools/{pyproject.toml,.gitignore,example.py}
 toolr example hello                 # run the generated example
-toolr self completion install bash  # or zsh / fish
+toolr self completion install bash  # or zsh / fish / powershell
 ```
 
 `toolr project init` writes a `tools/pyproject.toml` with
