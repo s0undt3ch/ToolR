@@ -35,9 +35,13 @@ fn run(fx: &VenvFixture, data: &TempDir, path: &str) -> Output {
         .unwrap()
 }
 
+/// `path` with `{abs}` swapped for an empty absolute dir, so a system `uv`
+/// (say in `/usr/bin`) can't stand in for the missing one.
 fn assert_repo_uv_never_ran(path: &str) {
     let (fx, data) = planted_repo();
-    let out = run(&fx, &data, path);
+    let abs = TempDir::new().unwrap();
+    let path = path.replace("{abs}", &abs.path().display().to_string());
+    let out = run(&fx, &data, &path);
     assert_eq!(fx.uv_argv(), "", "the repo's uv ran with PATH={path:?}");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success(), "expected failure:\n{stderr}");
@@ -49,20 +53,20 @@ fn assert_repo_uv_never_ran(path: &str) {
 
 #[test]
 fn empty_path_entry_does_not_run_repo_uv() {
-    assert_repo_uv_never_ran(":/usr/bin:/bin");
+    assert_repo_uv_never_ran(":{abs}");
 }
 
 #[test]
 fn trailing_colon_does_not_run_repo_uv() {
-    assert_repo_uv_never_ran("/usr/bin:/bin:");
+    assert_repo_uv_never_ran("{abs}:");
 }
 
 #[test]
 fn dot_path_entry_does_not_run_repo_uv() {
-    assert_repo_uv_never_ran(".:/usr/bin:/bin");
+    assert_repo_uv_never_ran(".:{abs}");
 }
 
 #[test]
 fn relative_path_entry_does_not_run_repo_uv() {
-    assert_repo_uv_never_ran("rel-bin:/usr/bin:/bin");
+    assert_repo_uv_never_ran("rel-bin:{abs}");
 }
