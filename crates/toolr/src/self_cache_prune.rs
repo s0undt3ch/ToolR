@@ -14,7 +14,50 @@ use toolr_core::cache::{
     sweep_rebuild_locks,
 };
 
-pub fn run(cache_root: &Path, matches: &ArgMatches) -> Result<ExitCode> {
+/// Output of one prune run. The `-q` rule is stated on the arg in `cli::build_command`.
+struct Report<'a> {
+    out: &'a mut dyn Write,
+    /// Test seam for where warnings go; `None` is the process's stderr.
+    err: Option<&'a mut dyn Write>,
+    quiet: bool,
+    dry_run: bool,
+}
+
+impl<'a> Report<'a> {
+    fn new(out: &'a mut dyn Write, quiet: bool, dry_run: bool) -> Self {
+        Self {
+            out,
+            err: None,
+            quiet,
+            dry_run,
+        }
+    }
+
+    /// Send warnings to `err` rather than the process's stderr.
+    #[cfg(test)]
+    fn with_err(mut self, err: &'a mut dyn Write) -> Self {
+        self.err = Some(err);
+        self
+    }
+
+    /// Success chatter. A dry run's lines are its answer, so `--quiet` keeps them.
+    fn note(&mut self, line: &str) -> io::Result<()> {
+        if self.quiet && !self.dry_run {
+            return Ok(());
+        }
+        writeln!(self.out, "{line}")
+    }
+
+    /// Warnings go to stderr, and always print.
+    fn warn(&mut self, line: &str) -> io::Result<()> {
+        match self.err.as_deref_mut() {
+            Some(err) => writeln!(err, "toolr: warning: {line}"),
+            None => writeln!(io::stderr(), "toolr: warning: {line}"),
+        }
+    }
+}
+
+pub fn run(cache_root: &Path, matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     let all = matches.get_flag("all");
     let dry_run = matches.get_flag("dry-run");
     let yes = matches.get_flag("yes");
@@ -24,31 +67,34 @@ pub fn run(cache_root: &Path, matches: &ArgMatches) -> Result<ExitCode> {
     entries.sort_by(|a, b| a.meta.repo_path.cmp(&b.meta.repo_path));
     let stdout = io::stdout();
     let mut out = stdout.lock();
+    let mut report = Report::new(&mut out, quiet, dry_run);
 
     if all {
-        return prune_all(cache_root, entries, dry_run, yes, &mut out);
+        return prune_all(cache_root, entries, yes, confirm_destroy_all, &mut report);
     }
     let classification = classify_entries(entries, Utc::now(), stale_after_days);
-    prune_classified(cache_root, classification, dry_run, &mut out)
+    prune_classified(cache_root, classification, &mut report)
 }
 
 fn prune_all(
     cache_root: &Path,
     entries: Vec<CachedVenv>,
-    dry_run: bool,
     yes: bool,
-    out: &mut dyn Write,
+    confirm: impl FnOnce(&[CachedVenv]) -> Result<bool>,
+    report: &mut Report,
 ) -> Result<ExitCode> {
+    let dry_run = report.dry_run;
     if entries.is_empty() {
         // Leftover locks are empty files holding no data, so they need no confirmation.
-        if sweep_locks(cache_root, &[], dry_run, out)? == 0 {
+        if sweep_locks(cache_root, &[], report)? == 0 {
             let root = cache_root.display();
-            writeln!(out, "toolr: no cache entries to remove under {root}")?;
+            let line = format!("toolr: no cache entries to remove under {root}");
+            report.note(&line)?;
         }
         return Ok(ExitCode::SUCCESS);
     }
-    if !yes && !dry_run && !confirm_destroy_all(&entries)? {
-        writeln!(out, "toolr: aborted, nothing removed")?;
+    if !yes && !dry_run && !confirm(&entries)? {
+        report.note("toolr: aborted, nothing removed")?;
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -56,34 +102,34 @@ fn prune_all(
     for e in &entries {
         total_bytes = total_bytes.saturating_add(e.size_bytes);
         if dry_run {
-            writeln!(
-                out,
+            let line = format!(
                 "DRY-RUN would remove {} ({})",
                 e.cache_dir.display(),
                 format_size(e.size_bytes, BINARY)
-            )?;
+            );
+            report.note(&line)?;
         } else {
-            remove_entry(&e.cache_dir, out)?;
+            remove_entry(&e.cache_dir, report)?;
         }
     }
     let action = if dry_run { "would free" } else { "freed" };
-    writeln!(
-        out,
+    let line = format!(
         "toolr: {action} {} across {} entr{}",
         format_size(total_bytes, BINARY),
         entries.len(),
         if entries.len() == 1 { "y" } else { "ies" },
-    )?;
-    sweep_locks(cache_root, &[], dry_run, out)?;
+    );
+    report.note(&line)?;
+    sweep_locks(cache_root, &[], report)?;
     Ok(ExitCode::SUCCESS)
 }
 
 fn prune_classified(
     cache_root: &Path,
     classification: Classification,
-    dry_run: bool,
-    out: &mut dyn Write,
+    report: &mut Report,
 ) -> Result<ExitCode> {
+    let dry_run = report.dry_run;
     let keep_repos: Vec<PathBuf> = classification
         .keep
         .iter()
@@ -95,8 +141,8 @@ fn prune_classified(
         .chain(classification.stale)
         .collect();
     if candidates.is_empty() {
-        if sweep_locks(cache_root, &keep_repos, dry_run, out)? == 0 {
-            writeln!(out, "toolr: nothing to prune")?;
+        if sweep_locks(cache_root, &keep_repos, report)? == 0 {
+            report.note("toolr: nothing to prune")?;
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -109,66 +155,63 @@ fn prune_classified(
             PruneReason::Stale => "STALE",
         };
         if dry_run {
-            writeln!(
-                out,
+            let line = format!(
                 "DRY-RUN {tag:<7} {} ({})",
                 c.entry.cache_dir.display(),
                 format_size(c.entry.size_bytes, BINARY),
-            )?;
+            );
+            report.note(&line)?;
         } else {
-            writeln!(
-                out,
+            let line = format!(
                 "{tag:<7} removing {} ({})",
                 c.entry.cache_dir.display(),
                 format_size(c.entry.size_bytes, BINARY),
-            )?;
-            remove_entry(&c.entry.cache_dir, out)?;
+            );
+            report.note(&line)?;
+            remove_entry(&c.entry.cache_dir, report)?;
         }
     }
     let action = if dry_run { "would free" } else { "freed" };
-    writeln!(
-        out,
+    let line = format!(
         "toolr: {action} {} across {} entr{}",
         format_size(total_bytes, BINARY),
         candidates.len(),
         if candidates.len() == 1 { "y" } else { "ies" },
-    )?;
-    sweep_locks(cache_root, &keep_repos, dry_run, out)?;
+    );
+    report.note(&line)?;
+    sweep_locks(cache_root, &keep_repos, report)?;
     Ok(ExitCode::SUCCESS)
 }
 
 /// Remove rebuild locks none of `keep_repos` needs. A failure only warns, like `remove_entry`.
-fn sweep_locks(
-    cache_root: &Path,
-    keep_repos: &[PathBuf],
-    dry_run: bool,
-    out: &mut dyn Write,
-) -> Result<usize> {
-    match sweep_rebuild_locks(cache_root, keep_repos, dry_run) {
+/// The count is returned whether or not the line prints: the caller's "nothing to prune" depends on it.
+fn sweep_locks(cache_root: &Path, keep_repos: &[PathBuf], report: &mut Report) -> Result<usize> {
+    match sweep_rebuild_locks(cache_root, keep_repos, report.dry_run) {
         Ok(sweep) if sweep.removed > 0 => {
-            let action = if dry_run { "would remove" } else { "removed" };
+            let action = if report.dry_run {
+                "would remove"
+            } else {
+                "removed"
+            };
             let plural = if sweep.removed == 1 { "" } else { "s" };
             let n = sweep.removed;
-            writeln!(out, "toolr: {action} {n} rebuild lock{plural}")?;
+            report.note(&format!("toolr: {action} {n} rebuild lock{plural}"))?;
             Ok(sweep.removed)
         }
         Ok(_) => Ok(0),
         Err(e) => {
-            writeln!(out, "toolr: warning: failed to sweep rebuild locks: {e}")?;
+            report.warn(&format!("failed to sweep rebuild locks: {e}"))?;
             Ok(0)
         }
     }
 }
 
-fn remove_entry(cache_dir: &Path, out: &mut dyn Write) -> Result<()> {
+fn remove_entry(cache_dir: &Path, report: &mut Report) -> Result<()> {
     match std::fs::remove_dir_all(cache_dir) {
         Ok(()) => Ok(()),
         Err(e) => {
-            writeln!(
-                out,
-                "toolr: warning: failed to remove {}: {e}",
-                cache_dir.display()
-            )?;
+            let line = format!("failed to remove {}: {e}", cache_dir.display());
+            report.warn(&line)?;
             Ok(())
         }
     }
@@ -227,11 +270,47 @@ mod tests {
         }
     }
 
+    fn orphan_candidate(dir: &Path, bytes: u64) -> Candidate {
+        std::fs::create_dir_all(dir.join("venv")).unwrap();
+        std::fs::write(dir.join("venv/blob"), vec![0u8; bytes as usize]).unwrap();
+        Candidate {
+            entry: make_entry(dir.to_path_buf(), "/missing".into(), bytes),
+            reason: PruneReason::Orphan,
+        }
+    }
+
+    fn two_entries(root: &Path) -> Vec<CachedVenv> {
+        ["repo-a", "repo-b"]
+            .iter()
+            .map(|key| {
+                let dir = root.join(key);
+                std::fs::create_dir_all(dir.join("venv")).unwrap();
+                std::fs::write(dir.join("venv/blob"), vec![0u8; 64]).unwrap();
+                make_entry(dir, root.to_path_buf(), 64)
+            })
+            .collect()
+    }
+
+    /// A stray rebuild lock: an empty `*.lock` file no kept repo owns.
+    fn stray_lock(root: &Path) -> PathBuf {
+        let lock = toolr_core::manifest::lock_path_for_repo(root, Path::new("/stray/repo"));
+        std::fs::create_dir_all(lock.parent().unwrap()).unwrap();
+        std::fs::write(&lock, b"").unwrap();
+        lock
+    }
+
     #[test]
     fn prune_all_with_empty_input_reports_no_entries() {
         let tmp = TempDir::new().unwrap();
         let mut out: Vec<u8> = Vec::new();
-        let rc = prune_all(tmp.path(), vec![], false, true, &mut out).unwrap();
+        let rc = prune_all(
+            tmp.path(),
+            vec![],
+            true,
+            confirm_destroy_all,
+            &mut Report::new(&mut out, false, false),
+        )
+        .unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         assert!(s.contains("no cache entries to remove"));
@@ -246,7 +325,14 @@ mod tests {
         let entries = vec![make_entry(entry_dir.clone(), tmp.path().to_path_buf(), 256)];
 
         let mut out: Vec<u8> = Vec::new();
-        let rc = prune_all(tmp.path(), entries, true, true, &mut out).unwrap();
+        let rc = prune_all(
+            tmp.path(),
+            entries,
+            true,
+            confirm_destroy_all,
+            &mut Report::new(&mut out, false, true),
+        )
+        .unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         assert!(s.contains("DRY-RUN would remove"));
@@ -267,7 +353,14 @@ mod tests {
         }
 
         let mut out: Vec<u8> = Vec::new();
-        let rc = prune_all(tmp.path(), entries, false, true, &mut out).unwrap();
+        let rc = prune_all(
+            tmp.path(),
+            entries,
+            true,
+            confirm_destroy_all,
+            &mut Report::new(&mut out, false, false),
+        )
+        .unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         assert!(s.contains("freed"));
@@ -281,7 +374,12 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut out: Vec<u8> = Vec::new();
         let classification = Classification::default();
-        let rc = prune_classified(tmp.path(), classification, false, &mut out).unwrap();
+        let rc = prune_classified(
+            tmp.path(),
+            classification,
+            &mut Report::new(&mut out, false, false),
+        )
+        .unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         assert!(s.contains("nothing to prune"));
@@ -307,7 +405,12 @@ mod tests {
         };
 
         let mut out: Vec<u8> = Vec::new();
-        let rc = prune_classified(tmp.path(), classification, true, &mut out).unwrap();
+        let rc = prune_classified(
+            tmp.path(),
+            classification,
+            &mut Report::new(&mut out, false, true),
+        )
+        .unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         assert!(s.contains("DRY-RUN ORPHAN"));
@@ -333,7 +436,12 @@ mod tests {
             }],
         };
         let mut out: Vec<u8> = Vec::new();
-        let rc = prune_classified(tmp.path(), classification, false, &mut out).unwrap();
+        let rc = prune_classified(
+            tmp.path(),
+            classification,
+            &mut Report::new(&mut out, false, false),
+        )
+        .unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         // Singular "entry" — the entries.len() == 1 branch.
@@ -342,15 +450,190 @@ mod tests {
     }
 
     #[test]
-    fn remove_entry_swallows_already_missing_directory_and_warns() {
+    fn prune_all_quiet_real_run_removes_silently() {
+        let tmp = TempDir::new().unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, false);
+        prune_all(
+            tmp.path(),
+            two_entries(tmp.path()),
+            true,
+            confirm_destroy_all,
+            rep,
+        )
+        .unwrap();
+        assert!(out.is_empty(), "got {}", String::from_utf8_lossy(&out));
+        assert!(!tmp.path().join("repo-a").exists());
+        assert!(!tmp.path().join("repo-b").exists());
+    }
+
+    #[test]
+    fn prune_all_quiet_dry_run_keeps_result_lines() {
+        let tmp = TempDir::new().unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, true);
+        prune_all(
+            tmp.path(),
+            two_entries(tmp.path()),
+            true,
+            confirm_destroy_all,
+            rep,
+        )
+        .unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert_eq!(s.matches("DRY-RUN would remove").count(), 2, "got {s}");
+        assert!(s.contains("would free"));
+        assert!(tmp.path().join("repo-a").exists());
+    }
+
+    #[test]
+    fn prune_all_quiet_empty_is_silent() {
+        let tmp = TempDir::new().unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, false);
+        prune_all(tmp.path(), vec![], true, confirm_destroy_all, rep).unwrap();
+        assert!(out.is_empty(), "got {}", String::from_utf8_lossy(&out));
+    }
+
+    #[test]
+    fn prune_all_quiet_dry_run_empty_still_reports() {
+        let tmp = TempDir::new().unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, true);
+        prune_all(tmp.path(), vec![], true, confirm_destroy_all, rep).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.contains("no cache entries to remove"), "got {s}");
+    }
+
+    #[test]
+    fn prune_all_quiet_declined_prompt_is_silent_and_keeps_entries() {
+        let tmp = TempDir::new().unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, false);
+        let rc = prune_all(
+            tmp.path(),
+            two_entries(tmp.path()),
+            false,
+            |_| Ok(false),
+            rep,
+        )
+        .unwrap();
+        assert_eq!(rc, ExitCode::SUCCESS);
+        assert!(out.is_empty(), "got {}", String::from_utf8_lossy(&out));
+        assert!(tmp.path().join("repo-a").exists());
+        assert!(tmp.path().join("repo-b").exists());
+    }
+
+    #[test]
+    fn prune_all_declined_prompt_reports_abort() {
+        let tmp = TempDir::new().unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, false, false);
+        prune_all(
+            tmp.path(),
+            two_entries(tmp.path()),
+            false,
+            |_| Ok(false),
+            rep,
+        )
+        .unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.contains("aborted, nothing removed"), "got {s}");
+        assert!(tmp.path().join("repo-a").exists());
+    }
+
+    #[test]
+    fn prune_classified_quiet_real_run_removes_silently() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("orphan");
+        let classification = Classification {
+            keep: vec![],
+            orphan: vec![orphan_candidate(&dir, 16)],
+            stale: vec![],
+        };
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, false);
+        prune_classified(tmp.path(), classification, rep).unwrap();
+        assert!(out.is_empty(), "got {}", String::from_utf8_lossy(&out));
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn prune_classified_quiet_dry_run_keeps_tagged_lines() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("orphan");
+        let classification = Classification {
+            keep: vec![],
+            orphan: vec![orphan_candidate(&dir, 16)],
+            stale: vec![],
+        };
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, true);
+        prune_classified(tmp.path(), classification, rep).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.contains("DRY-RUN ORPHAN"), "got {s}");
+        assert!(s.contains("would free"));
+        assert!(dir.exists());
+    }
+
+    #[test]
+    fn prune_classified_quiet_nothing_to_prune_is_silent() {
+        let tmp = TempDir::new().unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, false);
+        prune_classified(tmp.path(), Classification::default(), rep).unwrap();
+        assert!(out.is_empty(), "got {}", String::from_utf8_lossy(&out));
+    }
+
+    #[test]
+    fn prune_classified_quiet_dry_run_nothing_to_prune_still_reports() {
+        let tmp = TempDir::new().unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, true);
+        prune_classified(tmp.path(), Classification::default(), rep).unwrap();
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.contains("nothing to prune"), "got {s}");
+    }
+
+    #[test]
+    fn sweep_locks_quiet_returns_count_without_printing() {
+        let tmp = TempDir::new().unwrap();
+        let lock = stray_lock(tmp.path());
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, false);
+        assert_eq!(sweep_locks(tmp.path(), &[], rep).unwrap(), 1);
+        assert!(out.is_empty(), "got {}", String::from_utf8_lossy(&out));
+        assert!(!lock.exists());
+    }
+
+    #[test]
+    fn sweep_locks_quiet_dry_run_still_reports() {
+        let tmp = TempDir::new().unwrap();
+        let lock = stray_lock(tmp.path());
+        let mut out: Vec<u8> = Vec::new();
+        let rep = &mut Report::new(&mut out, true, true);
+        assert_eq!(sweep_locks(tmp.path(), &[], rep).unwrap(), 1);
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.contains("would remove 1 rebuild lock"), "got {s}");
+        assert!(lock.exists());
+    }
+
+    #[test]
+    fn remove_entry_swallows_already_missing_directory_and_warns_on_stderr() {
         let tmp = TempDir::new().unwrap();
         let missing = tmp.path().join("never-was");
-        let mut out: Vec<u8> = Vec::new();
-        // `remove_dir_all` on a non-existent path returns `NotFound`; the
-        // helper writes a warning and returns Ok(()) regardless so the
-        // surrounding loop doesn't abort mid-prune.
-        remove_entry(&missing, &mut out).unwrap();
-        let s = String::from_utf8(out).unwrap();
-        assert!(s.contains("warning: failed to remove"));
+        for quiet in [false, true] {
+            let (mut out, mut err): (Vec<u8>, Vec<u8>) = (Vec::new(), Vec::new());
+            // `remove_dir_all` on a non-existent path returns `NotFound`; the helper warns and
+            // returns Ok(()) regardless so the surrounding loop doesn't abort mid-prune.
+            let rep = &mut Report::new(&mut out, quiet, false).with_err(&mut err);
+            remove_entry(&missing, rep).unwrap();
+            let s = String::from_utf8(err).unwrap();
+            assert!(
+                s.contains("toolr: warning: failed to remove"),
+                "quiet={quiet}, got {s}"
+            );
+            assert!(out.is_empty(), "quiet={quiet}");
+        }
     }
 }

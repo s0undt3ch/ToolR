@@ -118,8 +118,8 @@ module each kept value came from:
 toolr: warning: group `ci` is declared more than once; keeping the title from tools.ci and ignoring the different title in tools.release
 ```
 
-The warning prints on the run that rebuilds the manifest, and `-q`
-suppresses it. `toolr self build-manifest` prints it for a plugin too.
+The warning prints on the run that rebuilds the manifest, `-q` included.
+`toolr self build-manifest` prints it for a plugin too.
 
 Declare each group's title and description once, and fetch it by title
 everywhere else. A group none of whose declarations passes a description or

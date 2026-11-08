@@ -18,14 +18,14 @@ pub fn resolve_cache_root() -> Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("could not resolve toolr cache directory"))
 }
 
-pub fn dispatch(matches: &ArgMatches) -> Result<ExitCode> {
+pub fn dispatch(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     let root = resolve_cache_root()?;
     match matches.subcommand() {
         Some(("list", _)) => {
             run_list(&root, &mut io::stdout().lock())?;
             Ok(ExitCode::SUCCESS)
         }
-        Some(("prune", prune_m)) => crate::self_cache_prune::run(&root, prune_m),
+        Some(("prune", prune_m)) => crate::self_cache_prune::run(&root, prune_m, quiet),
         _ => Ok(ExitCode::from(2)),
     }
 }

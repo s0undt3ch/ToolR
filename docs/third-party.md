@@ -129,7 +129,7 @@ that declares `M` like this:
 
 A skipped plugin doesn't break the CLI: local commands and other plugins keep working, and toolr
 prints `toolr: warning: skipping plugin <pkg>: ...` on stderr on every run (except for tab
-completion, `--quiet`, `project`, `self`, `init`, `--version` and `-V`). The same happens to a plugin
+completion, `project`, `self`, `init`, `--version` and `-V`). The same happens to a plugin
 with a command whose argument fails validation. Malformed JSON and the same command declared by two plugins
 still fail the manifest build.
 
