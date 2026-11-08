@@ -336,6 +336,9 @@ Known limits in PowerShell:
 - A word holding a variable, sub-expression or array (`$x`, `"a$(x)"`,
   `a,b`) completes nothing, and neither does anything after one or after
   `--%`.
+- In a file-name partial, `*`, `?` and `[...]` are wildcards, as in
+  PowerShell's own completion, so a partial with a complete `[...]` pair
+  matches nothing.
 - A toolr reached only through a `.cmd` or `.bat` shim completes nothing.
 - PowerShell ISE isn't supported.
 

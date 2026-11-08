@@ -73,7 +73,7 @@ fn fixture() -> Fixture {
     for dir in ["odd/d[1]", "odd/e`f"] {
         std::fs::create_dir_all(tmp.path().join(dir)).unwrap();
     }
-    for name in ["odd/a[1].txt", "odd/a`b.txt"] {
+    for name in ["odd/a[1].txt", "odd/a`b.txt", "odd/a``c.txt"] {
         std::fs::write(tmp.path().join(name), "").unwrap();
     }
     if !cfg!(windows) {
@@ -325,6 +325,7 @@ impl<'a> Session<'a> {
             .arg(self.fx.tmp.path())
             .env("PATH", path_with_toolr())
             .env("XDG_CACHE_HOME", common::test_cache_home())
+            .envs(home_env(self.fx.tmp.path()))
             .output()
             .unwrap();
         let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
@@ -341,6 +342,19 @@ impl<'a> Session<'a> {
             stderr,
         )
     }
+}
+
+/// Point PowerShell's home at `home`, so `~` resolves inside the fixture and never the real home.
+/// Windows PowerShell 5.1 takes its home from `HOMEDRIVE` and `HOMEPATH`; pwsh from `USERPROFILE`.
+fn home_env(home: &Path) -> Vec<(&'static str, std::ffi::OsString)> {
+    let mut env = vec![("HOME", home.as_os_str().to_owned())];
+    if cfg!(windows) {
+        let text = home.to_str().unwrap();
+        env.push(("USERPROFILE", home.as_os_str().to_owned()));
+        env.push(("HOMEDRIVE", text[..2].into()));
+        env.push(("HOMEPATH", text[2..].into()));
+    }
+    env
 }
 
 /// 5.1's `ConvertTo-Json` writes a one-element array as the element itself.
@@ -677,7 +691,7 @@ fn powershell_attached_path_keeps_the_option() {
 fn powershell_wildcard_characters_in_paths_stay_literal() {
     let fx = fixture();
     let path = |name: &str| format!(".{0}odd{0}{name}", sep());
-    let files = [path("a[1].txt"), path("a`b.txt")];
+    let files = [path("a[1].txt"), path("a`b.txt"), path("a``c.txt")];
     let dirs = sorted(vec![path("d[1]"), path("e`f")]);
     let mut lines = Vec::new();
     let mut want = Vec::new();
@@ -689,12 +703,22 @@ fn powershell_wildcard_characters_in_paths_stay_literal() {
             ));
             lines.push(format!("toolr ci lint --cfg {open}{prefix}odd/a["));
             want.push(vec![format!("{prefix}{}", path("a[1].txt"))]);
+            if open != "'" {
+                // A doubled backtick is one literal backtick outside single quotes.
+                lines.push(format!("toolr ci lint --cfg {open}{prefix}odd/a``"));
+                want.push(sorted(vec![
+                    format!("{prefix}{}", path("a`b.txt")),
+                    format!("{prefix}{}", path("a``c.txt")),
+                ]));
+            }
         }
         for prefix in ["", "--out="] {
             lines.push(format!("toolr ci lint --out {open}{prefix}odd/"));
             want.push(dirs.iter().map(|d| format!("{prefix}{d}")).collect());
         }
     }
+    lines.push("toolr ci lint --cfg odd/a[1".to_string());
+    want.push(vec![path("a[1].txt")]);
     if !cfg!(windows) {
         // `*` is a wildcard in the partial, as in PowerShell's own native-command completion.
         lines.push("toolr ci lint --cfg odd/x*".to_string());
@@ -713,6 +737,42 @@ fn powershell_wildcard_characters_in_paths_stay_literal() {
                 ps.display()
             );
         }
+    }
+}
+
+/// PowerShell doesn't expand a quoted `~`, so a path completed from `~/` names the home itself.
+#[test]
+fn powershell_tilde_path_expands_to_the_home() {
+    let fx = fixture();
+    let home = fx.tmp.path().to_str().unwrap();
+    let files = format!("{home}{}files", sep());
+    for ps in powershells() {
+        let results = Session::new(&ps, &fx).tab_all(&[
+            "toolr ci lint --cfg ~/",
+            "toolr ci lint --cfg=~/",
+            "toolr ci lint --cfg ~/fi",
+        ]);
+        for (prefix, r) in [("", &results[0]), ("--cfg=", &results[1])] {
+            let parsed = r.parsed();
+            assert!(
+                parsed.contains(&format!("{prefix}{files}")),
+                "{}: {r:?}",
+                ps.display()
+            );
+            assert!(
+                parsed
+                    .iter()
+                    .all(|p| p.starts_with(&format!("{prefix}{home}"))),
+                "{}: {r:?}",
+                ps.display()
+            );
+        }
+        assert_eq!(
+            results[2].parsed(),
+            std::slice::from_ref(&files),
+            "{}",
+            ps.display()
+        );
     }
 }
 

@@ -8,8 +8,9 @@
 # Known limits: when toolr has no candidates PowerShell falls back to its own file-name
 # completion; a cursor inside a word completes the whole word; a word holding a variable,
 # sub-expression or array (`$x`, `"a$(x)"`, `a,b`) completes nothing, nor does anything after
-# one; a toolr reached only through a .cmd/.bat shim completes nothing; PowerShell ISE isn't
-# supported.
+# one; in a file-name partial `*`, `?` and `[...]` are wildcards, as in PowerShell's own
+# completion, so a partial holding a whole `[...]` pair matches nothing; a toolr reached only
+# through a .cmd/.bat shim completes nothing; PowerShell ISE isn't supported.
 #
 # The script stays pure ASCII (5.1 reads a BOM-less file in the ANSI code page) and parses on
 # PowerShell 3, so the version guard below can run there.
@@ -234,18 +235,25 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
             } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {
                 # The partial stays a wildcard pattern (`*` globs), as in PowerShell's own
                 # native-command completion; escaping it would match nothing at all.
-                $fileWord = $raw
-                if ($prefix.Length -gt 0) {
-                    $fileWord = _toolr_quote $value.Substring($prefix.Length) "'"
-                }
+                $fileWord = _toolr_quote $value.Substring($prefix.Length) "'"
+                $fsHome = (Get-PSProvider FileSystem).Home
                 foreach ($result in [System.Management.Automation.CompletionCompleters]::CompleteFilename($fileWord)) {
                     if ($reply.Code -eq 11 -and $result.ResultType -ne 'ProviderContainer') {
                         continue
                     }
-                    # The text is escaped for -Path (`a`[1`]`); a native command needs the name.
                     $path = _toolr_parse_word $result.CompletionText
                     if ($null -ne $path) {
-                        $full = $prefix + [System.Management.Automation.WildcardPattern]::Unescape($path)
+                        # The text is escaped for -Path (`a`[1`]`); a native command needs the name.
+                        # Only unescape what round-trips, so an undoubled backtick is never lost.
+                        $name = [System.Management.Automation.WildcardPattern]::Unescape($path)
+                        if ([System.Management.Automation.WildcardPattern]::Escape($name) -ceq $path) {
+                            $path = $name
+                        }
+                        # The reply is quoted and PowerShell doesn't expand a quoted `~`.
+                        if ($fsHome -and $path -match '^~([/\\]|$)') {
+                            $path = $fsHome + $path.Substring(1)
+                        }
+                        $full = $prefix + $path
                         New-Object System.Management.Automation.CompletionResult (_toolr_quote $full $open), $result.ListItemText, $result.ResultType, $result.ToolTip
                     }
                 }
