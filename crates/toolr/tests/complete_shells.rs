@@ -2612,6 +2612,8 @@ compdef() { :; }
 _files() { print -r -- "FILES:$*"; }
 _description() { :; }
 compadd() {
+    # `-O` matches without adding; this stub's matcher accepts every candidate.
+    if [[ $1 == -O ]]; then set -A "$2" "${values[@]}"; return; fi
     print -r -- "COMPADD:$*"; print -rl -- "${values[@]/#/VALUE:}"
     if (( ${#descriptions} )); then print -rl -- "${descriptions[@]/#/DESC:}"; fi
 }
@@ -3073,6 +3075,19 @@ fn zsh_tab_via(fx: &Fixture, load: ZshLoad, typed: &str, after: &str) -> String 
 
 /// [`zsh_tab_via`] with `rc` appended to the rc file, for `zstyle` settings.
 fn zsh_tab_with(fx: &Fixture, load: ZshLoad, rc: &str, typed: &str, after: &str) -> String {
+    let input = format!("toolr ci lint {typed}\t{after}exit\n");
+    let (stdout, _) = zsh_session_via(fx, load, rc, &input);
+    stdout
+}
+
+/// [`zsh_session_via`] with the script sourced.
+fn zsh_session(fx: &Fixture, rc: &str, input: &str) -> (String, String) {
+    zsh_session_via(fx, ZshLoad::Sourced, rc, input)
+}
+
+/// Types `input` into the interactive zsh [`zsh_tab_with`] sets up; returns its stdout and what
+/// it wrote to the terminal, where zsh draws the completion listing.
+fn zsh_session_via(fx: &Fixture, load: ZshLoad, rc: &str, input: &str) -> (String, String) {
     let script = fx.tmp.path().join("toolr.zsh");
     let loader = match load {
         ZshLoad::Sourced => {
@@ -3111,14 +3126,14 @@ fn zsh_tab_with(fx: &Fixture, load: ZshLoad, rc: &str, typed: &str, after: &str)
         .env("PATH", path_with_toolr())
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .env("TERM", "dumb");
-    let out = common::run_on_pty(cmd, &format!("toolr ci lint {typed}\t{after}exit\n"));
+    let (out, tty) = common::run_on_pty_with_tty(cmd, input);
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     assert!(
         !stdout.contains("command not found"),
-        "{typed:?}: {stdout}\n{}",
+        "{input:?}: {stdout}\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    stdout
+    (stdout, String::from_utf8_lossy(&tty).into_owned())
 }
 
 /// The installed `~/.zfunc/_toolr` is autoloaded on the first Tab of a new shell. That load
@@ -3372,37 +3387,71 @@ fn zsh_descriptions_follow_their_values() {
     assert_eq!(descs, all.iter().map(String::as_str).collect::<Vec<_>>());
 }
 
-/// Past 20 candidates the compact grid is used, so no description array is built.
+/// Adds a `big` group of 25 commands, `cmd00` to `cmd24`, each with its own summary.
+fn big_described_group(fx: &Fixture) {
+    let commands: String = (0..25)
+        .map(|i| {
+            format!(
+                "@group.command\ndef cmd{i:02}(ctx):\n    \"\"\"Summary number {i:02}.\"\"\"\n\n"
+            )
+        })
+        .collect();
+    std::fs::write(
+        fx.tmp.path().join("tools/big.py"),
+        format!("\"\"\"Big.\"\"\"\ngroup = command_group(\"big\", \"Big\", docstring=__doc__)\n\n{commands}"),
+    )
+    .unwrap();
+}
+
+/// Past 20 matches the compact grid is used, so no description array is built. The stub
+/// `compadd -O` matches every candidate, so all 25 commands count.
 #[test]
 fn zsh_large_choice_set_skips_descriptions() {
     if !require("zsh") {
         return;
     }
     let fx = fixture();
-    let many: Vec<String> = (0..25).map(|i| format!("v{i:02}")).collect();
-    let literal = many
-        .iter()
-        .map(|v| format!("{v:?}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    std::fs::write(
-        fx.tmp.path().join("tools/big.py"),
-        format!(
-            r#""""Big."""
-from typing import Literal
-
-group = command_group("big", "Big", docstring=__doc__)
-
-@group.command
-def pick(ctx, choice: Literal[{literal}] = "v00"):
-    """Pick one."""
-    pass
-"#
-        ),
-    )
-    .unwrap();
-    let lines = zsh_run_with(&fx, "", "", &["toolr", "big", "pick", "--choice", "V"]);
+    big_described_group(&fx);
+    let many: Vec<String> = (0..25).map(|i| format!("cmd{i:02}")).collect();
+    let lines = zsh_run_with(&fx, "", "", &["toolr", "big", "C"]);
     assert_eq!(lines, compadd_lines("-a values", &many));
+}
+
+/// A live Tab on a slot of more than 20 described commands: descriptions are listed once the
+/// typed word narrows the matches to 20 or fewer, by prefix or through the `matcher-list`, and
+/// not while more than 20 match.
+#[test]
+fn zsh_tab_lists_descriptions_when_the_matches_are_few() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    big_described_group(&fx);
+    // Without `LIST_AMBIGUOUS` zsh lists even when it rewrites `CMD0` to `cmd0`.
+    let matcher = "zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}'\n\
+                   unsetopt LIST_AMBIGUOUS";
+    for (rc, typed, want) in [
+        ("", "cmd0", Some("03")),
+        ("", "cmd1", Some("13")),
+        (matcher, "CMD0", Some("03")),
+        ("", "cmd", None),
+        (matcher, "CMD", None),
+    ] {
+        let (_, tty) = zsh_session(&fx, rc, &format!("toolr big {typed}\t\x18dexit\n"));
+        match want {
+            Some(n) => {
+                assert!(
+                    tty.contains(&format!("Summary number {n}.")),
+                    "{typed:?}: {tty}"
+                );
+                assert!(!tty.contains("Summary number 24."), "{typed:?}: {tty}");
+            }
+            None => {
+                assert!(tty.contains("cmd24"), "{typed:?}: {tty}");
+                assert!(!tty.contains("Summary number"), "{typed:?}: {tty}");
+            }
+        }
+    }
 }
 
 /// A live Tab: with a `matcher-list` set, zsh completes a word the engine would have filtered

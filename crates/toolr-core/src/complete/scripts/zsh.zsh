@@ -71,19 +71,16 @@ _toolr() {
     local -a expl
     _description values expl value
 
-    # One-per-line descriptions only pay off for a small, scannable
-    # candidate list; fall back to the compact grid for large ones (e.g.
-    # long allowed-value sets) rather than a wall of text. No `-Q`: zsh re-quotes each match
-    # to fit the quote open at the cursor, so a value is inserted as inert text.
-    if (( ${#values} <= 20 )); then
-        # `compadd -d` uses the description array as the *displayed* text for
-        # each match, not just an annotation - an empty description would show
-        # as a blank row, so fall back to the value itself when none exists.
-        local line description
-        for line in "${lines[@]}"; do
-            description="${line#*$'\t'}"
-            descriptions+=("${description:-${line%%$'\t'*}}")
-        done
+    # One-per-line descriptions only pay off for a small, scannable list of matches; fall back
+    # to the compact grid for large ones rather than a wall of text. The engine returns the
+    # whole slot, so `-O` counts what the typed word matches without adding anything. No `-Q`:
+    # zsh re-quotes each match to fit the quote open at the cursor, so values stay inert text.
+    local -a matched
+    compadd "${expl[@]}" -O matched -a values
+    if (( ${#matched} <= 20 )); then
+        # `compadd -d` uses the description array as the *displayed* text for each match, not
+        # just an annotation, so a line with no description (or an empty one) shows the value.
+        descriptions=("${(@)${(@)lines%$'\t'}#*$'\t'}")
         compadd "${expl[@]}" -d descriptions -a values
     else
         compadd "${expl[@]}" -a values

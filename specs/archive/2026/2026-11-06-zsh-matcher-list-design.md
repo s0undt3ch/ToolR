@@ -217,3 +217,8 @@ two designs touch different lines and compose:
   names for any word, as before. In `Shell` mode that fallback returns every flag.
 - zsh at 10 000 values: the split loop took about 96 ms and the `${(@)lines%%$'\t'*}` expansion about 3 ms,
   so the script uses the expansion.
+- Open question 3 resolved differently: counting `values` against the 20 threshold hid descriptions for any
+  slot of more than 20 candidates, however far the typed word narrowed it. The script now counts the matches
+  with `compadd "${expl[@]}" -O matched -a values`, which applies the active matcher without adding, and
+  builds `descriptions` in one expansion when 20 or fewer match. `zsh_tab_lists_descriptions_when_the_matches_are_few`
+  covers it on a live pty, by prefix and through `matcher-list`.
