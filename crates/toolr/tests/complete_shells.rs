@@ -3486,3 +3486,52 @@ fn new_zsh_script_degrades_on_a_binary_that_ignores_the_variable() {
     let lines = zsh_run_with(&fx, "", shim, &["toolr", "ci", "lint", "--mode", "FA"]);
     assert_eq!(lines, Vec::<String>::new());
 }
+
+#[test]
+fn fish_script_asks_the_engine_for_shell_matching() {
+    let script = print_script("fish");
+    assert!(
+        script.contains("set -lx TOOLR_COMPLETE_MATCH shell"),
+        "{script}"
+    );
+    assert!(complete_call(&script).contains("toolr __complete"));
+}
+
+/// fish matches case-insensitively and by substring once the engine stops filtering.
+#[test]
+fn fish_uppercase_and_substring_partials_complete() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    for (line, want) in [
+        ("toolr CI", vec!["ci"]),
+        ("toolr ci LI", vec!["lint"]),
+        ("toolr ci lint --mode FA", vec!["fast"]),
+        ("toolr ci lint --mode alk", vec!["dry walk"]),
+        ("toolr ci lint --mode=FA", vec!["--mode=fast"]),
+        ("toolr ci lint --MO", vec!["--mode"]),
+    ] {
+        let stdout = fish_complete(&fx, line);
+        assert_eq!(fish_names(&stdout), want, "{line:?}");
+    }
+    // fish matches the whole `--mode=` word, so `alk` is no substring of it there and fish falls
+    // back to subsequence matching, which finds more than `dry walk`.
+    let stdout = fish_complete(&fx, "toolr ci lint --mode=alk");
+    assert!(fish_names(&stdout).contains(&"--mode=dry walk"), "{stdout}");
+    assert!(!fx.sentinel.exists());
+    assert!(!fx.sentinel2.exists());
+}
+
+/// The variable is local to the completion function, so it never reaches the user's session.
+#[test]
+fn fish_matching_variable_stays_out_of_the_session() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    let leak = "complete -C 'toolr ci lint --mode '; set -q TOOLR_COMPLETE_MATCH; and echo LEAKED";
+    let stdout = fish_complete_with(&fx, leak, "toolr ");
+    assert!(!stdout.contains("LEAKED"), "{stdout}");
+    assert!(fish_names(&stdout).contains(&"fast"), "{stdout}");
+}
