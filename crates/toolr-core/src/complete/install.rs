@@ -86,24 +86,13 @@ pub fn install_path_for(
 
 /// Write the embedded script to the chosen location.
 pub fn install_script(opts: &InstallOptions) -> Result<InstallOutcome> {
-    let path = match opts.shell {
-        Shell::Bash => {
-            install_path_for(opts.shell, opts.xdg_data_home.as_deref(), &opts.home, None)?
-        }
-        Shell::Fish => install_path_for(
-            opts.shell,
-            opts.xdg_config_home.as_deref(),
-            &opts.home,
-            None,
-        )?,
-        Shell::Zsh => install_path_for(opts.shell, None, &opts.home, None)?,
-        Shell::PowerShell => install_path_for(
-            opts.shell,
-            opts.xdg_data_home.as_deref(),
-            &opts.home,
-            opts.data_dir.as_deref(),
-        )?,
+    let (xdg, data_dir) = match opts.shell {
+        Shell::Bash => (opts.xdg_data_home.as_deref(), None),
+        Shell::Fish => (opts.xdg_config_home.as_deref(), None),
+        Shell::Zsh => (None, None),
+        Shell::PowerShell => (opts.xdg_data_home.as_deref(), opts.data_dir.as_deref()),
     };
+    let path = install_path_for(opts.shell, xdg, &opts.home, data_dir)?;
 
     let payload = completion_script(opts.shell);
     if payload.is_empty() {
