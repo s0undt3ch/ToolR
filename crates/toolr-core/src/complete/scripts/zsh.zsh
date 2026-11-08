@@ -85,9 +85,8 @@ _toolr() {
     fi
 }
 
-# Autoloaded from `fpath`, this file is the body of `_toolr`, so the first Tab must run the
-# function it just defined. Sourced, register it instead (`compinit` has already done so
-# when autoloaded).
+# Autoloaded: `compinit` already registered `toolr` via `#compdef`, and this file is the body
+# of `_toolr`, so run the function it just defined. Sourced: register it.
 if [[ ${zsh_eval_context[-1]-} == loadautofunc ]]; then
     _toolr "$@"
 else

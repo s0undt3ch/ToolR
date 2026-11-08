@@ -3026,7 +3026,7 @@ fn fish_attached_value_keeps_the_option_prefix() {
 }
 
 /// How the interactive zsh in [`zsh_tab_via`] loads the completion script.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum ZshLoad {
     /// `source`d from the rc file, as the eval/source install modes do.
     Sourced,
@@ -3042,6 +3042,7 @@ fn zsh_tab(fx: &Fixture, typed: &str, after: &str) -> String {
     zsh_tab_via(fx, ZshLoad::Sourced, typed, after)
 }
 
+/// [`zsh_tab`] with the script loaded as `load` says.
 fn zsh_tab_via(fx: &Fixture, load: ZshLoad, typed: &str, after: &str) -> String {
     let script = fx.tmp.path().join("toolr.zsh");
     let loader = match load {
@@ -3105,8 +3106,7 @@ fn zsh_first_tab_completes_when_autoloaded_or_sourced() {
             stdout
                 .lines()
                 .any(|l| l.trim_end_matches('\r') == "LINE:ci lint --mode dry walk"),
-            "{}: {stdout}",
-            matches!(load, ZshLoad::Autoloaded)
+            "{load:?}: {stdout}"
         );
     }
 }
