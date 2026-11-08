@@ -658,9 +658,17 @@ fn powershell_path_slot_completes_files() {
 fn powershell_directory_slot_completes_only_directories() {
     let fx = fixture();
     for ps in powershells() {
-        let r = Session::new(&ps, &fx).tab("toolr ci lint --out files/");
-        let lists: Vec<&str> = r.matches.iter().map(|m| m.list.as_str()).collect();
-        assert_eq!(lists, ["sub"], "{}: {r:?}", ps.display());
+        let results =
+            Session::new(&ps, &fx).tab_all(&["toolr ci lint --out files/", "toolr ci lint --out "]);
+        let lists: Vec<&str> = results[0].matches.iter().map(|m| m.list.as_str()).collect();
+        assert_eq!(lists, ["sub"], "{}: {:?}", ps.display(), results[0]);
+        let r = &results[1];
+        assert!(
+            r.matches.iter().any(|m| m.list == "files")
+                && r.matches.iter().all(|m| m.kind == "ProviderContainer"),
+            "{}: {r:?}",
+            ps.display()
+        );
     }
 }
 
