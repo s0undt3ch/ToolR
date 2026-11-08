@@ -25,6 +25,9 @@ git-cliff = "2.14.2"
 rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt" }
 uv = { version = "0.13.7" }
 prek = "0.5.9"
+# The PowerShell completion tests drive a real pwsh; pinned so every runner tests the same version.
+# Windows CI also runs them under the preinstalled Windows PowerShell 5.1.
+powershell = "7.6.9"
 "cargo:cargo-edit" = "0.13.14"
 # Dogfood: the released toolr binary drives repo automation (the prek
 # hooks backed by `toolr pre-commit <command>` in `tools/precommit/`).

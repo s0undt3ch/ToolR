@@ -69,6 +69,10 @@ cargo build -p toolr --release
 The Rust integration tests spawn the built `toolr` binary via `assert_cmd`. Don't shadow them with
 Python-level subprocess tests unless the behaviour can't be exercised in Rust.
 
+The completion tests drive real shells. bash 4.4+, zsh and fish come from your system package manager;
+`pwsh` comes from `mise install`. Locally a missing shell skips its tests; on CI it fails them. On Windows
+the PowerShell tests also run under Windows PowerShell 5.1.
+
 `crates/toolr-py/python/toolr/_context.pyi` is hand-written, not generated. `tests/context/test_context_stub.py`
 runs mypy's stubtest against it, so changing `Context` or another public name in `_context.py` needs a matching
 stub edit.
