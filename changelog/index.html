@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev924-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev931-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev924 - 2026-11-08
+        0.35.2-dev931 - 2026-11-08
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev924 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev931 - 2026-11-08">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev924-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev931-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev924 - 2026-11-08
+        0.35.2-dev931 - 2026-11-08
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev924 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev931 - 2026-11-08">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev924-2026-11-08">0.35.2-dev924 - 2026-11-08<a class="headerlink" href="#0352-dev924-2026-11-08" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev931-2026-11-08">0.35.2-dev931 - 2026-11-08<a class="headerlink" href="#0352-dev931-2026-11-08" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -8454,6 +8454,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> Pin prune and git-env trust behaviour (<a href="https://github.com/s0undt3ch/ToolR/commit/bf70ffb4f18d800ea935086c764d0a2b08f9e0a6"><code>bf70ffb</code></a>)</li>
 <li><em>(trust)</em> Run git on non-verbatim paths and drop dead helper branches (<a href="https://github.com/s0undt3ch/ToolR/commit/958369c9e0c1c790e231e53c5c1ad02375df7346"><code>958369c</code></a>)</li>
 <li><em>(e2e)</em> Decode toolr subprocess output as UTF-8 (<a href="https://github.com/s0undt3ch/ToolR/commit/dbc2142f69b042b540afeaa764b4773f46cf21d7"><code>dbc2142</code></a>)</li>
+<li>Skip git-backed tests with skip_if_binaries_missing (<a href="https://github.com/s0undt3ch/ToolR/commit/10ffa007535507f70f5dc306dd9cd2542f1d4030"><code>10ffa00</code></a>)</li>
+<li>Use pytest-skip-markers for Windows and missing-binary skips (<a href="https://github.com/s0undt3ch/ToolR/commit/f7e74a46656e451de82380ef832114d5a0ecbe0c"><code>f7e74a4</code></a>)</li>
+<li>Skip git-backed tests through a git fixture (<a href="https://github.com/s0undt3ch/ToolR/commit/9b2185d1bc7ba21484e254e9de560fd0c56e11b6"><code>9b2185d</code></a>)</li>
+<li><em>(cli)</em> Keep a system uv out of the relative-PATH-entry tests (<a href="https://github.com/s0undt3ch/ToolR/commit/4799e9f0734d9bdc343728e058c7529c5304d590"><code>4799e9f</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8508,6 +8512,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(ruff)</em> Sort the tools package in its own import block (<a href="https://github.com/s0undt3ch/ToolR/commit/19013ee8fbb00f290b24a73d778a9de0c2332f51"><code>19013ee</code></a>)</li>
 <li><em>(test)</em> Install bash 4.4+ on macOS for the completion tests (<a href="https://github.com/s0undt3ch/ToolR/commit/72c5aa7b5d20280194ec3affbf9f7440575170a3"><code>72c5aa7</code></a>)</li>
 <li><em>(lint)</em> Enforce ruff's unspecified-encoding rule (<a href="https://github.com/s0undt3ch/ToolR/commit/8dea0f7d27b726e220d2599459658eb162315571"><code>8dea0f7</code></a>)</li>
+<li>Skip build and test jobs for PRs that only touch CI-inert paths (<a href="https://github.com/s0undt3ch/ToolR/commit/50c173cf7ae3d17966b48d5a6bd842fcb46627b7"><code>50c173c</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
