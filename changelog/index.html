@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev961-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev969-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev961 - 2026-11-08
+        0.35.2-dev969 - 2026-11-08
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev961 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev969 - 2026-11-08">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev961-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev969-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev961 - 2026-11-08
+        0.35.2-dev969 - 2026-11-08
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev961 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev969 - 2026-11-08">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev961-2026-11-08">0.35.2-dev961 - 2026-11-08<a class="headerlink" href="#0352-dev961-2026-11-08" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev969-2026-11-08">0.35.2-dev969 - 2026-11-08<a class="headerlink" href="#0352-dev969-2026-11-08" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7737,6 +7737,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>Anything toolr wrote under a relative location (venvs, the managed uv, trust records) stays where it was: toolr rebuilds or re-downloads it under the default directory, asks for trust again, and the old directories can be deleted.</p>
 <p><code>toolr --quiet</code> (and <code>-q</code>) now silences the success lines of <code>self build-manifest</code>, <code>self trusted --prune</code>, <code>project manifest rebuild</code>, <code>project init</code> and <code>project venv sync|lock|add|remove</code>, and passes <code>--quiet</code> on to the uv runs of <code>project init</code> and the <code>venv</code> commands. Errors, refusals and warnings still print, and the <code>self trusted</code> listing is unchanged.
 <code>project venv shell</code> and <code>project venv run</code> also quiet their uv auto-sync. Unlike <code>project venv sync --quiet</code>, the root <code>-q</code> still exits non-zero with a message when there is no toolr project or uv needs install consent.</p>
+<p>Tab completion now offers groups, commands and further root flags after a root flag (<code>toolr --quiet &lt;TAB&gt;</code>, <code>toolr --quiet --&lt;TAB&gt;</code>), and no longer offers a root flag that was already given or conflicts with one.</p>
+<p>A line clap would reject (a repeated or conflicting root flag, a bad <code>--timeout-secs</code> value, <code>--version</code>) now completes to nothing.</p>
 <p>zsh and fish completion now match choice values typed with a backslash or inside quotes, such as <code>--mode dry\ r</code>, <code>'dry r</code> or <code>"dry r</code>. In zsh this also covers <code>$'…'</code>, quotes opened mid-word (<code>--mode='dry r</code>) and quoted earlier words such as <code>'--mode'</code>.</p>
 <p>Bash completion handles paths whose names hold a newline or other control character. A word in <code>$'…'</code> quoting, open or closed and also after <code>~/</code> or <code>$NAME/</code>, now completes instead of offering nothing, and each control character in a reply is quoted as its own <code>$'…'</code> run, so a Tab that inserts the common prefix no longer leaves a quote open. Under an open quote, a name equal to the typed text no longer adds an empty candidate, and a reply ending in the quote character still closes it. A <code>~</code> word with a quoted part before the first <code>/</code>, such as <code>~"root"/</code>, is now taken literally, as bash does, rather than listed as a home directory.</p>
 <p>This also fixes a case where Tab on a file name starting with <code>!</code>, after an open <code>"</code> with <code>set -H</code>, could run code. Pressing <code>M-*</code> (<code>insert-completions</code>) inside an open quote no longer inserts names unquoted, where a name could also run code. Names holding a quote could also run code or reach the command as the wrong argument on Tab; that is fixed too.</p>
@@ -7981,6 +7983,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Match escaped and quoted partials in zsh and fish (<a href="https://github.com/s0undt3ch/ToolR/commit/ae3599ac87a4fd04eee4458a64ce8f5747080e76"><code>ae3599a</code></a>)</li>
 <li><em>(complete)</em> Zsh mid-word quotes and fish one-word unescape (<a href="https://github.com/s0undt3ch/ToolR/commit/22c502b95fc2a842aa578a4e0ce25bd3edad397d"><code>22c502b</code></a>)</li>
 <li><em>(complete)</em> Fish keeps an empty unescaped word (<a href="https://github.com/s0undt3ch/ToolR/commit/9eda550378b6756abfad831b47c2bda8d129012e"><code>9eda550</code></a>)</li>
+<li><em>(complete)</em> Offer groups and root flags after a root flag (<a href="https://github.com/s0undt3ch/ToolR/commit/4e1c3bfb7b1aa0f9f4a18d92d317f39e136b0524"><code>4e1c3bf</code></a>)</li>
+<li><em>(complete)</em> Accept attached negative values, see --version, check value types (<a href="https://github.com/s0undt3ch/ToolR/commit/8cb24c3b48de80927530a2c55ff6317fafbd2822"><code>8cb24c3</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8069,6 +8073,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> State the root --quiet rule once, compute venv_run's quiet once (<a href="https://github.com/s0undt3ch/ToolR/commit/0ccec76e382c236be7190575d5678174be604238"><code>0ccec76</code></a>)</li>
 <li><em>(complete)</em> List bash's readline invariants, share hostile-name fixtures (<a href="https://github.com/s0undt3ch/ToolR/commit/ed448f3b168d97140f01d3179557290c9110601e"><code>ed448f3</code></a>)</li>
 <li><em>(complete)</em> Explain each zsh and fish quoting workaround (<a href="https://github.com/s0undt3ch/ToolR/commit/31c96f2155be7d9fb52ea8e8a776ad7a44c14917"><code>31c96f2</code></a>)</li>
+<li><em>(complete)</em> Derive root flag specs once, split the scan (<a href="https://github.com/s0undt3ch/ToolR/commit/510f5c40a6cb8b2df469c5882d3c7b7fa8c2fdae"><code>510f5c4</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8346,6 +8351,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Settle the zsh and fish quoted partials open questions (<a href="https://github.com/s0undt3ch/ToolR/commit/cccb2c3b7d564742c1067c15397f705941fe1b3f"><code>cccb2c3</code></a>)</li>
 <li><em>(specs)</em> Archive the zsh and fish quoted partials spec (<a href="https://github.com/s0undt3ch/ToolR/commit/f19b576c1df173a29e7cfaf96d583d9a30d66b32"><code>f19b576</code></a>)</li>
 <li><em>(complete)</em> Describe the shipped zsh and fish quoting (<a href="https://github.com/s0undt3ch/ToolR/commit/5755b8ad093ab927751988ab8b29921ed78bcaf0"><code>5755b8a</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for root flags before the first group (<a href="https://github.com/s0undt3ch/ToolR/commit/0a44b20eb5952c8f2214363813d7130819fd4f09"><code>0a44b20</code></a>)</li>
+<li><em>(specs)</em> Resolve root-flags open questions against main (<a href="https://github.com/s0undt3ch/ToolR/commit/b6bd638a9866677deb80f336841e9079cfc3644c"><code>b6bd638</code></a>)</li>
+<li><em>(specs)</em> Archive root-flags-after-root-flag spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/3522bb1fbbec5ba38fd34f3bb64ae4e3effa2164"><code>3522bb1</code></a>)</li>
+<li><em>(complete)</em> Update the root-flags spec and release note after review (<a href="https://github.com/s0undt3ch/ToolR/commit/90d1e4cb9c5a5aac692ebe5c23fdef7677c7bee7"><code>90d1e4c</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
