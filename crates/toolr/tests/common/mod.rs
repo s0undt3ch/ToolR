@@ -399,6 +399,7 @@ pub fn run_on_pty_with_tty(
     drop(cmd);
     let out = wait_or_kill(child);
     let mut tty = Vec::new();
+    // The reader thread lags the child's exit; drain until the pty has been quiet for 200 ms.
     while let Ok(chunk) = rx.recv_timeout(Duration::from_millis(200)) {
         tty.extend(chunk);
     }

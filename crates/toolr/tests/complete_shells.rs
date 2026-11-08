@@ -3061,7 +3061,7 @@ fn fish_attached_value_keeps_the_option_prefix() {
     assert_eq!(fish_names(&stdout), vec!["--out=files/sub/"]);
 }
 
-/// How the interactive zsh in [`zsh_tab_via`] loads the completion script.
+/// How the interactive zsh in [`zsh_tab_with`] loads the completion script.
 #[derive(Clone, Copy, Debug)]
 enum ZshLoad {
     /// `source`d from the rc file, as the eval/source install modes do.
@@ -3078,26 +3078,17 @@ fn zsh_tab(fx: &Fixture, typed: &str, after: &str) -> String {
     zsh_tab_with(fx, ZshLoad::Sourced, "", typed, after)
 }
 
-/// [`zsh_tab`] with the script loaded as `load` says.
-fn zsh_tab_via(fx: &Fixture, load: ZshLoad, typed: &str, after: &str) -> String {
-    zsh_tab_with(fx, load, "", typed, after)
-}
-
-/// [`zsh_tab_via`] with `rc` appended to the rc file, for `zstyle` settings.
+/// [`zsh_tab`] with the script loaded as `load` says and `rc` appended to the rc file, for
+/// `zstyle` settings.
 fn zsh_tab_with(fx: &Fixture, load: ZshLoad, rc: &str, typed: &str, after: &str) -> String {
     let input = format!("toolr ci lint {typed}\t{after}exit\n");
-    let (stdout, _) = zsh_session_via(fx, load, rc, &input);
+    let (stdout, _) = zsh_session(fx, load, rc, &input);
     stdout
-}
-
-/// [`zsh_session_via`] with the script sourced.
-fn zsh_session(fx: &Fixture, rc: &str, input: &str) -> (String, String) {
-    zsh_session_via(fx, ZshLoad::Sourced, rc, input)
 }
 
 /// Types `input` into the interactive zsh [`zsh_tab_with`] sets up; returns its stdout and what
 /// it wrote to the terminal, where zsh draws the completion listing.
-fn zsh_session_via(fx: &Fixture, load: ZshLoad, rc: &str, input: &str) -> (String, String) {
+fn zsh_session(fx: &Fixture, load: ZshLoad, rc: &str, input: &str) -> (String, String) {
     let script = fx.tmp.path().join("toolr.zsh");
     let loader = match load {
         ZshLoad::Sourced => {
@@ -3155,7 +3146,7 @@ fn zsh_first_tab_completes_when_autoloaded_or_sourced() {
     }
     let fx = fixture();
     for load in [ZshLoad::Autoloaded, ZshLoad::Sourced] {
-        let stdout = zsh_tab_via(&fx, load, "--mode dry\\ w", "\n");
+        let stdout = zsh_tab_with(&fx, load, "", "--mode dry\\ w", "\n");
         assert!(
             stdout
                 .lines()
@@ -3199,7 +3190,12 @@ fn zsh_tab_completes_quoted_and_escaped_partials_end_to_end() {
     // engine would return `alpha`/`beta`, no flags. Dequoted it is a flag word, which only
     // `cur="${(Q)raw}"` gives the engine.
     for typed in ["'--fla'", r#""--fla""#, r"\-\-fla"] {
-        let (stdout, _) = zsh_session(&fx, "", &format!("toolr ci pos {typed}\t\nexit\n"));
+        let (stdout, _) = zsh_session(
+            &fx,
+            ZshLoad::Sourced,
+            "",
+            &format!("toolr ci pos {typed}\t\nexit\n"),
+        );
         assert!(
             stdout
                 .lines()
@@ -3308,7 +3304,7 @@ fn sorted_choices(fx: &Fixture) -> Vec<String> {
     all
 }
 
-/// The `zsh` lines `_toolr` prints for `words`, with the `VALUE:` lines for `values`.
+/// The `COMPADD:` line for `flags`, then a `VALUE:` line per value.
 fn compadd_lines(flags: &str, values: &[String]) -> Vec<String> {
     std::iter::once(format!("COMPADD:{flags}"))
         .chain(values.iter().map(|v| format!("VALUE:{v}")))
@@ -3336,39 +3332,30 @@ fn zsh_script_asks_the_engine_for_shell_matching() {
 }
 
 /// The engine no longer drops `fast` for `FA`: `compadd` gets every choice and zsh's
-/// `matcher-list` decides.
+/// `matcher-list` decides, whether the partial is separate or attached with `=`.
 #[test]
 fn zsh_uppercase_partial_reaches_compadd() {
     if !require("zsh") {
         return;
     }
     let fx = fixture();
-    let calls: Vec<String> = zsh_run_with(&fx, "", "", &["toolr", "ci", "lint", "--mode", "FA"])
-        .into_iter()
-        .filter(|l| !l.starts_with("DESC:"))
-        .collect();
-    assert_eq!(
-        calls,
-        compadd_lines("-d descriptions -a values", &sorted_choices(&fx))
-    );
-}
-
-#[test]
-fn zsh_attached_uppercase_partial_reaches_compadd() {
-    if !require("zsh") {
-        return;
+    for (word, compset) in [
+        (vec!["--mode", "FA"], None),
+        (vec!["--mode=FA"], Some("COMPSET:-P 1 *=")),
+    ] {
+        let mut words = vec!["toolr", "ci", "lint"];
+        words.extend(word);
+        let calls: Vec<String> = zsh_run_with(&fx, "", "", &words)
+            .into_iter()
+            .filter(|l| !l.starts_with("DESC:"))
+            .collect();
+        let mut want: Vec<String> = compset.map(String::from).into_iter().collect();
+        want.extend(compadd_lines(
+            "-d descriptions -a values",
+            &sorted_choices(&fx),
+        ));
+        assert_eq!(calls, want, "{words:?}");
     }
-    let fx = fixture();
-    let calls: Vec<String> = zsh_run_with(&fx, "", "", &["toolr", "ci", "lint", "--mode=FA"])
-        .into_iter()
-        .filter(|l| !l.starts_with("DESC:"))
-        .collect();
-    let mut want = vec!["COMPSET:-P 1 *=".to_string()];
-    want.extend(compadd_lines(
-        "-d descriptions -a values",
-        &sorted_choices(&fx),
-    ));
-    assert_eq!(calls, want);
 }
 
 #[test]
@@ -3464,7 +3451,12 @@ fn zsh_tab_lists_descriptions_when_the_matches_are_few() {
         ("", "cmd", None),
         (matcher, "CMD", None),
     ] {
-        let (_, tty) = zsh_session(&fx, rc, &format!("toolr big {typed}\t\x18dexit\n"));
+        let (_, tty) = zsh_session(
+            &fx,
+            ZshLoad::Sourced,
+            rc,
+            &format!("toolr big {typed}\t\x18dexit\n"),
+        );
         match want {
             Some(n) => {
                 assert!(
@@ -3498,7 +3490,7 @@ fn zsh_tab_header_is_neutral_for_every_slot_kind() {
         "toolr ci lint --mode ",
         "toolr ",
     ] {
-        let (_, tty) = zsh_session(&fx, rc, &format!("{typed}\t\x18dexit\n"));
+        let (_, tty) = zsh_session(&fx, ZshLoad::Sourced, rc, &format!("{typed}\t\x18dexit\n"));
         assert!(tty.contains("HDR<toolr>"), "{typed:?}: {tty}");
         assert!(!tty.contains("HDR<value>"), "{typed:?}: {tty}");
         assert!(!tty.contains("VALUES<"), "{typed:?}: {tty}");
