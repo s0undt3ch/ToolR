@@ -305,7 +305,7 @@ directory. For bash:
 - toolr installs to `$XDG_DATA_HOME/bash-completion/completions` and
   doesn't honour `BASH_COMPLETION_USER_DIR`.
 
-A word with an unclosed quote (`--cfg 'a:b`) completes nothing.
+In bash, a word with an unclosed quote (`--cfg 'a:b`) completes nothing.
 
 An aliased toolr (`alias t=toolr`) gets no completion by default; run
 `complete -F _toolr_complete t` to register it.
