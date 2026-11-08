@@ -425,7 +425,7 @@ each script puts that part back the way its shell needs.
 With `TOOLR_COMPLETE_MATCH=shell` in its environment, `__complete` skips
 the prefix filter and prints every candidate for the slot at the cursor,
 so the shell matches the typed word itself (zsh's `matcher-list`, fish's
-case-insensitive and substring matching). The typed word still decides
+own matching (case-insensitive, substring, subsequence)). The typed word still decides
 the slot: a flag word gets flag names, a `--name=` word gets the values
 of `--name`. Path slots still exit 10 or 11. The zsh and fish scripts set
 it for their call. The bash script doesn't, and filters the reply by the

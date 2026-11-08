@@ -43,10 +43,9 @@ pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<Candidat
 }
 
 /// Who narrows the candidates to the typed word.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Matching {
     /// The engine keeps only candidates starting with the typed word.
-    #[default]
     Prefix,
     /// The engine returns every candidate the slot allows; the shell matches.
     Shell,
@@ -71,15 +70,15 @@ pub enum Completion {
     Directories,
 }
 
-/// Like [`serve_completions`], but a flag value or positional slot whose
-/// argument is path-typed, with no `allowed_values`, returns
+/// Like [`serve_completions`] (it prefix-matches the typed word too), but a flag value or
+/// positional slot whose argument is path-typed, with no `allowed_values`, returns
 /// [`Completion::Paths`] or [`Completion::Directories`] instead.
 pub fn complete(manifest: &Manifest, tokens: &[String]) -> Completion {
     complete_matching(manifest, tokens, Matching::Prefix)
 }
 
-/// [`complete`] with the caller choosing who matches the typed word. The typed word still
-/// picks the slot in either mode; [`Matching::Shell`] only stops it narrowing the candidates.
+/// [`complete`], which prefix-matches, with the caller choosing who matches the typed word. The
+/// typed word still picks the slot in either mode; [`Matching::Shell`] only stops it narrowing the candidates.
 pub fn complete_matching(manifest: &Manifest, tokens: &[String], matching: Matching) -> Completion {
     let slot = classify(manifest, tokens);
     if let Slot::FlagValue { argument, .. } | Slot::Positional { argument, .. } = &slot

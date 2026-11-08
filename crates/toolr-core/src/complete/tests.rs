@@ -2178,8 +2178,7 @@ fn shell_matching_still_drops_unsafe_names() {
 }
 
 #[test]
-fn prefix_matching_default_is_unchanged() {
-    assert_eq!(Matching::default(), Matching::Prefix);
+fn complete_prefix_matches_like_complete_matching_prefix() {
     let m = fixture();
     for words in [
         &["c"][..],

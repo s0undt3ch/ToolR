@@ -66,22 +66,19 @@ _toolr() {
         compset -P 1 '*='
     fi
 
-    # A bare `compadd` ignores the `matcher-list` style; `_description` puts its matcher (and
-    # the user's other styles for the tag) into `expl`. The reply doesn't say whether the slot
-    # holds commands, flags or values, so the tag and its `%d` header are neutral rather than
-    # a `values` that would also restyle command and flag names.
+    # A bare `compadd` ignores `matcher-list`; `_description` carries it in `expl`. The tag is
+    # neutral because the reply doesn't say if the slot holds commands, flags or values.
     local -a expl
     _description toolr expl toolr
 
-    # One-per-line descriptions only pay off for a small, scannable list of matches; fall back
-    # to the compact grid for large ones rather than a wall of text. The engine returns the
-    # whole slot, so `-O` counts what the typed word matches without adding anything. No `-Q`:
-    # zsh re-quotes each match to fit the quote open at the cursor, so values stay inert text.
+    # One-per-line descriptions only pay off for a small list; use the compact grid for large
+    # ones. `-O` counts what the typed word matches without adding anything. No `-Q`: zsh
+    # re-quotes each match to fit the quote open at the cursor, so values stay inert text.
     local -a matched
     compadd "${expl[@]}" -O matched -a values
     if (( ${#matched} <= 20 )); then
-        # `compadd -d` uses the description array as the *displayed* text for each match, not
-        # just an annotation, so a line with no description (or an empty one) shows the value.
+        # `compadd -d` displays this array, so drop an empty trailing description, then strip up
+        # to the first tab, so a line with no description shows the value.
         descriptions=("${(@)${(@)lines%$'\t'}#*$'\t'}")
         compadd "${expl[@]}" -d descriptions -a values
     else
