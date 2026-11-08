@@ -147,11 +147,12 @@ fn install_powershell_quiet_drops_the_hint() {
     assert!(host.script().is_file());
 }
 
-/// A stock Windows account has no `HOME`; the platform home stands in. On Unix the fallback is
-/// covered by the `resolve_home` unit tests, since `dirs::home_dir()` would find the real home.
+/// A stock Windows account has no `HOME`, and that alone mustn't fail the install. Where the
+/// platform home stands in is covered by the `resolve_home` unit tests, since reaching it here
+/// would write into the real profile.
 #[cfg(windows)]
 #[test]
-fn install_without_home_uses_platform_home() {
+fn install_powershell_without_home_succeeds() {
     let host = Host::new();
     let out = host.command(INSTALL).env_remove("HOME").output().unwrap();
     assert_ok(&out);
