@@ -1,20 +1,20 @@
 # Let the shell match completion candidates (FU-34)
 
-Status: proposed. Audit follow-up FU-34, found in #685 round 2 and pre-existing.
+Status: implemented (PR #713). Audit follow-up FU-34, found in #685 round 2 and pre-existing.
 
-Written against open PRs, not `main` alone:
+Written against #691 and FU-33, both since merged:
 
-- #691 (`fix/complete-double-dash`) restructures `crates/toolr-core/src/complete/engine.rs`
+- #691 (`fix/complete-double-dash`) restructured `crates/toolr-core/src/complete/engine.rs`
   (`Slot::FlagValue.attached`, `Slot::Positional.after_terminator`, `dash_ok` in `values`). Every engine
   signature below is from that branch.
-- FU-33 (`fix/zsh-fish-quoted-partials`, spec only) changes how `zsh.zsh` and `fish.fish` dequote words.
+- FU-33 (`fix/zsh-fish-quoted-partials`) changed how `zsh.zsh` and `fish.fish` dequote words.
   See "Compatibility with FU-33".
 
 ## Problem
 
 `toolr __complete <cwd> <words…>` prefix-filters every candidate against the last word before printing
 (`groups`, `commands`, `flags`, `values`, `group_node_flags` in `engine.rs`, plus
-`merge_root_flags_at_top_level` in `crates/toolr/src/dispatch.rs`). The shell only ever sees candidates that
+`merge_root_flags` in `crates/toolr/src/dispatch.rs`). The shell only ever sees candidates that
 already start with what was typed. zsh's `matcher-list` (case-insensitive, partial-word, `r:|=*` substring)
 and fish's fuzzy matcher never get to run.
 
@@ -113,7 +113,7 @@ In `crates/toolr/src/dispatch.rs`:
 
 - `fn matching_from_env() -> Matching`: `Shell` iff `TOOLR_COMPLETE_MATCH == "shell"`.
 - `run_complete` calls `complete_matching(&manifest, &tokens, matching)`.
-- `merge_root_flags_at_top_level(tokens, candidates, matching)` skips its `starts_with` check in `Shell`
+- `merge_root_flags(tokens, candidates, matching)` skips its `starts_with` check in `Shell`
   mode (it still only runs for a root-level flag word).
 
 Root flags and built-in entries are merged before the engine runs, so `Shell` mode covers them with no extra
@@ -208,8 +208,9 @@ two designs touch different lines and compose:
 
 - #691 and FU-33 had both merged by implementation time, so this was built on `main`.
 - A bare `compadd` does not apply `matcher-list`: the style reaches `compadd` only as the `-M` that
-  `_description` puts into `expl`. The zsh script calls `_description values expl value` and passes
-  `"${expl[@]}"` to `compadd`. A live pty test (`zsh_tab_applies_the_matcher_list`) covers it, so the manual
+  `_description` puts into `expl`. The zsh script calls `_description toolr expl toolr` and passes
+  `"${expl[@]}"` to `compadd`. The tag is neutral because the reply doesn't say whether the slot holds
+  commands, flags or values; a `values` tag would apply users' `values` styles to commands and flags. A live pty test (`zsh_tab_applies_the_matcher_list`) covers it, so the manual
   check in open question 4 is not needed.
 - fish sets the variable with `set -lx` inside `__toolr_complete`, not `env`: `env` runs the binary directly
   and would skip a `toolr` function, and the local dies with the function.

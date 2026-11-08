@@ -1,8 +1,7 @@
 # Plan: let the shell match completion candidates (FU-34)
 
-Design: `specs/2026-11-06-zsh-matcher-list-design.md`. Build on `fix/complete-double-dash` (#691): rebase onto
-`main` once it merges, or stack with git-spice. Work in a worktree under `.worktrees/`, at most three
-sub-agents. Run `cargo` for the touched crates only, then `mise run test` at the end.
+Design: `specs/archive/2026/2026-11-06-zsh-matcher-list-design.md`.
+Work in a worktree under `.worktrees/`, at most three sub-agents. Run `cargo` for the touched crates only, then `mise run test` at the end.
 
 ## Task 1: engine `Matching` (toolr-core)
 
@@ -38,7 +37,7 @@ Tests (fixture: the existing manifest helpers in `tests.rs`):
 
 Files: `crates/toolr/src/dispatch.rs`, test in `crates/toolr/tests/complete_smoke.rs`, docs `docs/cli.md`.
 
-1. `matching_from_env()`; pass to `complete_matching` and to `merge_root_flags_at_top_level`
+1. `matching_from_env()`; pass to `complete_matching` and to `merge_root_flags`
    (new third parameter; skip its `starts_with` in `Shell`).
 2. `docs/cli.md`, next to the exit-code table: document `TOOLR_COMPLETE_MATCH` and that unknown values mean
    prefix.
