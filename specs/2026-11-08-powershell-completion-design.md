@@ -208,7 +208,7 @@ parser and re-quoted whole with `--opt=` in front, so the reply is one word.
 back to its default file-name completion: probed for both an empty return and `@()`. The only way
 to suppress it, returning the typed word as the sole result, fails when the word is empty (the
 constructor rejects empty text) and leaves a one-item menu otherwise. So the fallback is accepted
-and documented as a known limit; see "Open questions".
+and documented as a known limit; see "Decisions".
 
 ### Quoting replies
 
@@ -364,12 +364,13 @@ PowerShell tests need it.
 - A `toolr` reached only through a `.cmd`/`.bat` shim completes nothing.
 - Not supported in PowerShell ISE.
 
-## Open questions for the user
+## Decisions (user, 2026-11-08)
 
-1. **Should install edit `$PROFILE` itself (an idempotent marker block), instead of printing the
-   line?** Recommended: no. No other shell's install edits a startup file, `install.ps1` doesn't
-   either, and Rust can't reliably find `$PROFILE` (edition, host, OneDrive redirection). A later
-   `--profile` flag could add it if users ask.
-2. **Is falling back to file-name completion acceptable when there are no candidates?** Recommended:
-   yes, documented as a known limit. It is PowerShell's native behaviour, and the only suppression
-   trick fails for an empty word and shows a one-item menu otherwise.
+1. **Install does not edit `$PROFILE`.** It writes `toolr.ps1` under the data directory and prints
+   the dot-source line, as specced in "Install". A later `--profile` flag could add editing if users
+   ask.
+2. **PowerShell's own file-name fallback is accepted** when toolr has no candidates. docs/cli.md
+   documents it as a known limit.
+3. **Windows PowerShell 5.1 is the floor** and pwsh 7.x is supported. Below 5.1 the script prints
+   the warning specced in "Version guard" and registers nothing.
+4. **No completion library.** The script stays toolr's own and delegates to `toolr __complete`.
