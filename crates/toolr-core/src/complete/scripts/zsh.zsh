@@ -85,4 +85,11 @@ _toolr() {
     fi
 }
 
-compdef _toolr toolr
+# Autoloaded from `fpath`, this file is the body of `_toolr`, so the first Tab must run the
+# function it just defined. Sourced, register it instead (`compinit` has already done so
+# when autoloaded).
+if [[ ${zsh_eval_context[-1]-} == loadautofunc ]]; then
+    _toolr "$@"
+else
+    compdef _toolr toolr
+fi

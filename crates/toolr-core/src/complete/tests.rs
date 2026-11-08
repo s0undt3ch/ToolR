@@ -1049,6 +1049,7 @@ fn zsh_script_invokes_toolr_complete() {
     assert!(script.starts_with("#compdef toolr"));
     assert!(script.contains("toolr __complete"));
     assert!(script.contains("compdef _toolr toolr"));
+    assert!(script.contains("loadautofunc"));
 }
 
 #[test]
