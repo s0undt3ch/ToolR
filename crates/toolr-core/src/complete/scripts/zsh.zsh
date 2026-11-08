@@ -36,11 +36,11 @@ _toolr() {
     local -a passthrough
     passthrough=("${(@Q)words[2,CURRENT-1]}" "$cur")
 
-    # Each line from `__complete` is `value<TAB>description`; split into
-    # parallel arrays so `compadd -d` can show the description next to
-    # its candidate.
+    # Each line from `__complete` is `value<TAB>description`. `TOOLR_COMPLETE_MATCH=shell` asks
+    # for every candidate in the slot, so `compadd` applies the user's `matcher-list`; a toolr
+    # that predates it ignores the variable and filters by prefix.
     local -a lines values descriptions
-    lines=("${(@f)$(toolr __complete "$PWD" "${passthrough[@]}" 2>/dev/null)}")
+    lines=("${(@f)$(TOOLR_COMPLETE_MATCH=shell toolr __complete "$PWD" "${passthrough[@]}" 2>/dev/null)}")
     # Saved first: the filter below would overwrite it.
     local rc=$?
     # `(@f)` turns empty output into one empty line; drop it, or `compadd` adds a blank match.
@@ -56,16 +56,8 @@ _toolr() {
         11) (( attached )) && compset -P 1 '*='; _files -/; return ;;
         *) return ;;
     esac
-    # `compadd -d` uses the description array as the *displayed* text for
-    # each match, not just an annotation - an empty description would show
-    # as a blank row, so fall back to the value itself when none exists.
-    local line value description
-    for line in "${lines[@]}"; do
-        value="${line%%$'\t'*}"
-        description="${line#*$'\t'}"
-        values+=("$value")
-        descriptions+=("${description:-$value}")
-    done
+    # One expansion, not a loop: unfiltered, a large choice set can be thousands of lines.
+    values=("${(@)lines%%$'\t'*}")
 
     if (( ${#values} == 0 )); then
         return
@@ -74,14 +66,27 @@ _toolr() {
         compset -P 1 '*='
     fi
 
+    # A bare `compadd` ignores the `matcher-list` style; `_description` puts its matcher (and
+    # the user's other styles for the tag) into `expl`.
+    local -a expl
+    _description values expl value
+
     # One-per-line descriptions only pay off for a small, scannable
     # candidate list; fall back to the compact grid for large ones (e.g.
     # long allowed-value sets) rather than a wall of text. No `-Q`: zsh re-quotes each match
     # to fit the quote open at the cursor, so a value is inserted as inert text.
     if (( ${#values} <= 20 )); then
-        compadd -d descriptions -a values
+        # `compadd -d` uses the description array as the *displayed* text for
+        # each match, not just an annotation - an empty description would show
+        # as a blank row, so fall back to the value itself when none exists.
+        local line description
+        for line in "${lines[@]}"; do
+            description="${line#*$'\t'}"
+            descriptions+=("${description:-${line%%$'\t'*}}")
+        done
+        compadd "${expl[@]}" -d descriptions -a values
     else
-        compadd -a values
+        compadd "${expl[@]}" -a values
     fi
 }
 
