@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use anyhow::Context as _;
 use clap::ArgMatches;
 
+use crate::builtin_completions::RootScan;
 use crate::help::{self, HelpMode};
 use toolr_core::complete::{
     Candidate, Completion, InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell,
@@ -683,12 +684,18 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     // completion scripts pass the user's in-progress `--<TAB>` word
     // through unchanged. Falling back to raw argv keeps every literal
     // token (including bare `--`) intact.
-    let tokens: Vec<String> = raw_complete_tokens(matches).unwrap_or_else(|| {
+    let raw: Vec<String> = raw_complete_tokens(matches).unwrap_or_else(|| {
         matches
             .get_many::<String>("args")
             .map(|v| v.cloned().collect())
             .unwrap_or_default()
     });
+    // Root flags are not global and the engine has never heard of them: strip the leading run so
+    // `toolr --quiet ci <TAB>` reaches it as `ci <TAB>`. A line clap would reject completes to nothing.
+    let scan = crate::builtin_completions::scan_root_flags(&raw);
+    if scan.dead_end {
+        return Ok(ExitCode::SUCCESS);
+    }
     // No `tools/` ancestor → no user-defined commands to complete, but
     // the binary's own `self` / `project` subtree must still be offered
     // (it doesn't depend on a project root). Fall back to an empty
@@ -702,7 +709,7 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     let (extra_groups, extra_commands) = crate::builtin_completions::built_in_completion_entries();
     manifest.groups.extend(extra_groups);
     manifest.commands.extend(extra_commands);
-    let mut candidates = match complete(&manifest, &tokens) {
+    let mut candidates = match complete(&manifest, &scan.rest) {
         Completion::Values(candidates) => candidates,
         Completion::Paths => return Ok(ExitCode::from(COMPLETE_PATHS)),
         Completion::Directories => return Ok(ExitCode::from(COMPLETE_DIRECTORIES)),
@@ -712,7 +719,7 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     // (`--debug`, `--quiet`, `--timestamps`, …) live only in
     // `cli::build_command` and need to be merged in for top-level
     // `toolr --<TAB>` to surface them.
-    merge_root_flags_at_top_level(&tokens, &mut candidates);
+    merge_root_flags(&scan, &mut candidates);
     for candidate in candidates {
         println!("{}\t{}", candidate.value, candidate.description);
     }
@@ -734,22 +741,21 @@ fn raw_complete_tokens(matches: &clap::ArgMatches) -> Option<Vec<String>> {
     Some(after_marker[cwd_pos + 1..].to_vec())
 }
 
-/// When the user is completing a flag at the root (`toolr --<TAB>` or
-/// `toolr -<TAB>`), merge the binary's own root flags into the candidate
-/// list returned by the engine. No-op for any other slot.
-fn merge_root_flags_at_top_level(tokens: &[String], candidates: &mut Vec<Candidate>) {
-    let Some(prefix) = tokens.last() else {
+/// When the user is completing a flag at the root (`toolr --<TAB>`, `toolr -<TAB>`, or after other root
+/// flags), merge the binary's own root flags into the engine's candidates, minus those already given or
+/// conflicting with one. No-op for any other slot.
+fn merge_root_flags(scan: &RootScan, candidates: &mut Vec<Candidate>) {
+    let [prefix] = scan.rest.as_slice() else {
         return;
     };
-    let committed = &tokens[..tokens.len() - 1];
-    if !committed.is_empty() {
+    if !(prefix.starts_with("--") || prefix == "-") {
         return;
     }
-    let is_flag_prefix = prefix.starts_with("--") || prefix == "-";
-    if !is_flag_prefix {
-        return;
+    // The engine offers `--help` at every group node; it must not repeat once given.
+    if scan.seen.iter().any(|id| id == "help") {
+        candidates.retain(|c| c.value != "--help");
     }
-    for flag in crate::builtin_completions::root_long_flags() {
+    for flag in scan.offerable_long_flags() {
         if flag.value.starts_with(prefix.as_str()) {
             candidates.push(flag);
         }
@@ -853,6 +859,52 @@ mod tests {
     //! subprocess profraws by default). These unit tests run inside the
     //! test process so the coverage counter actually moves.
     use super::*;
+
+    fn cand(value: &str) -> Candidate {
+        Candidate::new(value.to_string(), String::new())
+    }
+
+    /// Scan `given` flags followed by the in-progress `rest`, then merge into `start`.
+    fn merged(given: &[&str], rest: &[&str], start: &[&str]) -> Vec<String> {
+        let tokens: Vec<String> = given.iter().chain(rest).map(ToString::to_string).collect();
+        let scan = crate::builtin_completions::scan_root_flags(&tokens);
+        let mut candidates: Vec<Candidate> = start.iter().map(|v| cand(v)).collect();
+        merge_root_flags(&scan, &mut candidates);
+        candidates.into_iter().map(|c| c.value).collect()
+    }
+
+    #[test]
+    fn merge_offers_unseen_non_conflicting_flags() {
+        assert_eq!(
+            merged(&["--quiet"], &["--"], &["--help"]),
+            [
+                "--help",
+                "--no-output-timeout-secs",
+                "--no-timestamps",
+                "--timeout-secs",
+                "--timestamps"
+            ]
+        );
+    }
+
+    #[test]
+    fn merge_drops_help_once_given() {
+        let got = merged(&["--help"], &["--"], &["--help"]);
+        assert!(!got.contains(&"--help".to_string()), "{got:?}");
+        assert!(got.contains(&"--quiet".to_string()), "{got:?}");
+    }
+
+    #[test]
+    fn merge_is_inert_after_a_committed_word() {
+        assert_eq!(merged(&[], &["--", "--"], &["x"]), ["x"]);
+        assert_eq!(merged(&["--quiet"], &["ci", "--"], &["--help"]), ["--help"]);
+    }
+
+    #[test]
+    fn merge_is_inert_for_non_flag_words_and_empty_rest() {
+        assert_eq!(merged(&[], &["c"], &["ci"]), ["ci"]);
+        assert_eq!(merged(&[], &[], &["ci"]), ["ci"]);
+    }
 
     #[test]
     fn bash_source_hint_names_the_path_and_bashrc() {
