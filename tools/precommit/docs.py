@@ -418,7 +418,7 @@ def regen_doc_snippets(ctx: Context, *, check: bool = False) -> None:
     if github_step_summary is not None:
         if not diff_body.endswith("\n"):
             diff_body += "\n"
-        with open(github_step_summary, "a") as wfh:
+        with open(github_step_summary, "a", encoding="utf-8") as wfh:
             wfh.write("## ❌ Doc snippets are stale\n\n")
             wfh.write(
                 "The captured `--help` snippets under `docs/` no longer match "

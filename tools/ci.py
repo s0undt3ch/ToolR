@@ -225,7 +225,7 @@ def _pr_labels() -> set[str]:
     if not event_path:
         return set()
     try:
-        with open(event_path) as f:
+        with open(event_path, encoding="utf-8") as f:
             event = json.load(f)
     except (OSError, json.JSONDecodeError):
         return set()
@@ -395,7 +395,7 @@ def generate_build_matrix(
         ctx.error("GITHUB_STEP_SUMMARY environment variable is not set")
         ctx.exit(1)
 
-    with open(github_step_summary, "a") as wfh:
+    with open(github_step_summary, "a", encoding="utf-8") as wfh:
         wfh.write(f"## Build matrix ({workflow})\n\n")
         wfh.write(f"_{reason}_\n\n")
         wfh.write("### Wheels\n\n")
@@ -427,7 +427,7 @@ def generate_build_matrix(
 
     ctx.info(f"Emitting build matrix outputs for workflow={workflow!r} (reason: {reason})")
     ctx.print(Pretty(outputs))
-    with open(github_output, "a") as f:
+    with open(github_output, "a", encoding="utf-8") as f:
         f.writelines(f"{key}={json.dumps(value)}\n" for key, value in outputs.items())
 
 

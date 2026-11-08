@@ -20,7 +20,7 @@ def foo_binary(tmp_path: Path) -> Iterator[Path]:
     if sys.platform.startswith("win"):
         binary_name += ".exe"
     foo_binary = bin_dir / binary_name
-    with open(foo_binary, "w") as wfh:
+    with open(foo_binary, "w", encoding="utf-8") as wfh:
         wfh.write("This would never be a binary, but works for the test")
     foo_binary.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
     with patch("os.environ", {"PATH": str(bin_dir)}):
