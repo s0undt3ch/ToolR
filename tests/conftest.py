@@ -20,6 +20,8 @@ from packaging.version import Version
 from toolr._decorators import _get_command_group_storage
 from toolr.testing import CommandsTester
 
+from tests._git import Git
+
 pytest_plugins = ["pytester"]
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -82,6 +84,19 @@ def _isolate_toolr_cache(
     if _uv_cache_dir is not None:
         monkeypatch.setenv("UV_CACHE_DIR", _uv_cache_dir)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path_factory.mktemp("xdg-cache")))
+
+
+@pytest.fixture(scope="session")
+def git() -> Git:
+    """Factory: run `git` in a repository and return its stdout.
+
+    Skips every test that depends on it, directly or through another fixture, when `git` isn't
+    installed.
+    """
+    git_bin = shutil.which("git")
+    if git_bin is None:
+        pytest.skip("git is not installed")
+    return Git(git_bin)
 
 
 @pytest.fixture

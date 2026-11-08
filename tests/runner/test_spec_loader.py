@@ -16,9 +16,7 @@ from toolr._runner import load_spec_from_env
 #: POSIX ownership / permission-bit semantics that the spec-file provenance
 #: checks rely on (``os.getuid``, meaningful mode bits, symlinks without
 #: elevation). Skipped on Windows, which lacks them.
-posix_only = pytest.mark.skipif(
-    not hasattr(os, "getuid"), reason="requires POSIX ownership/permission semantics"
-)
+posix_only = pytest.mark.skip_on_windows(reason="requires POSIX ownership/permission semantics")
 
 
 #: Pass as a `spec_file` override value to remove that key from the spec.

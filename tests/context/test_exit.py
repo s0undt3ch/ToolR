@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import sys
-
 import pytest
 
 from toolr._context import status_to_exit_code
 
-IS_WINDOWS = sys.platform.startswith("win")
-unix_only = pytest.mark.skipif(IS_WINDOWS, reason="POSIX signals")
-windows_only = pytest.mark.skipif(not IS_WINDOWS, reason="Windows has no signal deaths")
+unix_only = pytest.mark.skip_on_windows(reason="POSIX signals")
+windows_only = pytest.mark.skip_unless_on_windows(reason="Windows has no signal deaths")
 
 
 def test_exit_with_message(ctx, capfd):

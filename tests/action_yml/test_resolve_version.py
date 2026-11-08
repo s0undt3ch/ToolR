@@ -22,6 +22,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytestmark = pytest.mark.skip_if_binaries_missing("bash")
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ACTION_YML = REPO_ROOT / "action.yml"
 
@@ -125,12 +127,6 @@ export -f gh
         raise AssertionError(msg)
 
     return run
-
-
-@pytest.fixture(autouse=True)
-def _skip_if_no_bash() -> None:
-    if shutil.which("bash") is None:
-        pytest.skip("bash not available")
 
 
 @pytest.mark.parametrize(
