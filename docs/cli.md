@@ -341,6 +341,10 @@ Known limits in PowerShell:
   matches nothing.
 - A toolr reached only through a `.cmd` or `.bat` shim completes nothing.
 - PowerShell ISE isn't supported.
+- Windows PowerShell 5.1 never asks toolr to complete a bare `-` or `--`, or
+  a single-dash word such as `-x`, so it offers nothing there. Type the first
+  letter after `--` (`--m`) and complete again. PowerShell 6 and later
+  complete all of them.
 
 ```sh
 toolr self completion install --help

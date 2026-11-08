@@ -563,16 +563,37 @@ fn powershell_attached_option_value_keeps_the_option() {
     }
 }
 
+/// Windows PowerShell 5.1, as opposed to pwsh.
+fn is_windows_powershell(ps: &Path) -> bool {
+    ps.file_stem()
+        .is_some_and(|s| s.eq_ignore_ascii_case("powershell"))
+}
+
 #[test]
 fn powershell_flags_complete_with_descriptions() {
     let fx = fixture();
     for ps in powershells() {
-        let r = Session::new(&ps, &fx).tab("toolr ci lint --");
-        for flag in ["--mode", "--cfg", "--out", "--verbose"] {
-            assert!(r.texts().contains(&flag), "{}: {r:?}", ps.display());
+        let results = Session::new(&ps, &fx).tab_all(&[
+            "toolr ci lint --",
+            "toolr ci lint -",
+            "toolr ci lint --m",
+        ]);
+        if is_windows_powershell(&ps) {
+            // 5.1 never calls a native completer for a word PowerShell tokenises as a parameter or
+            // operator (`-`, `--`); PowerShell 6 fixed both (PowerShell/PowerShell#2919, #3633).
+            assert!(results[0].matches.is_empty(), "{:?}", results[0]);
+            assert!(results[1].matches.is_empty(), "{:?}", results[1]);
+        } else {
+            for r in &results[..2] {
+                for flag in ["--mode", "--cfg", "--out", "--verbose"] {
+                    assert!(r.texts().contains(&flag), "{}: {r:?}", ps.display());
+                }
+            }
         }
-        let mode = r.matches.iter().find(|m| m.text == "--mode").unwrap();
-        assert_eq!(mode.tip, "Lint mode.");
+        // `--m` scans as a generic word, which every version passes to the completer.
+        let mode = results[2].matches.iter().find(|m| m.text == "--mode");
+        assert_eq!(mode.unwrap().tip, "Lint mode.", "{}", ps.display());
+        assert_eq!(results[2].texts(), ["--mode"], "{}", ps.display());
     }
 }
 

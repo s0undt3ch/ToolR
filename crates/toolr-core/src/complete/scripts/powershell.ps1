@@ -10,7 +10,9 @@
 # sub-expression or array (`$x`, `"a$(x)"`, `a,b`) completes nothing, nor does anything after
 # one; in a file-name partial `*`, `?` and `[...]` are wildcards, as in PowerShell's own
 # completion, so a partial holding a whole `[...]` pair matches nothing; a toolr reached only
-# through a .cmd/.bat shim completes nothing; PowerShell ISE isn't supported.
+# through a .cmd/.bat shim completes nothing; PowerShell ISE isn't supported; Windows
+# PowerShell 5.1 never calls this completer for a bare `-` or `--`, or a word like `-x`
+# (type a letter after `--`).
 #
 # The script stays pure ASCII (5.1 reads a BOM-less file in the ANSI code page) and parses on
 # PowerShell 3, so the version guard below can run there.
