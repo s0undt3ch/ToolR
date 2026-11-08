@@ -232,6 +232,8 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
                     New-Object System.Management.Automation.CompletionResult (_toolr_quote $full $open), $full, 'ParameterValue', $tip
                 }
             } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {
+                # The partial stays a wildcard pattern (`*` globs), as in PowerShell's own
+                # native-command completion; escaping it would match nothing at all.
                 $fileWord = $raw
                 if ($prefix.Length -gt 0) {
                     $fileWord = _toolr_quote $value.Substring($prefix.Length) "'"
@@ -240,13 +242,10 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
                     if ($reply.Code -eq 11 -and $result.ResultType -ne 'ProviderContainer') {
                         continue
                     }
-                    if ($prefix.Length -eq 0) {
-                        $result
-                        continue
-                    }
+                    # The text is escaped for -Path (`a`[1`]`); a native command needs the name.
                     $path = _toolr_parse_word $result.CompletionText
                     if ($null -ne $path) {
-                        $full = $prefix + $path
+                        $full = $prefix + [System.Management.Automation.WildcardPattern]::Unescape($path)
                         New-Object System.Management.Automation.CompletionResult (_toolr_quote $full $open), $result.ListItemText, $result.ResultType, $result.ToolTip
                     }
                 }

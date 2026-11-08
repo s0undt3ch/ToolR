@@ -69,6 +69,16 @@ fn fixture() -> Fixture {
     for name in ["files/with space.txt", "files/it's.txt"] {
         std::fs::write(tmp.path().join(name), "").unwrap();
     }
+    // Names PowerShell's own path completion wildcard-escapes; `*` isn't allowed on Windows.
+    for dir in ["odd/d[1]", "odd/e`f"] {
+        std::fs::create_dir_all(tmp.path().join(dir)).unwrap();
+    }
+    for name in ["odd/a[1].txt", "odd/a`b.txt"] {
+        std::fs::write(tmp.path().join(name), "").unwrap();
+    }
+    if !cfg!(windows) {
+        std::fs::write(tmp.path().join("odd/x*y.txt"), "").unwrap();
+    }
     let fx = Fixture {
         tmp,
         work,
@@ -659,6 +669,50 @@ fn powershell_attached_path_keeps_the_option() {
         assert_eq!(results[1].parsed(), [want("it's.txt")], "{}", ps.display());
         let dirs: Vec<&str> = results[2].matches.iter().map(|m| m.list.as_str()).collect();
         assert_eq!(dirs, ["sub"], "{}: {:?}", ps.display(), results[2]);
+    }
+}
+
+/// Native commands get the path itself, not the wildcard-escaped text `-Path` parameters take.
+#[test]
+fn powershell_wildcard_characters_in_paths_stay_literal() {
+    let fx = fixture();
+    let path = |name: &str| format!(".{0}odd{0}{name}", sep());
+    let files = [path("a[1].txt"), path("a`b.txt")];
+    let dirs = sorted(vec![path("d[1]"), path("e`f")]);
+    let mut lines = Vec::new();
+    let mut want = Vec::new();
+    for open in ["", "'", "\""] {
+        for prefix in ["", "--cfg="] {
+            lines.push(format!("toolr ci lint --cfg {open}{prefix}odd/a"));
+            want.push(sorted(
+                files.iter().map(|f| format!("{prefix}{f}")).collect(),
+            ));
+            lines.push(format!("toolr ci lint --cfg {open}{prefix}odd/a["));
+            want.push(vec![format!("{prefix}{}", path("a[1].txt"))]);
+        }
+        for prefix in ["", "--out="] {
+            lines.push(format!("toolr ci lint --out {open}{prefix}odd/"));
+            want.push(dirs.iter().map(|d| format!("{prefix}{d}")).collect());
+        }
+    }
+    if !cfg!(windows) {
+        // `*` is a wildcard in the partial, as in PowerShell's own native-command completion.
+        lines.push("toolr ci lint --cfg odd/x*".to_string());
+        want.push(vec![path("x*y.txt")]);
+        lines.push("toolr ci lint --cfg=odd/x".to_string());
+        want.push(vec![format!("--cfg={}", path("x*y.txt"))]);
+    }
+    for ps in powershells() {
+        let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let results = Session::new(&ps, &fx).tab_all(&lines);
+        for ((line, want), r) in lines.iter().zip(&want).zip(&results) {
+            assert_eq!(
+                &sorted(r.parsed()),
+                want,
+                "{} `{line}`: {r:?}",
+                ps.display()
+            );
+        }
     }
 }
 
