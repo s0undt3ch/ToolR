@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev941-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev985-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev941 - 2026-11-08
+        0.35.2-dev985 - 2026-11-08
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev941 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev985 - 2026-11-08">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1575,6 +1575,17 @@
     <span class="md-ellipsis">
       
         ⚙️ Miscellaneous Tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#revert" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ◀️ Revert
       
     </span>
   </a>
@@ -4502,15 +4513,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev941-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev985-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev941 - 2026-11-08
+        0.35.2-dev985 - 2026-11-08
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev941 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev985 - 2026-11-08">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4617,6 +4628,17 @@
     <span class="md-ellipsis">
       
         ⚙️ Miscellaneous Tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#revert" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ◀️ Revert
       
     </span>
   </a>
@@ -7539,7 +7561,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev941-2026-11-08">0.35.2-dev941 - 2026-11-08<a class="headerlink" href="#0352-dev941-2026-11-08" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev985-2026-11-08">0.35.2-dev985 - 2026-11-08<a class="headerlink" href="#0352-dev985-2026-11-08" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7597,6 +7619,7 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <p>Both now also reject a command decorator inside <code>if TYPE_CHECKING:</code>, a platform guard or an uncalled factory, even when that code never runs, and a <code>def</code> carrying two command decorators; each command must be a top-level <code>def</code>, with platform checks inside its body. toolr recognises <code>command</code> imported from <code>toolr</code> or any <code>toolr.*</code> submodule, re-exported within <code>tools/</code>, or assigned from <code>toolr.command</code>; one imported from anywhere else, such as click, counts only when called with <code>group=</code>, and a module's own <code>def command</code> never does.</p>
 <p><strong>Breaking:</strong> the manifest build now fails when no <code>command_group</code> call for a group passes a description or docstring (an empty one counts as none, and an expression other than a string literal, such as a constant, counts as one), listing every module that declares it, and when one call passes <code>docstring=</code> together with <code>description=</code> or <code>long_description=</code>, each as a literal or the <code>__doc__</code> of a module with a docstring. Title-only calls such as <code>command_group("ci", "CI")</code> still work as long as one declaration describes the group, in any module and in any order. Before, <code>command_group</code> raised for these only when the call created the group as its module imported, so a group created in a module no command imports could build and run; such a tree now fails to build. <code>CommandsTester</code> reports both with the same text. A plugin that adds commands to a host's group must describe that group in its own declaration, or its <code>toolr self build-manifest</code> fails.</p>
 <p><strong>Breaking:</strong> a <code>command_group(...)</code> call that isn't the whole value of a module-level <code>name = command_group(...)</code> assignment or bare statement now fails the manifest build with "unsupported command declarations", and so does <code>CommandsTester</code>. That covers tuple, chained and walrus bindings, calls under an <code>if</code>, <code>try</code>, <code>with</code>, loop or <code>match</code>, calls inside a function, lambda, comprehension or class, calls nested in another expression, and a group whose name isn't a string literal. Before, toolr dropped such a group and every command on it without a word and exited 0. Give each group its own top-level <code>name = command_group("name", ...)</code> line, and move any platform check into the command body.</p>
+<p><strong>Breaking:</strong> <code>toolr --quiet</code> (and <code>-q</code>) no longer hides warnings. It drops success lines, progress and advice, never errors, refusals or warnings, because a warning means the result may be incomplete. A <code>-q</code> run now prints on stderr what it used to drop, such as a skipped plugin or a <code>toolr-py</code> version mismatch, so scripts that run <code>toolr -q &lt;command&gt;</code> may see new output on every run.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7737,6 +7760,13 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>Anything toolr wrote under a relative location (venvs, the managed uv, trust records) stays where it was: toolr rebuilds or re-downloads it under the default directory, asks for trust again, and the old directories can be deleted.</p>
 <p><code>toolr --quiet</code> (and <code>-q</code>) now silences the success lines of <code>self build-manifest</code>, <code>self trusted --prune</code>, <code>project manifest rebuild</code>, <code>project init</code> and <code>project venv sync|lock|add|remove</code>, and passes <code>--quiet</code> on to the uv runs of <code>project init</code> and the <code>venv</code> commands. Errors, refusals and warnings still print, and the <code>self trusted</code> listing is unchanged.
 <code>project venv shell</code> and <code>project venv run</code> also quiet their uv auto-sync. Unlike <code>project venv sync --quiet</code>, the root <code>-q</code> still exits non-zero with a message when there is no toolr project or uv needs install consent.</p>
+<p><code>toolr --quiet</code> (and <code>-q</code>) now silences the success output of <code>self cache prune</code>: the per-entry lines, the totals, the rebuild-lock counts and the <code>aborted</code> line. <code>--dry-run</code> still prints what would go, its per-entry lines and its totals. Warnings, refusals and the confirmation prompt are unchanged, except that prune's warnings now go to stderr instead of stdout.</p>
+<p>Tab completion now offers groups, commands and further root flags after a root flag (<code>toolr --quiet &lt;TAB&gt;</code>, <code>toolr --quiet --&lt;TAB&gt;</code>), and no longer offers a root flag that was already given or conflicts with one.</p>
+<p>A line clap would reject (a repeated or conflicting root flag, a bad <code>--timeout-secs</code> value, <code>--version</code>) now completes to nothing.</p>
+<p>zsh and fish completion now match choice values typed with a backslash or inside quotes, such as <code>--mode dry\ r</code>, <code>'dry r</code> or <code>"dry r</code>. In zsh this also covers <code>$'…'</code>, quotes opened mid-word (<code>--mode='dry r</code>) and quoted earlier words such as <code>'--mode'</code>.</p>
+<p>Bash completion handles paths whose names hold a newline or other control character. A word in <code>$'…'</code> quoting, open or closed and also after <code>~/</code> or <code>$NAME/</code>, now completes instead of offering nothing, and each control character in a reply is quoted as its own <code>$'…'</code> run, so a Tab that inserts the common prefix no longer leaves a quote open. Under an open quote, a name equal to the typed text no longer adds an empty candidate, and a reply ending in the quote character still closes it. A <code>~</code> word with a quoted part before the first <code>/</code>, such as <code>~"root"/</code>, is now taken literally, as bash does, rather than listed as a home directory.</p>
+<p>This also fixes a case where Tab on a file name starting with <code>!</code>, after an open <code>"</code> with <code>set -H</code>, could run code. Pressing <code>M-*</code> (<code>insert-completions</code>) inside an open quote no longer inserts names unquoted, where a name could also run code. Names holding a quote could also run code or reach the command as the wrong argument on Tab; that is fixed too.</p>
+<p>Bash completion now offers nothing for a <code>$'…'</code> word holding <code>\'</code> or <code>\\'</code>, which readline misreads.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7969,6 +7999,19 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(trust)</em> Resolve the key once per decision (<a href="https://github.com/s0undt3ch/ToolR/commit/381fbac4a9c7e767bbcdf7e82b6596f103f302fe"><code>381fbac</code></a>)</li>
 <li><em>(trust)</em> Bound git file reads and name the worktree top in the repair hint (<a href="https://github.com/s0undt3ch/ToolR/commit/e8078ec01148b5160cfc4a947421b94738850b61"><code>e8078ec</code></a>)</li>
 <li><em>(cli)</em> Confirm project trust and untrust on stderr (<a href="https://github.com/s0undt3ch/ToolR/commit/11cace4f4c22a3bd93251a498995a5ece723c547"><code>11cace4</code></a>)</li>
+<li><em>(complete)</em> Complete ANSI-C quoted words in bash (<a href="https://github.com/s0undt3ch/ToolR/commit/f5cbc688c4aea202737654dc3de169c50d29e334"><code>f5cbc68</code></a>)</li>
+<li><em>(complete)</em> Escape a C1 control in bash replies byte by byte (<a href="https://github.com/s0undt3ch/ToolR/commit/be88bb484bd924c0dfa4c8ac7117d9a213b223b0"><code>be88bb4</code></a>)</li>
+<li><em>(complete)</em> Never let a quote inside $'…' desync readline (<a href="https://github.com/s0undt3ch/ToolR/commit/47311d12769b2a1649218b31a98187f3dc289c93"><code>47311d1</code></a>)</li>
+<li><em>(complete)</em> Double a leading quote readline would swallow; decline $'…' forms readline misreads (<a href="https://github.com/s0undt3ch/ToolR/commit/776b123914d6cec27683a7b967b8161d78cde2fe"><code>776b123</code></a>)</li>
+<li><em>(complete)</em> Offer nothing to insert-completions inside an open quote (<a href="https://github.com/s0undt3ch/ToolR/commit/b5f0cf8b139db8d8774e2a3edbbc66f2126e3c16"><code>b5f0cf8</code></a>)</li>
+<li><em>(complete)</em> Match escaped and quoted partials in zsh and fish (<a href="https://github.com/s0undt3ch/ToolR/commit/ae3599ac87a4fd04eee4458a64ce8f5747080e76"><code>ae3599a</code></a>)</li>
+<li><em>(complete)</em> Zsh mid-word quotes and fish one-word unescape (<a href="https://github.com/s0undt3ch/ToolR/commit/22c502b95fc2a842aa578a4e0ce25bd3edad397d"><code>22c502b</code></a>)</li>
+<li><em>(complete)</em> Fish keeps an empty unescaped word (<a href="https://github.com/s0undt3ch/ToolR/commit/9eda550378b6756abfad831b47c2bda8d129012e"><code>9eda550</code></a>)</li>
+<li><em>(complete)</em> Offer groups and root flags after a root flag (<a href="https://github.com/s0undt3ch/ToolR/commit/4e1c3bfb7b1aa0f9f4a18d92d317f39e136b0524"><code>4e1c3bf</code></a>)</li>
+<li><em>(complete)</em> Accept attached negative values, see --version, check value types (<a href="https://github.com/s0undt3ch/ToolR/commit/8cb24c3b48de80927530a2c55ff6317fafbd2822"><code>8cb24c3</code></a>)</li>
+<li><em>(cache)</em> Honour the root --quiet in self cache prune (<a href="https://github.com/s0undt3ch/ToolR/commit/ce14766bed3db348a6ebe8219f30af1869002f2e"><code>ce14766</code></a>)</li>
+<li><em>(cli)</em> [<strong>breaking</strong>] Keep warnings under the root --quiet (<a href="https://github.com/s0undt3ch/ToolR/commit/1470bbe1b1942f6720eb79686eb9cc948ab750ab"><code>1470bbe</code></a>)</li>
+<li><em>(cli)</em> [<strong>breaking</strong>] Python-side warnings survive -q, prune warns on stderr (<a href="https://github.com/s0undt3ch/ToolR/commit/4d95c271b92560c636248250644b6ee2b03827d0"><code>4d95c27</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8055,6 +8098,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(parser)</em> One bound-call helper per side, align mirror names (<a href="https://github.com/s0undt3ch/ToolR/commit/1f7742d21d83a169e64623aaaf77b60c3ee2942b"><code>1f7742d</code></a>)</li>
 <li><em>(completion)</em> Gate install output in one place per arm (<a href="https://github.com/s0undt3ch/ToolR/commit/933558b25512585cfd12bc45a220016894ebc55c"><code>933558b</code></a>)</li>
 <li><em>(cli)</em> State the root --quiet rule once, compute venv_run's quiet once (<a href="https://github.com/s0undt3ch/ToolR/commit/0ccec76e382c236be7190575d5678174be604238"><code>0ccec76</code></a>)</li>
+<li><em>(complete)</em> List bash's readline invariants, share hostile-name fixtures (<a href="https://github.com/s0undt3ch/ToolR/commit/ed448f3b168d97140f01d3179557290c9110601e"><code>ed448f3</code></a>)</li>
+<li><em>(complete)</em> Explain each zsh and fish quoting workaround (<a href="https://github.com/s0undt3ch/ToolR/commit/31c96f2155be7d9fb52ea8e8a776ad7a44c14917"><code>31c96f2</code></a>)</li>
+<li><em>(complete)</em> Derive root flag specs once, split the scan (<a href="https://github.com/s0undt3ch/ToolR/commit/510f5c40a6cb8b2df469c5882d3c7b7fa8c2fdae"><code>510f5c4</code></a>)</li>
+<li><em>(cache)</em> Build prune report lines as strings (<a href="https://github.com/s0undt3ch/ToolR/commit/076882e6593535f14c84808a0a4de5ae112abe80"><code>076882e</code></a>)</li>
+<li><em>(cli)</em> One statement of the -q rule, simpler prune Report (<a href="https://github.com/s0undt3ch/ToolR/commit/dca7854225d3c825de698a3cd07303f0b4686d25"><code>dca7854</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8325,6 +8373,21 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Design and plan for the execute-timeout test flakes (<a href="https://github.com/s0undt3ch/ToolR/commit/6e053accafff1ad6fef6dddf4bf575d87eb58a59"><code>6e053ac</code></a>)</li>
 <li><em>(specs)</em> Archive the execute-timeout flakes specs (<a href="https://github.com/s0undt3ch/ToolR/commit/de0df27ef62b5c4e635c7e2984e4132fd15a37b5"><code>de0df27</code></a>)</li>
 <li><em>(specs)</em> Record the pid file, escaped pattern and collision proof (<a href="https://github.com/s0undt3ch/ToolR/commit/7092fda9795c46fca2e8ad481b4f15198050bccf"><code>7092fda</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for bash ANSI-C quoted words (<a href="https://github.com/s0undt3ch/ToolR/commit/6376441fd7b1ef204c7243084b7374576ca1d630"><code>6376441</code></a>)</li>
+<li><em>(specs)</em> Record implementation findings and archive bash ANSI-C words spec (<a href="https://github.com/s0undt3ch/ToolR/commit/937119bac43c998f7c68a053b749fdc8d5a5c440"><code>937119b</code></a>)</li>
+<li><em>(specs,release-notes)</em> Mark superseded spec parts, note quote-bearing names (<a href="https://github.com/s0undt3ch/ToolR/commit/2c64dbd215a13d44c509dff8328915e24c72833f"><code>2c64dbd</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for zsh and fish quoted partials (<a href="https://github.com/s0undt3ch/ToolR/commit/6a77e77efd53df29f371208b2caa9efbe20eae10"><code>6a77e77</code></a>)</li>
+<li><em>(specs)</em> Settle the zsh and fish quoted partials open questions (<a href="https://github.com/s0undt3ch/ToolR/commit/cccb2c3b7d564742c1067c15397f705941fe1b3f"><code>cccb2c3</code></a>)</li>
+<li><em>(specs)</em> Archive the zsh and fish quoted partials spec (<a href="https://github.com/s0undt3ch/ToolR/commit/f19b576c1df173a29e7cfaf96d583d9a30d66b32"><code>f19b576</code></a>)</li>
+<li><em>(complete)</em> Describe the shipped zsh and fish quoting (<a href="https://github.com/s0undt3ch/ToolR/commit/5755b8ad093ab927751988ab8b29921ed78bcaf0"><code>5755b8a</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for root flags before the first group (<a href="https://github.com/s0undt3ch/ToolR/commit/0a44b20eb5952c8f2214363813d7130819fd4f09"><code>0a44b20</code></a>)</li>
+<li><em>(specs)</em> Resolve root-flags open questions against main (<a href="https://github.com/s0undt3ch/ToolR/commit/b6bd638a9866677deb80f336841e9079cfc3644c"><code>b6bd638</code></a>)</li>
+<li><em>(specs)</em> Archive root-flags-after-root-flag spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/3522bb1fbbec5ba38fd34f3bb64ae4e3effa2164"><code>3522bb1</code></a>)</li>
+<li><em>(complete)</em> Update the root-flags spec and release note after review (<a href="https://github.com/s0undt3ch/ToolR/commit/90d1e4cb9c5a5aac692ebe5c23fdef7677c7bee7"><code>90d1e4c</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for quiet-cache-prune (<a href="https://github.com/s0undt3ch/ToolR/commit/39336a67eea519d86952593d1514350b24375c9d"><code>39336a6</code></a>)</li>
+<li><em>(specs)</em> Record the -q warnings decision (keep warnings everywhere) (<a href="https://github.com/s0undt3ch/ToolR/commit/0b5343ac64996b7c93ba70c1707a02a4ae42fd6c"><code>0b5343a</code></a>)</li>
+<li><em>(specs)</em> Quiet-cache-prune is written against main now that #695 merged (<a href="https://github.com/s0undt3ch/ToolR/commit/11b9c5489585c8b144448340e53a6b25cde3ac88"><code>11b9c54</code></a>)</li>
+<li><em>(specs)</em> Archive the quiet-cache-prune spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/60c810b2d230fcbd72ed0cd6ecb786d0f1fd9af0"><code>60c810b</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8469,6 +8532,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Quote the writer's pid file path inside sh -c (<a href="https://github.com/s0undt3ch/ToolR/commit/3e4068b4c719618c0b0782897c0641c48e804f2a"><code>3e4068b</code></a>)</li>
 <li><em>(command)</em> Point process-matching helpers at unique_sleep (<a href="https://github.com/s0undt3ch/ToolR/commit/c2430b5267b43afc7eaef9abc7dcd1fd48c002f5"><code>c2430b5</code></a>)</li>
 <li><em>(command)</em> Cover wait_for_pid_file's wait and deadline paths (<a href="https://github.com/s0undt3ch/ToolR/commit/4dfecb4386a54ccaada588ba4551492dfb8eb428"><code>4dfecb4</code></a>)</li>
+<li><em>(runner)</em> Keep the quiet-warning test's contextvar out of other tests (<a href="https://github.com/s0undt3ch/ToolR/commit/34c9814f2606d5a0033967f90b2a0f74da8a247c"><code>34c9814</code></a>)</li>
+<li><em>(runner)</em> Make the quiet-warning test work before Python 3.14 (<a href="https://github.com/s0undt3ch/ToolR/commit/aa8c8684c2f71e008b2c1d9ca0847bc8062cb6b5"><code>aa8c868</code></a>)</li>
+<li><em>(command)</em> Stream to the real stdout when sys.stdout has no fd (<a href="https://github.com/s0undt3ch/ToolR/commit/e5577f79b5a0e9df30ba68cd76df6dc79536d962"><code>e5577f7</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8524,6 +8590,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(test)</em> Install bash 4.4+ on macOS for the completion tests (<a href="https://github.com/s0undt3ch/ToolR/commit/72c5aa7b5d20280194ec3affbf9f7440575170a3"><code>72c5aa7</code></a>)</li>
 <li><em>(lint)</em> Enforce ruff's unspecified-encoding rule (<a href="https://github.com/s0undt3ch/ToolR/commit/8dea0f7d27b726e220d2599459658eb162315571"><code>8dea0f7</code></a>)</li>
 <li>Skip build and test jobs for PRs that only touch CI-inert paths (<a href="https://github.com/s0undt3ch/ToolR/commit/50c173cf7ae3d17966b48d5a6bd842fcb46627b7"><code>50c173c</code></a>)</li>
+</ul>
+<h3 id="revert"><!-- 9 -->◀️ Revert<a class="headerlink" href="#revert" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(logs)</em> Keep the root log level under -q; fix the notes (<a href="https://github.com/s0undt3ch/ToolR/commit/0fffe2c18caada0b5e1d383e7bf904fa52c53705"><code>0fffe2c</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

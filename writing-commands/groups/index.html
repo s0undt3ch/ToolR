@@ -1872,8 +1872,8 @@ change the group. <code>toolr</code> keeps the value it has and warns, naming th
 module each kept value came from:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr: warning: group `ci` is declared more than once; keeping the title from tools.ci and ignoring the different title in tools.release
 </span></code></pre></div>
-<p>The warning prints on the run that rebuilds the manifest, and <code>-q</code>
-suppresses it. <code>toolr self build-manifest</code> prints it for a plugin too.</p>
+<p>The warning prints on the run that rebuilds the manifest, <code>-q</code> included.
+<code>toolr self build-manifest</code> prints it for a plugin too.</p>
 <p>Declare each group's title and description once, and fetch it by title
 everywhere else. A group none of whose declarations passes a description or
 docstring fails the build:</p>
