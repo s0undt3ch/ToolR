@@ -192,7 +192,7 @@ fn trust_no_sync_asks_nothing() {
     let out = c.run_with_tty(&["project", "trust", "--no-sync"], "y\n");
     let err = stderr(&out);
     assert!(out.status.success(), "{err}");
-    assert_eq!(err, "");
+    assert_eq!(err, format!("toolr: trusted {}\n", c.root()));
     assert_eq!(stdout(&out), format!("{}\n", c.root()));
     assert!(!c.fx.uv_ran_sync());
     assert!(c.is_trusted());
