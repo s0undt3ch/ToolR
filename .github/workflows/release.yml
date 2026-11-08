@@ -422,6 +422,46 @@ jobs:
         run: |
           git tag -m "chore(release): Release v${RELEASE_VERSION}" -a "v${RELEASE_VERSION}"
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: cibw-wheel-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
+          path: dist/
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
+          path: dist/
+
+      # Per-triple binary archives (consumed by install.sh and the mise
+      # plugin). Downloaded to a separate path so they are NOT uploaded to
+      # PyPI — they are not Python distributions. They are still attached
+      # to the GitHub Release alongside the wheels and sdists.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: toolr-archive-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Check distribution metadata
+        run: pipx run twine==7.0.0 check --strict dist/*
+
+      # A dress rehearsal with the exact files about to ship, before the tag
+      # is pushed: a failed upload stops the release while nothing is public.
+      # skip-existing lets a re-run get past files an earlier attempt uploaded.
+      - name: Publish to Test PyPI (Trusted Publisher)
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: true
+          verbose: true
+
       - name: Push the release commit and tag
         id: push-release
         env:
@@ -459,32 +499,6 @@ jobs:
             fail "origin's ${GITHUB_REF_NAME} moved since the run was dispatched, and nothing was published. Dispatch the release again from its new tip."
           fi
           fail "origin's ${GITHUB_REF_NAME} has not moved and nothing was published, so the cause is elsewhere (network, token, a server-side hook). Re-run this job once that is fixed."
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: cibw-wheel-*
-          path: dist
-          merge-multiple: true
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
-          path: dist/
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
-          path: dist/
-
-      # Per-triple binary archives (consumed by install.sh and the mise
-      # plugin). Downloaded to a separate path so they are NOT uploaded to
-      # PyPI — they are not Python distributions. They are still attached
-      # to the GitHub Release alongside the wheels and sdists.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: toolr-archive-*
-          path: release-assets
-          merge-multiple: true
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
