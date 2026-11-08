@@ -864,6 +864,37 @@ mod test_suite {
             }
         }
 
+        #[cfg(unix)]
+        #[test]
+        fn wait_for_pid_file_waits_for_a_late_writer() -> Result<()> {
+            let dir = tempfile::tempdir()?;
+            let path = dir.path().join("late.pid");
+            let writer = {
+                let path = path.clone();
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(200));
+                    std::fs::write(path, "4242\n")
+                })
+            };
+            let pid = wait_for_pid_file(&path, Duration::from_secs(10));
+            writer
+                .join()
+                .map_err(|_| anyhow!("the writer thread panicked"))??;
+            assert_eq!(pid, Some(4242));
+            Ok(())
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn wait_for_pid_file_gives_up_at_the_deadline() -> Result<()> {
+            let dir = tempfile::tempdir()?;
+            let start = Instant::now();
+            let pid = wait_for_pid_file(&dir.path().join("never.pid"), Duration::from_millis(100));
+            assert_eq!(pid, None);
+            assert!(start.elapsed() >= Duration::from_millis(100));
+            Ok(())
+        }
+
         /// The pid the child prints to `file`, read while `run` is still going. Polls a
         /// reopened handle: seeking `file` itself would move the child's write offset.
         fn pid_while_running<T>(file: &NamedTempFile, run: &thread::JoinHandle<T>) -> Option<u32> {
