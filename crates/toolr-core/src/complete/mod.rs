@@ -4,8 +4,8 @@
 //! shell completion scripts shell out to on every Tab press. The engine
 //! is split into three concerns:
 //!
-//! 1. [`serve_completions`] — pure prefix-matching against a loaded
-//!    `Manifest`. No I/O.
+//! 1. [`serve_completions`] / [`complete_matching`] — pure candidate lookup
+//!    against a loaded `Manifest`, prefix-filtered or left to the shell. No I/O.
 //! 2. [`resolve_manifest_at_tab`] — Tab-time freshness check that loads
 //!    the cached manifest, delegates to [`crate::freshness::compare`],
 //!    and either returns the cached manifest or a fresh one built by
@@ -18,7 +18,10 @@ pub mod freshness;
 pub mod install;
 pub mod scripts;
 
-pub use engine::{Candidate, Completion, complete, serve_completions, sort_and_dedup_by_value};
+pub use engine::{
+    Candidate, Completion, Matching, complete, complete_matching, serve_completions,
+    sort_and_dedup_by_value,
+};
 pub use freshness::{ResolvedManifest, resolve_manifest_at_tab};
 pub use install::{
     InstallOptions, InstallOutcome, PriorState, bash_completion_installed, install_path_for,
