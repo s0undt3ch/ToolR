@@ -331,6 +331,28 @@ jobs:
           mkdir -p target/coverage
           cargo llvm-cov --workspace --exclude toolr-py --tests --cobertura --output-path target/coverage/cobertura.xml -- --test-threads=1
 
+      # The completion tests already run under both editions through `-File`; these load the
+      # script into a real host session, the way a profile does, with the toolr on PATH.
+      - name: Smoke-test PowerShell completion (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $PSVersionTable.PSVersion
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw "expected Windows PowerShell 5.1" }
+          Invoke-Expression (& toolr self completion print powershell | Out-String)
+          $r = TabExpansion2 -inputScript 'toolr se' -cursorColumn 8
+          if (-not ($r.CompletionMatches.CompletionText -contains 'self')) { throw "no completion" }
+
+      - name: Smoke-test PowerShell completion (pwsh)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $PSVersionTable.PSVersion
+          if ($PSVersionTable.PSVersion.Major -ne 7) { throw "expected PowerShell 7" }
+          Invoke-Expression (& toolr self completion print powershell | Out-String)
+          $r = TabExpansion2 -inputScript 'toolr se' -cursorColumn 8
+          if (-not ($r.CompletionMatches.CompletionText -contains 'self')) { throw "no completion" }
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
