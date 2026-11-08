@@ -203,3 +203,17 @@ two designs touch different lines and compose:
    means `AL<Tab>` can show descriptions less often than `al<Tab>`.
 4. A live zsh `zpty` check is not automatable here; accept the stub driver in CI plus a manual check
    recorded in the PR (same call as FU-33's open question 1).
+
+## Implementation notes
+
+- #691 and FU-33 had both merged by implementation time, so this was built on `main`.
+- A bare `compadd` does not apply `matcher-list`: the style reaches `compadd` only as the `-M` that
+  `_description` puts into `expl`. The zsh script calls `_description values expl value` and passes
+  `"${expl[@]}"` to `compadd`. A live pty test (`zsh_tab_applies_the_matcher_list`) covers it, so the manual
+  check in open question 4 is not needed.
+- fish sets the variable with `set -lx` inside `__toolr_complete`, not `env`: `env` runs the binary directly
+  and would skip a `toolr` function, and the local dies with the function.
+- "A bare word never yields flags" is not quite right: a command with no positional left falls back to its flag
+  names for any word, as before. In `Shell` mode that fallback returns every flag.
+- zsh at 10 000 values: the split loop took about 96 ms and the `${(@)lines%%$'\t'*}` expansion about 3 ms,
+  so the script uses the expansion.
