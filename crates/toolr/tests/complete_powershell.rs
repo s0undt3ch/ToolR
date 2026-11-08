@@ -582,6 +582,8 @@ fn powershell_variable_or_subexpression_word_offers_nothing() {
             "toolr $x lint --mode ".to_string(),
             format!("toolr ci $(New-Item '{s1}') --mode "),
             "toolr ci lint,x --mode ".to_string(),
+            // After `--%` PowerShell passes the rest of the line verbatim.
+            "toolr --% ci lint --mode ".to_string(),
         ];
         let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
         let values = fx.values();

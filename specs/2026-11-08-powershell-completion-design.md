@@ -143,6 +143,7 @@ Each word is mapped by AST type:
 | `StringConstantExpressionAst` | `dry`, `'dry r`, `"dry r`, `a` + backtick-space, `--opt='dry r`, `‘dry r` | `.Value`, which the parser has already dequoted: `dry r`, `--opt=dry r` |
 | `ExpandableStringExpressionAst` without nested expressions | `"a<backtick>$b"` | `.Value` (`a$b`) |
 | `CommandParameterAst` | `--`, `-v`, `-x:y` | `.Extent.Text` (the probe showed `--` parses as a parameter, so its text is the only faithful form) |
+| `ConstantExpressionAst` | `4`, `0x10`, `1kb` | `.Extent.Text`: a native command gets the typed text, not the number (`/bin/echo 0x10 1kb` prints `0x10 1kb`), so `--jobs 4` doesn't stop completion. Added during implementation |
 | `ExpandableStringExpressionAst` with nested expressions, `VariableExpressionAst`, `SubExpressionAst`, `ArrayLiteralAst` (`a,b`), `ArrayExpressionAst`, anything else | `"a$(x)"`, `$x`, `$(rm`, `a,b`, `@(` | Offer nothing: the value PowerShell would pass at run time is unknown, and `a,b` would even pass two words |
 
 This is the zsh rule (`(Q)` removes quoting, never expands) expressed through PowerShell's parser,
