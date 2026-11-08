@@ -2433,11 +2433,12 @@ reportable.</p>
 </span></code></pre></div>
 <h3 id="project-trust"><code>toolr project trust [PATH]</code><a class="headerlink" href="#project-trust" title="Permanent link">&para;</a></h3>
 <p>Trust the repository at <code>PATH</code> (default: the current directory's project
-root) and print the repository path: the main checkout, or a bare
-repository's <code>foo.git</code> directory. This covers every worktree of it. Then it
-offers to sync its tools venv if it needs one. <code>--no-sync</code> only records the
-trust. When it asks, syncs or exits non-zero is in
-<a href="../concepts/#repository-trust">Repository trust</a>.</p>
+root) and print the repository path on stdout: the main checkout, or a bare
+repository's <code>foo.git</code> directory. This covers every worktree of it. stderr
+says <code>toolr: trusted &lt;repo&gt;</code>, or <code>toolr: &lt;repo&gt; was already trusted</code>;
+<code>--quiet</code> drops that line. Then it offers to sync its tools venv if it needs
+one. <code>--no-sync</code> only records the trust. When it asks, syncs or exits
+non-zero is in <a href="../concepts/#repository-trust">Repository trust</a>.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>trust<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>Allow toolr to run this repository's code, then sync its tools venv
@@ -2457,8 +2458,9 @@ trust. When it asks, syncs or exits non-zero is in
 </span></code></pre></div>
 <h3 id="project-untrust"><code>toolr project untrust [PATH]</code><a class="headerlink" href="#project-untrust" title="Permanent link">&para;</a></h3>
 <p>Remove the trust record for the repository at <code>PATH</code>, which untrusts every
-worktree of it. Prints the repository path when a record was removed; says
-so on stderr when there was none.</p>
+worktree of it. Prints the repository path on stdout and
+<code>toolr: untrusted &lt;repo&gt;</code> on stderr when a record was removed (the root <code>-q</code>
+drops the stderr line); says so on stderr when there was none.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>untrust<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>Revoke trust in this repository

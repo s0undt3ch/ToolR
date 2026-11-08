@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev929-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev933-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev929 - 2026-11-08
+        0.35.2-dev933 - 2026-11-08
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev929 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev933 - 2026-11-08">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev929-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev933-2026-11-08" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev929 - 2026-11-08
+        0.35.2-dev933 - 2026-11-08
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev929 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev933 - 2026-11-08">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev929-2026-11-08">0.35.2-dev929 - 2026-11-08<a class="headerlink" href="#0352-dev929-2026-11-08" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev933-2026-11-08">0.35.2-dev933 - 2026-11-08<a class="headerlink" href="#0352-dev933-2026-11-08" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7571,7 +7571,10 @@ that case. <code>--help</code>, tab completion and manifest builds never need tr
 (<code>toolr project venv sync --quiet</code>) never prompts, so in an untrusted repository it prints the
 refusal, while a directory with no <code>tools/pyproject.toml</code> still exits silently. The interpreter
 provenance check is removed; repository trust replaces it. Trust covers the whole git repository,
-including all its worktrees, and untrusting from any checkout untrusts all of them.</p>
+including all its worktrees, and untrusting from any checkout untrusts all of them. <code>toolr project
+trust</code> prints the repository path on stdout and <code>toolr: trusted &lt;repo&gt;</code>, or <code>toolr: &lt;repo&gt; was
+already trusted</code>, on stderr; <code>--quiet</code> keeps only the path. <code>toolr project untrust</code> likewise adds
+<code>toolr: untrusted &lt;repo&gt;</code> on stderr unless run with the root <code>-q</code>.</p>
 <p><strong>Breaking:</strong> a <code>tools/</code> directory is a toolr project only if it contains <code>pyproject.toml</code>. toolr
 finds the project by walking up to the nearest <code>tools/pyproject.toml</code>, and ignores any <code>tools/</code>
 without one. An unrelated <code>tools/</code> package below the repo root, such as <code>src/pkg/tools/</code>, used to
@@ -7965,6 +7968,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(trust)</em> Keep key kinds apart and narrow the repair hint (<a href="https://github.com/s0undt3ch/ToolR/commit/76f8a104414c69a19d6d4f647d70edd76e5b45c7"><code>76f8a10</code></a>)</li>
 <li><em>(trust)</em> Resolve the key once per decision (<a href="https://github.com/s0undt3ch/ToolR/commit/381fbac4a9c7e767bbcdf7e82b6596f103f302fe"><code>381fbac</code></a>)</li>
 <li><em>(trust)</em> Bound git file reads and name the worktree top in the repair hint (<a href="https://github.com/s0undt3ch/ToolR/commit/e8078ec01148b5160cfc4a947421b94738850b61"><code>e8078ec</code></a>)</li>
+<li><em>(cli)</em> Confirm project trust and untrust on stderr (<a href="https://github.com/s0undt3ch/ToolR/commit/11cace4f4c22a3bd93251a498995a5ece723c547"><code>11cace4</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8457,6 +8461,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li>Skip git-backed tests with skip_if_binaries_missing (<a href="https://github.com/s0undt3ch/ToolR/commit/10ffa007535507f70f5dc306dd9cd2542f1d4030"><code>10ffa00</code></a>)</li>
 <li>Use pytest-skip-markers for Windows and missing-binary skips (<a href="https://github.com/s0undt3ch/ToolR/commit/f7e74a46656e451de82380ef832114d5a0ecbe0c"><code>f7e74a4</code></a>)</li>
 <li>Skip git-backed tests through a git fixture (<a href="https://github.com/s0undt3ch/ToolR/commit/9b2185d1bc7ba21484e254e9de560fd0c56e11b6"><code>9b2185d</code></a>)</li>
+<li><em>(cli)</em> Keep a system uv out of the relative-PATH-entry tests (<a href="https://github.com/s0undt3ch/ToolR/commit/4799e9f0734d9bdc343728e058c7529c5304d590"><code>4799e9f</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
