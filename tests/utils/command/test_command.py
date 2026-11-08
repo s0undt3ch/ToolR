@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import os
 import pathlib
 import signal
@@ -159,6 +160,21 @@ def test_stream_and_capture(echo_command, capfd):
     # Check that output was also captured to the result
     result.stdout.seek(0)
     assert "should be streamed and captured" in result.stdout.read()
+
+
+def test_stream_output_falls_back_to_the_real_stdout(echo_command, capfd, monkeypatch):
+    """A replaced sys.stdout without a file descriptor streams to the process's real stdout."""
+    replaced = io.StringIO()
+    # Undo the patch inside the test: capfd closes its own stream at teardown, which would
+    # leave monkeypatch restoring a closed sys.stdout for the tests after this one.
+    with monkeypatch.context() as patched:
+        patched.setattr(sys, "stdout", replaced)
+        patched.setattr(sys, "stderr", io.StringIO())
+        result = run(echo_command("streamed past the StringIO"), stream_output=True)
+
+    assert result.returncode == 0
+    assert "streamed past the StringIO" in capfd.readouterr().out
+    assert replaced.getvalue() == ""
 
 
 def test_float_timeout_secs(sleep_command):
