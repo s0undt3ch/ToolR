@@ -428,8 +428,9 @@ so the shell matches the typed word itself (zsh's `matcher-list`, fish's
 case-insensitive and substring matching). The typed word still decides
 the slot: a flag word gets flag names, a `--name=` word gets the values
 of `--name`. Path slots still exit 10 or 11. The zsh and fish scripts set
-it for their call; bash leaves it unset, since readline doesn't filter
-the reply. Any other value, or none, means prefix filtering.
+it for their call. The bash script doesn't, and filters the reply by the
+typed prefix itself whatever the engine returns, since readline doesn't
+filter it. Any other value, or none, means prefix filtering.
 
 ### `toolr __build-static-manifest` {#__build-static-manifest}
 
