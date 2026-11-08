@@ -11,7 +11,7 @@
 //!    and either returns the cached manifest or a fresh one built by
 //!    [`crate::parser::build_static_manifest`]. Tab completion never
 //!    persists and never re-globs the tools venv.
-//! 3. [`scripts`] — embedded shell-completion scripts (bash, zsh, fish).
+//! 3. [`scripts`] — embedded shell-completion scripts (bash, zsh, fish, PowerShell).
 
 pub mod engine;
 pub mod freshness;
@@ -25,7 +25,7 @@ pub use engine::{
 pub use freshness::{ResolvedManifest, resolve_manifest_at_tab};
 pub use install::{
     InstallOptions, InstallOutcome, PriorState, bash_completion_installed, install_path_for,
-    install_script, shell_quote,
+    install_script, powershell_quote, shell_quote,
 };
 pub use scripts::{Shell, completion_script};
 

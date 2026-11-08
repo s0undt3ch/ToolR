@@ -4,7 +4,7 @@ Usage: toolr self completion install [OPTIONS] <shell>
 
 Arguments:
   <shell>  Shell to install the completion script for
-           [possible values: bash, zsh, fish]
+           [possible values: bash, zsh, fish, powershell]
 
 Options:
       --force

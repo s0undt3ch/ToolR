@@ -1076,21 +1076,100 @@ fn fish_script_does_not_inject_literal_dash_dash_into_args() {
 }
 
 use crate::complete::install::{
-    InstallOptions, InstallOutcome, PriorState, install_path_for, install_script,
+    InstallOptions, InstallOutcome, PriorState, install_path_for, install_script, powershell_quote,
 };
+
+#[test]
+fn powershell_install_path_uses_xdg_data_home() {
+    let tmp = TempDir::new().unwrap();
+    let xdg = tmp.path().join("xdg");
+    let data = tmp.path().join("data");
+    let path = install_path_for(Shell::PowerShell, Some(&xdg), tmp.path(), Some(&data)).unwrap();
+    assert_eq!(path, xdg.join("toolr/completions/toolr.ps1"));
+}
+
+#[test]
+fn powershell_install_path_falls_back_to_data_dir() {
+    let tmp = TempDir::new().unwrap();
+    let data = tmp.path().join("data");
+    let path = install_path_for(Shell::PowerShell, None, tmp.path(), Some(&data)).unwrap();
+    assert_eq!(path, data.join("toolr/completions/toolr.ps1"));
+}
+
+#[test]
+fn powershell_install_path_without_any_data_dir_errors() {
+    let tmp = TempDir::new().unwrap();
+    let err = install_path_for(Shell::PowerShell, None, tmp.path(), None).unwrap_err();
+    assert!(err.to_string().contains("XDG_DATA_HOME"), "{err}");
+}
+
+#[test]
+fn other_shells_ignore_data_dir() {
+    let tmp = TempDir::new().unwrap();
+    let data = tmp.path().join("data");
+    for shell in [Shell::Bash, Shell::Zsh, Shell::Fish] {
+        assert_eq!(
+            install_path_for(shell, None, tmp.path(), Some(&data)).unwrap(),
+            install_path_for(shell, None, tmp.path(), None).unwrap(),
+            "{shell}",
+        );
+    }
+}
+
+#[test]
+fn install_powershell_writes_under_data_dir() {
+    let tmp = TempDir::new().unwrap();
+    let opts = InstallOptions {
+        shell: Shell::PowerShell,
+        xdg_data_home: None,
+        xdg_config_home: None,
+        home: tmp.path().to_path_buf(),
+        data_dir: Some(tmp.path().join("data")),
+        force: false,
+        interactive: false,
+    };
+    assert!(matches!(
+        install_script(&opts).unwrap(),
+        InstallOutcome::Wrote { .. }
+    ));
+    let contents =
+        std::fs::read_to_string(tmp.path().join("data/toolr/completions/toolr.ps1")).unwrap();
+    assert!(contents.contains("Register-ArgumentCompleter"));
+}
+
+#[test]
+fn powershell_quote_plain_path() {
+    assert_eq!(powershell_quote("/home/u/toolr.ps1"), "'/home/u/toolr.ps1'");
+}
+
+#[test]
+fn powershell_quote_path_with_space() {
+    assert_eq!(
+        powershell_quote(r"C:\Users\A B\toolr.ps1"),
+        r"'C:\Users\A B\toolr.ps1'"
+    );
+}
+
+#[test]
+fn powershell_quote_doubles_straight_and_smart_single_quotes() {
+    assert_eq!(
+        powershell_quote("it's \u{2018}a\u{2019} \u{201A}b\u{201B}"),
+        "'it''s \u{2018}\u{2018}a\u{2019}\u{2019} \u{201A}\u{201A}b\u{201B}\u{201B}'"
+    );
+}
 
 #[test]
 fn install_path_for_bash_uses_xdg_data_home() {
     let tmp = TempDir::new().unwrap();
     let xdg_data = tmp.path().join("share");
-    let path = install_path_for(Shell::Bash, Some(&xdg_data), tmp.path()).unwrap();
+    let path = install_path_for(Shell::Bash, Some(&xdg_data), tmp.path(), None).unwrap();
     assert_eq!(path, xdg_data.join("bash-completion/completions/toolr"));
 }
 
 #[test]
 fn install_path_for_zsh_uses_home_zfunc() {
     let tmp = TempDir::new().unwrap();
-    let path = install_path_for(Shell::Zsh, None, tmp.path()).unwrap();
+    let path = install_path_for(Shell::Zsh, None, tmp.path(), None).unwrap();
     assert_eq!(path, tmp.path().join(".zfunc/_toolr"));
 }
 
@@ -1098,7 +1177,7 @@ fn install_path_for_zsh_uses_home_zfunc() {
 fn install_path_for_fish_uses_xdg_config_home() {
     let tmp = TempDir::new().unwrap();
     let xdg_config = tmp.path().join("config");
-    let path = install_path_for(Shell::Fish, Some(&xdg_config), tmp.path()).unwrap();
+    let path = install_path_for(Shell::Fish, Some(&xdg_config), tmp.path(), None).unwrap();
     assert_eq!(path, xdg_config.join("fish/completions/toolr.fish"));
 }
 
@@ -1110,6 +1189,7 @@ fn install_creates_file_when_absent() {
         xdg_data_home: Some(tmp.path().join("data")),
         xdg_config_home: None,
         home: tmp.path().to_path_buf(),
+        data_dir: None,
         force: false,
         interactive: false,
     };
@@ -1136,6 +1216,7 @@ fn install_refuses_to_overwrite_differing_file_without_force() {
         xdg_data_home: Some(tmp.path().join("data")),
         xdg_config_home: None,
         home: tmp.path().to_path_buf(),
+        data_dir: None,
         force: false,
         interactive: false,
     };
@@ -1153,6 +1234,7 @@ fn install_is_idempotent_when_content_matches() {
         xdg_data_home: Some(tmp.path().join("data")),
         xdg_config_home: None,
         home: tmp.path().to_path_buf(),
+        data_dir: None,
         force: false,
         interactive: false,
     };
@@ -1181,6 +1263,7 @@ fn install_with_force_overwrites_even_when_content_matches() {
         xdg_data_home: Some(tmp.path().join("data")),
         xdg_config_home: None,
         home: tmp.path().to_path_buf(),
+        data_dir: None,
         force: false,
         interactive: false,
     };
@@ -1196,6 +1279,7 @@ fn install_with_force_overwrites_even_when_content_matches() {
         xdg_data_home: Some(tmp.path().join("data")),
         xdg_config_home: None,
         home: tmp.path().to_path_buf(),
+        data_dir: None,
         force: true,
         interactive: false,
     };
@@ -1219,6 +1303,7 @@ fn install_with_force_overwrites_existing() {
         xdg_data_home: Some(tmp.path().join("data")),
         xdg_config_home: None,
         home: tmp.path().to_path_buf(),
+        data_dir: None,
         force: true,
         interactive: false,
     };
@@ -1242,6 +1327,7 @@ fn install_fish_uses_xdg_config_home_override() {
         xdg_data_home: None,
         xdg_config_home: Some(tmp.path().join("config")),
         home: tmp.path().to_path_buf(),
+        data_dir: None,
         force: false,
         interactive: false,
     };
@@ -1261,6 +1347,7 @@ fn install_zsh_lands_under_home_zfunc() {
         xdg_data_home: None,
         xdg_config_home: None,
         home: tmp.path().to_path_buf(),
+        data_dir: None,
         force: false,
         interactive: false,
     };
@@ -1277,7 +1364,7 @@ fn install_fish_without_xdg_falls_back_to_home_config() {
     // Exercises the `unwrap_or_else(|| home.join(".config"))` arm for
     // the Fish branch of `install_path_for` (and for `install_script`).
     let tmp = TempDir::new().unwrap();
-    let path = install_path_for(Shell::Fish, None, tmp.path()).unwrap();
+    let path = install_path_for(Shell::Fish, None, tmp.path(), None).unwrap();
     assert_eq!(path, tmp.path().join(".config/fish/completions/toolr.fish"));
 }
 
@@ -1285,7 +1372,7 @@ fn install_fish_without_xdg_falls_back_to_home_config() {
 fn install_bash_without_xdg_falls_back_to_home_local_share() {
     // Same fallback story for Bash.
     let tmp = TempDir::new().unwrap();
-    let path = install_path_for(Shell::Bash, None, tmp.path()).unwrap();
+    let path = install_path_for(Shell::Bash, None, tmp.path(), None).unwrap();
     assert_eq!(
         path,
         tmp.path()

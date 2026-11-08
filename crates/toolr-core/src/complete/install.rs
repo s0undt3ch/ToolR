@@ -10,14 +10,17 @@ use super::scripts::{Shell, completion_script};
 
 pub struct InstallOptions {
     pub shell: Shell,
-    /// `$XDG_DATA_HOME` for the bash script. `None` falls back to
-    /// `$HOME/.local/share`.
+    /// `$XDG_DATA_HOME` for the bash and PowerShell scripts. `None` falls back to
+    /// `$HOME/.local/share` for bash and to `data_dir` for PowerShell.
     pub xdg_data_home: Option<PathBuf>,
     /// `$XDG_CONFIG_HOME` for the fish script. `None` falls back to
     /// `$HOME/.config`.
     pub xdg_config_home: Option<PathBuf>,
     /// Path to use as the user's home directory.
     pub home: PathBuf,
+    /// Platform data directory (`dirs::data_dir()`), used for PowerShell when
+    /// `xdg_data_home` is unset.
+    pub data_dir: Option<PathBuf>,
     /// Overwrite a non-matching existing file without prompting.
     pub force: bool,
     /// Currently informational only — the file API is non-interactive.
@@ -52,8 +55,14 @@ pub enum PriorState {
     Differed,
 }
 
-/// Compute the target install path for `shell`.
-pub fn install_path_for(shell: Shell, xdg_override: Option<&Path>, home: &Path) -> Result<PathBuf> {
+/// Compute the target install path for `shell`. `data_dir` is only read for PowerShell, which has no
+/// completion directory of its own, so its script lives under toolr's data directory.
+pub fn install_path_for(
+    shell: Shell,
+    xdg_override: Option<&Path>,
+    home: &Path,
+    data_dir: Option<&Path>,
+) -> Result<PathBuf> {
     match shell {
         Shell::Bash => {
             let base = xdg_override
@@ -68,15 +77,32 @@ pub fn install_path_for(shell: Shell, xdg_override: Option<&Path>, home: &Path) 
                 .unwrap_or_else(|| home.join(".config"));
             Ok(base.join("fish/completions/toolr.fish"))
         }
+        Shell::PowerShell => xdg_override
+            .or(data_dir)
+            .map(|base| base.join("toolr/completions/toolr.ps1"))
+            .ok_or_else(|| anyhow!("no data directory; set XDG_DATA_HOME")),
     }
 }
 
 /// Write the embedded script to the chosen location.
 pub fn install_script(opts: &InstallOptions) -> Result<InstallOutcome> {
     let path = match opts.shell {
-        Shell::Bash => install_path_for(opts.shell, opts.xdg_data_home.as_deref(), &opts.home)?,
-        Shell::Fish => install_path_for(opts.shell, opts.xdg_config_home.as_deref(), &opts.home)?,
-        Shell::Zsh => install_path_for(opts.shell, None, &opts.home)?,
+        Shell::Bash => {
+            install_path_for(opts.shell, opts.xdg_data_home.as_deref(), &opts.home, None)?
+        }
+        Shell::Fish => install_path_for(
+            opts.shell,
+            opts.xdg_config_home.as_deref(),
+            &opts.home,
+            None,
+        )?,
+        Shell::Zsh => install_path_for(opts.shell, None, &opts.home, None)?,
+        Shell::PowerShell => install_path_for(
+            opts.shell,
+            opts.xdg_data_home.as_deref(),
+            &opts.home,
+            opts.data_dir.as_deref(),
+        )?,
     };
 
     let payload = completion_script(opts.shell);
@@ -172,4 +198,19 @@ pub fn shell_quote(s: &str) -> String {
         return s.to_string();
     }
     format!("'{}'", s.replace('\'', r#"'\''"#))
+}
+
+/// Quote `s` as one PowerShell single-quoted word. Inside single quotes nothing expands; PowerShell
+/// also reads the smart quotes U+2018 to U+201B as `'`, so each of them is doubled too.
+pub fn powershell_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for c in s.chars() {
+        if matches!(c, '\'' | '\u{2018}'..='\u{201B}') {
+            out.push(c);
+        }
+        out.push(c);
+    }
+    out.push('\'');
+    out
 }
