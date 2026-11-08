@@ -3025,21 +3025,52 @@ fn fish_attached_value_keeps_the_option_prefix() {
     assert_eq!(fish_names(&stdout), vec!["--out=files/sub/"]);
 }
 
+/// How the interactive zsh in [`zsh_tab_via`] loads the completion script.
+#[derive(Clone, Copy, Debug)]
+enum ZshLoad {
+    /// `source`d from the rc file, as the eval/source install modes do.
+    Sourced,
+    /// Saved as `_toolr` in an `fpath` directory and autoloaded by `compinit`, as
+    /// `toolr self completion install zsh` leaves it.
+    Autoloaded,
+}
+
 /// An interactive zsh on a pty: types `typed` after `toolr ci lint `, then Tab, then `after`.
 /// The rc file sources the script, a `toolr()` shim prints each submitted line as `LINE:<args>`
 /// after shell parsing, and `^Xd` prints the edit buffer as `BUF:<line>` and clears it.
 fn zsh_tab(fx: &Fixture, typed: &str, after: &str) -> String {
+    zsh_tab_via(fx, ZshLoad::Sourced, typed, after)
+}
+
+/// [`zsh_tab`] with the script loaded as `load` says.
+fn zsh_tab_via(fx: &Fixture, load: ZshLoad, typed: &str, after: &str) -> String {
     let script = fx.tmp.path().join("toolr.zsh");
-    std::fs::write(&script, print_script("zsh")).unwrap();
+    let loader = match load {
+        ZshLoad::Sourced => {
+            std::fs::write(&script, print_script("zsh")).unwrap();
+            format!(
+                "autoload -Uz compinit\ncompinit -u -D\nsource '{}'\n",
+                script.display()
+            )
+        }
+        ZshLoad::Autoloaded => {
+            let dir = fx.tmp.path().join("fpath");
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("_toolr"), print_script("zsh")).unwrap();
+            format!(
+                "fpath=('{}' $fpath)\nautoload -Uz compinit\ncompinit -u -D\n",
+                dir.display()
+            )
+        }
+    };
     std::fs::write(
         fx.tmp.path().join(".zshrc"),
         format!(
-            "autoload -Uz compinit\ncompinit -u -D\nsource '{}'\n\
+            "{loader}\
              toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
              else print -r -- \"LINE:$*\"; fi; }}\n\
              _toolr_test_dump() {{ print -r -- \"BUF:$BUFFER\"; BUFFER=; zle accept-line; }}\n\
              zle -N _toolr_test_dump\nbindkey '^Xd' _toolr_test_dump\n",
-            script.display()
         ),
     )
     .unwrap();
@@ -3059,6 +3090,25 @@ fn zsh_tab(fx: &Fixture, typed: &str, after: &str) -> String {
         String::from_utf8_lossy(&out.stderr)
     );
     stdout
+}
+
+/// The installed `~/.zfunc/_toolr` is autoloaded on the first Tab of a new shell. That load
+/// must complete, not just define `_toolr`, and the sourced mode must still work.
+#[test]
+fn zsh_first_tab_completes_when_autoloaded_or_sourced() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    for load in [ZshLoad::Autoloaded, ZshLoad::Sourced] {
+        let stdout = zsh_tab_via(&fx, load, "--mode dry\\ w", "\n");
+        assert!(
+            stdout
+                .lines()
+                .any(|l| l.trim_end_matches('\r') == "LINE:ci lint --mode dry walk"),
+            "{load:?}: {stdout}"
+        );
+    }
 }
 
 /// A live Tab: zsh hands `_toolr` the word as typed, and quotes the inserted match to fit the

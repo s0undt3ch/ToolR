@@ -85,4 +85,10 @@ _toolr() {
     fi
 }
 
-compdef _toolr toolr
+# Autoloaded: `compinit` already registered `toolr` via `#compdef`, and this file is the body
+# of `_toolr`, so run the function it just defined. Sourced: register it.
+if [[ ${zsh_eval_context[-1]-} == loadautofunc ]]; then
+    _toolr "$@"
+else
+    compdef _toolr toolr
+fi
