@@ -18,6 +18,7 @@
 #   - Windows PowerShell 5.1 never calls this completer for a bare `-` or `--`, or a word like
 #     `-x` (type a letter after `--`). PowerShell 6 fixed it: PowerShell/PowerShell#2912 by
 #     PR #2919, and PR #3633 for `--`.
+#   - Windows PowerShell 5.1 completes no file name for a partial holding a backtick.
 #
 # The script stays pure ASCII (5.1 reads a BOM-less file in the ANSI code page) and parses on
 # PowerShell 3, so the version guard below can run there.
@@ -245,9 +246,8 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
                 }
             } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {   # COMPLETE_PATHS, COMPLETE_DIRS
                 # Left unescaped, the partial stays a wildcard pattern, as in PowerShell's own completion.
-                # 5.1 matches nothing for an unclosed `[` or a bare backtick; a one-character class
-                # matches each literally. The `[` goes first, as the backtick's class adds a `]`.
-                $partial = $value.Substring($prefix.Length) -replace '\[(?=[^\]]*$)', '[[]' -replace '`', '[``]'
+                # 5.1 matches nothing for an unclosed `[`; `[[]` matches it literally (a backtick doesn't).
+                $partial = $value.Substring($prefix.Length) -replace '\[(?=[^\]]*$)', '[[]'
                 $fileWord = _toolr_quote $partial "'"
                 $fsHome = (Get-PSProvider FileSystem).Home
                 foreach ($result in [System.Management.Automation.CompletionCompleters]::CompleteFilename($fileWord)) {

@@ -780,6 +780,12 @@ fn powershell_wildcard_characters_in_paths_stay_literal() {
         let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
         let results = Session::new(&ps, &fx).tab_all(&lines);
         for ((line, want), r) in lines.iter().zip(&want).zip(&results) {
+            // 5.1's own file-name completion matches nothing for a backtick in the partial.
+            let want = if is_windows_powershell(&ps) && line.contains('`') {
+                &Vec::new()
+            } else {
+                want
+            };
             assert_eq!(
                 &sorted(r.parsed()),
                 want,

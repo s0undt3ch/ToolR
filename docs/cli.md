@@ -345,6 +345,8 @@ Known limits in PowerShell:
   a single-dash word such as `-x`, so it offers nothing there. Type the first
   letter after `--` (`--m`) and complete again. PowerShell 6 and later
   complete all of them.
+- Windows PowerShell 5.1 completes no file name for a partial that holds a
+  backtick. PowerShell 7 completes it.
 
 ```sh
 toolr self completion install --help
