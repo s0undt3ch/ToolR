@@ -33,7 +33,7 @@ deploy is removed.
 - `mkdocs-llmstxt` goes in the `docs` dependency group. The normal 7-day `exclude-newer` cooldown
   applies. 0.5.1 is current and old enough.
 - No new files under `tools/`. toolr scans that directory for commands.
-- No `paddle` and no absolute home paths in committed files.
+- No employer name and no absolute home paths in committed files.
 - Conventional Commits. No `Co-Authored-By` trailer.
 
 ## Review Focus
