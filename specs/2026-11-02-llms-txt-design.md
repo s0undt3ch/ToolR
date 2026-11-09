@@ -193,6 +193,21 @@ Run it where `mkdocs build --strict` already runs in CI (the docs job), and make
 locally with the same command. A docs change, a plugin update or a dependency update could
 otherwise stop the files matching the docs without anyone noticing.
 
+### Discovery
+
+Few agents look for `llms.txt` on their own, so point at it from the places a cold agent already
+reads. Added after the first review, at the maintainer's request.
+
+1. **Root `toolr --help`.** An agent meeting an unknown CLI runs `--help` first. Root help, short
+   and long, ends with the docs URL and the `llms.txt` URL. Subcommand help does not: an earlier
+   "Report bugs" footer on every page was dropped for costing a line everywhere (commit 3eb0ec50).
+2. **README and PyPI.** The README docs list links `llms.txt`. Both wheels' `[project.urls]` gain an
+   entry for it.
+3. **Per-page `<link rel="alternate" type="text/markdown">`.** Each rendered page listed in
+   `llms.txt` carries a head link to its Markdown copy. Pages that aren't listed have no copy, so
+   they get no link. The gate already checks that every listed page's copy exists, so these links
+   can't go dead. Whether any agent acts on the tag is unproven; it is cheap.
+
 ### Release note
 
 Queue one with `toolr release-notes add`. Agents and users can see this change.

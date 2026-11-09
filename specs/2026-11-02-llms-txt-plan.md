@@ -216,6 +216,50 @@ deploy is removed.
   Message: `docs(skills): point agents without skills at llms.txt`. Make the Pages removal its own
   commit: `ci(docs): stop deploying docs to GitHub Pages`.
 
+### Task 5: Point agents at llms.txt (help, README, PyPI, page heads)
+
+Spec: *Discovery*. Added after the first review, at the maintainer's request.
+
+**Files:**
+
+- Modify: `crates/toolr/src/cli.rs` (root command), `crates/toolr/src/help.rs` (render it), Rust
+  tests next to the existing `--help` tests, `docs/cli-files/toolr-help.txt` (regenerated)
+- Modify: `README.md`, `crates/toolr/pyproject.toml`, `crates/toolr-py/pyproject.toml`
+- Modify: `docs/.hooks/llmstxt_gate.py`, `tests/test_docs_llmstxt_gate.py`
+- Modify: the branch's release note (`toolr release-notes add --append --text …`)
+- [ ] **Step 1: Root help footer.** Root `toolr --help` and `toolr -h` end with exactly these two
+  lines, after the options:
+
+  ```text
+  Documentation: https://toolr.readthedocs.io/
+  For AI agents: https://toolr.readthedocs.io/llms.txt
+  ```
+
+  Subcommand help (`toolr self --help`, `toolr project venv --help`) and user command help do not.
+  Use clap's `after_help`/`after_long_help` on the root command if the custom renderer in `help.rs`
+  can be taught to print it; keep the renderer's single-trailing-newline rule. Tests first: one
+  asserting both root modes contain the `llms.txt` line, one asserting a subcommand's help doesn't.
+  Changed Rust lines need real-test coverage (99% patch gate). Regenerate snippets with
+  `toolr pre-commit regen-doc-snippets`; never hand-edit them. Run
+  `cargo xtask build-skill-refs --check`. Commit `feat(cli): point agents at llms.txt from toolr --help`.
+- [ ] **Step 2: README and PyPI.** In the README docs list, after the Agent skills entry, add
+  `- [llms.txt (docs index for AI agents)](https://toolr.readthedocs.io/llms.txt)`. In both
+  `pyproject.toml` files add `"LLM docs index" = "https://toolr.readthedocs.io/llms.txt"` to
+  `[project.urls]`, after `Documentation`. Commit `docs: link llms.txt from the README and PyPI`.
+- [ ] **Step 3: Head links.** In `docs/.hooks/llmstxt_gate.py` add
+  `alternate_link(page_src: str, listed: Collection[str], site_url: str) -> str | None`, returning
+  `<link rel="alternate" type="text/markdown" href="{site_url}{md_url(page_src)}">` for listed
+  pages and `None` otherwise, and an `on_post_page(output, page, config)` hook that inserts it just
+  before `</head>`. It reuses `nav_pages`, `section_patterns` and `resolve`. Tests first: listed page
+  gets the tag, excluded page doesn't, insertion lands before `</head>`. Build and check that
+  `site/quickstart/index.html` has the tag and `site/internals/index.html` doesn't. Commit
+  `feat(docs): link each page's Markdown copy from its head`.
+- [ ] **Step 4: Release note.** `toolr release-notes add --append --text "toolr --help now points
+  at the docs and at llms.txt."` Run `toolr release-notes check --base main`. Commit
+  `docs(release-notes): mention the --help docs pointer`.
+- [ ] **Step 5: Verify.** `uv run --group docs mkdocs build --strict`, `prek run --all-files`,
+  `mise run test`. All pass.
+
 ### Task 4: Archive the spec
 
 - [ ] **Step 1: Run
