@@ -26,6 +26,8 @@ exclude-newer = "7 days"
 # Security fixes are exempt from the cooldown, but uv can't tell an advisory
 # fix apart: pin a per-package cutoff just past the fixed release's upload
 # time, then drop the entry once that release ages past 7 days.
+# mdformat-tables 1.0.0 (unmaintained, merged into mdformat-gfm) caps mdformat<0.8, which pins markdown-it-py<4; drop once mkdocs-llmstxt stops requiring mdformat-tables.
+override-dependencies = ["mdformat>=1.0"]
 
 [tool.uv.workspace]
 members = [
