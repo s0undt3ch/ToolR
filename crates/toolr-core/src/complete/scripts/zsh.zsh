@@ -77,10 +77,23 @@ _toolr() {
     local -a matched
     compadd "${expl[@]}" -O matched -a values
     if (( ${#matched} <= 20 )); then
-        # `compadd -d` displays this array, so drop an empty trailing description, then strip up
-        # to the first tab, so a line with no description shows the value.
-        descriptions=("${(@)${(@)lines%$'\t'}#*$'\t'}")
-        compadd "${expl[@]}" -d descriptions -a values
+        # `-d` replaces what the listing shows, so each entry carries its own name, padded to the
+        # widest value (`m` counts display width) so the descriptions line up; `-l` puts one
+        # entry on each row. A line without a description shows the value alone.
+        descriptions=("${(@)${(@)lines%$'\t'}#*$'\t'}")  # a missing description becomes the value
+        local -a display
+        local -i width=0 i
+        for (( i = 1; i <= ${#values}; i++ )); do
+            (( ${(m)#values[i]} > width )) && width=${(m)#values[i]}
+        done
+        for (( i = 1; i <= ${#values}; i++ )); do
+            if [[ ${lines[i]} == *$'\t'?* ]]; then
+                display[i]="${(mr:width:)values[i]}  -- ${descriptions[i]}"
+            else
+                display[i]=${values[i]}
+            fi
+        done
+        compadd "${expl[@]}" -l -d display -a values
     else
         compadd "${expl[@]}" -a values
     fi
