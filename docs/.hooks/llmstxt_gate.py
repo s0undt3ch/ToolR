@@ -64,6 +64,18 @@ def _first_content_line(path: Path) -> str | None:
     return None
 
 
+def _link_exists(site_dir: Path, path: str) -> bool:
+    path = path.split("#", 1)[0].split("?", 1)[0]
+    if not path or path.endswith("/"):
+        path += "index.html"
+    return (site_dir / path).is_file()
+
+
+def stale_patterns(patterns: Iterable[str], pages: Sequence[str]) -> list[str]:
+    """Return the patterns that match no nav page."""
+    return [pattern for pattern in patterns if not resolve([pattern], pages)]
+
+
 def find_problems(
     *,
     pages: Sequence[str],
@@ -82,6 +94,10 @@ def find_problems(
     if missing:
         return missing
 
+    if not site_url:
+        return ["site_url is not set in mkdocs.yml, so llms.txt links cannot be checked"]
+    site_url = site_url if site_url.endswith("/") else site_url + "/"
+
     index = outputs["llms.txt"].read_text(encoding="utf-8")
     full = outputs["llms-full.txt"].read_text(encoding="utf-8")
     problems: list[str] = []
@@ -99,16 +115,16 @@ def find_problems(
         if site_url + md_url(page) not in index:
             problems.append(f"{page} is listed but missing from llms.txt")
         copy = site_dir / md_url(page)
-        marker = _first_content_line(copy) if copy.is_file() else None
+        if not copy.is_file():
+            problems.append(f"{page} is listed but its Markdown copy {md_url(page)} was not built")
+            continue
+        marker = _first_content_line(copy)
         if marker is None or marker not in full:
             problems.append(f"{page} is listed but its content is missing from llms-full.txt")
 
     for target in _LINK_TARGET.findall(index):
-        # Only .md targets: the intro prose links to rendered HTML pages, which are not llms.txt entries.
-        if (
-            target.startswith(site_url)
-            and target.endswith(".md")
-            and not (site_dir / target.removeprefix(site_url)).is_file()
+        if target.startswith(site_url) and not _link_exists(
+            site_dir, target.removeprefix(site_url)
         ):
             problems.append(f"llms.txt links to {target}, which was not built")
 
@@ -120,10 +136,20 @@ def on_post_build(config: MkDocsConfig) -> None:
     """Abort the build when the generated llms.txt is stale."""
     pages = nav_pages(config.nav or [])
     sections = config.plugins["llmstxt"].config.sections
-    problems = find_problems(
+    listed_patterns = section_patterns(sections)
+    excluded_patterns = config.extra.get("llmstxt_exclude", [])
+    problems = [
+        f"{pattern} in {where} matches no nav page"
+        for where, patterns in (
+            ("llmstxt.sections", listed_patterns),
+            ("extra.llmstxt_exclude", excluded_patterns),
+        )
+        for pattern in stale_patterns(patterns, pages)
+    ]
+    problems += find_problems(
         pages=pages,
-        listed=resolve(section_patterns(sections), pages),
-        excluded=resolve(config.extra.get("llmstxt_exclude", []), pages),
+        listed=resolve(listed_patterns, pages),
+        excluded=resolve(excluded_patterns, pages),
         site_dir=Path(config.site_dir),
         site_url=config.site_url or "",
     )
