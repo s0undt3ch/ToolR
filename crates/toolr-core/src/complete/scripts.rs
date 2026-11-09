@@ -111,7 +111,8 @@ mod tests {
 
     #[test]
     fn powershell_script_is_ascii() {
-        // Windows PowerShell 5.1 reads a BOM-less script in the ANSI code page.
+        // Windows PowerShell 5.1 reads a BOM-less script in the ANSI code page, and must read this
+        // one to reach the version guard and print its warning.
         assert!(completion_script(Shell::PowerShell).is_ascii());
     }
 }

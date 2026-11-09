@@ -311,9 +311,12 @@ In bash, a word with an unclosed quote (`--cfg 'a:b`) completes nothing.
 An aliased toolr (`alias t=toolr`) gets no completion by default; run
 `complete -F _toolr_complete t` to register it.
 
-PowerShell completion works in Windows PowerShell 5.1 and PowerShell 7;
-below 5.1 the script prints one warning and registers nothing. PowerShell
-has no completion directory, so toolr writes the script to
+PowerShell completion needs PowerShell 7 or newer. Windows PowerShell 5.1,
+the one built into Windows, prints one warning and registers nothing.
+PowerShell 7 installs alongside it ([install
+guide](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows),
+[migrating from 5.1](https://learn.microsoft.com/en-us/powershell/scripting/whats-new/migrating-from-windows-powershell-51-to-powershell-7)).
+PowerShell has no completion directory, so toolr writes the script to
 `toolr/completions/toolr.ps1` under `$XDG_DATA_HOME` when it's set, else
 under the platform data directory (`%APPDATA%` on Windows,
 `~/Library/Application Support` on macOS, `~/.local/share` on Linux), and
@@ -341,12 +344,6 @@ Known limits in PowerShell:
   matches nothing.
 - A toolr reached only through a `.cmd` or `.bat` shim completes nothing.
 - PowerShell ISE isn't supported.
-- Windows PowerShell 5.1 never asks toolr to complete a bare `-` or `--`, or
-  a single-dash word such as `-x`, so it offers nothing there. Type the first
-  letter after `--` (`--m`) and complete again. PowerShell 6 and later
-  complete all of them.
-- Windows PowerShell 5.1 completes no file name for a partial that holds a
-  backtick. PowerShell 7 completes it.
 
 ```sh
 toolr self completion install --help

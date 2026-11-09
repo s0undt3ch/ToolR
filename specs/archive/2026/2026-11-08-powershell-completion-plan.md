@@ -1,5 +1,9 @@
 # PowerShell Tab Completion — Implementation Plan
 
+> **Update 2026-11-09:** the completion floor was raised to PowerShell 7. Windows CI showed Windows PowerShell 5.1 gaps
+> (no completer call for `-` or `--`, nothing for an unclosed `[`, nothing for a backtick in a path partial), so 5.1
+> now gets the version-guard warning and registers nothing. Read the 5.1 material below as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

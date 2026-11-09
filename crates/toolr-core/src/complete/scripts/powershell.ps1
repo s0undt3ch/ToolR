@@ -1,5 +1,5 @@
 # toolr PowerShell completion - delegates to `toolr __complete`.
-# Needs Windows PowerShell 5.1 or PowerShell 7.
+# Needs PowerShell 7.
 #
 # Install via `toolr self completion install powershell` and dot-source the file it writes from
 # your profile, or load it on every shell start with:
@@ -15,19 +15,15 @@
 #   - A leading `~` in a file-name partial is expanded to the home directory in the reply.
 #   - A toolr reached only through a .cmd/.bat shim completes nothing.
 #   - PowerShell ISE isn't supported.
-#   - Windows PowerShell 5.1 never calls this completer for a bare `-` or `--`, or a word like
-#     `-x` (type a letter after `--`). PowerShell 6 fixed it: PowerShell/PowerShell#2912 by
-#     PR #2919, and PR #3633 for `--`.
-#   - Windows PowerShell 5.1 completes no file name for a partial holding a backtick.
 #
-# The script stays pure ASCII (5.1 reads a BOM-less file in the ANSI code page) and parses on
-# PowerShell 3, so the version guard below can run there.
+# The script stays pure ASCII and parses on PowerShell 3, so Windows PowerShell 5.1 and older can
+# read it and reach the version guard below.
 
-if ($PSVersionTable.PSVersion -lt [version]'5.1') {
-    Write-Warning 'toolr completion needs PowerShell 5.1 or newer'
+if ($PSVersionTable.PSVersion -lt [version]'7.0') {
+    Write-Warning 'toolr completion needs PowerShell 7 or newer'
 } else {
     # One argument in the MSVC rules .NET and Rust's std::env::args both parse. Legacy
-    # native-argument passing (5.1, pwsh before 7.3) drops empty words and mangles `"`.
+    # native-argument passing (pwsh before 7.3, or Legacy mode) drops empty words and mangles `"`.
     function global:_toolr_msvc_arg([string]$Word) {
         if ($Word.Length -gt 0 -and $Word -notmatch '[\s"]') {
             return $Word
@@ -246,9 +242,7 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
                 }
             } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {   # COMPLETE_PATHS, COMPLETE_DIRS
                 # Left unescaped, the partial stays a wildcard pattern, as in PowerShell's own completion.
-                # 5.1 matches nothing for an unclosed `[`; `[[]` matches it literally (a backtick doesn't).
-                $partial = $value.Substring($prefix.Length) -replace '\[(?=[^\]]*$)', '[[]'
-                $fileWord = _toolr_quote $partial "'"
+                $fileWord = _toolr_quote $value.Substring($prefix.Length) "'"
                 $fsHome = (Get-PSProvider FileSystem).Home
                 foreach ($result in [System.Management.Automation.CompletionCompleters]::CompleteFilename($fileWord)) {
                     if ($reply.Code -eq 11 -and $result.ResultType -ne 'ProviderContainer') {

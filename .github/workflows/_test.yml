@@ -23,7 +23,7 @@ on:
         required: false
         type: string
         default: ''
-        description: "Matrix Python version whose job also runs the `#[ignore]`d PowerShell completion tests, with the runner image's pwsh (and Windows PowerShell 5.1 on Windows). Empty skips them. They don't depend on Python, so one job per OS is enough."
+        description: "Matrix Python version whose job also runs the `#[ignore]`d PowerShell completion tests, with the runner image's pwsh. Empty skips them. They don't depend on Python, so one job per OS is enough."
       pythons:
         required: true
         type: string
@@ -335,17 +335,20 @@ jobs:
           if [ "$RUN_POWERSHELL_TESTS" = true ]; then cargo llvm-cov --no-report -p toolr --test complete_powershell -- --ignored --test-threads=1; fi
           cargo llvm-cov report --cobertura --output-path target/coverage/cobertura.xml
 
-      # The completion tests already run under both editions through `-File`; these load the
-      # script into a real host session, the way a profile does, with the toolr on PATH.
-      - name: Smoke-test PowerShell completion (Windows PowerShell 5.1)
+      # The completion tests run under pwsh through `-File`; these load the script into a real host
+      # session, the way a profile does, with the toolr on PATH. Windows PowerShell 5.1 is below the
+      # floor: it must print the version warning and register no completer.
+      - name: Smoke-test PowerShell completion (Windows PowerShell 5.1 gets the warning)
         if: runner.os == 'Windows'
         shell: powershell
         run: |
           $PSVersionTable.PSVersion
           if ($PSVersionTable.PSVersion.Major -ne 5) { throw "expected Windows PowerShell 5.1" }
-          Invoke-Expression (& toolr self completion print powershell | Out-String)
+          $script = & toolr self completion print powershell | Out-String
+          $warnings = & { Invoke-Expression $script } 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+          if (@($warnings).Count -ne 1 -or $warnings[0].Message -ne 'toolr completion needs PowerShell 7 or newer') { throw "expected the version warning, got: $warnings" }
           $r = TabExpansion2 -inputScript 'toolr se' -cursorColumn 8
-          if (-not ($r.CompletionMatches.CompletionText -contains 'self')) { throw "no completion" }
+          if ($r.CompletionMatches.CompletionText -contains 'self') { throw "completer registered on 5.1" }
 
       - name: Smoke-test PowerShell completion (pwsh)
         if: runner.os == 'Windows'

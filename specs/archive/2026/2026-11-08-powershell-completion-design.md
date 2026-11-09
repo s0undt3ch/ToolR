@@ -1,5 +1,9 @@
 # PowerShell tab completion
 
+> **Update 2026-11-09:** the completion floor was raised to PowerShell 7. Windows CI showed Windows PowerShell 5.1 gaps
+> (no completer call for `-` or `--`, nothing for an unclosed `[`, nothing for a backtick in a path partial), so 5.1
+> now gets the version-guard warning and registers nothing. Read the 5.1 material below as history.
+
 ## Why
 
 Audit finding F-37: toolr completes in bash, zsh and fish only. `Shell` in

@@ -77,8 +77,6 @@ Run them on purpose, with a missing shell failing them:
 mise exec powershell@7.6.9 -- cargo test -p toolr --test complete_powershell -- --ignored
 ```
 
-On Windows they also use the built-in Windows PowerShell 5.1.
-
 `crates/toolr-py/python/toolr/_context.pyi` is hand-written, not generated. `tests/context/test_context_stub.py`
 runs mypy's stubtest against it, so changing `Context` or another public name in `_context.py` needs a matching
 stub edit.
