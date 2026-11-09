@@ -26,6 +26,7 @@ dev = [
     { name = "attrs", specifier = ">=26.1.0" },
     { name = "coverage", specifier = ">=7.16.0" },
     { name = "hypothesis", specifier = ">=6.168.0" },
+    { name = "mkdocs", specifier = ">=1.6.1" },
     { name = "packaging", specifier = ">=26.3" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-randomly", specifier = ">=5.0.0" },
@@ -47,6 +48,7 @@ docs = [
 pre-commit = [
     { name = "attrs", specifier = ">=26.1.0" },
     { name = "hypothesis", specifier = ">=6.168.0" },
+    { name = "mkdocs", specifier = ">=1.6.1" },
     { name = "msgspec", specifier = ">=0.21.1" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pytest", specifier = ">=9.1.1" },
