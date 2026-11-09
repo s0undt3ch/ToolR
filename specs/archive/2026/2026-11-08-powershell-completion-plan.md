@@ -15,7 +15,7 @@ toolr's data directory, a profile hint, and a home-directory fallback. The `__co
 unchanged.
 
 **Tech Stack:** Rust (toolr-core `full`, `dirs`), PowerShell 5.1-compatible script, real pwsh and
-powershell.exe in tests, mise for pwsh on Linux/macOS.
+powershell.exe in tests, `mise exec powershell@<version>` for pwsh.
 
 **Spec:** `specs/2026-11-08-powershell-completion-design.md` — read it in full; this plan does not
 repeat its rules (word mapping table, quoting rules, exit-code handling, install hint text).
@@ -37,7 +37,7 @@ repeat its rules (word mapping table, quoting rules, exit-code handling, install
   the Rust arms carry the metric. Close gaps with real tests.
 - Format touched Rust files only (`rustfmt --edition 2024 <file>`), never whole-crate `cargo fmt`.
 - Conventional Commits; no `Co-Authored-By` trailer; British English in prose and comments.
-- Tests that need pwsh skip locally without it and fail under `CI` without it.
+- Tests that need pwsh are `#[ignore]`d; run with `--ignored`, a missing shell panics.
 
 ## Review Focus
 
@@ -191,8 +191,7 @@ texts are unit-tested on every host.
 
 - Modify: `crates/toolr-core/src/complete/scripts/powershell.ps1`
 - Create: `crates/toolr/tests/complete_powershell.rs`
-- Modify: `mise.toml`, `mise.lock` (`powershell = "7.6.9"`, then `mise lock`)
-- Modify: `CONTRIBUTING.md` (PowerShell tests need pwsh from `mise install`)
+- Modify: `CONTRIBUTING.md` (the `--ignored` command for the PowerShell tests)
 
 **Script structure** (function names fixed; all `_toolr_`-prefixed):
 
@@ -214,7 +213,7 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
 **Test harness** in `complete_powershell.rs`:
 
 ```rust
-fn powershells() -> Vec<PathBuf>;            // pwsh on PATH; + powershell.exe on Windows; CI requires all
+fn powershells() -> Vec<PathBuf>;            // pwsh on PATH; + powershell.exe on Windows; missing panics
 struct Fixture { tmp: TempDir, sentinels: Vec<PathBuf> }
 fn fixture() -> Fixture;                     // spec "Real-shell tests" values and files
 struct TabResult { index: usize, length: usize, matches: Vec<Match> }
@@ -274,8 +273,8 @@ runs it with `-NoProfile -NonInteractive -ExecutionPolicy Bypass -File`, and par
       `$PSVersionTable.PSVersion -lt [version]'5.1'`, `if` body is the exact `Write-Warning`, and
       `Register-ArgumentCompleter` sits in the `else`. This is the only check of the warning path:
       `$PSVersionTable` is read-only, so it is not executed.
-- [ ] **Step 2:** Add `powershell = "7.6.9"` to `mise.toml` `[tools]` and run `mise lock`;
-      `mise install`. Run `cargo test -p toolr --test complete_powershell` — fails against the stub.
+- [ ] **Step 2:** Run `mise exec powershell@7.6.9 -- cargo test -p toolr --test complete_powershell -- --ignored`
+      — fails against the stub.
 - [ ] **Step 3:** Implement the script per the spec. Keep comments to one line explaining why.
 - [ ] **Step 4:** Tests pass on pwsh 7.6.9 locally. If a Windows machine is not available, note in
       the PR that the 5.1 loop is verified by Windows CI (Task 4).
@@ -293,8 +292,7 @@ runs it with `-NoProfile -NonInteractive -ExecutionPolicy Bypass -File`, and par
 
 - [ ] **Step 1:** Confirm the Windows job runs the Rust integration tests (the
       `Run Rust Tests with Coverage` step uses `cargo llvm-cov … --tests` on every OS) and that
-      `mise install --locked` now provides pwsh on Linux and macOS. If the mise-action step uses an
-      install filter, add `powershell`.
+      the completion tests run in their own `--ignored` pass under `mise exec powershell@<version>`.
 - [ ] **Step 2:** After the Rust test step, add two Windows-only steps
       (`if: runner.os == 'Windows'`), `shell: powershell` and `shell: pwsh`, each running the snippet
       below (expecting major version 7 in the `pwsh` step).

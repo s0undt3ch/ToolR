@@ -143,26 +143,21 @@ def pick(ctx, first: str, second: Literal["x1", "x2"]):
     fx
 }
 
-/// pwsh when on `PATH`, plus Windows PowerShell on Windows. On CI a missing one fails the tests.
+/// pwsh from `PATH`, plus Windows PowerShell on Windows. The tests are `#[ignore]`d, so a
+/// missing shell means the caller asked for them and can't have them: that is an error.
 fn powershells() -> Vec<PathBuf> {
-    let mut found = Vec::new();
     let mut wanted = vec!["pwsh"];
     if cfg!(windows) {
         wanted.push("powershell");
     }
-    for name in wanted {
-        match which::which(name) {
-            Ok(path) => found.push(path),
-            Err(_) => {
-                assert!(
-                    std::env::var_os("CI").is_none(),
-                    "{name} is not installed; CI must provide it so the PowerShell completion tests run"
-                );
-                eprintln!("skipping {name}: not installed");
-            }
-        }
-    }
-    found
+    wanted
+        .into_iter()
+        .map(|name| {
+            which::which(name).unwrap_or_else(|_| {
+                panic!("{name} is not on PATH; these tests need it (see CONTRIBUTING.md)")
+            })
+        })
+        .collect()
 }
 
 fn path_with_toolr() -> std::ffi::OsString {
@@ -395,6 +390,7 @@ fn sorted(mut v: Vec<String>) -> Vec<String> {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_empty_word_offers_every_value() {
     let fx = fixture();
     for ps in powershells() {
@@ -411,6 +407,7 @@ fn powershell_empty_word_offers_every_value() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_values_are_inert() {
     let fx = fixture();
     for ps in powershells() {
@@ -429,6 +426,7 @@ fn powershell_values_are_inert() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_replies_round_trip_through_the_parser() {
     let fx = fixture();
     for ps in powershells() {
@@ -469,6 +467,7 @@ fn powershell_replies_round_trip_through_the_parser() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_quoted_and_escaped_partials_match() {
     let fx = fixture();
     for ps in powershells() {
@@ -497,6 +496,7 @@ fn powershell_quoted_and_escaped_partials_match() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_double_quoted_partial_keeps_double_quotes() {
     let fx = fixture();
     for ps in powershells() {
@@ -520,6 +520,7 @@ fn powershell_double_quoted_partial_keeps_double_quotes() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_replacement_covers_the_whole_token() {
     let fx = fixture();
     for ps in powershells() {
@@ -531,6 +532,7 @@ fn powershell_replacement_covers_the_whole_token() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_earlier_quoted_words_reach_the_engine_unquoted() {
     let fx = fixture();
     for ps in powershells() {
@@ -545,6 +547,7 @@ fn powershell_earlier_quoted_words_reach_the_engine_unquoted() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_attached_option_value_keeps_the_option() {
     let fx = fixture();
     for ps in powershells() {
@@ -575,6 +578,7 @@ fn is_windows_powershell(ps: &Path) -> bool {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_flags_complete_with_descriptions() {
     let fx = fixture();
     for ps in powershells() {
@@ -603,6 +607,7 @@ fn powershell_flags_complete_with_descriptions() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_double_dash_and_root_flags_pass_through() {
     let fx = fixture();
     for ps in powershells() {
@@ -619,6 +624,7 @@ fn powershell_double_dash_and_root_flags_pass_through() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_variable_or_subexpression_word_offers_nothing() {
     let fx = fixture();
     for ps in powershells() {
@@ -655,6 +661,7 @@ fn sep() -> char {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_path_slot_completes_files() {
     let fx = fixture();
     for ps in powershells() {
@@ -681,6 +688,7 @@ fn powershell_path_slot_completes_files() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_directory_slot_completes_only_directories() {
     let fx = fixture();
     for ps in powershells() {
@@ -699,6 +707,7 @@ fn powershell_directory_slot_completes_only_directories() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_attached_path_keeps_the_option() {
     let fx = fixture();
     for ps in powershells() {
@@ -722,6 +731,7 @@ fn powershell_attached_path_keeps_the_option() {
 
 /// Native commands get the path itself, not the wildcard-escaped text `-Path` parameters take.
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_wildcard_characters_in_paths_stay_literal() {
     let fx = fixture();
     let path = |name: &str| format!(".{0}odd{0}{name}", sep());
@@ -776,6 +786,7 @@ fn powershell_wildcard_characters_in_paths_stay_literal() {
 
 /// PowerShell doesn't expand a quoted `~`, so a path completed from `~/` names the home itself.
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_tilde_path_expands_to_the_home() {
     let fx = fixture();
     let home = fx.tmp.path().to_str().unwrap();
@@ -811,6 +822,7 @@ fn powershell_tilde_path_expands_to_the_home() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_cursor_mid_word_completes_the_whole_word() {
     let fx = fixture();
     for ps in powershells() {
@@ -831,6 +843,7 @@ fn powershell_cursor_mid_word_completes_the_whole_word() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_no_tools_dir_completes_builtins() {
     let fx = fixture();
     let outside = TempDir::new().unwrap();
@@ -846,6 +859,7 @@ fn powershell_no_tools_dir_completes_builtins() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_unicode_and_backslash_partials_reach_the_engine() {
     let fx = fixture();
     for ps in powershells() {
@@ -875,6 +889,7 @@ fn powershell_unicode_and_backslash_partials_reach_the_engine() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_empty_earlier_word_reaches_the_engine() {
     let fx = fixture();
     for ps in powershells() {
@@ -884,6 +899,7 @@ fn powershell_empty_earlier_word_reaches_the_engine() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_legacy_argument_passing_round_trips() {
     let fx = fixture();
     for ps in powershells() {
@@ -908,6 +924,7 @@ fn powershell_legacy_argument_passing_round_trips() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_hostile_session_settings_stay_quiet() {
     let fx = fixture();
     for ps in powershells() {
@@ -938,6 +955,7 @@ fn powershell_hostile_session_settings_stay_quiet() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_user_function_named_toolr_does_not_recurse() {
     let fx = fixture();
     for ps in powershells() {
@@ -957,6 +975,7 @@ fn powershell_user_function_named_toolr_does_not_recurse() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_non_filesystem_location_offers_no_values() {
     let fx = fixture();
     for ps in powershells() {
@@ -973,6 +992,7 @@ fn powershell_non_filesystem_location_offers_no_values() {
 }
 
 #[test]
+#[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_version_guard_wraps_the_whole_script() {
     let fx = fixture();
     let check = r#"

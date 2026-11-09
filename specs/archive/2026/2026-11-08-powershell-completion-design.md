@@ -328,10 +328,10 @@ under 5.1 and 7.
 
 ### Windows PowerShell 5.1 in CI
 
-`_test.yml` already runs `cargo llvm-cov … --tests` on `windows-latest`, where `powershell.exe` is
-always present, so the loop above runs every completion test under 5.1 inside the existing Windows
-job. As the user asked, the Windows job also gets two explicit smoke steps, one with
-`shell: powershell` and one with `shell: pwsh`, after the test run. Each loads the script printed by
+`_test.yml` runs the completion tests in a separate `cargo llvm-cov --no-report` pass with `--ignored`, on
+every OS, and `powershell.exe` is always present on `windows-latest`, so the loop above runs every
+completion test under 5.1 inside the existing Windows job. As the user asked, the Windows job also gets
+two explicit smoke steps, one with `shell: powershell` and one with `shell: pwsh`, after the test run. Each loads the script printed by
 the built binary through `Invoke-Expression`, checks `$PSVersionTable.PSVersion.Major` (5 and 7
 respectively, as `install-smoke.yml` does), and asserts that `TabExpansion2` on `toolr se` offers
 `self`. This catches a script that breaks only when loaded in a real host session rather than under
@@ -339,11 +339,11 @@ respectively, as `install-smoke.yml` does), and asserts that `TabExpansion2` on 
 
 ### pwsh on Linux and macOS
 
-pwsh 7 is pinned in `mise.toml` (`powershell = "7.6.9"`) and `mise.lock`, so CI's
-`mise install --locked` provides it on every runner and contributors get it from `mise install`.
-fish and zsh come from apt/brew steps in `_test.yml` instead; pwsh diverges because mise already
-ships it and pinning keeps the tested version identical everywhere. CONTRIBUTING.md notes that the
-PowerShell tests need it.
+The completion tests are `#[ignore]`d, so a plain `cargo test` never needs a shell. CI runs them in their own
+`cargo llvm-cov --no-report` pass under `mise exec powershell@<version>`, which installs pwsh 7 on demand, with
+the version set once in `_test.yml`; `mise.toml` does not carry it, so contributors and the other CI jobs don't
+download it. fish and zsh come from apt/brew steps in `_test.yml`. A missing shell fails the tests loudly.
+CONTRIBUTING.md documents the `--ignored` command.
 
 ### Unit and binary tests
 
