@@ -189,8 +189,8 @@ pub fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r#"'\''"#))
 }
 
-/// Quote `s` as one PowerShell single-quoted word. Inside single quotes nothing expands; PowerShell
-/// also reads the smart quotes U+2018 to U+201B as `'`, so each of them is doubled too.
+/// Quote `s` as one PowerShell single-quoted word. Unlike [`shell_quote`] it always quotes and doubles
+/// each quote (there is no `'\''` escape), including the smart quotes U+2018 to U+201B, read as `'`.
 pub fn powershell_quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('\'');

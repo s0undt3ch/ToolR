@@ -5,14 +5,19 @@
 # your profile, or load it on every shell start with:
 #   Invoke-Expression (& toolr self completion print powershell | Out-String)
 #
-# Known limits: when toolr has no candidates PowerShell falls back to its own file-name
-# completion; a cursor inside a word completes the whole word; a word holding a variable,
-# sub-expression or array (`$x`, `"a$(x)"`, `a,b`) completes nothing, nor does anything after
-# one; in a file-name partial `*`, `?` and `[...]` are wildcards, as in PowerShell's own
-# completion, so a partial holding a whole `[...]` pair matches nothing; a toolr reached only
-# through a .cmd/.bat shim completes nothing; PowerShell ISE isn't supported; Windows
-# PowerShell 5.1 never calls this completer for a bare `-` or `--`, or a word like `-x`
-# (type a letter after `--`).
+# Known limits:
+#   - With no toolr candidates PowerShell falls back to its own file-name completion.
+#   - A cursor inside a word completes the whole word.
+#   - A word holding a variable, sub-expression or array (`$x`, `"a$(x)"`, `a,b`) completes
+#     nothing, nor does anything after one, or after `--%`.
+#   - In a file-name partial `*`, `?` and `[...]` are wildcards, as in PowerShell's own
+#     completion, so a partial holding a whole `[...]` pair matches nothing.
+#   - A leading `~` in a file-name partial is expanded to the home directory in the reply.
+#   - A toolr reached only through a .cmd/.bat shim completes nothing.
+#   - PowerShell ISE isn't supported.
+#   - Windows PowerShell 5.1 never calls this completer for a bare `-` or `--`, or a word like
+#     `-x` (type a letter after `--`). PowerShell 6 fixed it: PowerShell/PowerShell#2912 by
+#     PR #2919, and PR #3633 for `--`.
 #
 # The script stays pure ASCII (5.1 reads a BOM-less file in the ANSI code page) and parses on
 # PowerShell 3, so the version guard below can run there.
@@ -96,29 +101,31 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
             (_toolr_parse_word $Value) -ceq $Value) {
             return $Value
         }
+        # Each style: opening quote, characters needing an escape, and whether the escape is a
+        # backtick prefix (double quotes) or the character doubled (single quotes).
         $doubles = '"' + [char]0x201C + [char]0x201D + [char]0x201E
         if ($Open.Length -gt 0 -and $doubles.Contains($Open)) {
-            $sb = New-Object System.Text.StringBuilder
-            [void]$sb.Append('"')
-            foreach ($c in $Value.ToCharArray()) {
-                if (('`$' + $doubles).Contains([string]$c)) {
-                    [void]$sb.Append('`')
-                }
-                [void]$sb.Append($c)
-            }
-            [void]$sb.Append('"')
-            return $sb.ToString()
+            $quote = '"'
+            $special = '`$' + $doubles
+            $backtick = $true
+        } else {
+            $quote = "'"
+            $special = "'" + [char]0x2018 + [char]0x2019 + [char]0x201A + [char]0x201B
+            $backtick = $false
         }
-        $singles = "'" + [char]0x2018 + [char]0x2019 + [char]0x201A + [char]0x201B
         $sb = New-Object System.Text.StringBuilder
-        [void]$sb.Append("'")
+        [void]$sb.Append($quote)
         foreach ($c in $Value.ToCharArray()) {
-            if ($singles.Contains([string]$c)) {
-                [void]$sb.Append($c)
+            if ($special.Contains([string]$c)) {
+                if ($backtick) {
+                    [void]$sb.Append('`')
+                } else {
+                    [void]$sb.Append($c)
+                }
             }
             [void]$sb.Append($c)
         }
-        [void]$sb.Append("'")
+        [void]$sb.Append($quote)
         return $sb.ToString()
     }
 
@@ -152,6 +159,7 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
         $stderr = $proc.StandardError.ReadToEndAsync()
         $stdout = $proc.StandardOutput.ReadToEnd()
         $proc.WaitForExit()
+        # The child has exited, so stderr is at EOF; the bound only covers a grandchild holding the pipe.
         [void]$stderr.Wait(1000)
         return @{ Code = $proc.ExitCode; Out = $stdout }
     }
@@ -211,6 +219,7 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
             if ($prefix.Length -gt 0 -and $raw.StartsWith($prefix)) {
                 $afterPrefix = $raw.Substring($prefix.Length)
             }
+            # The quote the user typed, possibly after `--opt=`.
             $open = ''
             if ($raw.Length -gt 0) {
                 $open = $raw.Substring(0, 1)
@@ -234,9 +243,8 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
                     }
                     New-Object System.Management.Automation.CompletionResult (_toolr_quote $full $open), $full, 'ParameterValue', $tip
                 }
-            } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {
-                # The partial stays a wildcard pattern (`*` globs), as in PowerShell's own
-                # native-command completion; escaping it would match nothing at all.
+            } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {   # COMPLETE_PATHS, COMPLETE_DIRS
+                # Left unescaped, the partial stays a wildcard pattern, as in PowerShell's own completion.
                 $fileWord = _toolr_quote $value.Substring($prefix.Length) "'"
                 $fsHome = (Get-PSProvider FileSystem).Home
                 foreach ($result in [System.Management.Automation.CompletionCompleters]::CompleteFilename($fileWord)) {
@@ -245,13 +253,12 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
                     }
                     $path = _toolr_parse_word $result.CompletionText
                     if ($null -ne $path) {
-                        # The text is escaped for -Path (`a`[1`]`); a native command needs the name.
-                        # Only unescape what round-trips, so an undoubled backtick is never lost.
+                        # Unescape the -Path escaping, but only what round-trips, so no backtick is lost.
                         $name = [System.Management.Automation.WildcardPattern]::Unescape($path)
                         if ([System.Management.Automation.WildcardPattern]::Escape($name) -ceq $path) {
                             $path = $name
                         }
-                        # The reply is quoted and PowerShell doesn't expand a quoted `~`.
+                        # A quoted `~` isn't expanded by PowerShell, so do it here.
                         if ($fsHome -and $path -match '^~([/\\]|$)') {
                             $path = $fsHome + $path.Substring(1)
                         }
