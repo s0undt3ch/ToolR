@@ -58,6 +58,7 @@ docs = [
     "markdown-include>=0.8.1",
     "mkdocs>=1.6.1",
     "mkdocs-awesome-nav>=3.3.0",
+    "mkdocs-llmstxt>=0.5.1",
     "mkdocs-material>=9.7.7",
     "mkdocstrings[python]>=1.0.6",
 ]
@@ -147,6 +148,9 @@ ignore = [
 "crates/toolr-py/python/toolr/utils/_rust_utils.pyi" = [
   "A002",   # Function argument `input` is shadowing a Python builtin
   "N818",   # Exception name `*` should be named with an Error suffix"
+]
+"docs/.hooks/*.py" = [
+  "INP001", # Not a package: MkDocs loads the file by path
 ]
 "tests/**/*.py" = [
   "ANN",      # Ignore missing type annotations in tests

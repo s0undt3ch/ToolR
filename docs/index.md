@@ -1,5 +1,6 @@
 <h1 align="center">
   <img width="240px" src="imgs/toolr.png" alt="ToolR - AI Generated Logo"/>
+  <span hidden>ToolR</span>
 </h1>
 
 {!README.md!lines=5-24}

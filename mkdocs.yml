@@ -1,4 +1,5 @@
 site_name: ToolR Documentation
+site_url: !ENV [READTHEDOCS_CANONICAL_URL, "https://toolr.readthedocs.io/stable/"]
 strict: true
 theme:
   name: material
@@ -108,6 +109,42 @@ plugins:
           inventories:
             - https://docs.python.org/3/objects.inv
             - https://rich.readthedocs.io/en/stable/objects.inv
+  - llmstxt:
+      full_output: llms-full.txt
+      preprocess: docs/.hooks/llmstxt_preprocess.py
+      markdown_description: |
+        ToolR is a command-line tool that finds Python commands in a repository's `tools/`
+        directory and runs them as a single CLI. If your harness supports skills, install the
+        ToolR skills as described on the [Agent skills](https://toolr.readthedocs.io/stable/skills/) page.
+      sections:
+        Start here:
+          - index.md: Overview of ToolR and where to begin
+          - quickstart.md: First command, from install to run
+          - installation/index.md: Installation options
+          - installation/mise.md: Installing ToolR with mise
+          - concepts.md: How a ToolR project is laid out
+        Writing commands:
+          - writing-commands/index.md: Overview of writing commands
+          - writing-commands/groups.md: Defining groups and commands
+          - writing-commands/arguments.md: Declaring command arguments
+          - writing-commands/docstrings.md: Docstring-driven help text
+          - writing-commands/context.md: Using the ctx object
+          - writing-commands/annotations.md: Supported type annotations
+          - writing-commands/across-files.md: Splitting commands across files
+          - writing-commands/external-sources.md: Exposing external command sources
+          - writing-commands/nesting.md: Nested command groups
+          - writing-commands/testing.md: Testing commands
+        Reference:
+          - project-config.md: Project configuration options
+          - cli.md: Command-line reference
+          - reference/*.md
+        Optional:
+          - third-party.md: Third-party plugin packages
+          - skills.md: Agent skills for ToolR
+
+extra:
+  # Edited together with llmstxt.sections: a nav page is listed or excluded, never both.
+  llmstxt_exclude: [internals/*.md, migration.md, contributing.md, changelog.md]
 
 markdown_extensions:
   - admonition
