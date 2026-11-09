@@ -56,7 +56,7 @@ _toolr() {
         11) (( attached )) && compset -P 1 '*='; _files -/; return ;;
         *) return ;;
     esac
-    # One expansion, not a loop: unfiltered, a large choice set can be thousands of lines.
+    # One expansion: unfiltered, a large choice set can be thousands of lines.
     values=("${(@)lines%%$'\t'*}")
 
     if (( ${#values} == 0 )); then
@@ -78,19 +78,29 @@ _toolr() {
     compadd "${expl[@]}" -O matched -a values
     if (( ${#matched} <= 20 )); then
         # `-d` replaces what the listing shows, so each entry carries its own name, padded to the
-        # widest value (`m` counts display width) so the descriptions line up; `-l` puts one
-        # entry on each row. A line without a description shows the value alone.
-        descriptions=("${(@)${(@)lines%$'\t'}#*$'\t'}")  # a missing description becomes the value
+        # widest listed value (`m` counts display width) so the descriptions line up; `-l` puts
+        # one entry on each row. Only the 20 or fewer matches are visited: a large slot returns
+        # thousands of lines and one pass over each would be slow. A line without a description
+        # shows the value alone.
         local -a display
-        local -i width=0 i
-        for (( i = 1; i <= ${#values}; i++ )); do
-            (( ${(m)#values[i]} > width )) && width=${(m)#values[i]}
+        local -i width=0 idx
+        local v line
+        for v in "${matched[@]}"; do
+            (( ${(m)#v} > width )) && width=${(m)#v}
         done
-        for (( i = 1; i <= ${#values}; i++ )); do
-            if [[ ${lines[i]} == *$'\t'?* ]]; then
-                display[i]="${(mr:width:)values[i]}  -- ${descriptions[i]}"
+        local -a all
+        all=("${values[@]}")
+        values=("${matched[@]}")
+        descriptions=()
+        for v in "${values[@]}"; do
+            # `(e)` takes `v` literally; the first exact match is the candidate's own line.
+            idx=${all[(ie)$v]}
+            line=${lines[idx]}
+            descriptions+=("${${line%$'\t'}#*$'\t'}")
+            if [[ $line == *$'\t'?* ]]; then
+                display+=("${(mr:width:)v}  -- ${descriptions[-1]}")
             else
-                display[i]=${values[i]}
+                display+=("$v")
             fi
         done
         compadd "${expl[@]}" -l -d display -a values
