@@ -50,6 +50,12 @@ impl Fixture {
             .collect()
     }
 
+    /// The fixture's long-form path: Windows runners' `TEMP` can be an 8.3 short name
+    /// (`RUNNER~1`), which PowerShell expands in the paths it completes.
+    fn home(&self) -> PathBuf {
+        dunce::canonicalize(self.tmp.path()).unwrap()
+    }
+
     fn assert_inert(&self) {
         for s in &self.sentinels {
             assert!(!s.exists(), "{} was created", s.display());
@@ -324,7 +330,7 @@ impl<'a> Session<'a> {
             .arg(self.fx.tmp.path())
             .env("PATH", path_with_toolr())
             .env("XDG_CACHE_HOME", common::test_cache_home())
-            .envs(home_env(self.fx.tmp.path()))
+            .envs(home_env(&self.fx.home()))
             .output()
             .unwrap();
         let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
@@ -789,7 +795,8 @@ fn powershell_wildcard_characters_in_paths_stay_literal() {
 #[ignore = "needs pwsh (and Windows PowerShell 5.1 on Windows); run with --ignored, see CONTRIBUTING.md"]
 fn powershell_tilde_path_expands_to_the_home() {
     let fx = fixture();
-    let home = fx.tmp.path().to_str().unwrap();
+    let home = fx.home();
+    let home = home.to_str().unwrap();
     let files = format!("{home}{}files", sep());
     for ps in powershells() {
         let results = Session::new(&ps, &fx).tab_all(&[
