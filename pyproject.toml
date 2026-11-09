@@ -27,6 +27,10 @@ exclude-newer = "7 days"
 # fix apart: pin a per-package cutoff just past the fixed release's upload
 # time, then drop the entry once that release ages past 7 days.
 
+# mdformat-tables 1.0.0 (unmaintained, merged into mdformat-gfm) caps mdformat<0.8, which pins
+# markdown-it-py<4; drop once mkdocs-llmstxt stops requiring mdformat-tables.
+override-dependencies = ["mdformat>=1.0"]
+
 [tool.uv.workspace]
 members = [
     "crates/toolr",
@@ -52,12 +56,14 @@ dev = [
     "pytest-subtests>=0.15.0",
     "pyyaml",
     "packaging>=26.3",
+    "mkdocs>=1.6.1",  # for the llms.txt gate tests; the docs group has the rest of the stack
 ]
 docs = [
     "toolr-py",
     "markdown-include>=0.8.1",
     "mkdocs>=1.6.1",
     "mkdocs-awesome-nav>=3.3.0",
+    "mkdocs-llmstxt>=0.5.1",
     "mkdocs-material>=9.7.7",
     "mkdocstrings[python]>=1.0.6",
 ]
@@ -69,6 +75,7 @@ pre-commit = [
     "mypy>=2.3.1",
     "attrs>=26.1.0",
     "hypothesis>=6.168.0",
+    "mkdocs>=1.6.1",
     "msgspec>=0.21.1",
     "pytest>=9.1.1",
     "rich>=15.0.0",
@@ -147,6 +154,9 @@ ignore = [
 "crates/toolr-py/python/toolr/utils/_rust_utils.pyi" = [
   "A002",   # Function argument `input` is shadowing a Python builtin
   "N818",   # Exception name `*` should be named with an Error suffix"
+]
+"docs/.hooks/*.py" = [
+  "INP001", # Not a package: MkDocs loads the file by path
 ]
 "tests/**/*.py" = [
   "ANN",      # Ignore missing type annotations in tests

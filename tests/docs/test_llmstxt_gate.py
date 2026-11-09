@@ -1,0 +1,483 @@
+"""Tests for the MkDocs llms.txt staleness gate."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+from types import ModuleType
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+from typing import Any
+
+import pytest
+from mkdocs.exceptions import PluginError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+SITE_URL = "https://example.test/stable/"
+
+
+@pytest.fixture
+def gate(repo_root: Path) -> ModuleType:
+    # docs/.hooks isn't a package, so load the module by path.
+    spec = importlib.util.spec_from_file_location(
+        "llmstxt_gate", repo_root / "docs/.hooks/llmstxt_gate.py"
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def make_site(gate: ModuleType, tmp_path: Path) -> Callable[..., Path]:
+    def _make(
+        *,
+        pages: tuple[str, ...] = ("quickstart.md",),
+        links: tuple[str, ...] | None = None,
+        full: str | None = None,
+        write_full: bool = True,
+    ) -> Path:
+        site = tmp_path / "site"
+        site.mkdir()
+        if links is None:
+            links = tuple(SITE_URL + gate.md_url(p) for p in pages)
+        (site / "llms.txt").write_text(
+            "# T\n\n" + "\n".join(f"- [x]({link}): d" for link in links) + "\n"
+        )
+        if write_full:
+            (site / "llms-full.txt").write_text(
+                full if full is not None else "".join(f"# {p}\n\nBody of {p}\n" for p in pages)
+            )
+        for page in pages:
+            target = site / gate.md_url(page)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"# {page}\n\nBody of {page}\n")
+        return site
+
+    return _make
+
+
+@pytest.fixture
+def make_config() -> Callable[..., SimpleNamespace]:
+    def _make(
+        *,
+        nav: list[Any] | None = None,
+        sections: dict[str, list[Any]] | None = None,
+        exclude: list[str] | None = None,
+        site_url: str = SITE_URL,
+        site_dir: Path | None = None,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            nav=["quickstart.md", "migration.md"] if nav is None else nav,
+            site_url=site_url,
+            site_dir=str(site_dir),
+            plugins={
+                "llmstxt": SimpleNamespace(
+                    config=SimpleNamespace(
+                        sections={"S": [{"quickstart.md": "d"}]} if sections is None else sections
+                    )
+                )
+            },
+            extra={"llmstxt_exclude": exclude or []},
+        )
+
+    return _make
+
+
+def test_nav_pages_flattens_and_skips_urls(gate: ModuleType) -> None:
+    nav = [
+        {"Home": "index.md"},
+        {"Guide": [{"Groups": "writing-commands/groups.md"}, {"Ext": "https://example.test/x.md"}]},
+        "cli.md",
+        {"Site": "http://example.test/y"},
+    ]
+    assert gate.nav_pages(nav) == ["index.md", "writing-commands/groups.md", "cli.md"]
+
+
+def test_resolve_ignores_non_nav_matches(gate: ModuleType) -> None:
+    pages = ["reference/a.md", "reference/sub/x.md", "cli.md"]
+    # fnmatch's "*" crosses "/", the same as the llmstxt plugin's own expansion.
+    assert gate.resolve(["reference/*.md"], pages) == ["reference/a.md", "reference/sub/x.md"]
+    assert gate.resolve(["reference/*.md", "elsewhere/other.md"], pages) == [
+        "reference/a.md",
+        "reference/sub/x.md",
+    ]
+    assert gate.resolve(["cli.md"], pages) == ["cli.md"]
+
+
+def test_section_patterns_flattens_str_and_dict_entries(gate: ModuleType) -> None:
+    sections = {
+        "A": [{"index.md": "Overview"}, "reference/*.md"],
+        "B": [{"cli.md": "CLI"}],
+    }
+    assert gate.section_patterns(sections) == ["index.md", "reference/*.md", "cli.md"]
+
+
+@pytest.mark.parametrize(
+    ("page", "expected"),
+    [
+        ("index.md", "index.md"),
+        ("a/index.md", "a/index.md"),
+        ("a/b.md", "a/b/index.md"),
+    ],
+)
+def test_md_url(gate: ModuleType, page: str, expected: str) -> None:
+    assert gate.md_url(page) == expected
+
+
+def test_clean_site_has_no_problems(gate: ModuleType, make_site: Callable[..., Path]) -> None:
+    site = make_site(pages=("quickstart.md", "a/b.md"))
+    problems = gate.find_problems(
+        pages=["quickstart.md", "a/b.md", "migration.md"],
+        listed=["quickstart.md", "a/b.md"],
+        excluded=["migration.md"],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert problems == []
+
+
+def test_missing_output_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
+    site = make_site(write_full=False)
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert len(problems) == 1
+    assert "llms-full.txt" in problems[0]
+
+
+def test_unclassified_nav_page_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site()
+    problems = gate.find_problems(
+        pages=["quickstart.md", "orphan.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any("orphan.md" in p for p in problems)
+
+
+def test_page_in_both_lists_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
+    site = make_site()
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=["quickstart.md"],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any("quickstart.md" in p and "both" in p for p in problems)
+
+
+def test_listed_page_missing_from_index_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site(links=())
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any("quickstart.md" in p and "llms.txt" in p for p in problems)
+
+
+def test_listed_page_missing_from_full_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site(full="# Something else\n")
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any("quickstart.md" in p and "llms-full.txt" in p for p in problems)
+
+
+def test_listed_page_truncated_in_full_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site(full="# quickstart.md\n\nFirst paragraph\n")
+    (site / "quickstart/index.md").write_text(
+        "# quickstart.md\n\nFirst paragraph\n\n## More\n\nLast paragraph\n"
+    )
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any(
+        "quickstart.md" in p and "incomplete" in p and "llms-full.txt" in p for p in problems
+    )
+
+
+def test_dead_link_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
+    site = make_site(links=(SITE_URL + "quickstart/index.md", SITE_URL + "gone/index.md"))
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any("gone/index.md" in p for p in problems)
+
+
+def test_on_post_build_raises_plugin_error(
+    make_site: Callable[..., Path], make_config: Callable[..., SimpleNamespace], gate: ModuleType
+) -> None:
+    config = make_config(site_dir=make_site())
+    with pytest.raises(PluginError, match=r"migration\.md"):
+        gate.on_post_build(config)
+
+
+def test_link_to_a_rendered_html_page_is_not_flagged(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site(links=(SITE_URL + "quickstart/index.md", SITE_URL + "skills/"))
+    (site / "skills").mkdir()
+    (site / "skills/index.html").write_text("<html></html>")
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert problems == []
+
+
+def test_dead_rendered_page_link_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site(links=(SITE_URL + "quickstart/index.md", SITE_URL + "gone/"))
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any("gone/" in p for p in problems)
+
+
+def test_missing_markdown_copy_is_reported_distinctly(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site()
+    (site / "quickstart/index.md").unlink()
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any("quickstart.md" in p and "was not built" in p for p in problems)
+    assert not any("missing from llms-full.txt" in p for p in problems)
+
+
+def test_missing_llms_txt_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
+    site = make_site()
+    (site / "llms.txt").unlink()
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert len(problems) == 1
+    assert "llms.txt" in problems[0]
+
+
+def test_empty_llms_full_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
+    site = make_site(full="")
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert len(problems) == 1
+    assert "llms-full.txt" in problems[0]
+
+
+def test_unset_site_url_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
+    site = make_site()
+    problems = gate.find_problems(
+        pages=["quickstart.md"], listed=["quickstart.md"], excluded=[], site_dir=site, site_url=""
+    )
+    assert len(problems) == 1
+    assert "site_url" in problems[0]
+
+
+def test_site_url_without_trailing_slash_is_normalised(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site()
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL.rstrip("/"),
+    )
+    assert problems == []
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        (
+            {"exclude": ["deleted.md"]},
+            r"deleted\.md in extra\.llmstxt_exclude matches no nav page",
+        ),
+        (
+            {"sections": {"S": [{"quickstart.md": "d"}, "old/*.md"]}},
+            r"old/\*\.md in llmstxt\.sections matches no nav page",
+        ),
+    ],
+    ids=["exclude", "sections"],
+)
+def test_on_post_build_reports_stale_patterns(
+    gate: ModuleType,
+    make_site: Callable[..., Path],
+    make_config: Callable[..., SimpleNamespace],
+    kwargs: dict[str, Any],
+    message: str,
+) -> None:
+    config = make_config(site_dir=make_site(), nav=[{"Q": "quickstart.md"}], **kwargs)
+    with pytest.raises(PluginError, match=message):
+        gate.on_post_build(config)
+
+
+def test_alternate_link_for_listed_page(gate: ModuleType) -> None:
+    link = gate.alternate_link("quickstart.md", ["quickstart.md"], "https://example.test/stable")
+    assert link == (
+        '<link rel="alternate" type="text/markdown" '
+        'href="https://example.test/stable/quickstart/index.md">'
+    )
+
+
+def test_alternate_link_none_for_unlisted_page(gate: ModuleType) -> None:
+    assert gate.alternate_link("internals.md", ["quickstart.md"], SITE_URL) is None
+
+
+@pytest.mark.parametrize(
+    ("src", "tagged"),
+    [("quickstart.md", True), ("internals.md", False)],
+    ids=["listed", "excluded"],
+)
+def test_on_post_page_inserts_link_before_head_close(
+    gate: ModuleType, make_config: Callable[..., SimpleNamespace], src: str, tagged: bool
+) -> None:
+    html = "<html><head><title>T</title></head><body></body></html>"
+    page = SimpleNamespace(file=SimpleNamespace(src_uri=src))
+    out = gate.on_post_page(
+        html, page=page, config=make_config(nav=["quickstart.md", "internals.md"])
+    )
+    if tagged:
+        tag = f'<link rel="alternate" type="text/markdown" href="{SITE_URL}quickstart/index.md">'
+        assert out == f"<html><head><title>T</title>{tag}</head><body></body></html>"
+    else:
+        assert out == html
+
+
+def test_dirty_build_skips_the_gate_with_a_warning(
+    gate: ModuleType,
+    make_site: Callable[..., Path],
+    make_config: Callable[..., SimpleNamespace],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config = make_config(site_dir=make_site())
+    gate.on_startup(command="build", dirty=True)
+    with caplog.at_level("WARNING"):
+        gate.on_post_build(config)
+    assert "dirty" in caplog.text
+
+
+def test_clean_build_still_raises_after_a_dirty_one(
+    gate: ModuleType, make_site: Callable[..., Path], make_config: Callable[..., SimpleNamespace]
+) -> None:
+    config = make_config(site_dir=make_site())
+    gate.on_startup(command="build", dirty=True)
+    gate.on_startup(command="build", dirty=False)
+    with pytest.raises(PluginError, match=r"migration\.md"):
+        gate.on_post_build(config)
+
+
+def test_on_post_build_names_a_missing_plugin(
+    gate: ModuleType, make_site: Callable[..., Path], make_config: Callable[..., SimpleNamespace]
+) -> None:
+    config = make_config(site_dir=make_site())
+    config.plugins = {}
+    with pytest.raises(PluginError, match="llmstxt plugin is not configured"):
+        gate.on_post_build(config)
+
+
+def test_on_post_page_names_a_missing_plugin(
+    gate: ModuleType, make_config: Callable[..., SimpleNamespace]
+) -> None:
+    config = make_config()
+    config.plugins = {}
+    page = SimpleNamespace(file=SimpleNamespace(src_uri="quickstart.md"))
+    with pytest.raises(PluginError, match="llmstxt plugin is not configured"):
+        gate.on_post_page("<head></head>", page=page, config=config)
+
+
+def test_truncated_page_is_reported_even_when_another_shares_its_last_line(
+    gate: ModuleType,
+    make_site: Callable[..., Path],
+) -> None:
+    shared = "Next: [Nested groups](../groups/)"
+    site = make_site(pages=("a.md", "b.md"))
+    (site / "a/index.md").write_text(f"# A\n\nA body\n\n{shared}\n")
+    (site / "b/index.md").write_text(f"# B\n\nB body\n\nB tail\n\n{shared}\n")
+    (site / "llms-full.txt").write_text(f"# A\n\nA body\n\n{shared}\n# B\n\nB body\n")
+    problems = gate.find_problems(
+        pages=["a.md", "b.md"],
+        listed=["a.md", "b.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert len(problems) == 1
+    assert "b.md" in problems[0]
+    assert "incomplete" in problems[0]
+
+
+def test_llms_txt_entry_for_an_off_nav_page_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
+    site = make_site(
+        links=(SITE_URL + "quickstart/index.md", SITE_URL + "reference/hidden/index.md")
+    )
+    (site / "reference/hidden").mkdir(parents=True)
+    (site / "reference/hidden/index.md").write_text("# Hidden\n")
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert problems == [
+        f"llms.txt links to {SITE_URL}reference/hidden/index.md, which is not a listed nav page"
+    ]

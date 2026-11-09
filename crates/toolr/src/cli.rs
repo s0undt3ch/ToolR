@@ -136,6 +136,10 @@ fn build_dispatcher_command(
 // / `no_output_timeout_secs=` arguments still override these.
 const OUTPUT_HEADING: &str = "Output Options";
 
+// Root help only: an every-page footer was removed for costing a line on every help page.
+const ROOT_AFTER_HELP: &str = "Documentation: https://toolr.readthedocs.io/\n\
+     For AI agents: https://toolr.readthedocs.io/llms.txt";
+
 /// The root `toolr` command: its output flags and the combined `-h`/`--help` arg.
 fn build_root_command() -> Command {
     Command::new("toolr")
@@ -145,6 +149,7 @@ fn build_root_command() -> Command {
         .bin_name("toolr")
         .version(env!("CARGO_PKG_VERSION"))
         .about("In-project CLI tooling support")
+        .after_help(ROOT_AFTER_HELP)
         .styles(help_styles())
         .disable_help_flag(true)
         .disable_help_subcommand(true)

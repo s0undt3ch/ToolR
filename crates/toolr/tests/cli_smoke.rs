@@ -943,3 +943,34 @@ fn completion_print_rejects_unknown_shell() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("powershell"), "{stderr}");
 }
+
+/// The root help points agents at `llms.txt`; subcommand help doesn't repeat it.
+#[test]
+fn root_help_points_at_llms_txt_and_subcommands_do_not() {
+    let tmp = tempfile::tempdir().unwrap();
+    let help = |args: &[&str]| {
+        // Pin the width so the footer can't wrap on a narrow CI terminal.
+        let out = common::toolr()
+            .current_dir(tmp.path())
+            .env("COLUMNS", "100")
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    for flag in ["--help", "-h"] {
+        let out = help(&[flag]);
+        assert!(
+            out.ends_with(
+                "Documentation: https://toolr.readthedocs.io/\nFor AI agents: https://toolr.readthedocs.io/llms.txt\n"
+            ),
+            "root {flag} footer wrong:\n{out}"
+        );
+    }
+    for args in [&["self", "--help"][..], &["project", "venv", "--help"][..]] {
+        assert!(
+            !help(args).contains("llms.txt"),
+            "{args:?} must not carry the footer"
+        );
+    }
+}

@@ -566,7 +566,7 @@ jobs:
       id-token: write
 
   docs:
-    name: Publish Docs
+    name: Build Docs
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -586,7 +586,7 @@ jobs:
       - build-py-wheel-linux
 
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -695,13 +695,6 @@ jobs:
         # --no-sync: a plain `uv run` re-syncs the workspace, undoing the
         # --no-install-workspace + wheel-install steps above.
         run: uv run --no-sync mkdocs build --strict
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
-        if: github.ref == 'refs/heads/main'
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
 
   check-dist:
     name: Check distributions
