@@ -23,7 +23,7 @@ on:
         required: false
         type: string
         default: ''
-        description: 'Matrix Python version whose job also runs the `#[ignore]`d PowerShell completion tests, with the runner image''s pwsh (and Windows PowerShell 5.1 on Windows). Empty skips them. They don''t depend on Python, so one job per OS is enough.'
+        description: "Matrix Python version whose job also runs the `#[ignore]`d PowerShell completion tests, with the runner image's pwsh (and Windows PowerShell 5.1 on Windows). Empty skips them. They don't depend on Python, so one job per OS is enough."
       pythons:
         required: true
         type: string
