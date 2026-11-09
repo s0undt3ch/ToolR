@@ -74,12 +74,9 @@ def alternate_link(page_src: str, listed: Collection[str], site_url: str) -> str
     return f'<link rel="alternate" type="text/markdown" href="{href}">'
 
 
-def _first_content_line(path: Path) -> str | None:
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#"):
-            return stripped
-    return None
+def _content_lines(path: Path) -> list[str]:
+    stripped = (line.strip() for line in path.read_text(encoding="utf-8").splitlines())
+    return [line for line in stripped if line and not line.startswith("#")]
 
 
 def _link_exists(site_dir: Path, path: str) -> bool:
@@ -136,9 +133,11 @@ def find_problems(
         if not copy.is_file():
             problems.append(f"{page} is listed but its Markdown copy {md_url(page)} was not built")
             continue
-        marker = _first_content_line(copy)
-        if marker is None or marker not in full:
-            problems.append(f"{page} is listed but its content is missing from llms-full.txt")
+        lines = _content_lines(copy)
+        if not lines or lines[0] not in full or lines[-1] not in full:
+            problems.append(
+                f"{page} is listed but its content is incomplete or missing in llms-full.txt"
+            )
 
     for target in _LINK_TARGET.findall(index):
         if target.startswith(site_url) and not _link_exists(

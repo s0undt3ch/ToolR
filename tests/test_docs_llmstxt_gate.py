@@ -174,6 +174,23 @@ def test_listed_page_missing_from_full_is_reported(make_site: Callable[..., Path
     assert any("quickstart.md" in p and "llms-full.txt" in p for p in problems)
 
 
+def test_listed_page_truncated_in_full_is_reported(make_site: Callable[..., Path]) -> None:
+    site = make_site(full="# quickstart.md\n\nFirst paragraph\n")
+    (site / "quickstart/index.md").write_text(
+        "# quickstart.md\n\nFirst paragraph\n\n## More\n\nLast paragraph\n"
+    )
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert any(
+        "quickstart.md" in p and "incomplete" in p and "llms-full.txt" in p for p in problems
+    )
+
+
 def test_dead_link_is_reported(make_site: Callable[..., Path]) -> None:
     site = make_site(links=(SITE_URL + "quickstart/index.md", SITE_URL + "gone/index.md"))
     problems = gate.find_problems(
