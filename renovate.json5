@@ -51,6 +51,15 @@
     },
     {
       customType: "regex",
+      description: "Track the pwsh that the completion test run installs through mise exec",
+      managerFilePatterns: ["/^\\.github/workflows/_test\\.yml$/"],
+      matchStrings: ["POWERSHELL_VERSION: (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "PowerShell/PowerShell",
+      datasourceTemplate: "github-releases",
+      extractVersionTemplate: "^v(?<version>.*)$",
+    },
+    {
+      customType: "regex",
       description: "Track the mise version every workflow installs",
       managerFilePatterns: ["/^\\.github/env$/"],
       matchStrings: ["MISE_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],

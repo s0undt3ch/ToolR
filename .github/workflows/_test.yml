@@ -32,6 +32,9 @@ jobs:
     name: ${{ inputs.display-name }} (${{ matrix.python-version }})
     runs-on: ${{ inputs.os }}
     timeout-minutes: 40
+    env:
+      # Only the completion test pass installs it; see the Rust coverage step. Renovate: renovate.json5.
+      POWERSHELL_VERSION: 7.6.9
     permissions:
       id-token: write
     strategy:
@@ -314,22 +317,19 @@ jobs:
       # pyo3 wrapper is exercised by Python-side tests via the cdylib;
       # excluding it from the Rust coverage run is the right call.
       - name: Run Rust Tests with Coverage
-        # --tests             include both unit and `tests/*.rs` integration tests.
-        # --cobertura         emit Cobertura XML (Codecov accepts it natively).
-        # --output-path       deterministic file location for the upload step.
-        # -- --test-threads=1 forwarded to libtest. Keeps the integration
-        #                     suite serialised so flaky subprocess-spawn
-        #                     timing doesn't surprise us; llvm-cov itself
-        #                     has no concurrency limitation, this is purely
-        #                     for test stability under tempdir-heavy specs.
-        # Single-line invocation so the same step works under both bash
+        # The PowerShell completion tests are `#[ignore]`d, so they run separately under `mise exec`,
+        # which installs pwsh on demand. `--no-report` runs accumulate profiles; `report` merges them.
+        # -- --test-threads=1 keeps the subprocess-heavy integration suite serialised.
+        # Single-line invocations so the same step works under both bash
         # (Linux/macOS) and PowerShell (Windows runners use `pwsh` by
         # default, where bash's `\` line-continuation is a unary operator
         # and the line gets parsed as a separate command).
         shell: bash
         run: |
           mkdir -p target/coverage
-          cargo llvm-cov --workspace --exclude toolr-py --tests --cobertura --output-path target/coverage/cobertura.xml -- --test-threads=1
+          cargo llvm-cov --no-report --workspace --exclude toolr-py --tests -- --test-threads=1
+          mise exec "powershell@${POWERSHELL_VERSION}" -- cargo llvm-cov --no-report -p toolr --test complete_powershell -- --ignored --test-threads=1
+          cargo llvm-cov report --cobertura --output-path target/coverage/cobertura.xml
 
       # The completion tests already run under both editions through `-File`; these load the
       # script into a real host session, the way a profile does, with the toolr on PATH.
