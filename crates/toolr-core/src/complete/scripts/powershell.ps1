@@ -245,8 +245,9 @@ if ($PSVersionTable.PSVersion -lt [version]'5.1') {
                 }
             } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {   # COMPLETE_PATHS, COMPLETE_DIRS
                 # Left unescaped, the partial stays a wildcard pattern, as in PowerShell's own completion.
-                # 5.1 matches nothing for an unclosed `[`; `[[]` matches it literally (a backtick doesn't).
-                $partial = $value.Substring($prefix.Length) -replace '\[(?=[^\]]*$)', '[[]'
+                # 5.1 matches nothing for an unclosed `[` or a bare backtick; a one-character class
+                # matches each literally. The `[` goes first, as the backtick's class adds a `]`.
+                $partial = $value.Substring($prefix.Length) -replace '\[(?=[^\]]*$)', '[[]' -replace '`', '[``]'
                 $fileWord = _toolr_quote $partial "'"
                 $fsHome = (Get-PSProvider FileSystem).Home
                 foreach ($result in [System.Management.Automation.CompletionCompleters]::CompleteFilename($fileWord)) {
