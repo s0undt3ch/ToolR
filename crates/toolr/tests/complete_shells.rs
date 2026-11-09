@@ -108,6 +108,16 @@ def lint(
         verbose: Say more.
     """
     pass
+
+@group.command
+def pos(ctx, target: Literal["alpha", "beta"], flavour: str = "plain"):
+    """A positional and a flag.
+
+    Args:
+        target: What to act on.
+        flavour: Which kind.
+    """
+    pass
 "#
     );
     std::fs::write(fx.tmp.path().join("tools/ci.py"), src).unwrap();
@@ -2586,20 +2596,37 @@ fn zsh_completion_never_executes_values() {
 fn zsh_complete(fx: &Fixture, words: &[&str]) -> Vec<String> {
     zsh_run_with(fx, "", "", words)
         .into_iter()
-        .filter(|l| !l.starts_with("VALUE:"))
+        .filter(|l| !l.starts_with("VALUE:") && !l.starts_with("DESC:"))
         .collect()
 }
 
 /// The stub driver: it sets `compstate` states a test needs, including ones live zsh never
 /// produces; [`zsh_tab`] checks what real zsh does. `quote` is the quote character zsh reports
-/// at the cursor, `prelude` runs after the script loads, and each `compadd` candidate is a
-/// `VALUE:` line.
+/// at the cursor, `prelude` runs after the script loads, each `compadd` candidate is a
+/// `VALUE:` line, and each description passed with `-d` a `DESC:` line.
 fn zsh_run_with(fx: &Fixture, quote: &str, prelude: &str, words: &[&str]) -> Vec<String> {
+    zsh_run_script(fx, &print_script("zsh"), quote, prelude, words)
+}
+
+/// [`zsh_run_with`] for any `_toolr` source, such as one an older toolr installed.
+fn zsh_run_script(
+    fx: &Fixture,
+    script: &str,
+    quote: &str,
+    prelude: &str,
+    words: &[&str],
+) -> Vec<String> {
     // The `compadd` stub reads the script's own `values`: zsh functions see their caller's locals.
     const DRIVER: &str = r#"
 compdef() { :; }
 _files() { print -r -- "FILES:$*"; }
-compadd() { print -r -- "COMPADD:$*"; print -rl -- "${values[@]/#/VALUE:}"; }
+_description() { :; }
+compadd() {
+    # `-O` matches without adding; this stub's matcher accepts every candidate.
+    if [[ $1 == -O ]]; then set -A "$2" "${values[@]}"; return; fi
+    print -r -- "COMPADD:$*"; print -rl -- "${values[@]/#/VALUE:}"
+    if (( ${#descriptions} )); then print -rl -- "${descriptions[@]/#/DESC:}"; fi
+}
 compset() { print -r -- "COMPSET:$*"; }
 typeset -A compstate
 compstate[quote]=$ZSH_QUOTE
@@ -2613,7 +2640,7 @@ _toolr
         .arg("-c")
         .arg(DRIVER)
         .arg("driver")
-        .arg(print_script("zsh"))
+        .arg(script)
         .args(words)
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
@@ -2654,8 +2681,9 @@ fn zsh_engine_word(fx: &Fixture, quote: &str, words: &[&str]) -> (String, Vec<St
 }
 
 /// `$words` holds the word as typed; the script must take the quoting off before the engine
-/// matches it. zsh reports the open quote even after it's closed, so `'dry r'` carries `'` too,
-/// and reports none for a quote opened mid-word.
+/// sees it. zsh reports the open quote even after it's closed, so `'dry r'` carries `'` too,
+/// and reports none for a quote opened mid-word. The engine returns every choice and zsh
+/// matches; [`zsh_tab_completes_quoted_and_escaped_partials_end_to_end`] checks what lands.
 #[test]
 fn zsh_quoted_and_escaped_partials_match_a_choice() {
     if !require("zsh") {
@@ -2677,15 +2705,11 @@ fn zsh_quoted_and_escaped_partials_match_a_choice() {
     ] {
         let (word, values) = zsh_engine_word(&fx, quote, &["toolr", "ci", "lint", "--mode", cur]);
         assert_eq!(word, want, "{quote:?} {cur:?}");
-        let matching: Vec<String> = fx
-            .choices()
-            .into_iter()
-            .filter(|c| c.starts_with(want))
-            .collect();
-        assert_eq!(values, matching, "{quote:?} {cur:?}");
+        assert_eq!(values, sorted_choices(&fx), "{quote:?} {cur:?}");
     }
-    let words = ["toolr", "ci", "lint", "--mode='dry r"];
-    assert_eq!(zsh_values(&fx, "", &words), vec!["dry run".to_string()]);
+    let (word, values) = zsh_engine_word(&fx, "", &["toolr", "ci", "lint", "--mode='dry r"]);
+    assert_eq!(word, "--mode=dry r");
+    assert_eq!(values, sorted_choices(&fx));
 }
 
 #[test]
@@ -2694,19 +2718,21 @@ fn zsh_attached_option_with_escaped_value_matches() {
         return;
     }
     let fx = fixture();
-    let calls = zsh_run_with(&fx, "", "", &["toolr", "ci", "lint", r"--mode=dry\ r"]);
+    let calls = zsh_complete(&fx, &["toolr", "ci", "lint", r"--mode=dry\ r"]);
     assert_eq!(
         calls,
         vec![
             "COMPSET:-P 1 *=".to_string(),
             "COMPADD:-d descriptions -a values".to_string(),
-            "VALUE:dry run".to_string(),
         ]
     );
+    let (word, values) = zsh_engine_word(&fx, "", &["toolr", "ci", "lint", r"--mode=dry\ r"]);
+    assert_eq!(word, "--mode=dry r");
+    assert_eq!(values, sorted_choices(&fx));
 }
 
 /// A quoted earlier word must reach the engine as the shell will pass it, or `'--mode'` isn't
-/// recognised as the option whose value is being completed.
+/// recognised as the option whose value is being completed (the slot would offer flag names).
 #[test]
 fn zsh_earlier_quoted_words_reach_the_engine_unquoted() {
     if !require("zsh") {
@@ -2714,11 +2740,14 @@ fn zsh_earlier_quoted_words_reach_the_engine_unquoted() {
     }
     let fx = fixture();
     let words = ["toolr", "ci", "lint", "'--mode'", "fa"];
-    assert_eq!(zsh_values(&fx, "", &words), vec!["fast".to_string()]);
+    assert_eq!(zsh_values(&fx, "", &words), sorted_choices(&fx));
     let words = [
         "toolr", "ci", "lint", r"--cfg", r"a\ b", "--mode", r"dry\ r",
     ];
-    assert_eq!(zsh_values(&fx, "", &words), vec!["dry run".to_string()]);
+    assert_eq!(zsh_values(&fx, "", &words), sorted_choices(&fx));
+    // Unquoted, the same position is a flag-name slot.
+    let words = ["toolr", "ci", "lint", "--cfg", "a", "--zz"];
+    assert!(zsh_values(&fx, "", &words).contains(&"--mode".to_string()));
 }
 
 /// Live zsh completes the command inside backticks itself and never calls `_toolr`; if it ever
@@ -2743,21 +2772,23 @@ fn zsh_quoted_substitution_partial_is_inert() {
     let sub = format!("$(touch {})", fx.sentinel.display());
     let tick = format!("`touch {}`", fx.sentinel2.display());
     for (quote, cur, want) in [
-        ("'", "'$(touch", &sub),
-        ("$'", "$'$(touch", &sub),
-        ("", r"\$\(touch", &sub),
-        ("'", "'`touch", &tick),
-        ("", r"\`touch", &tick),
+        ("'", "'$(touch", "$(touch"),
+        ("$'", "$'$(touch", "$(touch"),
+        ("", r"\$\(touch", "$(touch"),
+        ("'", "'`touch", "`touch"),
+        ("", r"\`touch", "`touch"),
     ] {
-        assert_eq!(
-            zsh_values(&fx, quote, &["toolr", "ci", "lint", "--mode", cur]),
-            vec![want.clone()],
-            "{quote:?} {cur:?}"
+        let (word, values) = zsh_engine_word(&fx, quote, &["toolr", "ci", "lint", "--mode", cur]);
+        assert_eq!(word, want, "{quote:?} {cur:?}");
+        assert!(
+            values.contains(&sub) && values.contains(&tick),
+            "{values:?}"
         );
     }
-    // In `"…"`, `$(` opens a substitution, so the word is no value; live zsh doesn't call `_toolr`.
+    // In `"…"`, `$(` opens a substitution; live zsh doesn't call `_toolr`, and the stub run
+    // must not run it either.
     let words = ["toolr", "ci", "lint", "--mode", "\"$(touch"];
-    assert_eq!(zsh_values(&fx, "\"", &words), Vec::<String>::new());
+    zsh_values(&fx, "\"", &words);
     assert!(!fx.sentinel.exists(), "a typed $(...) ran");
     assert!(!fx.sentinel2.exists(), "a typed backtick ran");
 }
@@ -2981,12 +3012,17 @@ fn zsh_attached_value_moves_the_option_into_the_prefix() {
     );
     assert_eq!(
         zsh_complete(&fx, &with("--out=")),
-        vec![compset, "FILES:-/".to_string()]
+        vec![compset.clone(), "FILES:-/".to_string()]
     );
-    // No values: neither `compset` nor a blank `compadd` runs.
-    for cur in ["--verbose=", "--mode=zz", "--nope="] {
+    // No value slot: neither `compset` nor a blank `compadd` runs.
+    for cur in ["--verbose=", "--nope="] {
         assert_eq!(zsh_complete(&fx, &with(cur)), Vec::<String>::new(), "{cur}");
     }
+    // A partial no choice starts with still reaches `compadd`; zsh's matcher decides.
+    assert_eq!(
+        zsh_complete(&fx, &with("--mode=zz")),
+        vec![compset, "COMPADD:-d descriptions -a values".to_string()]
+    );
     let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--mode", "fa"]);
     assert_eq!(calls, vec!["COMPADD:-d descriptions -a values".to_string()]);
 }
@@ -3025,7 +3061,7 @@ fn fish_attached_value_keeps_the_option_prefix() {
     assert_eq!(fish_names(&stdout), vec!["--out=files/sub/"]);
 }
 
-/// How the interactive zsh in [`zsh_tab_via`] loads the completion script.
+/// How the interactive zsh in [`zsh_tab_with`] loads the completion script.
 #[derive(Clone, Copy, Debug)]
 enum ZshLoad {
     /// `source`d from the rc file, as the eval/source install modes do.
@@ -3039,11 +3075,20 @@ enum ZshLoad {
 /// The rc file sources the script, a `toolr()` shim prints each submitted line as `LINE:<args>`
 /// after shell parsing, and `^Xd` prints the edit buffer as `BUF:<line>` and clears it.
 fn zsh_tab(fx: &Fixture, typed: &str, after: &str) -> String {
-    zsh_tab_via(fx, ZshLoad::Sourced, typed, after)
+    zsh_tab_with(fx, ZshLoad::Sourced, "", typed, after)
 }
 
-/// [`zsh_tab`] with the script loaded as `load` says.
-fn zsh_tab_via(fx: &Fixture, load: ZshLoad, typed: &str, after: &str) -> String {
+/// [`zsh_tab`] with the script loaded as `load` says and `rc` appended to the rc file, for
+/// `zstyle` settings.
+fn zsh_tab_with(fx: &Fixture, load: ZshLoad, rc: &str, typed: &str, after: &str) -> String {
+    let input = format!("toolr ci lint {typed}\t{after}exit\n");
+    let (stdout, _) = zsh_session(fx, load, rc, &input);
+    stdout
+}
+
+/// Types `input` into the interactive zsh [`zsh_tab_with`] sets up; returns its stdout and what
+/// it wrote to the terminal, where zsh draws the completion listing.
+fn zsh_session(fx: &Fixture, load: ZshLoad, rc: &str, input: &str) -> (String, String) {
     let script = fx.tmp.path().join("toolr.zsh");
     let loader = match load {
         ZshLoad::Sourced => {
@@ -3070,7 +3115,7 @@ fn zsh_tab_via(fx: &Fixture, load: ZshLoad, typed: &str, after: &str) -> String 
              toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
              else print -r -- \"LINE:$*\"; fi; }}\n\
              _toolr_test_dump() {{ print -r -- \"BUF:$BUFFER\"; BUFFER=; zle accept-line; }}\n\
-             zle -N _toolr_test_dump\nbindkey '^Xd' _toolr_test_dump\n",
+             zle -N _toolr_test_dump\nbindkey '^Xd' _toolr_test_dump\n{rc}\n",
         ),
     )
     .unwrap();
@@ -3082,14 +3127,14 @@ fn zsh_tab_via(fx: &Fixture, load: ZshLoad, typed: &str, after: &str) -> String 
         .env("PATH", path_with_toolr())
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .env("TERM", "dumb");
-    let out = common::run_on_pty(cmd, &format!("toolr ci lint {typed}\t{after}exit\n"));
+    let (out, tty) = common::run_on_pty_with_tty(cmd, input);
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     assert!(
         !stdout.contains("command not found"),
-        "{typed:?}: {stdout}\n{}",
+        "{input:?}: {stdout}\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    stdout
+    (stdout, String::from_utf8_lossy(&tty).into_owned())
 }
 
 /// The installed `~/.zfunc/_toolr` is autoloaded on the first Tab of a new shell. That load
@@ -3101,7 +3146,7 @@ fn zsh_first_tab_completes_when_autoloaded_or_sourced() {
     }
     let fx = fixture();
     for load in [ZshLoad::Autoloaded, ZshLoad::Sourced] {
-        let stdout = zsh_tab_via(&fx, load, "--mode dry\\ w", "\n");
+        let stdout = zsh_tab_with(&fx, load, "", "--mode dry\\ w", "\n");
         assert!(
             stdout
                 .lines()
@@ -3139,6 +3184,23 @@ fn zsh_tab_completes_quoted_and_escaped_partials_end_to_end() {
         assert!(
             stdout.lines().any(|l| l.trim_end_matches('\r') == want),
             "{typed:?}: want {want:?}\n{stdout}"
+        );
+    }
+    // `pos` has a positional, so a raw `'--fla'` or `\-\-fla` reads as that positional and the
+    // engine would return `alpha`/`beta`, no flags. Dequoted it is a flag word, which only
+    // `cur="${(Q)raw}"` gives the engine.
+    for typed in ["'--fla'", r#""--fla""#, r"\-\-fla"] {
+        let (stdout, _) = zsh_session(
+            &fx,
+            ZshLoad::Sourced,
+            "",
+            &format!("toolr ci pos {typed}\t\nexit\n"),
+        );
+        assert!(
+            stdout
+                .lines()
+                .any(|l| l.trim_end_matches('\r') == "LINE:ci pos --flavour"),
+            "{typed:?}: {stdout}"
         );
     }
     // zsh completes the command inside these itself; nothing toolr offers may land or run.
@@ -3231,4 +3293,337 @@ fn fish_quoted_substitution_partial_is_inert() {
     }
     assert!(!fx.sentinel.exists(), "a typed $(...) ran");
     assert!(!fx.sentinel2.exists(), "a typed backtick ran");
+}
+
+// --- zsh and fish ask for every candidate and match the typed word themselves ---
+
+/// Every fixture choice, in the engine's order.
+fn sorted_choices(fx: &Fixture) -> Vec<String> {
+    let mut all = fx.choices();
+    all.sort();
+    all
+}
+
+/// The `COMPADD:` line for `flags`, then a `VALUE:` line per value.
+fn compadd_lines(flags: &str, values: &[String]) -> Vec<String> {
+    std::iter::once(format!("COMPADD:{flags}"))
+        .chain(values.iter().map(|v| format!("VALUE:{v}")))
+        .collect()
+}
+
+/// The line of `script` that runs `toolr __complete`, comments aside.
+fn complete_call(script: &str) -> String {
+    let calls: Vec<&str> = script
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("toolr __complete"))
+        .collect();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    calls[0].to_string()
+}
+
+#[test]
+fn zsh_script_asks_the_engine_for_shell_matching() {
+    let call = complete_call(&print_script("zsh"));
+    assert!(
+        call.contains("TOOLR_COMPLETE_MATCH=shell toolr __complete"),
+        "{call}"
+    );
+    assert!(!complete_call(&print_script("bash")).contains("TOOLR_COMPLETE_MATCH"));
+}
+
+/// The engine no longer drops `fast` for `FA`: `compadd` gets every choice and zsh's
+/// `matcher-list` decides, whether the partial is separate or attached with `=`.
+#[test]
+fn zsh_uppercase_partial_reaches_compadd() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    for (word, compset) in [
+        (vec!["--mode", "FA"], None),
+        (vec!["--mode=FA"], Some("COMPSET:-P 1 *=")),
+    ] {
+        let mut words = vec!["toolr", "ci", "lint"];
+        words.extend(word);
+        let calls: Vec<String> = zsh_run_with(&fx, "", "", &words)
+            .into_iter()
+            .filter(|l| !l.starts_with("DESC:"))
+            .collect();
+        let mut want: Vec<String> = compset.map(String::from).into_iter().collect();
+        want.extend(compadd_lines(
+            "-d descriptions -a values",
+            &sorted_choices(&fx),
+        ));
+        assert_eq!(calls, want, "{words:?}");
+    }
+}
+
+#[test]
+fn zsh_command_slot_offers_all_commands_for_any_partial() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let groups = zsh_values(&fx, "", &["toolr", "ZZ"]);
+    for want in ["ci", "project", "self"] {
+        assert!(groups.iter().any(|g| g == want), "{want} not in {groups:?}");
+    }
+    assert_eq!(
+        zsh_values(&fx, "", &["toolr", "ci", "ZZ"]),
+        vec!["lint", "pos"]
+    );
+}
+
+/// Descriptions line up with their values: a missing one shows the value itself.
+#[test]
+fn zsh_descriptions_follow_their_values() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let lines = zsh_run_with(&fx, "", "", &["toolr", "ci", ""]);
+    assert_eq!(
+        lines,
+        vec![
+            "COMPADD:-d descriptions -a values".to_string(),
+            "VALUE:lint".to_string(),
+            "VALUE:pos".to_string(),
+            "DESC:Lint things.".to_string(),
+            "DESC:A positional and a flag.".to_string(),
+        ]
+    );
+    let lines = zsh_run_with(&fx, "", "", &["toolr", "ci", "lint", "--mode", ""]);
+    let descs: Vec<&str> = lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("DESC:"))
+        .collect();
+    let all = sorted_choices(&fx);
+    assert_eq!(descs, all.iter().map(String::as_str).collect::<Vec<_>>());
+}
+
+/// Adds a `big` group of 25 commands, `cmd00` to `cmd24`, each with its own summary.
+fn big_described_group(fx: &Fixture) {
+    let commands: String = (0..25)
+        .map(|i| {
+            format!(
+                "@group.command\ndef cmd{i:02}(ctx):\n    \"\"\"Summary number {i:02}.\"\"\"\n\n"
+            )
+        })
+        .collect();
+    std::fs::write(
+        fx.tmp.path().join("tools/big.py"),
+        format!("\"\"\"Big.\"\"\"\ngroup = command_group(\"big\", \"Big\", docstring=__doc__)\n\n{commands}"),
+    )
+    .unwrap();
+}
+
+/// Past 20 matches the compact grid is used, so no description array is built. The stub
+/// `compadd -O` matches every candidate, so all 25 commands count.
+#[test]
+fn zsh_large_choice_set_skips_descriptions() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    big_described_group(&fx);
+    let many: Vec<String> = (0..25).map(|i| format!("cmd{i:02}")).collect();
+    let lines = zsh_run_with(&fx, "", "", &["toolr", "big", "C"]);
+    assert_eq!(lines, compadd_lines("-a values", &many));
+}
+
+/// A live Tab on a slot of more than 20 described commands: descriptions are listed once the
+/// typed word narrows the matches to 20 or fewer, by prefix or through the `matcher-list`, and
+/// not while more than 20 match.
+#[test]
+fn zsh_tab_lists_descriptions_when_the_matches_are_few() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    big_described_group(&fx);
+    // Without `LIST_AMBIGUOUS` zsh lists even when it rewrites `CMD0` to `cmd0`.
+    let matcher = "zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}'\n\
+                   unsetopt LIST_AMBIGUOUS";
+    for (rc, typed, want) in [
+        ("", "cmd0", Some("03")),
+        ("", "cmd1", Some("13")),
+        (matcher, "CMD0", Some("03")),
+        ("", "cmd", None),
+        (matcher, "CMD", None),
+    ] {
+        let (_, tty) = zsh_session(
+            &fx,
+            ZshLoad::Sourced,
+            rc,
+            &format!("toolr big {typed}\t\x18dexit\n"),
+        );
+        match want {
+            Some(n) => {
+                assert!(
+                    tty.contains(&format!("Summary number {n}.")),
+                    "{typed:?}: {tty}"
+                );
+                assert!(!tty.contains("Summary number 24."), "{typed:?}: {tty}");
+            }
+            None => {
+                assert!(tty.contains("cmd24"), "{typed:?}: {tty}");
+                assert!(!tty.contains("Summary number"), "{typed:?}: {tty}");
+            }
+        }
+    }
+}
+
+/// A live Tab with a `descriptions` format: one neutral `toolr` header over groups, commands,
+/// flags and values alike, never a `value` header and never the `values` tag.
+#[test]
+fn zsh_tab_header_is_neutral_for_every_slot_kind() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let rc = "zstyle ':completion:*:descriptions' format 'HDR<%d>'\n\
+              zstyle ':completion:*:values' format 'VALUES<%d>'\n\
+              unsetopt LIST_AMBIGUOUS";
+    for typed in [
+        "toolr ci ",
+        "toolr ci lint --",
+        "toolr ci lint --mode ",
+        "toolr ",
+    ] {
+        let (_, tty) = zsh_session(&fx, ZshLoad::Sourced, rc, &format!("{typed}\t\x18dexit\n"));
+        assert!(tty.contains("HDR<toolr>"), "{typed:?}: {tty}");
+        assert!(!tty.contains("HDR<value>"), "{typed:?}: {tty}");
+        assert!(!tty.contains("VALUES<"), "{typed:?}: {tty}");
+    }
+}
+
+/// A live Tab: with a `matcher-list` set, zsh completes a word the engine would have filtered
+/// out; without one, it doesn't.
+#[test]
+fn zsh_tab_applies_the_matcher_list() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let rc = "zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}' 'l:|=* r:|=*'";
+    for (typed, want) in [
+        ("--mode FA", "--mode fast"),
+        ("--mode=FA", "--mode=fast"),
+        (r"--mode DRY\ W", "--mode dry walk"),
+        ("--mode alk", "--mode dry walk"),
+        ("--mode=alk", "--mode=dry walk"),
+    ] {
+        let stdout = zsh_tab_with(&fx, ZshLoad::Sourced, rc, typed, "\n");
+        let want = format!("LINE:ci lint {want}");
+        assert!(
+            stdout.lines().any(|l| l.trim_end_matches('\r') == want),
+            "{typed:?}: want {want:?}\n{stdout}"
+        );
+    }
+    let stdout = zsh_tab(&fx, "--mode FA", "\x18d");
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.trim_end_matches('\r') == "BUF:toolr ci lint --mode FA"),
+        "{stdout}"
+    );
+    assert!(!fx.sentinel.exists());
+    assert!(!fx.sentinel2.exists());
+}
+
+/// A script installed by an older toolr never sets the variable, so the new binary filters.
+#[test]
+fn old_zsh_script_gets_prefix_filtered_output_from_new_binary() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let old = print_script("zsh").replace("TOOLR_COMPLETE_MATCH=shell toolr", "toolr");
+    assert!(!complete_call(&old).contains("TOOLR_COMPLETE_MATCH"));
+    let unset = "unset TOOLR_COMPLETE_MATCH";
+    let run = |cur: &str| -> Vec<String> {
+        zsh_run_script(
+            &fx,
+            &old,
+            "",
+            unset,
+            &["toolr", "ci", "lint", "--mode", cur],
+        )
+        .into_iter()
+        .filter_map(|l| l.strip_prefix("VALUE:").map(str::to_string))
+        .collect()
+    };
+    assert_eq!(run("FA"), Vec::<String>::new());
+    assert_eq!(run("fa"), vec!["fast".to_string()]);
+}
+
+/// A binary that predates the variable prefix-filters; the new script still hands `compadd`
+/// what it gets.
+#[test]
+fn new_zsh_script_degrades_on_a_binary_that_ignores_the_variable() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let shim = r#"toolr() { env -u TOOLR_COMPLETE_MATCH "$(whence -p toolr)" "$@"; }"#;
+    let lines = zsh_run_with(&fx, "", shim, &["toolr", "ci", "lint", "--mode", "fa"]);
+    assert_eq!(
+        lines,
+        vec![
+            "COMPADD:-d descriptions -a values".to_string(),
+            "VALUE:fast".to_string(),
+            "DESC:fast".to_string(),
+        ]
+    );
+    let lines = zsh_run_with(&fx, "", shim, &["toolr", "ci", "lint", "--mode", "FA"]);
+    assert_eq!(lines, Vec::<String>::new());
+}
+
+#[test]
+fn fish_script_asks_the_engine_for_shell_matching() {
+    let script = print_script("fish");
+    assert!(
+        script.contains("set -lx TOOLR_COMPLETE_MATCH shell"),
+        "{script}"
+    );
+    assert!(complete_call(&script).contains("toolr __complete"));
+}
+
+/// fish matches case-insensitively and by substring once the engine stops filtering.
+#[test]
+fn fish_uppercase_and_substring_partials_complete() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    for (line, want) in [
+        ("toolr CI", vec!["ci"]),
+        ("toolr ci LI", vec!["lint"]),
+        ("toolr ci lint --mode FA", vec!["fast"]),
+        ("toolr ci lint --mode alk", vec!["dry walk"]),
+        ("toolr ci lint --mode=FA", vec!["--mode=fast"]),
+        ("toolr ci lint --MO", vec!["--mode"]),
+    ] {
+        let stdout = fish_complete(&fx, line);
+        assert_eq!(fish_names(&stdout), want, "{line:?}");
+    }
+    // fish matches the whole `--mode=` word, so `alk` is no substring of it there and fish falls
+    // back to subsequence matching, which finds more than `dry walk`.
+    let stdout = fish_complete(&fx, "toolr ci lint --mode=alk");
+    assert!(fish_names(&stdout).contains(&"--mode=dry walk"), "{stdout}");
+    assert!(!fx.sentinel.exists());
+    assert!(!fx.sentinel2.exists());
+}
+
+/// The variable is local to the completion function, so it never reaches the user's session.
+#[test]
+fn fish_matching_variable_stays_out_of_the_session() {
+    if !require("fish") {
+        return;
+    }
+    let fx = fixture();
+    let leak = "complete -C 'toolr ci lint --mode '; set -q TOOLR_COMPLETE_MATCH; and echo LEAKED";
+    let stdout = fish_complete_with(&fx, leak, "toolr ");
+    assert!(!stdout.contains("LEAKED"), "{stdout}");
+    assert!(fish_names(&stdout).contains(&"fast"), "{stdout}");
 }

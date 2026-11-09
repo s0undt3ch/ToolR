@@ -345,11 +345,22 @@ pub fn write_fresh_manifest(root: &Path, manifest_json: &str) {
 /// toolr's prompts fire and read them. Fails instead of hanging when a prompt
 /// waits for more input than `answers` holds.
 #[cfg(unix)]
-pub fn run_on_pty(mut cmd: std::process::Command, answers: &str) -> std::process::Output {
+pub fn run_on_pty(cmd: std::process::Command, answers: &str) -> std::process::Output {
+    run_on_pty_with_tty(cmd, answers).0
+}
+
+/// [`run_on_pty`], plus what the child wrote to the terminal itself, such as zsh's
+/// completion listing.
+#[cfg(unix)]
+pub fn run_on_pty_with_tty(
+    mut cmd: std::process::Command,
+    answers: &str,
+) -> (std::process::Output, Vec<u8>) {
     use std::fs::File;
-    use std::io::Write;
+    use std::io::{Read, Write};
     use std::os::fd::FromRawFd;
     use std::process::Stdio;
+    use std::time::Duration;
 
     let (mut master, mut slave) = (0, 0);
     // SAFETY: openpty writes two fds into the out-params; the null pointers
@@ -370,8 +381,15 @@ pub fn run_on_pty(mut cmd: std::process::Command, answers: &str) -> std::process
     // The pty echoes `answers` back to the master. On macOS, `tcsetattr(TCSADRAIN)` (readline
     // switching modes) waits until that echo is read, so read it the way a terminal would.
     let mut echo = master.try_clone().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let _ = std::io::copy(&mut echo, &mut std::io::sink());
+        let mut buf = [0u8; 4096];
+        // Reads fail with EIO once the child's side closes.
+        while let Ok(n @ 1..) = echo.read(&mut buf) {
+            if tx.send(buf[..n].to_vec()).is_err() {
+                break;
+            }
+        }
     });
     cmd.stdin(Stdio::from(slave))
         .stdout(Stdio::piped())
@@ -380,8 +398,13 @@ pub fn run_on_pty(mut cmd: std::process::Command, answers: &str) -> std::process
     // Close the parent's slave so the reader sees EOF once the child's side closes.
     drop(cmd);
     let out = wait_or_kill(child);
+    let mut tty = Vec::new();
+    // The reader thread lags the child's exit; drain until the pty has been quiet for 200 ms.
+    while let Ok(chunk) = rx.recv_timeout(Duration::from_millis(200)) {
+        tty.extend(chunk);
+    }
     drop(master);
-    out
+    (out, tty)
 }
 
 /// An unexpected prompt would wait on the pty forever, so give up after a

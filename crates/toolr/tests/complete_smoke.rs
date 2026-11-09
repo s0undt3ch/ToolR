@@ -52,6 +52,7 @@ fn complete_raw(tmp: &TempDir, args: &[&str]) -> String {
     }
     let output = common::toolr()
         .current_dir(tmp.path())
+        .env_remove(MATCH_VAR)
         .args(&full)
         .output()
         .unwrap();
@@ -539,5 +540,140 @@ fn stays_empty_after_version_or_bad_values() {
         &["--timeout-secs", "-1", ""],
     ] {
         assert_eq!(complete_raw(&tmp, line), "", "{line:?}");
+    }
+}
+
+// --- `TOOLR_COMPLETE_MATCH`: who matches the typed word ---
+
+const MATCH_VAR: &str = "TOOLR_COMPLETE_MATCH";
+
+/// `__complete` with `TOOLR_COMPLETE_MATCH` set to `value`, or unset for [`None`]: the exit
+/// code and the candidate values.
+fn complete_matching(tmp: &TempDir, value: Option<&str>, args: &[&str]) -> (i32, Vec<String>) {
+    let mut cmd = common::toolr();
+    cmd.current_dir(tmp.path())
+        .arg("__complete")
+        .arg(tmp.path())
+        .args(args);
+    match value {
+        Some(value) => cmd.env(MATCH_VAR, value),
+        None => cmd.env_remove(MATCH_VAR),
+    };
+    let output = cmd.output().unwrap();
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let mut names: Vec<String> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| l.split('\t').next().unwrap().to_string())
+        .collect();
+    names.sort();
+    (output.status.code().unwrap(), names)
+}
+
+#[test]
+fn complete_defaults_to_prefix_filtering() {
+    let tmp = fixture();
+    assert_eq!(complete_matching(&tmp, None, &["CI"]), (0, vec![]));
+    assert_eq!(
+        complete_matching(&tmp, None, &["c"]),
+        (0, vec!["ci".to_string()])
+    );
+}
+
+#[test]
+fn complete_match_shell_returns_unfiltered_candidates() {
+    let tmp = fixture();
+    let (rc, names) = complete_matching(&tmp, Some("shell"), &["CI"]);
+    assert_eq!(rc, 0);
+    // The binary's own `self`/`project` groups come through unfiltered too.
+    for want in ["ci", "project", "self"] {
+        assert!(names.iter().any(|n| n == want), "{want} not in {names:?}");
+    }
+    assert_eq!(
+        complete_matching(&tmp, Some("shell"), &["ci", "deploy", "ZZ"]),
+        (0, vec!["production".to_string(), "staging".to_string()])
+    );
+    let stdout = complete_raw_with_shell_matching(&tmp, &["CI"]);
+    assert!(stdout.contains("ci\tCI utilities"), "{stdout}");
+}
+
+fn complete_raw_with_shell_matching(tmp: &TempDir, args: &[&str]) -> String {
+    let output = common::toolr()
+        .current_dir(tmp.path())
+        .env(MATCH_VAR, "shell")
+        .arg("__complete")
+        .arg(tmp.path())
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).unwrap()
+}
+
+#[test]
+fn complete_match_unknown_value_means_prefix() {
+    let tmp = fixture();
+    for value in ["banana", "", "SHELL", "prefix"] {
+        assert_eq!(
+            complete_matching(&tmp, Some(value), &["CI"]),
+            (0, vec![]),
+            "{value:?}"
+        );
+    }
+}
+
+#[test]
+fn complete_match_shell_root_flags_unfiltered() {
+    let tmp = fixture();
+    let (rc, names) = complete_matching(&tmp, Some("shell"), &["--zz"]);
+    assert_eq!(rc, 0);
+    for want in ["--debug", "--help", "--quiet", "--timestamps"] {
+        assert!(names.iter().any(|n| n == want), "{want} not in {names:?}");
+    }
+    assert_eq!(complete_matching(&tmp, None, &["--zz"]), (0, vec![]));
+    // Given and conflicting root flags stay out either way.
+    let (_, names) = complete_matching(&tmp, Some("shell"), &["--quiet", "--zz"]);
+    assert!(!names.iter().any(|n| n == "--quiet"), "{names:?}");
+    // Root flags only join a flag word.
+    let (_, names) = complete_matching(&tmp, Some("shell"), &["ZZ"]);
+    assert!(!names.iter().any(|n| n.starts_with('-')), "{names:?}");
+}
+
+#[test]
+fn complete_match_shell_keeps_path_exit_codes() {
+    let tmp = TempDir::new().unwrap();
+    let tools = common::write_project(tmp.path());
+    std::fs::write(
+        tools.join("ci.py"),
+        r#""""CI utilities."""
+import pathlib
+
+from toolr.types import DirectoryPath
+
+group = command_group("ci", "CI utilities", docstring=__doc__)
+
+@group.command
+def lint(ctx, cfg: pathlib.Path | None = None, out: DirectoryPath | None = None):
+    """Lint things."""
+    pass
+"#,
+    )
+    .unwrap();
+    common::toolr()
+        .current_dir(tmp.path())
+        .arg("__build-static-manifest")
+        .assert()
+        .success();
+    for value in [None, Some("shell")] {
+        assert_eq!(
+            complete_matching(&tmp, value, &["ci", "lint", "--cfg", "ZZ"]),
+            (10, vec![]),
+            "{value:?}"
+        );
+        assert_eq!(
+            complete_matching(&tmp, value, &["ci", "lint", "--out=ZZ"]),
+            (11, vec![]),
+            "{value:?}"
+        );
     }
 }

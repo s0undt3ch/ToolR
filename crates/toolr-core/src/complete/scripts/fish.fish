@@ -33,6 +33,9 @@ function __toolr_complete
     # append, not an end-of-options marker, which would inject a spurious
     # `--` token into the call and trip clap's option-terminator logic.
     set -a args $current
+    # Ask for the whole slot so fish matches it; an older toolr ignores this and prefix-filters.
+    # Local, so it never leaks into the session.
+    set -lx TOOLR_COMPLETE_MATCH shell
     set -l out (toolr __complete "$PWD" $args 2>/dev/null)
     set -l rc $status
     # `--opt=value`: the engine returns bare values, but fish matches them against the

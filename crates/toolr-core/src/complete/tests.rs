@@ -1,4 +1,6 @@
-use crate::complete::{Candidate, Completion, complete, serve_completions};
+use crate::complete::{
+    Candidate, Completion, Matching, complete, complete_matching, serve_completions,
+};
 use crate::manifest::{
     Argument, ArgumentKind, Command, Group, Manifest, Origin, PluginWarning, PluginWarningKind,
     SCHEMA_VERSION,
@@ -2029,4 +2031,192 @@ fn dash_leading_choices_are_offered_only_where_clap_takes_them() {
     ] {
         assert_eq!(dash_values(words), want, "{words:?}");
     }
+}
+
+// --- `Matching::Shell`: the engine leaves matching the typed word to the shell ---
+
+fn shell_values(m: &Manifest, words: &[&str]) -> Vec<String> {
+    complete_values(complete_matching(m, &tokens(words), Matching::Shell))
+}
+
+#[test]
+fn shell_matching_returns_every_group_for_any_prefix() {
+    let m = fixture();
+    let all = complete_values(complete_matching(&m, &tokens(&[""]), Matching::Prefix));
+    assert_eq!(all, vec!["ci".to_string(), "data".to_string()]);
+    assert_eq!(shell_values(&m, &["ZZZ"]), all);
+}
+
+#[test]
+fn shell_matching_returns_every_command_in_a_group() {
+    // Direct commands, then child groups.
+    assert_eq!(
+        shell_values(&fixture(), &["ci", "HE"]),
+        vec!["deploy".to_string(), "hello".to_string()]
+    );
+    assert_eq!(
+        shell_values(&nested_fixture(), &["docker", "ZZ"]),
+        vec!["container".to_string(), "image".to_string()]
+    );
+    let dispatcher = dispatcher_fixture();
+    assert_eq!(
+        shell_values(&dispatcher, &["jenkins", "job", "ZZ"]),
+        vec!["delete_orphans".to_string(), "delete_stale".to_string()]
+    );
+}
+
+#[test]
+fn shell_matching_flag_slot_returns_every_flag_and_help() {
+    assert_eq!(
+        shell_values(&fixture(), &["ci", "hello", "--zz"]),
+        vec!["--help".to_string(), "--name".to_string()]
+    );
+    // Group nodes offer `--help` for any flag word.
+    assert_eq!(
+        shell_values(&fixture(), &["--zz"]),
+        vec!["--help".to_string()]
+    );
+    assert_eq!(
+        shell_values(&fixture(), &["ci", "-"]),
+        vec!["--help".to_string()]
+    );
+}
+
+#[test]
+fn shell_matching_non_flag_word_never_offers_flags() {
+    // `lint` has a positional and flags: a bare word is the positional's slot.
+    assert_eq!(
+        shell_values(&dash_fixture(), &["ci", "lint", "AL"]),
+        vec!["alpha".to_string(), "beta".to_string()]
+    );
+}
+
+/// A command with no positional falls back to its flag names for any word, as with prefix
+/// matching; only the typed word no longer narrows them, and `--help` still needs a flag word.
+#[test]
+fn shell_matching_flags_only_command_offers_its_flags() {
+    let words = ["jenkins", "job", "delete_companyuser", "AL"];
+    assert!(
+        values(serve_completions(
+            &flags_only_child_fixture(),
+            &tokens(&words)
+        ))
+        .is_empty()
+    );
+    assert_eq!(
+        shell_values(&flags_only_child_fixture(), &words),
+        vec![
+            "--company-id".to_string(),
+            "--user-emails".to_string(),
+            "--user-ids".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn shell_matching_flag_value_returns_every_choice() {
+    let m = attached_fixture();
+    let all = vec![
+        "abc".to_string(),
+        "alpha".to_string(),
+        "x=~root".to_string(),
+    ];
+    assert_eq!(shell_values(&m, &["ci", "lint", "--mode", "ZZ"]), all);
+    assert_eq!(shell_values(&m, &["ci", "lint", "--style", "ZZ"]), all);
+}
+
+#[test]
+fn shell_matching_attached_value_returns_every_choice() {
+    assert_eq!(
+        shell_values(&attached_fixture(), &["ci", "lint", "--mode=ZZ"]),
+        vec![
+            "abc".to_string(),
+            "alpha".to_string(),
+            "x=~root".to_string()
+        ]
+    );
+}
+
+#[test]
+fn shell_matching_keeps_the_dash_guard() {
+    let m = dash_fixture();
+    assert_eq!(
+        shell_values(&m, &["ci", "lint", "--mode", "ZZ"]),
+        vec!["-".to_string(), "fast".to_string(), "full".to_string()]
+    );
+    assert_eq!(
+        shell_values(&m, &["ci", "lint", "--mode=ZZ"]),
+        vec!["-", "--dash", "-1", "-x", "fast", "full"]
+    );
+    assert_eq!(
+        shell_values(&m, &["ci", "pos", "ZZ"]),
+        vec!["-".to_string(), "a".to_string()]
+    );
+    assert_eq!(
+        shell_values(&m, &["ci", "pos", "--", "ZZ"]),
+        vec!["-", "--n", "a"]
+    );
+}
+
+#[test]
+fn shell_matching_still_drops_unsafe_names() {
+    let mut m = fixture();
+    let load = m.commands.iter_mut().find(|c| c.name == "load").unwrap();
+    load.arguments[0].allowed_values = vec!["ok".into(), "bad\x1b[2J".into()];
+    for matching in [Matching::Prefix, Matching::Shell] {
+        let out = complete_values(complete_matching(
+            &m,
+            &tokens(&["data", "load", ""]),
+            matching,
+        ));
+        assert_eq!(out, vec!["ok".to_string()], "{matching:?}");
+    }
+    assert_eq!(
+        shell_values(&m, &["data", "load", "ZZ"]),
+        vec!["ok".to_string()]
+    );
+}
+
+#[test]
+fn complete_prefix_matches_like_complete_matching_prefix() {
+    let m = fixture();
+    for words in [
+        &["c"][..],
+        &["C"],
+        &["ci", "h"],
+        &["ci", "hello", "--n"],
+        &["ci", "deploy", "--env", "s"],
+        &["data", "load", "W"],
+    ] {
+        let t = tokens(words);
+        assert_eq!(
+            complete(&m, &t),
+            complete_matching(&m, &t, Matching::Prefix),
+            "{words:?}"
+        );
+    }
+    assert!(complete_values(complete(&m, &tokens(&["C"]))).is_empty());
+}
+
+#[test]
+fn shell_matching_paths_still_signal_the_shell() {
+    let m = path_fixture();
+    for matching in [Matching::Prefix, Matching::Shell] {
+        for (words, want) in [
+            (&["ci", "build", "--cfg", "ZZ"][..], Completion::Paths),
+            (&["ci", "build", "--out=ZZ"], Completion::Directories),
+            (&["ci", "build", "ZZ"], Completion::Paths),
+        ] {
+            assert_eq!(
+                complete_matching(&m, &tokens(words), matching),
+                want,
+                "{words:?}"
+            );
+        }
+    }
+    // Choices on a path type are still values, now unfiltered.
+    assert_eq!(
+        shell_values(&m, &["ci", "build", "--pick", "ZZ"]),
+        vec!["x".to_string(), "y".to_string()]
+    );
 }

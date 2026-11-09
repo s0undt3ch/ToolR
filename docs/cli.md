@@ -422,6 +422,16 @@ A `--name=partial` word completes as the value of `--name`, with
 `partial` as the prefix. Candidates are bare values, without `--name=`;
 each script puts that part back the way its shell needs.
 
+With `TOOLR_COMPLETE_MATCH=shell` in its environment, `__complete` skips
+the prefix filter and prints every candidate for the slot at the cursor,
+so the shell matches the typed word itself (zsh's `matcher-list`, fish's
+own matching (case-insensitive, substring, subsequence)). The typed word still decides
+the slot: a flag word gets flag names, a `--name=` word gets the values
+of `--name`. Path slots still exit 10 or 11. The zsh and fish scripts set
+it for their call. The bash script doesn't, and filters the reply by the
+typed prefix itself whatever the engine returns, since readline doesn't
+filter it. Any other value, or none, means prefix filtering.
+
 ### `toolr __build-static-manifest` {#__build-static-manifest}
 
 Regenerate only the static layer of the manifest (no Python

@@ -1,4 +1,4 @@
-//! Pure prefix-matching completion engine. No I/O.
+//! Pure completion engine: the candidates for the slot at the cursor. No I/O.
 
 use crate::manifest::{Argument, ArgumentKind, Command, Manifest};
 use crate::parser::{PathCompletion, SupportedType};
@@ -39,7 +39,26 @@ impl Candidate {
 ///
 /// The returned vector is sorted by `value` and deduplicated on it.
 pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<Candidate> {
-    candidates(manifest, classify(manifest, tokens))
+    candidates(manifest, classify(manifest, tokens), Matching::Prefix)
+}
+
+/// Who narrows the candidates to the typed word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Matching {
+    /// The engine keeps only candidates starting with the typed word.
+    Prefix,
+    /// The engine returns every candidate the slot allows; the shell matches.
+    Shell,
+}
+
+impl Matching {
+    /// Whether `candidate` survives the engine's own filtering for the typed `prefix`.
+    pub fn keeps(self, candidate: &str, prefix: &str) -> bool {
+        match self {
+            Matching::Prefix => candidate.starts_with(prefix),
+            Matching::Shell => true,
+        }
+    }
 }
 
 /// What the shell should offer at the cursor: candidate values, or its own
@@ -51,10 +70,16 @@ pub enum Completion {
     Directories,
 }
 
-/// Like [`serve_completions`], but a flag value or positional slot whose
-/// argument is path-typed, with no `allowed_values`, returns
+/// Like [`serve_completions`] (it prefix-matches the typed word too), but a flag value or
+/// positional slot whose argument is path-typed, with no `allowed_values`, returns
 /// [`Completion::Paths`] or [`Completion::Directories`] instead.
 pub fn complete(manifest: &Manifest, tokens: &[String]) -> Completion {
+    complete_matching(manifest, tokens, Matching::Prefix)
+}
+
+/// [`complete`], which prefix-matches, with the caller choosing who matches the typed word. The
+/// typed word still picks the slot in either mode; [`Matching::Shell`] only stops it narrowing the candidates.
+pub fn complete_matching(manifest: &Manifest, tokens: &[String], matching: Matching) -> Completion {
     let slot = classify(manifest, tokens);
     if let Slot::FlagValue { argument, .. } | Slot::Positional { argument, .. } = &slot
         && argument.allowed_values.is_empty()
@@ -72,26 +97,26 @@ pub fn complete(manifest: &Manifest, tokens: &[String]) -> Completion {
             }
         };
     }
-    Completion::Values(candidates(manifest, slot))
+    Completion::Values(candidates(manifest, slot, matching))
 }
 
-fn candidates(manifest: &Manifest, slot: Slot<'_>) -> Vec<Candidate> {
+fn candidates(manifest: &Manifest, slot: Slot<'_>, matching: Matching) -> Vec<Candidate> {
     let mut out = match slot {
         Slot::Group { prefix } => {
             if is_flag_prefix(&prefix) {
-                group_node_flags(&prefix)
+                group_node_flags(&prefix, matching)
             } else {
-                groups(manifest, &prefix)
+                groups(manifest, &prefix, matching)
             }
         }
         Slot::Command { group, prefix } => {
             if is_flag_prefix(&prefix) {
-                group_node_flags(&prefix)
+                group_node_flags(&prefix, matching)
             } else {
-                commands(manifest, &group, &prefix)
+                commands(manifest, &group, &prefix, matching)
             }
         }
-        Slot::Flag { command, prefix } => flags(command, &prefix),
+        Slot::Flag { command, prefix } => flags(command, &prefix, matching),
         Slot::FlagValue {
             argument,
             prefix,
@@ -101,7 +126,7 @@ fn candidates(manifest: &Manifest, slot: Slot<'_>) -> Vec<Candidate> {
             argument,
             prefix,
             after_terminator: dash_ok,
-        } => values(argument, &prefix, dash_ok),
+        } => values(argument, &prefix, dash_ok, matching),
         Slot::None => Vec::new(),
     };
     // Every candidate source in the engine passes here; names are already
@@ -130,10 +155,10 @@ const HELP_DESCRIPTION: &str = "Print help";
 /// the manifest, but clap injects `--help` on every subcommand. Offer it
 /// when the user has explicitly typed a flag prefix; binaries layer
 /// additional root-level flags on top via their own completion path.
-fn group_node_flags(prefix: &str) -> Vec<Candidate> {
+fn group_node_flags(prefix: &str, matching: Matching) -> Vec<Candidate> {
     ["--help"]
         .into_iter()
-        .filter(|f| f.starts_with(prefix))
+        .filter(|f| matching.keeps(f, prefix))
         .map(|f| Candidate::new(f, HELP_DESCRIPTION))
         .collect()
 }
@@ -501,13 +526,13 @@ fn scan_args(command: &Command, arg_tokens: &[String]) -> ArgScan {
     }
 }
 
-/// Top-level group names matching `prefix`, described by their `title`.
-fn groups(manifest: &Manifest, prefix: &str) -> Vec<Candidate> {
+/// Top-level group names kept for `prefix`, described by their `title`.
+fn groups(manifest: &Manifest, prefix: &str, matching: Matching) -> Vec<Candidate> {
     manifest
         .groups
         .iter()
         .filter(|g| g.parent.is_none())
-        .filter(|g| g.name.starts_with(prefix))
+        .filter(|g| matching.keeps(&g.name, prefix))
         .map(|g| Candidate::new(g.name.clone(), g.title.clone()))
         .collect()
 }
@@ -517,34 +542,34 @@ fn groups(manifest: &Manifest, prefix: &str) -> Vec<Candidate> {
 /// complete to `image`, `container`, plus any commands attached to
 /// `docker` itself. Each is described by its group `title` or command
 /// `summary`.
-fn commands(manifest: &Manifest, group: &str, prefix: &str) -> Vec<Candidate> {
+fn commands(manifest: &Manifest, group: &str, prefix: &str, matching: Matching) -> Vec<Candidate> {
     // Filter by prefix before cloning the description text, so a narrow
     // prefix doesn't pay for summaries/titles it's about to discard.
     let mut out: Vec<Candidate> = manifest
         .commands
         .iter()
-        .filter(|c| c.group == group && c.name.starts_with(prefix))
+        .filter(|c| c.group == group && matching.keeps(&c.name, prefix))
         .map(|c| Candidate::new(c.name.clone(), c.summary.clone()))
         .collect();
     out.extend(
         manifest
             .groups
             .iter()
-            .filter(|g| g.parent.as_deref() == Some(group) && g.name.starts_with(prefix))
+            .filter(|g| g.parent.as_deref() == Some(group) && matching.keeps(&g.name, prefix))
             .map(|g| Candidate::new(g.name.clone(), g.title.clone())),
     );
     out
 }
 
-fn flags(command: &Command, prefix: &str) -> Vec<Candidate> {
+fn flags(command: &Command, prefix: &str, matching: Matching) -> Vec<Candidate> {
     let mut out: Vec<Candidate> = command
         .arguments
         .iter()
         .filter(|a| !is_positional(a))
         .filter_map(|a| {
             let value = format!("--{}", a.name.replace('_', "-"));
-            value
-                .starts_with(prefix)
+            matching
+                .keeps(&value, prefix)
                 .then(|| Candidate::new(value, a.help.clone()))
         })
         .collect();
@@ -552,21 +577,21 @@ fn flags(command: &Command, prefix: &str) -> Vec<Candidate> {
     // user is explicitly probing flags (`--`/`-` prefix). The empty-prefix
     // flag fallback that fires for argparse-style children still returns
     // only the command's own flags, so existing behavior is preserved.
-    if is_flag_prefix(prefix) && "--help".starts_with(prefix) {
+    if is_flag_prefix(prefix) && matching.keeps("--help", prefix) {
         out.push(Candidate::new("--help", HELP_DESCRIPTION));
     }
     out
 }
 
-/// Choices matching `prefix`. A choice starting with `-` is offered only when
+/// Choices kept for `prefix`. A choice starting with `-` is offered only when
 /// `dash_ok`: clap reads it as a flag anywhere else and rejects the line. A bare
 /// `-` is a plain value to clap, so it is always offered.
-fn values(argument: &Argument, prefix: &str, dash_ok: bool) -> Vec<Candidate> {
+fn values(argument: &Argument, prefix: &str, dash_ok: bool, matching: Matching) -> Vec<Candidate> {
     argument
         .allowed_values
         .iter()
         .filter(|v| dash_ok || *v == "-" || !v.starts_with('-'))
-        .filter(|v| v.starts_with(prefix))
+        .filter(|v| matching.keeps(v, prefix))
         .map(|v| Candidate::bare(v.clone()))
         .collect()
 }
