@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev993-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev1006-2026-11-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev993 - 2026-11-08
+        0.35.2-dev1006 - 2026-11-09
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev993 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev1006 - 2026-11-09">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4513,15 +4513,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev993-2026-11-08" class="md-nav__link">
+  <a href="#0352-dev1006-2026-11-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev993 - 2026-11-08
+        0.35.2-dev1006 - 2026-11-09
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev993 - 2026-11-08">
+    <nav class="md-nav" aria-label="0.35.2-dev1006 - 2026-11-09">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7561,7 +7561,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev993-2026-11-08">0.35.2-dev993 - 2026-11-08<a class="headerlink" href="#0352-dev993-2026-11-08" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev1006-2026-11-09">0.35.2-dev1006 - 2026-11-09<a class="headerlink" href="#0352-dev1006-2026-11-09" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7768,6 +7768,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>This also fixes a case where Tab on a file name starting with <code>!</code>, after an open <code>"</code> with <code>set -H</code>, could run code. Pressing <code>M-*</code> (<code>insert-completions</code>) inside an open quote no longer inserts names unquoted, where a name could also run code. Names holding a quote could also run code or reach the command as the wrong argument on Tab; that is fixed too.</p>
 <p>Bash completion now offers nothing for a <code>$'…'</code> word holding <code>\'</code> or <code>\\'</code>, which readline misreads.</p>
 <p>Fix zsh completion installed to <code>~/.zfunc/_toolr</code> doing nothing on the first Tab in a new shell; the script now completes when autoloaded as well as when sourced. Run <code>toolr self completion install zsh --force</code> to replace an existing install.</p>
+<p>zsh and fish completion now leave matching the typed word to the shell, so zsh's <code>matcher-list</code> style (case-insensitive, partial-word or substring matching) and fish's case-insensitive and fuzzy matching work on toolr groups, commands, flags and choices: <code>toolr ci lint --mode FA&lt;Tab&gt;</code> can complete <code>fast</code>. Rerun <code>toolr self completion install zsh</code> (or <code>fish</code>) to pick up the new script. bash completion is unchanged.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7789,6 +7790,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Complete --opt=value in bash, zsh and fish (<a href="https://github.com/s0undt3ch/ToolR/commit/ac3678ccff8c60dbf746b4e137a0939f3457e39c"><code>ac3678c</code></a>)</li>
 <li><em>(trust)</em> Resolve a project root to its git repository key (<a href="https://github.com/s0undt3ch/ToolR/commit/d69bac81d598ebf251b54606b125b6269f316a75"><code>d69bac8</code></a>)</li>
 <li><em>(trust)</em> Key records and proofs on the repository (<a href="https://github.com/s0undt3ch/ToolR/commit/abb1d305ebccbea0c945d678f6df3318e13c0cc7"><code>abb1d30</code></a>)</li>
+<li><em>(complete)</em> Let the shell match candidates when asked (<a href="https://github.com/s0undt3ch/ToolR/commit/7ca1de7bd7af2cf49aa8e74826c22ad69a19f15e"><code>7ca1de7</code></a>)</li>
+<li><em>(complete)</em> Zsh matcher-list applies to toolr candidates (<a href="https://github.com/s0undt3ch/ToolR/commit/a8d1948b9940e948b61047d95332de314bcc2309"><code>a8d1948</code></a>)</li>
+<li><em>(complete)</em> Fish fuzzy matching applies to toolr candidates (<a href="https://github.com/s0undt3ch/ToolR/commit/772864e6d0ade66240a774fb7acb176a9419f2ce"><code>772864e</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8014,6 +8018,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> [<strong>breaking</strong>] Keep warnings under the root --quiet (<a href="https://github.com/s0undt3ch/ToolR/commit/1470bbe1b1942f6720eb79686eb9cc948ab750ab"><code>1470bbe</code></a>)</li>
 <li><em>(cli)</em> [<strong>breaking</strong>] Python-side warnings survive -q, prune warns on stderr (<a href="https://github.com/s0undt3ch/ToolR/commit/4d95c271b92560c636248250644b6ee2b03827d0"><code>4d95c27</code></a>)</li>
 <li><em>(completion)</em> Complete on the first autoloaded zsh Tab (<a href="https://github.com/s0undt3ch/ToolR/commit/946261e9654d999c652a73ada3d4a62c9762bbd5"><code>946261e</code></a>)</li>
+<li><em>(complete)</em> Zsh shows descriptions when 20 or fewer candidates match (<a href="https://github.com/s0undt3ch/ToolR/commit/f694004e46d079c628642df322e834d5c365f79b"><code>f694004</code></a>)</li>
+<li><em>(complete)</em> Neutral zsh completion tag, and a live row that needs the dequote (<a href="https://github.com/s0undt3ch/ToolR/commit/b6332dd0848f2f17e4acb7d8ee530924d3f78518"><code>b6332dd</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8105,6 +8111,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Derive root flag specs once, split the scan (<a href="https://github.com/s0undt3ch/ToolR/commit/510f5c40a6cb8b2df469c5882d3c7b7fa8c2fdae"><code>510f5c4</code></a>)</li>
 <li><em>(cache)</em> Build prune report lines as strings (<a href="https://github.com/s0undt3ch/ToolR/commit/076882e6593535f14c84808a0a4de5ae112abe80"><code>076882e</code></a>)</li>
 <li><em>(cli)</em> One statement of the -q rule, simpler prune Report (<a href="https://github.com/s0undt3ch/ToolR/commit/dca7854225d3c825de698a3cd07303f0b4686d25"><code>dca7854</code></a>)</li>
+<li><em>(test)</em> Collapse the zsh pty helpers and merge the uppercase-partial tests (<a href="https://github.com/s0undt3ch/ToolR/commit/b5575f3976eb67f71c359bd5c3e3d7f853d68816"><code>b5575f3</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8392,6 +8399,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Archive the quiet-cache-prune spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/60c810b2d230fcbd72ed0cd6ecb786d0f1fd9af0"><code>60c810b</code></a>)</li>
 <li><em>(specs)</em> Spec and plan for zsh autoload first tab (<a href="https://github.com/s0undt3ch/ToolR/commit/ff2cffaa09e217b1acf6f25a2614453b7889b871"><code>ff2cffa</code></a>)</li>
 <li><em>(specs)</em> Archive zsh autoload first tab spec (<a href="https://github.com/s0undt3ch/ToolR/commit/f002fadffef3dc39d52ea154b886e346597a488a"><code>f002fad</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for zsh matcher-list completion matching (<a href="https://github.com/s0undt3ch/ToolR/commit/37fefb108a896d0402c6a4b799b694af674bc2eb"><code>37fefb1</code></a>)</li>
+<li><em>(specs)</em> Archive the shell-matching design (<a href="https://github.com/s0undt3ch/ToolR/commit/50a5f88cd4d79983198874c0aeffa0b8dcf7e8f2"><code>50a5f88</code></a>)</li>
+<li><em>(cli)</em> Bash filters the completion reply by prefix itself (<a href="https://github.com/s0undt3ch/ToolR/commit/ed5ca88fc259d068f085a5e5757748be5fc678ee"><code>ed5ca88</code></a>)</li>
+<li><em>(specs)</em> Correct the zsh matcher-list spec after implementation (<a href="https://github.com/s0undt3ch/ToolR/commit/f685c7f1dc321bee4af8059343bcd351aaca0530"><code>f685c7f</code></a>)</li>
+<li><em>(complete)</em> Trim shell script comments and say complete prefix-matches (<a href="https://github.com/s0undt3ch/ToolR/commit/43844bfa87434699f97d25649366212778ab98c8"><code>43844bf</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
