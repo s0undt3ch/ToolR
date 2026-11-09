@@ -27,11 +27,6 @@ pytest_plugins = ["pytester"]
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-@pytest.fixture(scope="session")
-def repo_root() -> Path:
-    return _REPO_ROOT
-
-
 @pytest.fixture(autouse=True)
 def _clean_registry() -> Iterator[None]:
     """Give every test an empty process-wide command-group registry.
