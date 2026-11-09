@@ -470,6 +470,7 @@ jobs:
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
+      powershell-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons)[0] }}
     permissions:
       contents: read
       id-token: write
@@ -489,6 +490,7 @@ jobs:
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       pythons: ${{ needs.prepare-ci.outputs.test-pythons-narrow }}
+      powershell-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons-narrow)[0] }}
     permissions:
       contents: read
       id-token: write

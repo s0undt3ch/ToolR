@@ -340,9 +340,9 @@ respectively, as `install-smoke.yml` does), and asserts that `TabExpansion2` on 
 ### pwsh on Linux and macOS
 
 The completion tests are `#[ignore]`d, so a plain `cargo test` never needs a shell. CI runs them in their own
-`cargo llvm-cov --no-report` pass under `mise exec powershell@<version>`, which installs pwsh 7 on demand, with
-the version set once in `_test.yml`; `mise.toml` does not carry it, so contributors and the other CI jobs don't
-download it. fish and zsh come from apt/brew steps in `_test.yml`. A missing shell fails the tests loudly.
+`cargo llvm-cov --no-report` pass with the runner image's pwsh 7 (all three images ship it), in one job per OS:
+Windows and one Linux job (`powershell-python` in `_test.yml`); they don't depend on Python. `mise.toml` does not
+carry pwsh, so contributors don't download it; locally, `mise exec powershell@<version>` runs them. fish and zsh come from apt/brew steps in `_test.yml`. A missing shell fails the tests loudly.
 CONTRIBUTING.md documents the `--ignored` command.
 
 ### Unit and binary tests

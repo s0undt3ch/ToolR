@@ -15,7 +15,7 @@ toolr's data directory, a profile hint, and a home-directory fallback. The `__co
 unchanged.
 
 **Tech Stack:** Rust (toolr-core `full`, `dirs`), PowerShell 5.1-compatible script, real pwsh and
-powershell.exe in tests, `mise exec powershell@<version>` for pwsh.
+powershell.exe in tests, the runner image's pwsh in CI, `mise exec powershell@<version>` locally.
 
 **Spec:** `specs/2026-11-08-powershell-completion-design.md` — read it in full; this plan does not
 repeat its rules (word mapping table, quoting rules, exit-code handling, install hint text).
@@ -292,7 +292,7 @@ runs it with `-NoProfile -NonInteractive -ExecutionPolicy Bypass -File`, and par
 
 - [ ] **Step 1:** Confirm the Windows job runs the Rust integration tests (the
       `Run Rust Tests with Coverage` step uses `cargo llvm-cov … --tests` on every OS) and that
-      the completion tests run in their own `--ignored` pass under `mise exec powershell@<version>`.
+      the completion tests run in their own `--ignored` pass with the runner's pwsh, on Windows and one Linux job.
 - [ ] **Step 2:** After the Rust test step, add two Windows-only steps
       (`if: runner.os == 'Windows'`), `shell: powershell` and `shell: pwsh`, each running the snippet
       below (expecting major version 7 in the `pwsh` step).
