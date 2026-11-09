@@ -84,6 +84,9 @@ validation:
   absolute_links: warn
   unrecognized_links: warn
 
+hooks:
+  - docs/.hooks/llmstxt_gate.py
+
 plugins:
   - autorefs:
       resolve_closest: true
