@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from types import ModuleType
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -14,18 +15,24 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 # docs/.hooks isn't a package, so load the module by path.
-_HOOK = Path(__file__).parents[2] / "docs/.hooks/llmstxt_gate.py"
-_spec = importlib.util.spec_from_file_location("llmstxt_gate", _HOOK)
-assert _spec is not None
-assert _spec.loader is not None
-gate = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(gate)
+HOOK = Path(__file__).parents[2] / "docs/.hooks/llmstxt_gate.py"
+
+
+@pytest.fixture
+def gate() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("llmstxt_gate", HOOK)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 SITE_URL = "https://example.test/stable/"
 
 
 @pytest.fixture
-def make_site(tmp_path: Path) -> Callable[..., Path]:
+def make_site(gate: ModuleType, tmp_path: Path) -> Callable[..., Path]:
     def _make(
         *,
         pages: tuple[str, ...] = ("quickstart.md",),
@@ -53,7 +60,7 @@ def make_site(tmp_path: Path) -> Callable[..., Path]:
     return _make
 
 
-def test_nav_pages_flattens_and_skips_urls() -> None:
+def test_nav_pages_flattens_and_skips_urls(gate: ModuleType) -> None:
     nav = [
         {"Home": "index.md"},
         {"Guide": [{"Groups": "writing-commands/groups.md"}, {"Ext": "https://example.test/x.md"}]},
@@ -63,7 +70,7 @@ def test_nav_pages_flattens_and_skips_urls() -> None:
     assert gate.nav_pages(nav) == ["index.md", "writing-commands/groups.md", "cli.md"]
 
 
-def test_resolve_ignores_non_nav_matches() -> None:
+def test_resolve_ignores_non_nav_matches(gate: ModuleType) -> None:
     pages = ["reference/a.md", "reference/sub/x.md", "cli.md"]
     # fnmatch's "*" crosses "/", the same as the llmstxt plugin's own expansion.
     assert gate.resolve(["reference/*.md"], pages) == ["reference/a.md", "reference/sub/x.md"]
@@ -74,14 +81,14 @@ def test_resolve_ignores_non_nav_matches() -> None:
     assert gate.resolve(["cli.md"], pages) == ["cli.md"]
 
 
-def test_stale_patterns_reports_patterns_matching_no_page() -> None:
+def test_stale_patterns_reports_patterns_matching_no_page(gate: ModuleType) -> None:
     assert gate.stale_patterns(["cli.md", "gone.md", "old/*.md"], ["cli.md"]) == [
         "gone.md",
         "old/*.md",
     ]
 
 
-def test_section_patterns_flattens_str_and_dict_entries() -> None:
+def test_section_patterns_flattens_str_and_dict_entries(gate: ModuleType) -> None:
     sections = {
         "A": [{"index.md": "Overview"}, "reference/*.md"],
         "B": [{"cli.md": "CLI"}],
@@ -97,11 +104,11 @@ def test_section_patterns_flattens_str_and_dict_entries() -> None:
         ("a/b.md", "a/b/index.md"),
     ],
 )
-def test_md_url(page: str, expected: str) -> None:
+def test_md_url(gate: ModuleType, page: str, expected: str) -> None:
     assert gate.md_url(page) == expected
 
 
-def test_clean_site_has_no_problems(make_site: Callable[..., Path]) -> None:
+def test_clean_site_has_no_problems(gate: ModuleType, make_site: Callable[..., Path]) -> None:
     site = make_site(pages=("quickstart.md", "a/b.md"))
     problems = gate.find_problems(
         pages=["quickstart.md", "a/b.md", "migration.md"],
@@ -113,7 +120,7 @@ def test_clean_site_has_no_problems(make_site: Callable[..., Path]) -> None:
     assert problems == []
 
 
-def test_missing_output_is_reported(make_site: Callable[..., Path]) -> None:
+def test_missing_output_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
     site = make_site(write_full=False)
     problems = gate.find_problems(
         pages=["quickstart.md"],
@@ -126,7 +133,9 @@ def test_missing_output_is_reported(make_site: Callable[..., Path]) -> None:
     assert "llms-full.txt" in problems[0]
 
 
-def test_unclassified_nav_page_is_reported(make_site: Callable[..., Path]) -> None:
+def test_unclassified_nav_page_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site()
     problems = gate.find_problems(
         pages=["quickstart.md", "orphan.md"],
@@ -138,7 +147,7 @@ def test_unclassified_nav_page_is_reported(make_site: Callable[..., Path]) -> No
     assert any("orphan.md" in p for p in problems)
 
 
-def test_page_in_both_lists_is_reported(make_site: Callable[..., Path]) -> None:
+def test_page_in_both_lists_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
     site = make_site()
     problems = gate.find_problems(
         pages=["quickstart.md"],
@@ -150,7 +159,9 @@ def test_page_in_both_lists_is_reported(make_site: Callable[..., Path]) -> None:
     assert any("quickstart.md" in p and "both" in p for p in problems)
 
 
-def test_listed_page_missing_from_index_is_reported(make_site: Callable[..., Path]) -> None:
+def test_listed_page_missing_from_index_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site(links=())
     problems = gate.find_problems(
         pages=["quickstart.md"],
@@ -162,7 +173,9 @@ def test_listed_page_missing_from_index_is_reported(make_site: Callable[..., Pat
     assert any("quickstart.md" in p and "llms.txt" in p for p in problems)
 
 
-def test_listed_page_missing_from_full_is_reported(make_site: Callable[..., Path]) -> None:
+def test_listed_page_missing_from_full_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site(full="# Something else\n")
     problems = gate.find_problems(
         pages=["quickstart.md"],
@@ -174,7 +187,9 @@ def test_listed_page_missing_from_full_is_reported(make_site: Callable[..., Path
     assert any("quickstart.md" in p and "llms-full.txt" in p for p in problems)
 
 
-def test_listed_page_truncated_in_full_is_reported(make_site: Callable[..., Path]) -> None:
+def test_listed_page_truncated_in_full_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site(full="# quickstart.md\n\nFirst paragraph\n")
     (site / "quickstart/index.md").write_text(
         "# quickstart.md\n\nFirst paragraph\n\n## More\n\nLast paragraph\n"
@@ -191,7 +206,7 @@ def test_listed_page_truncated_in_full_is_reported(make_site: Callable[..., Path
     )
 
 
-def test_dead_link_is_reported(make_site: Callable[..., Path]) -> None:
+def test_dead_link_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
     site = make_site(links=(SITE_URL + "quickstart/index.md", SITE_URL + "gone/index.md"))
     problems = gate.find_problems(
         pages=["quickstart.md"],
@@ -203,7 +218,9 @@ def test_dead_link_is_reported(make_site: Callable[..., Path]) -> None:
     assert any("gone/index.md" in p for p in problems)
 
 
-def test_on_post_build_raises_plugin_error(make_site: Callable[..., Path]) -> None:
+def test_on_post_build_raises_plugin_error(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site()
     config = SimpleNamespace(
         site_dir=str(site),
@@ -220,7 +237,9 @@ def test_on_post_build_raises_plugin_error(make_site: Callable[..., Path]) -> No
         gate.on_post_build(config)
 
 
-def test_live_rendered_page_link_is_not_reported(make_site: Callable[..., Path]) -> None:
+def test_live_rendered_page_link_is_not_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site(links=(SITE_URL + "quickstart/index.md", SITE_URL + "skills/"))
     (site / "skills").mkdir()
     (site / "skills/index.html").write_text("<html></html>")
@@ -234,7 +253,9 @@ def test_live_rendered_page_link_is_not_reported(make_site: Callable[..., Path])
     assert problems == []
 
 
-def test_dead_rendered_page_link_is_reported(make_site: Callable[..., Path]) -> None:
+def test_dead_rendered_page_link_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site(links=(SITE_URL + "quickstart/index.md", SITE_URL + "gone/"))
     problems = gate.find_problems(
         pages=["quickstart.md"],
@@ -246,7 +267,9 @@ def test_dead_rendered_page_link_is_reported(make_site: Callable[..., Path]) -> 
     assert any("gone/" in p for p in problems)
 
 
-def test_missing_markdown_copy_is_reported_distinctly(make_site: Callable[..., Path]) -> None:
+def test_missing_markdown_copy_is_reported_distinctly(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site()
     (site / "quickstart/index.md").unlink()
     problems = gate.find_problems(
@@ -260,7 +283,7 @@ def test_missing_markdown_copy_is_reported_distinctly(make_site: Callable[..., P
     assert not any("missing from llms-full.txt" in p for p in problems)
 
 
-def test_missing_llms_txt_is_reported(make_site: Callable[..., Path]) -> None:
+def test_missing_llms_txt_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
     site = make_site()
     (site / "llms.txt").unlink()
     problems = gate.find_problems(
@@ -274,7 +297,7 @@ def test_missing_llms_txt_is_reported(make_site: Callable[..., Path]) -> None:
     assert "llms.txt" in problems[0]
 
 
-def test_empty_llms_full_is_reported(make_site: Callable[..., Path]) -> None:
+def test_empty_llms_full_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
     site = make_site(full="")
     problems = gate.find_problems(
         pages=["quickstart.md"],
@@ -287,7 +310,7 @@ def test_empty_llms_full_is_reported(make_site: Callable[..., Path]) -> None:
     assert "llms-full.txt" in problems[0]
 
 
-def test_unset_site_url_is_reported(make_site: Callable[..., Path]) -> None:
+def test_unset_site_url_is_reported(gate: ModuleType, make_site: Callable[..., Path]) -> None:
     site = make_site()
     problems = gate.find_problems(
         pages=["quickstart.md"], listed=["quickstart.md"], excluded=[], site_dir=site, site_url=""
@@ -296,7 +319,9 @@ def test_unset_site_url_is_reported(make_site: Callable[..., Path]) -> None:
     assert "site_url" in problems[0]
 
 
-def test_site_url_without_trailing_slash_is_normalised(make_site: Callable[..., Path]) -> None:
+def test_site_url_without_trailing_slash_is_normalised(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site()
     problems = gate.find_problems(
         pages=["quickstart.md"],
@@ -308,7 +333,9 @@ def test_site_url_without_trailing_slash_is_normalised(make_site: Callable[..., 
     assert problems == []
 
 
-def test_on_post_build_reports_stale_patterns(make_site: Callable[..., Path]) -> None:
+def test_on_post_build_reports_stale_patterns(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site()
     config = SimpleNamespace(
         site_dir=str(site),
@@ -327,7 +354,7 @@ def test_on_post_build_reports_stale_patterns(make_site: Callable[..., Path]) ->
         gate.on_post_build(config)
 
 
-def test_alternate_link_for_listed_page() -> None:
+def test_alternate_link_for_listed_page(gate: ModuleType) -> None:
     link = gate.alternate_link("quickstart.md", ["quickstart.md"], "https://example.test/stable")
     assert link == (
         '<link rel="alternate" type="text/markdown" '
@@ -335,7 +362,7 @@ def test_alternate_link_for_listed_page() -> None:
     )
 
 
-def test_alternate_link_none_for_unlisted_page() -> None:
+def test_alternate_link_none_for_unlisted_page(gate: ModuleType) -> None:
     assert gate.alternate_link("internals.md", ["quickstart.md"], SITE_URL) is None
 
 
@@ -356,7 +383,9 @@ def _post_page_config() -> SimpleNamespace:
     [("quickstart.md", True), ("internals.md", False)],
     ids=["listed", "excluded"],
 )
-def test_on_post_page_inserts_link_before_head_close(src: str, tagged: bool) -> None:
+def test_on_post_page_inserts_link_before_head_close(
+    gate: ModuleType, src: str, tagged: bool
+) -> None:
     html = "<html><head><title>T</title></head><body></body></html>"
     page = SimpleNamespace(file=SimpleNamespace(src_uri=src))
     out = gate.on_post_page(html, page=page, config=_post_page_config())
@@ -382,7 +411,7 @@ def _broken_build_config(site: Path) -> SimpleNamespace:
 
 
 def test_dirty_build_skips_the_gate_with_a_warning(
-    make_site: Callable[..., Path], caplog: pytest.LogCaptureFixture
+    gate: ModuleType, make_site: Callable[..., Path], caplog: pytest.LogCaptureFixture
 ) -> None:
     config = _broken_build_config(make_site())
     gate.on_startup(command="build", dirty=True)
@@ -394,7 +423,9 @@ def test_dirty_build_skips_the_gate_with_a_warning(
     assert "dirty" in caplog.text
 
 
-def test_clean_build_still_raises_after_a_dirty_one(make_site: Callable[..., Path]) -> None:
+def test_clean_build_still_raises_after_a_dirty_one(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     config = _broken_build_config(make_site())
     gate.on_startup(command="build", dirty=True)
     gate.on_startup(command="build", dirty=False)
@@ -402,14 +433,16 @@ def test_clean_build_still_raises_after_a_dirty_one(make_site: Callable[..., Pat
         gate.on_post_build(config)
 
 
-def test_on_post_build_names_a_missing_plugin(make_site: Callable[..., Path]) -> None:
+def test_on_post_build_names_a_missing_plugin(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     config = _broken_build_config(make_site())
     config.plugins = {}
     with pytest.raises(PluginError, match="llmstxt plugin is not configured"):
         gate.on_post_build(config)
 
 
-def test_on_post_page_names_a_missing_plugin() -> None:
+def test_on_post_page_names_a_missing_plugin(gate: ModuleType) -> None:
     config = _post_page_config()
     config.plugins = {}
     page = SimpleNamespace(file=SimpleNamespace(src_uri="quickstart.md"))
@@ -418,6 +451,7 @@ def test_on_post_page_names_a_missing_plugin() -> None:
 
 
 def test_truncated_page_is_reported_even_when_another_shares_its_last_line(
+    gate: ModuleType,
     make_site: Callable[..., Path],
 ) -> None:
     shared = "Next: [Nested groups](../groups/)"
@@ -437,7 +471,9 @@ def test_truncated_page_is_reported_even_when_another_shares_its_last_line(
     assert "incomplete" in problems[0]
 
 
-def test_llms_txt_entry_for_an_off_nav_page_is_reported(make_site: Callable[..., Path]) -> None:
+def test_llms_txt_entry_for_an_off_nav_page_is_reported(
+    gate: ModuleType, make_site: Callable[..., Path]
+) -> None:
     site = make_site(
         links=(SITE_URL + "quickstart/index.md", SITE_URL + "reference/hidden/index.md")
     )
