@@ -94,6 +94,7 @@ fn render_markdown(cmd: &Command, bin_path: &str, mode: HelpMode, width: usize) 
     // closest to the prompt when the user reads the page bottom-up.
     push_commands(&mut out, cmd);
     push_options_by_heading(&mut out, cmd, mode, width);
+    push_after_help(&mut out, cmd, mode);
     // Each section pushes a trailing blank-line separator. With the
     // bugs footer gone, the final section's separator becomes a stray
     // trailing blank line — collapse to exactly one terminating "\n".
@@ -116,6 +117,20 @@ fn push_about(out: &mut String, cmd: &Command, mode: HelpMode) {
     };
     if !text.is_empty() {
         out.push_str(&text);
+        out.push_str("\n\n");
+    }
+}
+
+/// Footer set via clap's `after_help` / `after_long_help`. Long mode prefers
+/// the long variant and falls back to the short one, as clap does.
+fn push_after_help(out: &mut String, cmd: &Command, mode: HelpMode) {
+    let short = cmd.get_after_help();
+    let text = match mode {
+        HelpMode::Long => cmd.get_after_long_help().or(short),
+        HelpMode::Short => short,
+    };
+    if let Some(text) = text {
+        out.push_str(&text.to_string());
         out.push_str("\n\n");
     }
 }
@@ -836,6 +851,18 @@ mod tests {
             !md.contains("[default:"),
             "short mode suppresses defaults: {md}"
         );
+    }
+
+    #[test]
+    fn after_help_renders_last_in_both_modes() {
+        let cmd = widget().after_help("Short footer.");
+        for mode in [HelpMode::Short, HelpMode::Long] {
+            let out = render_markdown(&cmd, "widget", mode, 80);
+            assert!(out.ends_with("Short footer.\n"), "{out}");
+        }
+        let cmd = widget().after_help("Short.").after_long_help("Long.");
+        assert!(render_markdown(&cmd, "widget", HelpMode::Long, 80).ends_with("Long.\n"));
+        assert!(render_markdown(&cmd, "widget", HelpMode::Short, 80).ends_with("Short.\n"));
     }
 
     #[test]

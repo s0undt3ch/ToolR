@@ -26,3 +26,6 @@ Output Options:
       --no-output-timeout-secs <SECONDS>
           Default no-output watchdog applied to every ctx.run(...) subprocess — abort if no
           stdout/stderr for this many seconds. Per-call no_output_timeout_secs= wins when set.
+
+Documentation: https://toolr.readthedocs.io/
+For AI agents: https://toolr.readthedocs.io/llms.txt
