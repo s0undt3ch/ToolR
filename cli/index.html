@@ -2479,7 +2479,7 @@ drops the stderr line); says so on stderr when there was none.</p>
 <h3 id="self-completion-print"><code>toolr self completion print &lt;shell&gt;</code><a class="headerlink" href="#self-completion-print" title="Permanent link">&para;</a></h3>
 <p>Print the completion script for <code>&lt;shell&gt;</code> to stdout. Useful for piping
 into your own dotfiles management.</p>
-<p><strong><code>&lt;shell&gt;</code>:</strong> <code>bash</code>, <code>zsh</code>, or <code>fish</code>.</p>
+<p><strong><code>&lt;shell&gt;</code>:</strong> <code>bash</code>, <code>zsh</code>, <code>fish</code>, or <code>powershell</code> (alias <code>pwsh</code>).</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>print<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>Print the completion script for a shell to stdout
@@ -2488,7 +2488,7 @@ into your own dotfiles management.</p>
 </span><span id="__span-28-4"><a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>
 </span><span id="__span-28-5"><a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a>Arguments:
 </span><span id="__span-28-6"><a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>  &lt;shell&gt;  Shell to emit a completion script for
-</span><span id="__span-28-7"><a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a>           [possible values: bash, zsh, fish]
+</span><span id="__span-28-7"><a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a>           [possible values: bash, zsh, fish, powershell]
 </span><span id="__span-28-8"><a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a>
 </span><span id="__span-28-9"><a id="__codelineno-28-9" name="__codelineno-28-9" href="#__codelineno-28-9"></a>Options:
 </span><span id="__span-28-10"><a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a>  -h, --help
@@ -2496,8 +2496,9 @@ into your own dotfiles management.</p>
 </span></code></pre></div>
 <h3 id="self-completion-install"><code>toolr self completion install &lt;shell&gt; [--force]</code><a class="headerlink" href="#self-completion-install" title="Permanent link">&para;</a></h3>
 <p>Write the completion script for <code>&lt;shell&gt;</code> into its standard location
-(<code>~/.local/share/bash-completion/completions/</code>, <code>~/.zfunc/</code>, or
-<code>~/.config/fish/completions/</code>). <code>--force</code> overwrites an existing file
+(<code>~/.local/share/bash-completion/completions/</code>, <code>~/.zfunc/</code>,
+<code>~/.config/fish/completions/</code>, or <code>toolr/completions/toolr.ps1</code> under the
+data directory for PowerShell). <code>--force</code> overwrites an existing file
 without prompting.</p>
 <p>Bash completion needs bash 4.4 or newer; on an older bash, sourcing the
 script prints one warning and registers nothing. The script itself doesn't
@@ -2518,6 +2519,40 @@ directory. For bash:</p>
 <p>In bash, a word with an unclosed quote (<code>--cfg 'a:b</code>) completes nothing.</p>
 <p>An aliased toolr (<code>alias t=toolr</code>) gets no completion by default; run
 <code>complete -F _toolr_complete t</code> to register it.</p>
+<p>PowerShell completion needs PowerShell 7 or newer. Windows PowerShell 5.1,
+the one built into Windows, prints one warning and registers nothing.
+PowerShell 7 installs alongside it (<a href="https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows">install
+guide</a>,
+<a href="https://learn.microsoft.com/en-us/powershell/scripting/whats-new/migrating-from-windows-powershell-51-to-powershell-7">migrating from 5.1</a>).
+PowerShell has no completion directory, so toolr writes the script to
+<code>toolr/completions/toolr.ps1</code> under <code>$XDG_DATA_HOME</code> when it's set, else
+under the platform data directory (<code>%APPDATA%</code> on Windows,
+<code>~/Library/Application Support</code> on macOS, <code>~/.local/share</code> on Linux), and
+prints the line to load it:</p>
+<ul>
+<li>Add <code>. '&lt;installed path&gt;'</code> to your profile
+  (<code>$PROFILE.CurrentUserAllHosts</code>); toolr doesn't edit the profile itself.</li>
+<li>On Windows the execution policy must allow local scripts:
+  <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code>.</li>
+<li>Or load it on every shell start without a file or a policy change:
+  <code>Invoke-Expression (&amp; toolr self completion print powershell | Out-String)</code>.</li>
+<li>Register an alias with
+  <code>Register-ArgumentCompleter -Native -CommandName t -ScriptBlock ${function:_toolr_complete}</code>.</li>
+</ul>
+<p>Known limits in PowerShell:</p>
+<ul>
+<li>When toolr has no candidates, PowerShell falls back to its own file-name
+  completion.</li>
+<li>A cursor inside a word completes the whole word.</li>
+<li>A word holding a variable, sub-expression or array (<code>$x</code>, <code>"a$(x)"</code>,
+  <code>a,b</code>) completes nothing, and neither does anything after one or after
+  <code>--%</code>.</li>
+<li>In a file-name partial, <code>*</code>, <code>?</code> and <code>[...]</code> are wildcards, as in
+  PowerShell's own completion, so a partial with a complete <code>[...]</code> pair
+  matches nothing.</li>
+<li>A toolr reached only through a <code>.cmd</code> or <code>.bat</code> shim completes nothing.</li>
+<li>PowerShell ISE isn't supported.</li>
+</ul>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>install<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>Install the completion script for a shell into its standard location
@@ -2526,7 +2561,7 @@ directory. For bash:</p>
 </span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>
 </span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>Arguments:
 </span><span id="__span-30-6"><a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>  &lt;shell&gt;  Shell to install the completion script for
-</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>           [possible values: bash, zsh, fish]
+</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>           [possible values: bash, zsh, fish, powershell]
 </span><span id="__span-30-8"><a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a>
 </span><span id="__span-30-9"><a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a>Options:
 </span><span id="__span-30-10"><a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>      --force

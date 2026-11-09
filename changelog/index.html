@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev1014-2026-11-09" class="md-nav__link">
+  <a href="#0352-dev1042-2026-11-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev1014 - 2026-11-09
+        0.35.2-dev1042 - 2026-11-09
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev1014 - 2026-11-09">
+    <nav class="md-nav" aria-label="0.35.2-dev1042 - 2026-11-09">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4513,15 +4513,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev1014-2026-11-09" class="md-nav__link">
+  <a href="#0352-dev1042-2026-11-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev1014 - 2026-11-09
+        0.35.2-dev1042 - 2026-11-09
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev1014 - 2026-11-09">
+    <nav class="md-nav" aria-label="0.35.2-dev1042 - 2026-11-09">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7561,7 +7561,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev1014-2026-11-09">0.35.2-dev1014 - 2026-11-09<a class="headerlink" href="#0352-dev1014-2026-11-09" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev1042-2026-11-09">0.35.2-dev1042 - 2026-11-09<a class="headerlink" href="#0352-dev1042-2026-11-09" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7769,6 +7769,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>Bash completion now offers nothing for a <code>$'…'</code> word holding <code>\'</code> or <code>\\'</code>, which readline misreads.</p>
 <p>Fix zsh completion installed to <code>~/.zfunc/_toolr</code> doing nothing on the first Tab in a new shell; the script now completes when autoloaded as well as when sourced. Run <code>toolr self completion install zsh --force</code> to replace an existing install.</p>
 <p>zsh and fish completion now leave matching the typed word to the shell, so zsh's <code>matcher-list</code> style (case-insensitive, partial-word or substring matching) and fish's case-insensitive and fuzzy matching work on toolr groups, commands, flags and choices: <code>toolr ci lint --mode FA&lt;Tab&gt;</code> can complete <code>fast</code>. Rerun <code>toolr self completion install zsh</code> (or <code>fish</code>) to pick up the new script. bash completion is unchanged.</p>
+<p>toolr now completes in PowerShell (PowerShell 7 or newer; Windows PowerShell 5.1 prints a warning and registers nothing): run <code>toolr self completion install powershell</code> and add the printed line to your profile. Installing completion no longer needs <code>HOME</code> to be set.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7793,6 +7794,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Let the shell match candidates when asked (<a href="https://github.com/s0undt3ch/ToolR/commit/7ca1de7bd7af2cf49aa8e74826c22ad69a19f15e"><code>7ca1de7</code></a>)</li>
 <li><em>(complete)</em> Zsh matcher-list applies to toolr candidates (<a href="https://github.com/s0undt3ch/ToolR/commit/a8d1948b9940e948b61047d95332de314bcc2309"><code>a8d1948</code></a>)</li>
 <li><em>(complete)</em> Fish fuzzy matching applies to toolr candidates (<a href="https://github.com/s0undt3ch/ToolR/commit/772864e6d0ade66240a774fb7acb176a9419f2ce"><code>772864e</code></a>)</li>
+<li><em>(completion)</em> Add the powershell shell value and install path (<a href="https://github.com/s0undt3ch/ToolR/commit/f320e09b8c76e6aaee59fe74e982485d78c3ecb0"><code>f320e09</code></a>)</li>
+<li><em>(completion)</em> Add the powershell completion script (<a href="https://github.com/s0undt3ch/ToolR/commit/e55274358fe1114595fd5dfeee3e7c6d9138fadc"><code>e552743</code></a>)</li>
+<li><em>(completion)</em> Require PowerShell 7 for completion (<a href="https://github.com/s0undt3ch/ToolR/commit/96e791edb1d66a457a93cc309a9cfe068335b16d"><code>96e791e</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8020,6 +8024,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(completion)</em> Complete on the first autoloaded zsh Tab (<a href="https://github.com/s0undt3ch/ToolR/commit/946261e9654d999c652a73ada3d4a62c9762bbd5"><code>946261e</code></a>)</li>
 <li><em>(complete)</em> Zsh shows descriptions when 20 or fewer candidates match (<a href="https://github.com/s0undt3ch/ToolR/commit/f694004e46d079c628642df322e834d5c365f79b"><code>f694004</code></a>)</li>
 <li><em>(complete)</em> Neutral zsh completion tag, and a live row that needs the dequote (<a href="https://github.com/s0undt3ch/ToolR/commit/b6332dd0848f2f17e4acb7d8ee530924d3f78518"><code>b6332dd</code></a>)</li>
+<li><em>(completion)</em> Give native commands the literal path in powershell (<a href="https://github.com/s0undt3ch/ToolR/commit/f945aac9097c7b4d8f28e9938a9901b8294ae60b"><code>f945aac</code></a>)</li>
+<li><em>(completion)</em> Expand a completed ~ path and pass powershell the parsed partial (<a href="https://github.com/s0undt3ch/ToolR/commit/2932ae783e4c401fc82b4de9e49559f2a225ed52"><code>2932ae7</code></a>)</li>
+<li><em>(completion)</em> Match an unclosed [ literally in powershell path partials (<a href="https://github.com/s0undt3ch/ToolR/commit/bad34cfcbfc83d36db8a8fc619afe928f34f52aa"><code>bad34cf</code></a>)</li>
+<li><em>(completion)</em> Match a literal backtick in powershell path partials (<a href="https://github.com/s0undt3ch/ToolR/commit/082bd2a654e8d458dc6f8b0bb646731144ad79c7"><code>082bd2a</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8112,6 +8120,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cache)</em> Build prune report lines as strings (<a href="https://github.com/s0undt3ch/ToolR/commit/076882e6593535f14c84808a0a4de5ae112abe80"><code>076882e</code></a>)</li>
 <li><em>(cli)</em> One statement of the -q rule, simpler prune Report (<a href="https://github.com/s0undt3ch/ToolR/commit/dca7854225d3c825de698a3cd07303f0b4686d25"><code>dca7854</code></a>)</li>
 <li><em>(test)</em> Collapse the zsh pty helpers and merge the uppercase-partial tests (<a href="https://github.com/s0undt3ch/ToolR/commit/b5575f3976eb67f71c359bd5c3e3d7f853d68816"><code>b5575f3</code></a>)</li>
+<li><em>(completion)</em> Pick each shell's install inputs before one path call (<a href="https://github.com/s0undt3ch/ToolR/commit/e27943b38780822d3a1258c7ae61a6913ac4660d"><code>e27943b</code></a>)</li>
+<li><em>(completion)</em> Tidy the powershell script's quoting and comments (<a href="https://github.com/s0undt3ch/ToolR/commit/98bb86a708152d538733bdf397eb907623676af2"><code>98bb86a</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8404,6 +8414,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> Bash filters the completion reply by prefix itself (<a href="https://github.com/s0undt3ch/ToolR/commit/ed5ca88fc259d068f085a5e5757748be5fc678ee"><code>ed5ca88</code></a>)</li>
 <li><em>(specs)</em> Correct the zsh matcher-list spec after implementation (<a href="https://github.com/s0undt3ch/ToolR/commit/f685c7f1dc321bee4af8059343bcd351aaca0530"><code>f685c7f</code></a>)</li>
 <li><em>(complete)</em> Trim shell script comments and say complete prefix-matches (<a href="https://github.com/s0undt3ch/ToolR/commit/43844bfa87434699f97d25649366212778ab98c8"><code>43844bf</code></a>)</li>
+<li><em>(specs)</em> Spec and plan for powershell completion (<a href="https://github.com/s0undt3ch/ToolR/commit/be6c6d68d0d48e5f4af84c9ac9e40d6e21b44d75"><code>be6c6d6</code></a>)</li>
+<li><em>(specs)</em> Record the user's powershell completion decisions (<a href="https://github.com/s0undt3ch/ToolR/commit/a3b307a154bdb3eca1a053416a042055c19c2528"><code>a3b307a</code></a>)</li>
+<li><em>(completion)</em> Document powershell completion (<a href="https://github.com/s0undt3ch/ToolR/commit/7e23230bcd122878813951226bd5ff5be49f95ea"><code>7e23230</code></a>)</li>
+<li><em>(specs)</em> Archive the powershell completion spec (<a href="https://github.com/s0undt3ch/ToolR/commit/cbe5e97c3bd0a22eaa97fd1da7b021d423581c56"><code>cbe5e97</code></a>)</li>
+<li><em>(specs)</em> Describe the shipped powershell path completion and known limits (<a href="https://github.com/s0undt3ch/ToolR/commit/ea28ff9f142d9039d966b998c5e99c624e48d8a7"><code>ea28ff9</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8552,6 +8567,15 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(runner)</em> Make the quiet-warning test work before Python 3.14 (<a href="https://github.com/s0undt3ch/ToolR/commit/aa8c8684c2f71e008b2c1d9ca0847bc8062cb6b5"><code>aa8c868</code></a>)</li>
 <li><em>(command)</em> Stream to the real stdout when sys.stdout has no fd (<a href="https://github.com/s0undt3ch/ToolR/commit/e5577f79b5a0e9df30ba68cd76df6dc79536d962"><code>e5577f7</code></a>)</li>
 <li><em>(completion)</em> Name the zsh load mode in failures and clarify the autoload comment (<a href="https://github.com/s0undt3ch/ToolR/commit/1b8bbc7d4fdaa9a02b91b7b6da457c03ee051749"><code>1b8bbc7</code></a>)</li>
+<li><em>(completion)</em> Pin powershell completion after --% and record the constant word rule (<a href="https://github.com/s0undt3ch/ToolR/commit/57fe23f405b6b7eb7a0395b270c4c7f22d080159"><code>57fe23f</code></a>)</li>
+<li><em>(completion)</em> An empty HOME no longer fails the install (<a href="https://github.com/s0undt3ch/ToolR/commit/e79ef489498345b90d89074faa24ffff6f1f3fbc"><code>e79ef48</code></a>)</li>
+<li><em>(completion)</em> Name the home-less powershell install test for what it checks (<a href="https://github.com/s0undt3ch/ToolR/commit/17fe305174fecd323c210aa2a6eb3d1d319cbfb7"><code>17fe305</code></a>)</li>
+<li><em>(completion)</em> Pin the empty powershell directory partial to directories (<a href="https://github.com/s0undt3ch/ToolR/commit/8addd0137d20f43ae4f7651fee4855da8c5a87c3"><code>8addd01</code></a>)</li>
+<li><em>(completion)</em> Pin Windows PowerShell 5.1's dash-word gap (<a href="https://github.com/s0undt3ch/ToolR/commit/bd8221788f858d2a2b7e8efbd50aee66aed8507e"><code>bd82217</code></a>)</li>
+<li><em>(completion)</em> Assert the powershell driver markers exist (<a href="https://github.com/s0undt3ch/ToolR/commit/359451d80fdd1768ee355aeaaf5de4c73a634701"><code>359451d</code></a>)</li>
+<li><em>(completion)</em> Ignore the powershell tests unless run with --ignored (<a href="https://github.com/s0undt3ch/ToolR/commit/c9027892e172fcd9d40b025a323904af983b796b"><code>c902789</code></a>)</li>
+<li><em>(completion)</em> Compare powershell home paths in long form (<a href="https://github.com/s0undt3ch/ToolR/commit/6dfacb5abdc6da2b955474a27778ad5c45018285"><code>6dfacb5</code></a>)</li>
+<li><em>(completion)</em> Pin Windows PowerShell 5.1's backtick partial gap (<a href="https://github.com/s0undt3ch/ToolR/commit/dd0b075e8da6f9e03b4e299f88dd546a41692fa9"><code>dd0b075</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8608,6 +8632,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(lint)</em> Enforce ruff's unspecified-encoding rule (<a href="https://github.com/s0undt3ch/ToolR/commit/8dea0f7d27b726e220d2599459658eb162315571"><code>8dea0f7</code></a>)</li>
 <li>Skip build and test jobs for PRs that only touch CI-inert paths (<a href="https://github.com/s0undt3ch/ToolR/commit/50c173cf7ae3d17966b48d5a6bd842fcb46627b7"><code>50c173c</code></a>)</li>
 <li>Check distributions on every run and upload to Test PyPI only at release (<a href="https://github.com/s0undt3ch/ToolR/commit/b6771d8693fff8e1264940f8d7d2d9e50a5f7368"><code>b6771d8</code></a>)</li>
+<li><em>(completion)</em> Exercise powershell completion on 5.1 and pwsh (<a href="https://github.com/s0undt3ch/ToolR/commit/e40d4ad3587d750c4d24130d63b0e55a51d68779"><code>e40d4ad</code></a>)</li>
+<li><em>(test)</em> Install powershell only for the completion test run (<a href="https://github.com/s0undt3ch/ToolR/commit/49ce48980036eae9e6f1c0c80cab47db50b2d2ce"><code>49ce489</code></a>)</li>
+<li><em>(test)</em> Use the runner's pwsh and run the powershell tests once per os (<a href="https://github.com/s0undt3ch/ToolR/commit/6b89ede2b392b8040deb8baaf436736b1db6e491"><code>6b89ede</code></a>)</li>
+<li><em>(test)</em> Double-quote the powershell-python description (<a href="https://github.com/s0undt3ch/ToolR/commit/3777dfba0552e1cb841b46f8fe46d038835fe109"><code>3777dfb</code></a>)</li>
 </ul>
 <h3 id="revert"><!-- 9 -->◀️ Revert<a class="headerlink" href="#revert" title="Permanent link">&para;</a></h3>
 <ul>

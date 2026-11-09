@@ -1887,18 +1887,23 @@ turns the trust check off because every test drives a throwaway repository. Use 
 </table>
 <p>The Rust integration tests spawn the built <code>toolr</code> binary via <code>assert_cmd</code>. Don't shadow them with
 Python-level subprocess tests unless the behaviour can't be exercised in Rust.</p>
+<p>The completion tests drive real shells. bash 4.4+, zsh and fish come from your system package manager.
+The PowerShell completion tests are <code>#[ignore]</code>d by default, because few dev machines have <code>pwsh</code>.
+Run them on purpose, with a missing shell failing them:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mise<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>powershell@7.6.9<span class="w"> </span>--<span class="w"> </span>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>-p<span class="w"> </span>toolr<span class="w"> </span>--test<span class="w"> </span>complete_powershell<span class="w"> </span>--<span class="w"> </span>--ignored
+</span></code></pre></div>
 <p><code>crates/toolr-py/python/toolr/_context.pyi</code> is hand-written, not generated. <code>tests/context/test_context_stub.py</code>
 runs mypy's stubtest against it, so changing <code>Context</code> or another public name in <code>_context.py</code> needs a matching
 stub edit.</p>
 <h3 id="reproducing-a-failure-from-its-seed">Reproducing a failure from its seed<a class="headerlink" href="#reproducing-a-failure-from-its-seed" title="Permanent link">&para;</a></h3>
 <p>The Python suite runs in random order with <code>pytest-randomly</code>. Every run prints its seed in the header
 (<code>Using --randomly-seed=1234</code>), including in the CI log. To replay that order locally:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--randomly-seed<span class="o">=</span><span class="m">1234</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--randomly-seed<span class="o">=</span><span class="m">1234</span>
 </span></code></pre></div>
 <p><code>-p no:randomly</code> restores the default order. To replay the reverse of that order, which is a quick
 way to find a test that leaks state:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--co<span class="w"> </span>-q<span class="w"> </span>-p<span class="w"> </span>no:randomly<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>::<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-r<span class="w"> </span>&gt;<span class="w"> </span>ids.txt<span class="w">   </span><span class="c1"># `tac` on Linux</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-p<span class="w"> </span>no:cacheprovider<span class="w"> </span>-p<span class="w"> </span>no:randomly<span class="w"> </span><span class="s2">"@ids.txt"</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>--co<span class="w"> </span>-q<span class="w"> </span>-p<span class="w"> </span>no:randomly<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>::<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-r<span class="w"> </span>&gt;<span class="w"> </span>ids.txt<span class="w">   </span><span class="c1"># `tac` on Linux</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-p<span class="w"> </span>no:cacheprovider<span class="w"> </span>-p<span class="w"> </span>no:randomly<span class="w"> </span><span class="s2">"@ids.txt"</span>
 </span></code></pre></div>
 <p>Run it in the foreground: a backgrounded shell starts children with <code>SIGINT</code> ignored, which fails
 <code>tests/e2e/test_signals.py</code>.</p>
@@ -1961,16 +1966,16 @@ each <code>non-exhaustive patterns: … not covered</code> error names the next 
 </ul>
 <h2 id="release-notes">Release notes<a class="headerlink" href="#release-notes" title="Permanent link">&para;</a></h2>
 <p>User-visible changes queue a note in <code>release-notes/</code>:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>add<span class="w"> </span>--text<span class="w"> </span><span class="s2">"…"</span><span class="w">            </span><span class="c1"># new note, slug from the branch name</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>add<span class="w"> </span>--append<span class="w"> </span>--text<span class="w"> </span><span class="s2">"…"</span><span class="w">   </span><span class="c1"># add to the branch's existing note</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>check<span class="w"> </span>--base<span class="w"> </span>&lt;parent&gt;<span class="w">     </span><span class="c1"># the CI gate, run locally</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>add<span class="w"> </span>--text<span class="w"> </span><span class="s2">"…"</span><span class="w">            </span><span class="c1"># new note, slug from the branch name</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>add<span class="w"> </span>--append<span class="w"> </span>--text<span class="w"> </span><span class="s2">"…"</span><span class="w">   </span><span class="c1"># add to the branch's existing note</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>check<span class="w"> </span>--base<span class="w"> </span>&lt;parent&gt;<span class="w">     </span><span class="c1"># the CI gate, run locally</span>
 </span></code></pre></div>
 <p>CI fails a PR with a <code>feat</code>, <code>fix</code>, <code>revert</code> or breaking commit and no note. A <code>Release-Notes: skip</code>
 trailer on any commit exempts the PR. The full rules are in <a href="https://github.com/s0undt3ch/ToolR/blob/main/release-notes/README.md"><code>release-notes/README.md</code></a>.</p>
 <h2 id="pre-commit-hooks">Pre-commit hooks<a class="headerlink" href="#pre-commit-hooks" title="Permanent link">&para;</a></h2>
 <p><code>prek install --install-hooks</code> (above) wires the gate. Manually:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>prek<span class="w"> </span>run<span class="w"> </span>rumdl<span class="w"> </span>--files<span class="w"> </span>docs/internals/manifest.md
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>prek<span class="w"> </span>run<span class="w"> </span>rumdl<span class="w"> </span>--files<span class="w"> </span>docs/internals/manifest.md
 </span></code></pre></div>
 <p>Hooks include <code>ruff</code>, <code>mypy</code>, <code>clippy</code>, <code>cargo check</code>, <code>rumdl</code>, <code>typos</code>, <code>jactionlint</code>,
 <code>shellcheck</code>, plus the project-local hooks (<code>pin-github-actions</code>, <code>regen-doc-snippets</code>).</p>
@@ -1979,7 +1984,7 @@ trailer on any commit exempts the PR. The full rules are in <a href="https://git
 <code>$PATH</code> (<code>toolr</code>, <code>invoke</code>, <code>python-tools-scripts</code>, <code>duty</code>, <code>doit</code>, <code>nox</code>). It's a stdlib-only
 script — no toolr, no rich, no venv to bootstrap — so it can run in a fresh CI job. Add
 <code>--install</code> to let it <code>uv tool install</code> missing Python tools on demand:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>python3<span class="w"> </span>scripts/bench.py<span class="w"> </span>--install
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>python3<span class="w"> </span>scripts/bench.py<span class="w"> </span>--install
 </span></code></pre></div>
 <p>Output is a markdown table on stdout (progress goes to stderr); the README's headline benchmark
 table comes from this command. Re-run it on a fresh hardware target before changing the README's
