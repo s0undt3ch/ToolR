@@ -12,11 +12,13 @@ import mkdocs.plugins
 from mkdocs.exceptions import PluginError
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from collections.abc import Iterable
     from collections.abc import Mapping
     from collections.abc import Sequence
 
     from mkdocs.config.defaults import MkDocsConfig
+    from mkdocs.structure.pages import Page
 
 _LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
 
@@ -54,6 +56,18 @@ def md_url(page: str) -> str:
     if page == "index.md" or page.endswith("/index.md"):
         return page
     return page.removesuffix(".md") + "/index.md"
+
+
+def _with_trailing_slash(site_url: str) -> str:
+    return site_url if site_url.endswith("/") else site_url + "/"
+
+
+def alternate_link(page_src: str, listed: Collection[str], site_url: str) -> str | None:
+    """Return the `<link rel="alternate">` tag for a listed page's Markdown copy, else None."""
+    if page_src not in listed:
+        return None
+    href = _with_trailing_slash(site_url) + md_url(page_src)
+    return f'<link rel="alternate" type="text/markdown" href="{href}">'
 
 
 def _first_content_line(path: Path) -> str | None:
@@ -96,7 +110,7 @@ def find_problems(
 
     if not site_url:
         return ["site_url is not set in mkdocs.yml, so llms.txt links cannot be checked"]
-    site_url = site_url if site_url.endswith("/") else site_url + "/"
+    site_url = _with_trailing_slash(site_url)
 
     index = outputs["llms.txt"].read_text(encoding="utf-8")
     full = outputs["llms-full.txt"].read_text(encoding="utf-8")
@@ -129,6 +143,17 @@ def find_problems(
             problems.append(f"llms.txt links to {target}, which was not built")
 
     return problems
+
+
+def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
+    """Advertise a listed page's Markdown copy to agents that fetch the HTML."""
+    pages = nav_pages(config.nav or [])
+    sections = config.plugins["llmstxt"].config.sections
+    listed = resolve(section_patterns(sections), pages)
+    link = alternate_link(page.file.src_uri, listed, config.site_url or "")
+    if link is None:
+        return output
+    return output.replace("</head>", f"{link}</head>", 1)
 
 
 @mkdocs.plugins.event_priority(-100)

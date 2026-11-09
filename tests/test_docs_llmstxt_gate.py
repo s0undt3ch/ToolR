@@ -308,3 +308,43 @@ def test_on_post_build_reports_stale_patterns(make_site: Callable[..., Path]) ->
         PluginError, match=r"deleted\.md in extra\.llmstxt_exclude matches no nav page"
     ):
         gate.on_post_build(config)
+
+
+def test_alternate_link_for_listed_page() -> None:
+    link = gate.alternate_link("quickstart.md", ["quickstart.md"], "https://example.test/stable")
+    assert link == (
+        '<link rel="alternate" type="text/markdown" '
+        'href="https://example.test/stable/quickstart/index.md">'
+    )
+
+
+def test_alternate_link_none_for_unlisted_page() -> None:
+    assert gate.alternate_link("internals.md", ["quickstart.md"], SITE_URL) is None
+
+
+def _post_page_config() -> SimpleNamespace:
+    return SimpleNamespace(
+        nav=["quickstart.md", "internals.md"],
+        site_url=SITE_URL,
+        plugins={
+            "llmstxt": SimpleNamespace(
+                config=SimpleNamespace(sections={"S": [{"quickstart.md": "d"}]})
+            )
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("src", "tagged"),
+    [("quickstart.md", True), ("internals.md", False)],
+    ids=["listed", "excluded"],
+)
+def test_on_post_page_inserts_link_before_head_close(src: str, tagged: bool) -> None:
+    html = "<html><head><title>T</title></head><body></body></html>"
+    page = SimpleNamespace(file=SimpleNamespace(src_uri=src))
+    out = gate.on_post_page(html, page=page, config=_post_page_config())
+    if tagged:
+        tag = f'<link rel="alternate" type="text/markdown" href="{SITE_URL}quickstart/index.md">'
+        assert out == f"<html><head><title>T</title>{tag}</head><body></body></html>"
+    else:
+        assert out == html
