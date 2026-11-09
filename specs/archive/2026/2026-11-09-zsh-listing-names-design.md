@@ -1,6 +1,6 @@
 # Show names next to descriptions in zsh listings (FU-46)
 
-Status: implemented (PR to be linked on opening). Audit follow-up FU-46, found by reading `zsh.zsh` after #713 (FU-34) merged.
+Status: implemented (PR #721). Audit follow-up FU-46, found by reading `zsh.zsh` after #713 (FU-34) merged.
 
 ## Problem
 
