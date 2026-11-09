@@ -250,6 +250,11 @@ runs it with `-NoProfile -NonInteractive -ExecutionPolicy Bypass -File`, and par
     - `powershell_directory_slot_completes_only_directories` — `--out files/` → only `sub`.
     - `powershell_attached_path_keeps_the_option` — `--cfg=files/w` → one word round-tripping to
       `--cfg=<path>`.
+    - `powershell_wildcard_characters_in_paths_stay_literal` — a partial or result holding `*`, `?`
+      or `[...]` reaches the native command as the real name: the partial is passed re-quoted in
+      single quotes, results are unescaped only when `Escape(Unescape(p)) -ceq p`.
+    - `powershell_tilde_path_expands_to_the_home` — a leading `~` (then `/`, `\` or the end) becomes
+      `(Get-PSProvider FileSystem).Home`, since a quoted `~` isn't expanded.
     - `powershell_cursor_mid_word_completes_the_whole_word` — pins the documented limit.
     - `powershell_no_tools_dir_completes_builtins` — outside the fixture, `toolr se` → `self`.
     - `powershell_toolr_exe_name_completes` — `toolr.exe se` → `self`.

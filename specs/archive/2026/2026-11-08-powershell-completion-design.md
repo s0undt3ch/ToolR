@@ -199,11 +199,22 @@ The exit-code table in docs/cli.md (`0`, `1`, `10`, `11`) applies unchanged.
   rejects an empty tooltip (probed).
 
 **Exit 10 / 11.** The script calls
-`[System.Management.Automation.CompletionCompleters]::CompleteFilename($raw)` on the cursor word's
-raw text, with a typed `--opt=` stripped first. That gives PowerShell's own file completion, with
-its own quoting (`'./with space.txt'` was probed). Exit 11 keeps only results whose `ResultType` is
-`ProviderContainer`. For an attached `--opt=` word, each result's text is dequoted through the
-parser and re-quoted whole with `--opt=` in front, so the reply is one word.
+`[System.Management.Automation.CompletionCompleters]::CompleteFilename($partial)`, where `$partial` is
+the cursor word's parsed value (a typed `--opt=` stripped) re-quoted in single quotes. PowerShell's
+own file completion then does the work, with its own quoting (`'./with space.txt'` was probed). The
+partial is the parsed value, not the raw text, so a double-quoted or backtick-escaped partial
+reaches the completer as the text the user means; single quotes keep it inert. It stays a wildcard
+pattern (`*` globs), as in PowerShell's native-command completion; escaping it would match nothing.
+Exit 11 keeps only results whose `ResultType` is `ProviderContainer`. For each result:
+
+- Its text is dequoted through the parser. The text is escaped for `-Path` (`` a`[1`] ``) but a
+  native command needs the real name, so it is unescaped with `[WildcardPattern]::Unescape`, and only
+  when `Escape(Unescape(p)) -ceq p`. Anything that doesn't round-trip (an undoubled backtick, say)
+  keeps its text, so a character is never lost.
+- A leading `~` followed by `/`, `\` or the end is expanded to `(Get-PSProvider FileSystem).Home`.
+  The reply is quoted, and PowerShell doesn't expand a quoted `~`, so the native command would
+  receive a literal `~`.
+- The result is re-quoted whole with `--opt=` in front, so the reply is one word.
 
 **Exit 1, any other code, or no candidates.** The completer returns nothing. PowerShell then falls
 back to its default file-name completion: probed for both an empty return and `@()`. The only way
@@ -363,6 +374,13 @@ PowerShell tests need it.
 - A word holding a variable, sub-expression or array (`$x`, `"a$(x)"`, `a,b`) completes nothing,
   and so does anything after one.
 - A `toolr` reached only through a `.cmd`/`.bat` shim completes nothing.
+- A file-name partial treats `*`, `?` and `[...]` as wildcards, as PowerShell's own completion does,
+  so a partial holding a whole `[...]` pair matches nothing.
+- Words after `--%` (the stop-parsing token) complete nothing.
+- Windows PowerShell 5.1 never calls a native completer for a bare `-` or `--`, or a word like `-x`;
+  type a letter after `--`. PowerShell 6 fixed this: issue
+  [PowerShell/PowerShell#2912](https://github.com/PowerShell/PowerShell/issues/2912) by PR #2919,
+  and PR #3633 for `--`.
 - Not supported in PowerShell ISE.
 
 ## Decisions (user, 2026-11-08)
