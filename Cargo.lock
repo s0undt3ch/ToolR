@@ -1932,8 +1932,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_ast"
-version = "0.0.20"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.3#ba65abf8ba7bfbcc059f7fb9712be5ba9cab6abc"
+version = "0.0.21"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.4#05cdc36a45a29e078c2af9358969d0f576408bef"
 dependencies = [
  "aho-corasick",
  "arrayvec",
@@ -1953,8 +1953,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_parser"
-version = "0.0.20"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.3#ba65abf8ba7bfbcc059f7fb9712be5ba9cab6abc"
+version = "0.0.21"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.4#05cdc36a45a29e078c2af9358969d0f576408bef"
 dependencies = [
  "bitflags",
  "bstr",
@@ -1975,8 +1975,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_trivia"
-version = "0.0.20"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.3#ba65abf8ba7bfbcc059f7fb9712be5ba9cab6abc"
+version = "0.0.21"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.4#05cdc36a45a29e078c2af9358969d0f576408bef"
 dependencies = [
  "itertools",
  "memchr",
@@ -1989,8 +1989,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_source_file"
-version = "0.0.20"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.3#ba65abf8ba7bfbcc059f7fb9712be5ba9cab6abc"
+version = "0.0.21"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.4#05cdc36a45a29e078c2af9358969d0f576408bef"
 dependencies = [
  "memchr",
  "ruff_text_size",
@@ -1998,16 +1998,16 @@ dependencies = [
 
 [[package]]
 name = "ruff_text_size"
-version = "0.0.20"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.3#ba65abf8ba7bfbcc059f7fb9712be5ba9cab6abc"
+version = "0.0.21"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.4#05cdc36a45a29e078c2af9358969d0f576408bef"
 dependencies = [
  "get-size2",
 ]
 
 [[package]]
 name = "ruff_unicode_names2"
-version = "0.0.20"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.3#ba65abf8ba7bfbcc059f7fb9712be5ba9cab6abc"
+version = "0.0.21"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.4#05cdc36a45a29e078c2af9358969d0f576408bef"
 dependencies = [
  "phf",
  "ruff_unicode_names2_generator",
@@ -2015,8 +2015,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_unicode_names2_generator"
-version = "0.0.20"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.3#ba65abf8ba7bfbcc059f7fb9712be5ba9cab6abc"
+version = "0.0.21"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.4#05cdc36a45a29e078c2af9358969d0f576408bef"
 dependencies = [
  "phf_codegen",
  "rand",
