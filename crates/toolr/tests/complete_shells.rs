@@ -3350,9 +3350,11 @@ fn zsh_uppercase_partial_reaches_compadd() {
     ] {
         let mut words = vec!["toolr", "ci", "lint"];
         words.extend(word);
-        let calls: Vec<String> = zsh_run_with(&fx, "", "", &words)
-            .into_iter()
+        let lines = zsh_run_with(&fx, "", "", &words);
+        let calls: Vec<String> = lines
+            .iter()
             .filter(|l| !l.starts_with("DESC:") && !l.starts_with("DISP:"))
+            .cloned()
             .collect();
         let mut want: Vec<String> = compset.map(String::from).into_iter().collect();
         want.extend(compadd_lines(
@@ -3360,6 +3362,12 @@ fn zsh_uppercase_partial_reaches_compadd() {
             &sorted_choices(&fx),
         ));
         assert_eq!(calls, want, "{words:?}");
+        // The choices carry no description, so each is displayed as itself.
+        let disps: Vec<String> = lines
+            .iter()
+            .filter_map(|l| l.strip_prefix("DISP:").map(str::to_string))
+            .collect();
+        assert_eq!(disps, sorted_choices(&fx), "{words:?}");
     }
 }
 
@@ -3453,6 +3461,32 @@ fn zsh_value_with_a_tab_never_reaches_compadd() {
         "{lines:?}"
     );
     assert!(lines.iter().all(|l| !l.contains('\t')), "{lines:?}");
+}
+
+/// Names pad by display width, not by character count: a double-width name counts two columns
+/// and a combining mark none, so the `--` of every row lands in the same column.
+#[test]
+fn zsh_display_pads_wide_and_combining_names() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let shim = r#"toolr() { printf 'ab\tfirst\n日本語\tsecond\ne\u0301e\tthird\nx\n'; }"#;
+    let lines = zsh_run_with(&fx, "", shim, &["toolr", "x"]);
+    let disps: Vec<&str> = lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("DISP:"))
+        .collect();
+    // The widest name is 日本語 at six columns.
+    assert_eq!(
+        disps,
+        vec![
+            "ab      -- first",
+            "日本語  -- second",
+            "e\u{301}e      -- third",
+            "x",
+        ]
+    );
 }
 
 /// Adds a `big` group of 25 commands, `cmd00` to `cmd24`, each with its own summary.
