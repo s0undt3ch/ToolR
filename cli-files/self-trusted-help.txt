@@ -1,9 +1,0 @@
-List the repositories toolr trusts to run code
-
-Usage: toolr self trusted [OPTIONS]
-
-Options:
-      --prune
-          Forget records whose repository no longer exists
-  -h, --help
-          Print help
