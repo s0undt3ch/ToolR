@@ -166,6 +166,7 @@ or delete it and start from scratch.
 - [Writing commands](https://toolr.readthedocs.io/latest/writing-commands/)
 - [Third-party packages](https://toolr.readthedocs.io/latest/third-party/)
 - [Agent skills (for LLM coding assistants)](https://toolr.readthedocs.io/latest/skills/)
+- [llms.txt (docs index for AI agents)](https://toolr.readthedocs.io/llms.txt)
 - [Internals (manifest, freshness, cache)](https://toolr.readthedocs.io/latest/internals/)
 - [CLI reference](https://toolr.readthedocs.io/latest/cli/)
 

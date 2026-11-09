@@ -21,6 +21,7 @@ dynamic = ["version"]
 [project.urls]
 Repository = "https://github.com/s0undt3ch/ToolR"
 Documentation = "https://toolr.readthedocs.io"
+"LLM docs index" = "https://toolr.readthedocs.io/llms.txt"
 Issues = "https://github.com/s0undt3ch/ToolR/issues"
 Changelog = "https://github.com/s0undt3ch/ToolR/blob/main/CHANGELOG.md"
 
