@@ -949,8 +949,10 @@ fn completion_print_rejects_unknown_shell() {
 fn root_help_points_at_llms_txt_and_subcommands_do_not() {
     let tmp = tempfile::tempdir().unwrap();
     let help = |args: &[&str]| {
+        // Pin the width so the footer can't wrap on a narrow CI terminal.
         let out = common::toolr()
             .current_dir(tmp.path())
+            .env("COLUMNS", "100")
             .args(args)
             .output()
             .unwrap();
