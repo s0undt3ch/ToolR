@@ -2616,6 +2616,7 @@ dependencies = [
  "assert_cmd",
  "chrono",
  "clap",
+ "dirs",
  "dunce",
  "email_address",
  "humansize",

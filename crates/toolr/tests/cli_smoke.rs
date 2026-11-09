@@ -916,3 +916,30 @@ fn identical_group_conflicts_each_warn() {
     std::fs::write(tools.join("m3.py"), "x = 1\n").unwrap();
     assert_eq!(stderr_of(root, &["--help"]), twice);
 }
+
+fn completion_print(shell: &str) -> std::process::Output {
+    let tmp = TempDir::new().unwrap();
+    common::toolr()
+        .current_dir(tmp.path())
+        .args(["self", "completion", "print", shell])
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn completion_print_pwsh_matches_powershell() {
+    let powershell = completion_print("powershell");
+    let pwsh = completion_print("pwsh");
+    assert!(powershell.status.success(), "{powershell:?}");
+    assert!(pwsh.status.success(), "{pwsh:?}");
+    assert!(!powershell.stdout.is_empty());
+    assert_eq!(pwsh.stdout, powershell.stdout);
+}
+
+#[test]
+fn completion_print_rejects_unknown_shell() {
+    let out = completion_print("nushell");
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("powershell"), "{stderr}");
+}

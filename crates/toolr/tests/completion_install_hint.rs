@@ -365,20 +365,16 @@ fn hint_names_no_path_when_home_is_not_utf8() {
     assert!(!hint.contains("`source /"), "{hint}");
 }
 
+/// An empty `HOME` no longer fails the install: the platform home stands in (unit-tested in
+/// `dispatch.rs`). `XDG_DATA_HOME` keeps this run out of the real home.
 #[test]
-fn empty_home_fails_completion_install() {
+fn empty_home_still_installs_under_xdg_data_home() {
     let host = Host::new();
     let output = host
         .command(&["self", "completion", "install", "bash"])
         .env("HOME", "")
-        .env_remove("XDG_DATA_HOME")
-        .env_remove("XDG_CONFIG_HOME")
         .output()
         .unwrap();
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("$HOME is not set or empty"),
-        "stderr:\n{stderr}"
-    );
+    succeeded(BASH, &output);
+    assert!(host.installed_bash_script().is_file());
 }

@@ -9,7 +9,8 @@ use crate::help::{self, HelpMode};
 use toolr_core::complete::{
     Candidate, Completion, InstallOptions, InstallOutcome, Matching, PriorState,
     Shell as CompletionShell, bash_completion_installed, complete_matching, completion_script,
-    install_script, resolve_manifest_at_tab, shell_quote, sort_and_dedup_by_value,
+    install_script, powershell_quote, resolve_manifest_at_tab, shell_quote,
+    sort_and_dedup_by_value,
 };
 use toolr_core::discovery::discover_project_root;
 use toolr_core::env::{non_empty_env_path, xdg_dir_env};
@@ -554,6 +555,7 @@ fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Re
         xdg_data_home,
         xdg_config_home,
         home,
+        data_dir: dirs::data_dir(),
         force,
         interactive: std::io::IsTerminal::is_terminal(&std::io::stdin()),
     };
@@ -589,6 +591,7 @@ fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Re
                     );
                 }
                 print_bash_source_hint(shell, &path);
+                print_powershell_profile_hint(shell, &path);
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -600,6 +603,7 @@ fn run_completion_install(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Re
                     path.display()
                 );
                 print_bash_source_hint(shell, &path);
+                print_powershell_profile_hint(shell, &path);
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -646,9 +650,43 @@ fn bash_source_hint(path: &std::path::Path) -> String {
     )
 }
 
+/// PowerShell has no completion directory, so the installed script loads only from a profile.
+fn print_powershell_profile_hint(shell: CompletionShell, path: &std::path::Path) {
+    if matches!(shell, CompletionShell::PowerShell) {
+        println!("{}", powershell_profile_hint(path, cfg!(windows)));
+    }
+}
+
+/// `windows` is a parameter, not `cfg!`, so both texts are tested on every host.
+fn powershell_profile_hint(path: &std::path::Path, windows: bool) -> String {
+    let action = match path.to_str() {
+        Some(path) => format!("add `. {}`", powershell_quote(path)),
+        None => "add a line that dot-sources the installed script".to_string(),
+    };
+    let policy = if windows {
+        "; the execution policy must allow local scripts \
+         (`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`)"
+    } else {
+        ""
+    };
+    format!(
+        "toolr: {action} to your PowerShell profile (`$PROFILE.CurrentUserAllHosts`) to load it{policy}."
+    )
+}
+
+/// `$HOME` first, so Git Bash/MSYS users and the tests' `HOME` seam keep working; then the
+/// platform home, which covers a stock Windows account where `HOME` is unset.
 fn dirs_home() -> anyhow::Result<PathBuf> {
-    non_empty_env_path("HOME")
-        .ok_or_else(|| anyhow::anyhow!("$HOME is not set or empty; cannot pick install path"))
+    resolve_home(non_empty_env_path("HOME"), dirs::home_dir)
+}
+
+fn resolve_home(
+    env_home: Option<PathBuf>,
+    fallback: impl FnOnce() -> Option<PathBuf>,
+) -> anyhow::Result<PathBuf> {
+    env_home.or_else(fallback).ok_or_else(|| {
+        anyhow::anyhow!("cannot determine the home directory; cannot pick install path")
+    })
 }
 
 fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
@@ -662,7 +700,8 @@ fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> 
 
 /// `toolr __complete` exits with this, printing nothing, to have the shell
 /// complete file system paths. Old scripts treat it as "no candidates".
-/// The scripts in `crates/toolr-core/src/complete/scripts/` (`bash.sh`, `fish.fish`, `zsh.zsh`)
+/// The scripts in `crates/toolr-core/src/complete/scripts/` (`bash.sh`, `fish.fish`, `zsh.zsh`,
+/// `powershell.ps1`)
 /// and the exit-code table in `docs/cli.md` must match both values.
 const COMPLETE_PATHS: u8 = 10;
 /// As [`COMPLETE_PATHS`], for directories only.
@@ -992,14 +1031,58 @@ mod tests {
         );
     }
 
-    // ----------------------------------------------------------------
-    // dirs_home: $HOME present / absent.
-    // ----------------------------------------------------------------
+    // resolve_home takes $HOME and the platform fallback as inputs, so no test mutates the environment.
+    #[test]
+    fn resolve_home_prefers_env() {
+        let home = resolve_home(Some("/env/home".into()), || Some("/platform".into())).unwrap();
+        assert_eq!(home, PathBuf::from("/env/home"));
+    }
 
-    // Same env-mutation reasoning as above — `$HOME` is set on every
-    // sane CI runner, so the happy path is implicitly covered by the
-    // completion-install integration tests. We don't exercise the
-    // "no HOME" bail branch here for the same reason.
+    #[test]
+    fn resolve_home_falls_back_when_env_missing() {
+        let home = resolve_home(None, || Some("/platform".into())).unwrap();
+        assert_eq!(home, PathBuf::from("/platform"));
+    }
+
+    #[test]
+    fn resolve_home_errors_when_both_missing() {
+        let err = resolve_home(None, || None).unwrap_err();
+        assert!(
+            err.to_string().contains("cannot pick install path"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn powershell_profile_hint_quotes_the_path() {
+        assert_eq!(
+            powershell_profile_hint(std::path::Path::new("/home/u/it's/toolr.ps1"), false),
+            "toolr: add `. '/home/u/it''s/toolr.ps1'` to your PowerShell profile \
+             (`$PROFILE.CurrentUserAllHosts`) to load it."
+        );
+    }
+
+    #[test]
+    fn powershell_profile_hint_on_windows_names_execution_policy() {
+        assert_eq!(
+            powershell_profile_hint(std::path::Path::new(r"C:\Users\u\toolr.ps1"), true),
+            "toolr: add `. 'C:\\Users\\u\\toolr.ps1'` to your PowerShell profile \
+             (`$PROFILE.CurrentUserAllHosts`) to load it; the execution policy must allow \
+             local scripts (`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`)."
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn powershell_profile_hint_without_utf8_path_names_no_path() {
+        use std::os::unix::ffi::OsStrExt;
+        let path = std::path::Path::new(std::ffi::OsStr::from_bytes(b"/home/\xff/toolr.ps1"));
+        assert_eq!(
+            powershell_profile_hint(path, false),
+            "toolr: add a line that dot-sources the installed script to your PowerShell profile \
+             (`$PROFILE.CurrentUserAllHosts`) to load it."
+        );
+    }
 
     // ----------------------------------------------------------------
     // output_options_from_matches: every flag knob.

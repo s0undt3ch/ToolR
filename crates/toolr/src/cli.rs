@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use clap::builder::styling::{AnsiColor, Effects, Styles};
+use clap::builder::{PossibleValue, PossibleValuesParser};
 use clap::{Arg, ArgAction, Command, ValueHint};
 
 /// Palette for `--help` output. Yellow + bold for section headers and
@@ -587,6 +588,16 @@ fn build_self_cache_subcommand() -> Command {
         )
 }
 
+/// Shells `self completion print|install` accept; `pwsh` is an alias, so `--help` lists one name.
+fn shell_values() -> PossibleValuesParser {
+    PossibleValuesParser::new([
+        PossibleValue::new("bash"),
+        PossibleValue::new("zsh"),
+        PossibleValue::new("fish"),
+        PossibleValue::new("powershell").alias("pwsh"),
+    ])
+}
+
 /// `toolr self completion` and its subcommands.
 fn build_self_completion_subcommand() -> Command {
     Command::new("completion")
@@ -601,7 +612,7 @@ fn build_self_completion_subcommand() -> Command {
                 .arg(
                     Arg::new("shell")
                         .required(true)
-                        .value_parser(["bash", "zsh", "fish"])
+                        .value_parser(shell_values())
                         .help("Shell to emit a completion script for"),
                 ),
         )
@@ -615,7 +626,7 @@ fn build_self_completion_subcommand() -> Command {
                 .arg(
                     Arg::new("shell")
                         .required(true)
-                        .value_parser(["bash", "zsh", "fish"])
+                        .value_parser(shell_values())
                         .help("Shell to install the completion script for"),
                 )
                 .arg(

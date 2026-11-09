@@ -609,10 +609,7 @@ mod tests {
             &m,
             &tokens(&["self", "completion", "install", ""]),
         ));
-        assert_eq!(
-            out,
-            vec!["bash".to_string(), "fish".to_string(), "zsh".to_string()]
-        );
+        assert_eq!(out, vec!["bash", "fish", "powershell", "zsh"]);
     }
 
     #[test]

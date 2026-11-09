@@ -18,6 +18,7 @@ toolr-core = { path = "../toolr-core" }
 anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true
+dirs.workspace = true
 dunce.workspace = true
 email_address.workspace = true
 humansize.workspace = true
