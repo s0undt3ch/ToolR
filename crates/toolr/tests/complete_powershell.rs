@@ -180,6 +180,7 @@ const DRIVER: &str = r#"
 param([string]$Script, [string]$Requests, [string]$Output, [string]$Cwd)
 . $Script
 # PRELUDE
+# Deliberately re-implements _toolr_parse_word, so the script is checked against an independent oracle.
 function Read-Word([string]$Text) {
     $tokens = $null; $errors = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseInput("x $Text", [ref]$tokens, [ref]$errors)
@@ -288,6 +289,9 @@ impl<'a> Session<'a> {
 
     fn run_raw(&self, requests: &[(String, usize)]) -> (Vec<TabResult>, String) {
         let work = self.fx.work.path();
+        for marker in ["# PRELUDE", "# CHDIR"] {
+            assert!(DRIVER.contains(marker), "DRIVER lost its {marker} marker");
+        }
         let driver = DRIVER.replace("# PRELUDE", self.prelude).replace(
             "# CHDIR",
             &self
@@ -349,6 +353,7 @@ impl<'a> Session<'a> {
 fn home_env(home: &Path) -> Vec<(&'static str, std::ffi::OsString)> {
     let mut env = vec![("HOME", home.as_os_str().to_owned())];
     if cfg!(windows) {
+        // Assumes a drive-letter path (`C:\...`), so the first two characters are the drive.
         let text = home.to_str().unwrap();
         env.push(("USERPROFILE", home.as_os_str().to_owned()));
         env.push(("HOMEDRIVE", text[..2].into()));
@@ -580,7 +585,7 @@ fn powershell_flags_complete_with_descriptions() {
         ]);
         if is_windows_powershell(&ps) {
             // 5.1 never calls a native completer for a word PowerShell tokenises as a parameter or
-            // operator (`-`, `--`); PowerShell 6 fixed both (PowerShell/PowerShell#2919, #3633).
+            // operator (`-`, `--`); PowerShell 6 fixed both (PowerShell/PowerShell#2912 via #2919, and #3633).
             assert!(results[0].matches.is_empty(), "{:?}", results[0]);
             assert!(results[1].matches.is_empty(), "{:?}", results[1]);
         } else {
