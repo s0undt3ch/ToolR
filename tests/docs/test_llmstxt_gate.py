@@ -435,3 +435,21 @@ def test_truncated_page_is_reported_even_when_another_shares_its_last_line(
     assert len(problems) == 1
     assert "b.md" in problems[0]
     assert "incomplete" in problems[0]
+
+
+def test_llms_txt_entry_for_an_off_nav_page_is_reported(make_site: Callable[..., Path]) -> None:
+    site = make_site(
+        links=(SITE_URL + "quickstart/index.md", SITE_URL + "reference/hidden/index.md")
+    )
+    (site / "reference/hidden").mkdir(parents=True)
+    (site / "reference/hidden/index.md").write_text("# Hidden\n")
+    problems = gate.find_problems(
+        pages=["quickstart.md"],
+        listed=["quickstart.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert problems == [
+        f"llms.txt links to {SITE_URL}reference/hidden/index.md, which is not a listed nav page"
+    ]

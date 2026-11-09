@@ -134,11 +134,14 @@ def find_problems(
                 f"{page} is listed but its content is incomplete or missing in llms-full.txt"
             )
 
+    listed_urls = {site_url + md_url(page) for page in listed}
     for target in _LINK_TARGET.findall(index):
-        if target.startswith(site_url) and not _link_exists(
-            site_dir, target.removeprefix(site_url)
-        ):
+        if not target.startswith(site_url):
+            continue
+        if not _link_exists(site_dir, target.removeprefix(site_url)):
             problems.append(f"llms.txt links to {target}, which was not built")
+        elif target.endswith(".md") and target not in listed_urls:
+            problems.append(f"llms.txt links to {target}, which is not a listed nav page")
 
     return problems
 
