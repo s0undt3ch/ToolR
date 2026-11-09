@@ -39,7 +39,7 @@ _toolr() {
     # Each line from `__complete` is `value<TAB>description`. `TOOLR_COMPLETE_MATCH=shell` asks
     # for every candidate in the slot, so `compadd` applies the user's `matcher-list`; a toolr
     # that predates it ignores the variable and filters by prefix.
-    local -a lines values descriptions
+    local -a lines candidates
     lines=("${(@f)$(TOOLR_COMPLETE_MATCH=shell toolr __complete "$PWD" "${passthrough[@]}" 2>/dev/null)}")
     # Saved first: the filter below would overwrite it.
     local rc=$?
@@ -56,10 +56,11 @@ _toolr() {
         11) (( attached )) && compset -P 1 '*='; _files -/; return ;;
         *) return ;;
     esac
-    # One expansion: unfiltered, a large choice set can be thousands of lines.
-    values=("${(@)lines%%$'\t'*}")
+    # One expansion, not a loop: unfiltered, a slot can hold thousands of lines. The only loop
+    # below visits at most `max_described` of them.
+    candidates=("${(@)lines%%$'\t'*}")
 
-    if (( ${#values} == 0 )); then
+    if (( ${#candidates} == 0 )); then
         return
     fi
     if (( attached )); then
@@ -74,38 +75,42 @@ _toolr() {
     # One-per-line descriptions only pay off for a small list; use the compact grid for large
     # ones. `-O` counts what the typed word matches without adding anything. No `-Q`: zsh
     # re-quotes each match to fit the quote open at the cursor, so values stay inert text.
+    local -i max_described=20
     local -a matched
-    compadd "${expl[@]}" -O matched -a values
-    if (( ${#matched} <= 20 )); then
+    compadd "${expl[@]}" -O matched -a candidates
+    if (( ${#matched} <= max_described )); then
         # `-d` replaces what the listing shows, so each entry carries its own name, padded to the
-        # widest listed value (`m` counts display width) so the descriptions line up; `-l` puts
-        # one entry on each row. Only the 20 or fewer matches are visited: a large slot returns
-        # thousands of lines and one pass over each would be slow. A line without a description
-        # shows the value alone.
-        local -a display
+        # widest listed value (`m` counts display width) so the descriptions line up and hidden
+        # candidates don't pad the visible rows; `-l` puts one entry on each row. Only the
+        # `max_described` or fewer matches are visited: one pass over every candidate of a large
+        # slot would be slow.
+        # The test stub in crates/toolr/tests/complete_shells.rs reads `shown_values` and
+        # `display` by dynamic scope; keep the names in step.
+        local -a shown_values display
         local -i width=0 idx
-        local v line
-        for v in "${matched[@]}"; do
+        local v line desc
+        shown_values=("${matched[@]}")
+        for v in "${shown_values[@]}"; do
             (( ${(m)#v} > width )) && width=${(m)#v}
         done
-        local -a all
-        all=("${values[@]}")
-        values=("${matched[@]}")
-        descriptions=()
-        for v in "${values[@]}"; do
-            # `(e)` takes `v` literally; the first exact match is the candidate's own line.
-            idx=${all[(ie)$v]}
+        for v in "${shown_values[@]}"; do
+            # `matched` is a subset the matcher may have reordered, so each match finds its own
+            # line by value. `(e)` makes `v` literal: a value such as `a*c` is not a pattern.
+            idx=${candidates[(ie)$v]}
             line=${lines[idx]}
-            descriptions+=("${${line%$'\t'}#*$'\t'}")
+            # Drop an empty trailing description, then everything up to the first tab; a line
+            # with no tab keeps the whole line, so test for text after a tab to see if there
+            # is a description.
+            desc=${${line%$'\t'}#*$'\t'}
             if [[ $line == *$'\t'?* ]]; then
-                display+=("${(mr:width:)v}  -- ${descriptions[-1]}")
+                display+=("${(mr:width:)v}  -- $desc")
             else
                 display+=("$v")
             fi
         done
-        compadd "${expl[@]}" -l -d display -a values
+        compadd "${expl[@]}" -l -d display -a shown_values
     else
-        compadd "${expl[@]}" -a values
+        compadd "${expl[@]}" -a candidates
     fi
 }
 
