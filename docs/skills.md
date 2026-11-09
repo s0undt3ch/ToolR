@@ -106,6 +106,15 @@ through — see the
 or `mise skills --help` for the full command surface. Toolr ships the
 skills; how you manage them on your machine is owned upstream.
 
+## Without the skills: llms.txt
+
+Agents that don't have the skills can start from
+[`llms.txt`](https://toolr.readthedocs.io/llms.txt), a curated index of
+the docs, or from
+[`llms-full.txt`](https://toolr.readthedocs.io/llms-full.txt), the same
+pages in one file. Both are served from the docs root and built from the
+stable docs.
+
 ## How the references stay correct
 
 Each skill ships a `references/` directory with files generated from
