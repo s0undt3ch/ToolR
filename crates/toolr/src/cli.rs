@@ -136,7 +136,7 @@ fn build_dispatcher_command(
 // / `no_output_timeout_secs=` arguments still override these.
 const OUTPUT_HEADING: &str = "Output Options";
 
-/// Root-only footer, two adjacent lines.
+// Root help only: an every-page footer was removed for costing a line on every help page.
 const ROOT_AFTER_HELP: &str = "Documentation: https://toolr.readthedocs.io/\n\
      For AI agents: https://toolr.readthedocs.io/llms.txt";
 

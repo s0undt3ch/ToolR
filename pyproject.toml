@@ -56,7 +56,7 @@ dev = [
     "pytest-subtests>=0.15.0",
     "pyyaml",
     "packaging>=26.3",
-    "mkdocs>=1.6.1",
+    "mkdocs>=1.6.1",  # for the llms.txt gate tests; the docs group has the rest of the stack
 ]
 docs = [
     "toolr-py",
