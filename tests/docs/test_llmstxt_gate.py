@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 # docs/.hooks isn't a package, so load the module by path.
-_HOOK = Path(__file__).parents[1] / "docs/.hooks/llmstxt_gate.py"
+_HOOK = Path(__file__).parents[2] / "docs/.hooks/llmstxt_gate.py"
 _spec = importlib.util.spec_from_file_location("llmstxt_gate", _HOOK)
 assert _spec is not None
 assert _spec.loader is not None
