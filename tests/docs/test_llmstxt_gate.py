@@ -415,3 +415,23 @@ def test_on_post_page_names_a_missing_plugin() -> None:
     page = SimpleNamespace(file=SimpleNamespace(src_uri="quickstart.md"))
     with pytest.raises(PluginError, match="llmstxt plugin is not configured"):
         gate.on_post_page("<head></head>", page=page, config=config)
+
+
+def test_truncated_page_is_reported_even_when_another_shares_its_last_line(
+    make_site: Callable[..., Path],
+) -> None:
+    shared = "Next: [Nested groups](../groups/)"
+    site = make_site(pages=("a.md", "b.md"))
+    (site / "a/index.md").write_text(f"# A\n\nA body\n\n{shared}\n")
+    (site / "b/index.md").write_text(f"# B\n\nB body\n\nB tail\n\n{shared}\n")
+    (site / "llms-full.txt").write_text(f"# A\n\nA body\n\n{shared}\n# B\n\nB body\n")
+    problems = gate.find_problems(
+        pages=["a.md", "b.md"],
+        listed=["a.md", "b.md"],
+        excluded=[],
+        site_dir=site,
+        site_url=SITE_URL,
+    )
+    assert len(problems) == 1
+    assert "b.md" in problems[0]
+    assert "incomplete" in problems[0]
