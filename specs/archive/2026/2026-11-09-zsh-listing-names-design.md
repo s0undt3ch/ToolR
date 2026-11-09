@@ -48,14 +48,14 @@ The documentation text itself was not available offline, so the wording is from 
 Keep the structure of `zsh.zsh`. In the 20-or-fewer branch only:
 
 1. Build `descriptions` as today (drop an empty trailing description, strip up to the first tab).
-2. Find the widest value with `${(m)#...}` semantics, so wide characters count by display width. A plain
-   `${#v}` would misalign CJK names.
+2. Find the widest of the matched values with `${(m)#...}` semantics, so wide characters count by display
+   width. A plain `${#v}` would misalign CJK names.
 3. Build `display` in one loop of at most 20 entries: `${(mr:w:)value} -- ${description}`, or just
    `${value}` when the description is empty, so a missing description still shows the name.
 4. Call `compadd "${expl[@]}" -l -d display -a values`.
 
-The width covers every candidate returned, not only the matched ones, so the column stays stable while
-the user narrows the word. Values are never put through `eval` or expansion; they only fill `display`,
+The width comes from the matched candidates only, so a long candidate the typed word has already excluded
+can't pad the visible rows or wrap them on a narrow terminal; the column may shift as the word narrows. Values are never put through `eval` or expansion; they only fill `display`,
 which `compadd` prints as text. A value or description holding `%` is shown literally because `-d`
 strings are not prompt-expanded (unverified; the plan's live test covers it).
 
