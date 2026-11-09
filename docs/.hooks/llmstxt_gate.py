@@ -1,4 +1,4 @@
-"""MkDocs hook: fail the build when llms.txt drifts from the nav."""
+"""MkDocs hook: the llms.txt build gate, and the per-page Markdown `<link rel="alternate">` injection."""
 
 from __future__ import annotations
 
@@ -42,6 +42,7 @@ def nav_pages(nav: list[Any]) -> list[str]:
 
 def resolve(patterns: Iterable[str], pages: Sequence[str]) -> list[str]:
     """Return the nav pages matching any fnmatch pattern, in nav order."""
+    # Mirrors mkdocs-llmstxt's glob expansion (fnmatch, `*` crosses `/`); an upgrade that changes it shows up here.
     patterns = list(patterns)
     return [page for page in pages if any(fnmatch(page, pattern) for pattern in patterns)]
 
@@ -57,6 +58,7 @@ def section_patterns(sections: Mapping[str, Sequence[str | Mapping[str, str]]]) 
 
 def md_url(page: str) -> str:
     """Return the path of the Markdown copy the plugin writes for a page."""
+    # Mirrors mkdocs-llmstxt's output layout; an upgrade that changes it shows up here.
     if page == "index.md" or page.endswith("/index.md"):
         return page
     return page.removesuffix(".md") + "/index.md"
@@ -81,11 +83,6 @@ def _link_exists(site_dir: Path, path: str) -> bool:
     return (site_dir / path).is_file()
 
 
-def stale_patterns(patterns: Iterable[str], pages: Sequence[str]) -> list[str]:
-    """Return the patterns that match no nav page."""
-    return [pattern for pattern in patterns if not resolve([pattern], pages)]
-
-
 def find_problems(
     *,
     pages: Sequence[str],
@@ -94,7 +91,7 @@ def find_problems(
     site_dir: Path,
     site_url: str,
 ) -> list[str]:
-    """Return one line per way llms.txt disagrees with the nav; empty means it passed."""
+    """Return one line per way the llms.txt output disagrees with the nav or the built site; empty means it passed."""
     outputs = {name: site_dir / name for name in ("llms.txt", "llms-full.txt")}
     missing = [
         f"{name} was not generated or is empty"
@@ -155,6 +152,13 @@ def _llmstxt_sections(config: MkDocsConfig) -> Mapping[str, Sequence[str | Mappi
     return plugin.config.sections  # type: ignore[no-any-return]
 
 
+def _listing(config: MkDocsConfig) -> tuple[list[str], list[str], list[str]]:
+    """Return the nav pages, the `sections` patterns and the nav pages those patterns list."""
+    pages = nav_pages(config.nav or [])
+    patterns = section_patterns(_llmstxt_sections(config))
+    return pages, patterns, resolve(patterns, pages)
+
+
 def on_startup(*, command: str, dirty: bool) -> None:
     """Remember whether this is a `--dirty` build."""
     global _dirty  # noqa: PLW0603
@@ -163,9 +167,7 @@ def on_startup(*, command: str, dirty: bool) -> None:
 
 def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
     """Advertise a listed page's Markdown copy to agents that fetch the HTML."""
-    pages = nav_pages(config.nav or [])
-    sections = _llmstxt_sections(config)
-    listed = resolve(section_patterns(sections), pages)
+    _, _, listed = _listing(config)
     link = alternate_link(page.file.src_uri, listed, config.site_url or "")
     if link is None:
         return output
@@ -180,9 +182,7 @@ def on_post_build(config: MkDocsConfig) -> None:
             "Skipping the llms.txt gate: dirty builds regenerate llms.txt from partial pages"
         )
         return
-    pages = nav_pages(config.nav or [])
-    sections = _llmstxt_sections(config)
-    listed_patterns = section_patterns(sections)
+    pages, listed_patterns, listed = _listing(config)
     excluded_patterns = config.extra.get("llmstxt_exclude", [])
     problems = [
         f"{pattern} in {where} matches no nav page"
@@ -190,11 +190,12 @@ def on_post_build(config: MkDocsConfig) -> None:
             ("llmstxt.sections", listed_patterns),
             ("extra.llmstxt_exclude", excluded_patterns),
         )
-        for pattern in stale_patterns(patterns, pages)
+        for pattern in patterns
+        if not resolve([pattern], pages)
     ]
     problems += find_problems(
         pages=pages,
-        listed=resolve(listed_patterns, pages),
+        listed=listed,
         excluded=resolve(excluded_patterns, pages),
         site_dir=Path(config.site_dir),
         site_url=config.site_url or "",
