@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from fnmatch import fnmatch
 from pathlib import Path
@@ -21,6 +22,9 @@ if TYPE_CHECKING:
     from mkdocs.structure.pages import Page
 
 _LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
+log = logging.getLogger("mkdocs.hooks.llmstxt_gate")
+# --dirty rebuilds only changed pages, so the plugin's llms.txt is partial and the gate would misfire.
+_dirty = False
 
 
 def nav_pages(nav: list[Any]) -> list[str]:
@@ -145,10 +149,25 @@ def find_problems(
     return problems
 
 
+def _llmstxt_sections(config: MkDocsConfig) -> Mapping[str, Sequence[str | Mapping[str, str]]]:
+    try:
+        plugin = config.plugins["llmstxt"]
+    except KeyError:
+        msg = "llmstxt plugin is not configured; the llms.txt gate needs it"
+        raise PluginError(msg) from None
+    return plugin.config.sections  # type: ignore[no-any-return]
+
+
+def on_startup(*, command: str, dirty: bool) -> None:
+    """Remember whether this is a `--dirty` build."""
+    global _dirty  # noqa: PLW0603
+    _dirty = dirty
+
+
 def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
     """Advertise a listed page's Markdown copy to agents that fetch the HTML."""
     pages = nav_pages(config.nav or [])
-    sections = config.plugins["llmstxt"].config.sections
+    sections = _llmstxt_sections(config)
     listed = resolve(section_patterns(sections), pages)
     link = alternate_link(page.file.src_uri, listed, config.site_url or "")
     if link is None:
@@ -159,8 +178,13 @@ def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
 @mkdocs.plugins.event_priority(-100)
 def on_post_build(config: MkDocsConfig) -> None:
     """Abort the build when the generated llms.txt is stale."""
+    if _dirty:
+        log.warning(
+            "Skipping the llms.txt gate: dirty builds regenerate llms.txt from partial pages"
+        )
+        return
     pages = nav_pages(config.nav or [])
-    sections = config.plugins["llmstxt"].config.sections
+    sections = _llmstxt_sections(config)
     listed_patterns = section_patterns(sections)
     excluded_patterns = config.extra.get("llmstxt_exclude", [])
     problems = [

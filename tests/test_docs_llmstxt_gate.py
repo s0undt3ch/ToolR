@@ -348,3 +348,53 @@ def test_on_post_page_inserts_link_before_head_close(src: str, tagged: bool) -> 
         assert out == f"<html><head><title>T</title>{tag}</head><body></body></html>"
     else:
         assert out == html
+
+
+def _broken_build_config(site: Path) -> SimpleNamespace:
+    return SimpleNamespace(
+        site_dir=str(site),
+        site_url=SITE_URL,
+        nav=[{"Q": "quickstart.md"}, {"M": "migration.md"}],
+        plugins={
+            "llmstxt": SimpleNamespace(
+                config=SimpleNamespace(sections={"S": [{"quickstart.md": "d"}]})
+            )
+        },
+        extra={"llmstxt_exclude": []},
+    )
+
+
+def test_dirty_build_skips_the_gate_with_a_warning(
+    make_site: Callable[..., Path], caplog: pytest.LogCaptureFixture
+) -> None:
+    config = _broken_build_config(make_site())
+    gate.on_startup(command="build", dirty=True)
+    try:
+        with caplog.at_level("WARNING"):
+            gate.on_post_build(config)
+    finally:
+        gate.on_startup(command="build", dirty=False)
+    assert "dirty" in caplog.text
+
+
+def test_clean_build_still_raises_after_a_dirty_one(make_site: Callable[..., Path]) -> None:
+    config = _broken_build_config(make_site())
+    gate.on_startup(command="build", dirty=True)
+    gate.on_startup(command="build", dirty=False)
+    with pytest.raises(PluginError, match=r"migration\.md"):
+        gate.on_post_build(config)
+
+
+def test_on_post_build_names_a_missing_plugin(make_site: Callable[..., Path]) -> None:
+    config = _broken_build_config(make_site())
+    config.plugins = {}
+    with pytest.raises(PluginError, match="llmstxt plugin is not configured"):
+        gate.on_post_build(config)
+
+
+def test_on_post_page_names_a_missing_plugin() -> None:
+    config = _post_page_config()
+    config.plugins = {}
+    page = SimpleNamespace(file=SimpleNamespace(src_uri="quickstart.md"))
+    with pytest.raises(PluginError, match="llmstxt plugin is not configured"):
+        gate.on_post_page("<head></head>", page=page, config=config)
