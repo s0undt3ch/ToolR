@@ -3489,6 +3489,31 @@ fn zsh_display_pads_wide_and_combining_names() {
     );
 }
 
+/// A value holding glob characters finds its own line: the lookup takes it literally, so
+/// `a*c` doesn't resolve to `abc` nor `a[b]` to `ab`, which come first in the reply.
+#[test]
+fn zsh_display_looks_values_up_literally() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    let shim = r#"toolr() { printf 'abc\tone\na*c\ttwo\nab\tthree\na[b]\tfour\n'; }"#;
+    let lines = zsh_run_with(&fx, "", shim, &["toolr", "x"]);
+    let disps: Vec<&str> = lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("DISP:"))
+        .collect();
+    assert_eq!(
+        disps,
+        vec![
+            "abc   -- one",
+            "a*c   -- two",
+            "ab    -- three",
+            "a[b]  -- four",
+        ]
+    );
+}
+
 /// Adds a `big` group of 25 commands, `cmd00` to `cmd24`, each with its own summary.
 fn big_described_group(fx: &Fixture) {
     described_group(fx, 25);
