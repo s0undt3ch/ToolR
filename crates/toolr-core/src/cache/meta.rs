@@ -24,10 +24,6 @@ use thiserror::Error;
 /// longer written; they stay `#[serde(default)]` so older sidecars still parse.
 pub const SCHEMA_VERSION: u32 = 2;
 
-/// The venv layout this toolr builds, recorded in `meta.json` on every sync for a future check.
-/// Nothing reads it yet. Sidecars without the field count as layout 1.
-pub const VENV_LAYOUT_VERSION: u32 = 1;
-
 /// Filename used for the sidecar inside the per-repo cache directory.
 pub const FILE_NAME: &str = "meta.json";
 
@@ -46,10 +42,6 @@ pub struct Meta {
     pub created_at: DateTime<Utc>,
     /// Updated on every toolr invocation against this cache entry.
     pub last_used_at: DateTime<Utc>,
-    /// Venv layout the entry was last synced with; see [`VENV_LAYOUT_VERSION`]. Older toolr builds
-    /// ignore the field.
-    #[serde(default = "default_layout_version")]
-    pub layout_version: u32,
     /// Deprecated: no longer written or read. Kept so older `meta.json`
     /// files still parse.
     #[serde(default)]
@@ -61,10 +53,6 @@ pub struct Meta {
 }
 
 fn default_schema_version() -> u32 {
-    1
-}
-
-fn default_layout_version() -> u32 {
     1
 }
 
@@ -94,7 +82,6 @@ impl Meta {
             python_version: python_version.into(),
             created_at: now,
             last_used_at: now,
-            layout_version: VENV_LAYOUT_VERSION,
             interpreter_path: None,
             interpreter_hash: None,
         }

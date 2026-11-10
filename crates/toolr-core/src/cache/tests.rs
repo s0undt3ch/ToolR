@@ -15,7 +15,6 @@ fn sample_meta() -> Meta {
         last_used_at: Utc.with_ymd_and_hms(2026, 5, 11, 12, 34, 56).unwrap(),
         interpreter_path: None,
         interpreter_hash: None,
-        layout_version: 1,
     }
 }
 
@@ -27,22 +26,6 @@ fn loads_v1_sidecar_without_interpreter_fields() {
     let m = Meta::load(tmp.path()).unwrap();
     assert!(m.interpreter_path.is_none());
     assert!(m.interpreter_hash.is_none());
-}
-
-/// A sidecar written before `layout_version` existed describes the layout toolr has always
-/// built, so it must not read as outdated.
-#[test]
-fn sidecar_without_layout_version_reads_as_layout_one() {
-    let tmp = TempDir::new().unwrap();
-    let v2 = r#"{"schema_version":2,"repo_path":"/r","toolr_version":"0","python_version":"3.13","created_at":"2026-01-01T00:00:00Z","last_used_at":"2026-01-01T00:00:00Z"}"#;
-    std::fs::write(tmp.path().join("meta.json"), v2).unwrap();
-    let m = Meta::load(tmp.path()).unwrap();
-    assert_eq!(m.layout_version, 1);
-    assert!(m.layout_version >= crate::cache::VENV_LAYOUT_VERSION);
-    assert_eq!(
-        Meta::new("/r", "0", "3.13").layout_version,
-        crate::cache::VENV_LAYOUT_VERSION
-    );
 }
 
 #[test]
@@ -278,7 +261,6 @@ fn make_entry(
         last_used_at: last_used,
         interpreter_path: None,
         interpreter_hash: None,
-        layout_version: 1,
     };
     m.write(&cache_dir).unwrap();
 }
@@ -351,7 +333,6 @@ fn entry_at(repo: &str, last_used: chrono::DateTime<Utc>) -> CachedVenv {
             last_used_at: last_used,
             interpreter_path: None,
             interpreter_hash: None,
-            layout_version: 1,
         },
         size_bytes: 1024,
         is_orphan: false,

@@ -260,7 +260,6 @@ mod tests {
                 last_used_at: ts,
                 interpreter_path: None,
                 interpreter_hash: None,
-                layout_version: 1,
             },
             size_bytes: size,
             is_orphan: false,

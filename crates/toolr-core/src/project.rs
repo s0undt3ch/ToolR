@@ -255,7 +255,7 @@ pub fn finalize_sync(repo_root: &Path, resolved: &ResolvedVenv) -> Result<()> {
 
     // Preserve created_at when a sidecar already exists; otherwise mint a
     // fresh one.
-    let mut meta = match Meta::load(&cache_dir) {
+    let meta = match Meta::load(&cache_dir) {
         Ok(existing) => existing,
         Err(_) => Meta::new(
             repo_root.to_path_buf(),
@@ -263,7 +263,6 @@ pub fn finalize_sync(repo_root: &Path, resolved: &ResolvedVenv) -> Result<()> {
             &resolved.python_version,
         ),
     };
-    meta.layout_version = crate::cache::VENV_LAYOUT_VERSION;
     meta.write(&cache_dir)
         .with_context(|| format!("writing meta.json to {}", cache_dir.display()))?;
 
@@ -463,9 +462,9 @@ mod tests {
 
         // Pre-seed a sidecar so the `Ok(existing)` branch runs.
         let cache_dir = venv_dir.parent().unwrap();
-        let mut seeded = Meta::new(&repo_root, "old-version", "3.13");
-        seeded.layout_version = 0;
-        seeded.write(cache_dir).unwrap();
+        Meta::new(&repo_root, "old-version", "3.13")
+            .write(cache_dir)
+            .unwrap();
         let created = Meta::load(cache_dir).unwrap().created_at;
 
         let resolved = make_resolved_cache(venv_dir.clone(), "abc");
@@ -477,11 +476,6 @@ mod tests {
             "created_at preserved from the existing sidecar"
         );
         assert!(meta.interpreter_path.is_none());
-        assert_eq!(
-            meta.layout_version,
-            crate::cache::VENV_LAYOUT_VERSION,
-            "a finished sync stamps the current layout"
-        );
     }
 
     fn ask(input: &str) -> (bool, String) {

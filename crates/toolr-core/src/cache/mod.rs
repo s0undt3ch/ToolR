@@ -14,7 +14,7 @@ pub use enumerate::{CachedVenv, dir_size_bytes, enumerate_caches, enumerate_cach
 pub use hint::{HINT_ORPHAN_THRESHOLD, compute_hint};
 pub use init::write_meta_for_new_venv;
 pub use locks::{LockSweep, sweep_rebuild_locks};
-pub use meta::{Meta, MetaError, SCHEMA_VERSION, VENV_LAYOUT_VERSION};
+pub use meta::{Meta, MetaError, SCHEMA_VERSION};
 pub use touch::{touch_last_used, touch_or_backfill};
 
 #[cfg(test)]
