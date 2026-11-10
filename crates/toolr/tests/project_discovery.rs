@@ -63,7 +63,7 @@ fn manifest_rebuild_below_unrelated_tools_dir_writes_root_manifest() {
         .assert()
         .success()
         .stdout(contains(
-            manifest_in(&tmp.path().canonicalize().unwrap())
+            manifest_in(&dunce::canonicalize(tmp.path()).unwrap())
                 .display()
                 .to_string(),
         ));
@@ -100,7 +100,7 @@ fn bare_tools_repo() -> (TempDir, PathBuf) {
     let tools = tmp.path().join("tools");
     fs::create_dir_all(&tools).unwrap();
     fs::write(tools.join("demo.py"), DEMO).unwrap();
-    let tools = tools.canonicalize().unwrap();
+    let tools = dunce::canonicalize(&tools).unwrap();
     (tmp, tools)
 }
 

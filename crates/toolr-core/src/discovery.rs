@@ -43,9 +43,10 @@ pub fn discover_project_root(start: &Path) -> Result<PathBuf, DiscoveryError> {
 /// [`discover_project_root`], stopping after `ceiling` when given, so tests
 /// can ignore `tools/` directories on the host above their tempdir.
 fn discover_below(start: &Path, ceiling: Option<&Path>) -> Result<PathBuf, DiscoveryError> {
-    let mut current = start
-        .canonicalize()
-        .map_err(|e| DiscoveryError::Io(start.to_path_buf(), e))?;
+    // `dunce` drops Windows' `\\?\` verbatim prefix when the plain form is
+    // valid: this root reaches Python as `ctx.repo_root` and is the runner's cwd.
+    let mut current =
+        dunce::canonicalize(start).map_err(|e| DiscoveryError::Io(start.to_path_buf(), e))?;
     let mut first_bare: Option<PathBuf> = None;
     loop {
         let tools = current.join("tools");
@@ -74,7 +75,7 @@ mod tests {
     /// host `tools/` (the Windows runners' `C:\tools`) can't leak in.
     fn sandbox() -> (TempDir, PathBuf) {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = dunce::canonicalize(tmp.path()).unwrap();
         (tmp, root)
     }
 
@@ -86,6 +87,20 @@ mod tests {
     fn mkdir(path: &Path) -> PathBuf {
         std::fs::create_dir_all(path).unwrap();
         path.to_path_buf()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn root_is_not_a_verbatim_path_on_windows() {
+        let (_tmp, root) = sandbox();
+        mkfile(&root.join("tools/pyproject.toml"));
+        let found = discover_project_root(&root).unwrap();
+        assert!(
+            !found.to_string_lossy().starts_with(r"\\?\"),
+            "verbatim root: {}",
+            found.display()
+        );
+        assert_eq!(found, root);
     }
 
     #[test]

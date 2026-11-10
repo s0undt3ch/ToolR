@@ -2642,6 +2642,7 @@ dependencies = [
  "blake3",
  "chrono",
  "dirs",
+ "dunce",
  "email_address",
  "flate2",
  "glob",

@@ -62,11 +62,11 @@ fn project_venv_path_prints_in_tree_path_when_configured() {
     // Canonicalise the expected path so the comparison matches toolr's
     // output across platforms. On Windows `TempDir` paths return the
     // 8.3 short form (`RUNNER~1`), while toolr internally calls
-    // `canonicalize()` which produces the verbatim long-form
-    // (`\\?\C:\Users\runneradmin\...`). On macOS `/tmp` is a symlink
+    // `dunce::canonicalize()`, which produces the plain long-form
+    // (`C:\Users\runneradmin\...`). On macOS `/tmp` is a symlink
     // to `/private/tmp`. Canonicalising the parent (which exists)
     // then joining `.venv` (which doesn't yet) lines both sides up.
-    let expected = std::fs::canonicalize(tmp.path().join("tools"))
+    let expected = dunce::canonicalize(tmp.path().join("tools"))
         .unwrap()
         .join(".venv");
     assert!(
