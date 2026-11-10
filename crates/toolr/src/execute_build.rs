@@ -909,8 +909,6 @@ mod tests {
         );
     }
 
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     /// A deferred arg bound to `env_name` (clap's `.env()`, via the
     /// manifest metadata), parsed with that variable set and no flag typed.
     fn env_spec(
@@ -920,14 +918,10 @@ mod tests {
     ) -> anyhow::Result<BTreeMap<String, Value>> {
         let mut cmd = deferred_cmd(SupportedType::FilePath, "tools/pyproject.toml");
         cmd.arguments[0].metadata.env = Some(env_name.into());
-        let matches = {
-            let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-            // SAFETY: ENV_LOCK serialises every env mutation in this module.
-            unsafe { std::env::set_var(env_name, value) };
-            let matches = user_matches(&cmd, &["test"]);
-            unsafe { std::env::remove_var(env_name) };
-            matches
-        };
+        // SAFETY: the variable name is unique to the calling test.
+        unsafe { std::env::set_var(env_name, value) };
+        let matches = user_matches(&cmd, &["test"]);
+        unsafe { std::env::remove_var(env_name) };
         build_spec(&cmd, &matches, &layout.bases(), &OutputOptions::default()).map(|s| s.args)
     }
 

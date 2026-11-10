@@ -427,6 +427,26 @@ mod tests {
     /// Every value-taking root option in the CLI, aliases included, is in
     /// `ROOT_VALUE_OPTIONS`, and nothing else is.
     #[test]
+    fn builtins_are_root_subcommands() {
+        let command = crate::cli::build_command(&Manifest {
+            schema_version: SCHEMA_VERSION,
+            static_hash: String::new(),
+            third_party_hash: String::new(),
+            toolr_version: String::new(),
+            groups: Vec::new(),
+            commands: Vec::new(),
+            plugin_warnings: Vec::new(),
+            input_records: Default::default(),
+        });
+        for name in super::BUILTINS {
+            assert!(
+                command.get_subcommands().any(|c| c.get_name() == *name),
+                "BUILTINS lists `{name}`, which isn't a root subcommand"
+            );
+        }
+    }
+
+    #[test]
     fn root_value_options_match_the_cli() {
         let command = crate::cli::build_command(&Manifest {
             schema_version: SCHEMA_VERSION,
