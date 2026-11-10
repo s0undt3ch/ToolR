@@ -693,7 +693,7 @@ mod tests {
     #[test]
     fn catalogue_covers_every_toolr_types_name() {
         // Same list as `toolr_types_names_match_python_surface` in mod.rs,
-        // which is itself pinned to tests/toolr_types/test_types_module.py.
+        // which is itself pinned to tests/types/test_types_module.py.
         let names = [
             "AbsolutePath",
             "Count",

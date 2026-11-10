@@ -433,6 +433,7 @@ jobs:
         run: |
           git tag -m "chore(release): Release v${RELEASE_VERSION}" -a "v${RELEASE_VERSION}"
 
+      # CONTRIBUTING.md 'Recovering a half-published release' mirrors this; update both.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: cibw-wheel-*
@@ -520,6 +521,7 @@ jobs:
         with:
           subject-path: dist/*
 
+      # CONTRIBUTING.md 'Recovering a half-published release' mirrors this; update both.
       - name: Create GitHub release
         id: create-release
         shell: bash

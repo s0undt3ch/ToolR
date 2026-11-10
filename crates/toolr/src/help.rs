@@ -399,6 +399,7 @@ fn render_option_signature(arg: &Arg, group_has_short: bool) -> String {
     };
     let long = arg.get_long().map(|l| format!("--{l}")).unwrap_or_default();
     let value = if arg.get_action().takes_values() {
+        // Hyphenated like the flag; positionals keep the raw id, which is what clap's own errors print.
         let name = arg.get_value_names().and_then(|n| n.first()).map_or_else(
             || arg.get_id().as_str().replace('_', "-"),
             |v| v.to_string(),

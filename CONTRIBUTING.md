@@ -145,7 +145,7 @@ The compiler doesn't check the rest. Tests catch some of it, but not all:
    convert the string the binary sends.
 4. Add the name to the three pinned lists: `toolr_types_names_match_python_surface` in
    `parser/types/mod.rs`, `catalogue_covers_every_toolr_types_name` in `supported.rs`, and
-   `EXPECTED_TOOLR_TYPES_NAMES` in `tests/toolr_types/test_types_module.py`.
+   `EXPECTED_TOOLR_TYPES_NAMES` in `tests/types/test_types_module.py`.
 5. Run `cargo xtask build-skill-refs` and commit the regenerated type tables in `docs/` and
    `skills/`.
 6. Queue a release note with `toolr release-notes add`. A new type makes the next release a minor one.
@@ -178,48 +178,47 @@ trailer on any commit exempts the PR. The full rules are in [`release-notes/READ
 
 ## Recovering a half-published release
 
-`release.yml` is dispatched from `main` only; the first job fails on any other ref. The `publish-release`
-job runs these steps in order: Test PyPI dress rehearsal, push the release commit and tag, attest, create
-the GitHub release, publish to PyPI. Where it failed decides what to do.
+`release.yml` runs from `main` only; its first job fails on any other ref. The `publish-release` job
+runs, in order: Test PyPI dress rehearsal, push the release commit and tag, attest, create the GitHub
+release, publish to PyPI. This section mirrors `.github/workflows/release.yml` and
+`.github/workflows/_prepare-release.yml`; change them together. Find where the run failed, then:
 
-- **Before "Push the release commit and tag"** (build, tests, Test PyPI, or the push itself because `main`
-  moved): nothing is on PyPI, GitHub or the tag, only the dress-rehearsal files on Test PyPI. Fix the cause
-  and dispatch the release again. Test PyPI uploads use `skip-existing`, so a retry gets past them.
-- **After the push** (attest, GitHub release, or PyPI failed): the tag `vX.Y.Z` exists on the release
-  commit. Re-running the job fails at the push step by design. Don't delete the tag. Check what exists
-  (`gh release view vX.Y.Z`, the PyPI project page), then finish what is missing from the failed run's
-  artifacts, within 7 days of the failed run (`retention-days: 7` on the notes, patch and tarballs); after
-  that, cut the next patch version instead. Download them as the workflow lays them out:
+- **Before "Push the release commit and tag"** (build, tests, Test PyPI, or `main` moved): only the Test
+  PyPI dress-rehearsal files are public. Fix the cause and dispatch the release again; uploads use
+  `skip-existing`.
+- **After the push** (attest, GitHub release or PyPI failed): `vX.Y.Z` is tagged, and re-running
+  `publish-release` fails at the push step by design. Don't delete the tag. Check what exists
+  (`gh release view vX.Y.Z`, the PyPI project page), then finish the missing parts. This works for 7 days
+  after the failed run, the `retention-days: 7` of the notes, patch and tarball artifacts.
+    1. Download the artifacts. `<binary-tarball>` and `<py-tarball>` are the `binary-release-tarball-name`
+       and `py-release-tarball-name` outputs of the run page's `prepare-release` job; the notes file is
+       always `release-notes.md`.
 
-    ```sh
-    run=<run-id>
-    gh run download "$run" -p 'cibw-wheel-*' -D dist
-    gh run download "$run" -n <binary-release-tarball-name> -D dist
-    gh run download "$run" -n <py-release-tarball-name> -D dist
-    gh run download "$run" -p 'toolr-archive-*' -D release-assets
-    gh run download "$run" -n <release-notes-filename> -D .
-    ```
+       ```sh
+       run=<run-id>
+       gh run download "$run" -p 'cibw-wheel-*' -D wheels && mkdir -p dist release-assets \
+         && mv wheels/*/* dist/ && rmdir wheels/* wheels
+       gh run download "$run" -n <binary-tarball> -D dist
+       gh run download "$run" -n <py-tarball> -D dist
+       gh run download "$run" -n release-notes.md -D .
+       gh run download "$run" -p 'toolr-archive-*' -D archives \
+         && mv archives/*/* release-assets/ && rmdir archives/* archives
+       ```
 
-  The tarball and notes names are the `prepare-release` job's outputs (`binary-release-tarball-name`,
-  `py-release-tarball-name`, `release-notes-filename`). `-p` puts each artifact in its own subdirectory, so
-  move the files up into `dist/` and `release-assets/` before the next step.
-    - No GitHub release: run the workflow's own command (`--latest` becomes `--prerelease` for an `-rc` version):
-
-      ```sh
-      gh release create "vX.Y.Z" --repo s0undt3ch/ToolR --verify-tag --title "X.Y.Z" \
-        --notes-file <release-notes-filename> --latest dist/* release-assets/*
-      ```
-
-    - Files missing on PyPI: Trusted Publishing only works from the workflow, so upload the remaining files
-      from `dist/` with `twine upload --skip-existing` and a short-lived project API token. This publishes
-      without the PEP 740 attestations that `pypa/gh-action-pypi-publish` adds.
-    - "Attest final release artifacts" needs the workflow's OIDC token and can't be redone by hand. A release
-      recovered this way ships without those attestations; if they matter, cut the next patch version instead.
-- **`publish-packslip`** runs after a failed `publish-release` too, and re-signs with `--clobber`. Once the
-  release exists, "Re-run failed jobs" is fine: `publish-release` fails at the push step by design and
-  `publish-packslip` still runs. Or re-run only the `publish-packslip` job.
-- If a half-published version can't be completed (for example PyPI rejected a file), leave it, and cut the
-  next patch version instead of reusing the number: PyPI never accepts a deleted file name again.
+    2. No GitHub release: run the same command as the `Create GitHub release` step in
+       `release.yml`, with `RELEASE_VERSION=X.Y.Z`, `RELEASE_NOTES=release-notes.md` and `--prerelease`
+       in place of `--latest` for an `-rc` version.
+    3. Files missing on PyPI: Trusted Publishing only works from the workflow. Upload the missing files
+       from `dist/` with
+       `TWINE_USERNAME=__token__ TWINE_PASSWORD=<token> twine upload --skip-existing dist/<file>`,
+       minting a project-scoped token at <https://pypi.org/manage/account/token/> and revoking it
+       afterwards. This publishes without the PEP 740 attestations `pypa/gh-action-pypi-publish` adds.
+    4. "Attest final release artifacts" needs the workflow's OIDC token and can't be redone by hand, so a
+       recovered release ships without those attestations.
+    5. `publish-packslip` runs after a failed `publish-release` and re-signs with `--clobber`. Once the
+       release exists, "Re-run failed jobs" is fine, or re-run only `publish-packslip`.
+- **Can't finish** (artifacts expired, PyPI rejected a file, or the missing attestations matter): leave
+  that version and cut the next patch version. PyPI never accepts a deleted file name again.
 
 ## Pre-commit hooks
 
@@ -231,7 +230,8 @@ prek run rumdl --files docs/internals/manifest.md
 ```
 
 Hooks include `ruff`, `mypy`, `clippy`, `rumdl`, `typos`, `jactionlint`,
-`shellcheck`, plus the project-local hooks (`toolr pre-commit regen-doc-snippets` and the other commands under `tools/precommit/`).
+`shellcheck`, plus the project-local hooks, which run the `toolr pre-commit` commands under
+`tools/precommit/` (for example the `regen-doc-snippets` hook).
 `pin-github-actions` comes from `s0undt3ch/pre-commit-hooks`.
 
 ## Benchmarking

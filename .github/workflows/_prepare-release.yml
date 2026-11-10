@@ -197,6 +197,7 @@ jobs:
         with:
           name: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
           path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+          # CONTRIBUTING.md 'Recovering a half-published release' mirrors this; update both.
           retention-days: 7
           if-no-files-found: error
 
@@ -308,6 +309,7 @@ jobs:
         with:
           name: toolr-${{ env.RELEASE_VERSION }}.patch
           path: toolr-${{ env.RELEASE_VERSION }}.patch
+          # CONTRIBUTING.md 'Recovering a half-published release' mirrors this; update both.
           retention-days: 7
           if-no-files-found: error
 
@@ -354,6 +356,7 @@ jobs:
         with:
           name: ${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
           path: dist/${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
+          # CONTRIBUTING.md 'Recovering a half-published release' mirrors this; update both.
           retention-days: 7
           if-no-files-found: error
 
@@ -363,6 +366,7 @@ jobs:
         with:
           name: ${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
           path: dist/${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
+          # CONTRIBUTING.md 'Recovering a half-published release' mirrors this; update both.
           retention-days: 7
           if-no-files-found: error
 

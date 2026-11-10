@@ -175,6 +175,9 @@ ignore = [
 "tests/utils/**/*.py" = [
   "PLC0415", # `import` should be at the top-level of a file
 ]
+"tests/types/__init__.py" = [
+  "A005",   # imports as `tests.types`, so it cannot shadow the stdlib `types`
+]
 "tests/testing/test_make_context.py" = [
   "PLC0415", # local imports keep the `--8<--` doc snippets self-contained
 ]
