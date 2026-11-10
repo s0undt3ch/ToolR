@@ -4,7 +4,7 @@ minimum_pre_commit_version: 3.0.0
 # (existing clones must re-run `prek install --install-hooks` once to pick up
 # the commit-msg hook). `default_stages` pins every hook to the pre-commit
 # stage unless it opts in otherwise — without it, `pass_filenames: false` hooks
-# (cargo check, clippy, …) would run a second time at the commit-msg stage.
+# (clippy, …) would run a second time at the commit-msg stage.
 default_install_hook_types: [pre-commit, commit-msg]
 default_stages: [pre-commit]
 repos:
@@ -209,22 +209,14 @@ repos:
       # bumping unrelated transitives the way `cargo update` would.
       # If the rewrite changes bytes on disk, prek sees the
       # modification and fails the commit; re-stage the fresh
-      # lockfile and commit again. No compilation — the `cargo check`
-      # and clippy hooks below pick that up on `.rs` changes.
+      # lockfile and commit again. No compilation — the clippy hooks
+      # below pick that up on `.rs` changes.
       - id: cargo-lock
         name: Sync Cargo.lock with Cargo.toml
         entry: cargo fetch
         language: system
         pass_filenames: false
         files: ^(Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
-
-      # Does it compile?
-      - id: cargo-check
-        name: cargo check
-        entry: cargo check --all-targets --all-features
-        language: system
-        types: [rust]
-        pass_filenames: false
 
       - id: clippy
         name: clippy
