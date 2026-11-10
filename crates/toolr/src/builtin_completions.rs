@@ -235,9 +235,7 @@ impl RootScan {
 }
 
 fn root_flag_specs() -> Vec<RootFlagSpec> {
-    let mut root = crate::cli::build_command(&Manifest::empty());
-    // Unbuilt, clap has not added `--version` / `-V` yet, so build before reading the args.
-    root.build();
+    let root = crate::cli::root_command();
     let mut specs: Vec<RootFlagSpec> = root
         .get_arguments()
         .filter_map(|a| {

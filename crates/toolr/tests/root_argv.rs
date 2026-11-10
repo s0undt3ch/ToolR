@@ -1,0 +1,36 @@
+//! What toolr reads from its own argv before clap runs: only the leading run of root flags is
+//! toolr's, so a command's own `--version` or a root flag before a built-in is not misread.
+
+mod common;
+
+use common::Project;
+
+const REL_GROUP: &str = "\"\"\"Release.\"\"\"\nfrom toolr import Context, command_group\n\
+     group = command_group(\"rel\", \"Release\", \"Release tools.\")\n\
+     @group.command\ndef bump(ctx: Context, version: str = \"\") -> None:\n    \
+     \"\"\"Bump the version.\n\n    Args:\n        version: The new version.\n    \"\"\"\n";
+
+#[test]
+fn a_command_with_its_own_version_option_builds_the_manifest_on_a_fresh_clone() {
+    let p = Project::new();
+    p.write_tool("rel.py", REL_GROUP);
+    assert!(!p.tools().join(".toolr-manifest.json").exists());
+
+    let out = p.stdout(&["rel", "bump", "--version", "1.2", "--help"]);
+    assert!(out.contains("The new version."), "{out}");
+}
+
+#[test]
+fn root_flags_before_a_built_in_keep_its_help() {
+    let p = Project::new();
+    for (args, about) in [
+        (&["-q", "self", "--help"][..], "Operations on toolr itself"),
+        (
+            &["--timeout-secs", "5", "project", "venv", "-h"][..],
+            "Inspect, sync, and operate on the tools venv",
+        ),
+    ] {
+        let out = p.stdout(args);
+        assert!(out.starts_with(about), "{args:?}:\n{out}");
+    }
+}

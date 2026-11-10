@@ -7,6 +7,7 @@ mod execute_build;
 mod help;
 mod init_scaffold;
 mod init_templates;
+mod invocation;
 mod project;
 mod self_cache;
 mod self_cache_prune;
@@ -14,7 +15,9 @@ mod value_parsers;
 
 use std::process::ExitCode;
 
-use toolr_core::discovery::{DiscoveryError, discover_project_root};
+use toolr_core::discovery::DiscoveryError;
+
+use crate::invocation::{Invocation, RootArgv};
 use toolr_core::manifest::{Manifest, ManifestError, load_manifest};
 
 fn main() -> ExitCode {
@@ -36,18 +39,18 @@ fn main() -> ExitCode {
 
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
-    let argv: Vec<String> = std::env::args().collect();
-    let mut built = match bootstrap::ensure_manifest(&cwd, &argv)? {
+    let run = Invocation::new(RootArgv::new(std::env::args().collect()), cwd);
+    let mut built = match bootstrap::ensure_manifest(&run)? {
         Some(built) => built,
         // `__complete` resolves the manifest itself; loading it here too
         // would parse it twice per TAB and warn about a corrupt one.
-        None if bootstrap::is_tab_completion(&argv) => Manifest::empty().into(),
-        None => load_or_empty(&cwd, &argv)?.into(),
+        None if run.argv.is_tab_completion() => Manifest::empty().into(),
+        None => load_or_empty(&run)?.into(),
     };
     // Covers fragments and a hand-edited committed manifest alike. Tab
     // completion drops the same entries in `resolve_manifest_at_tab`.
     built.manifest.drop_unsafe_names();
-    if !bootstrap::should_skip_auto_rebuild(&argv) {
+    if !run.argv.skips_manifest_build() {
         // Printed under `-q` too (the rule is on the `-q` arg in `cli::root_flag_args`).
         // Build warnings come only from a manifest built on this run.
         for message in built.all_warnings() {
@@ -56,33 +59,22 @@ fn run() -> anyhow::Result<ExitCode> {
     }
     let manifest = built.manifest;
     let mut command = cli::build_command(&manifest);
-    // Use try_get_matches_from so that `subcommand_required` validation errors
-    // (e.g. `toolr self --help`) don't exit before dispatch can intercept
-    // help flags. When clap reports MissingRequiredArgument / NoSubcommand AND
-    // --help or -h is present in argv, we fall through to dispatch which
-    // renders help. For genuine errors (bad flags, unknown subcommands) we let
-    // clap print its error and exit.
-    let matches = match command.clone().try_get_matches_from(std::env::args_os()) {
+    // try_get_matches_from, so a `subcommand_required` error on a help request
+    // (`toolr self --help`) still renders that command's help instead of the error.
+    let matches = match command.clone().try_get_matches_from(run.argv.words()) {
         Ok(m) => m,
         Err(e) => {
             use clap::error::ErrorKind;
-            let want_help = argv.iter().any(|a| a == "--help");
-            let want_short = !want_help && argv.iter().any(|a| a == "-h");
-            if (want_help || want_short)
+            if let Some(mode) = run.argv.help_mode()
                 && matches!(
                     e.kind(),
                     ErrorKind::MissingSubcommand | ErrorKind::MissingRequiredArgument
                 )
             {
-                // Help was requested but clap failed validation first.
-                // Delegate to dispatch with a synthesised "root" match by
-                // passing an empty argv so clap can build a valid root-level
-                // ArgMatches. Dispatch's resolve_help_target will then walk
-                // the argv to find the right level.
-                dispatch::dispatch_help_from_argv(&argv, &mut command)?;
+                dispatch::print_help_from_argv(&run.argv, &command, mode);
                 return Ok(ExitCode::SUCCESS);
             }
-            if let Some(hint) = misplaced_root_flag_hint(&e, &command, &argv) {
+            if let Some(hint) = misplaced_root_flag_hint(&e, &command, &run.argv) {
                 let _ = e.print();
                 eprintln!("{hint}");
                 return Ok(ExitCode::from(e.exit_code() as u8));
@@ -90,8 +82,8 @@ fn run() -> anyhow::Result<ExitCode> {
             // Genuine error: print it the way clap does; outside a project an
             // unknown command is most likely a wrong directory, so say so.
             if e.kind() == ErrorKind::InvalidSubcommand
-                && bootstrap::names_user_command(&argv)
-                && let Some(hint) = no_project_hint(&cwd)
+                && run.argv.names_user_command()
+                && let Some(hint) = no_project_hint(&run)
             {
                 let _ = e.print();
                 eprintln!("{hint}");
@@ -100,8 +92,8 @@ fn run() -> anyhow::Result<ExitCode> {
             e.exit()
         }
     };
-    maybe_emit_cache_hint(&matches, &argv);
-    dispatch::dispatch(&matches, &manifest, &mut command)
+    maybe_emit_cache_hint(&matches);
+    dispatch::dispatch(&matches, &manifest, &mut command, run)
 }
 
 /// The line to follow clap's "unexpected argument" when the argument is one of toolr's root
@@ -109,7 +101,7 @@ fn run() -> anyhow::Result<ExitCode> {
 fn misplaced_root_flag_hint(
     err: &clap::Error,
     root: &clap::Command,
-    argv: &[String],
+    argv: &RootArgv,
 ) -> Option<String> {
     use clap::error::{ContextKind, ContextValue, ErrorKind};
     if err.kind() != ErrorKind::UnknownArgument {
@@ -119,21 +111,21 @@ fn misplaced_root_flag_hint(
         return None;
     };
     let spelling = bad.split('=').next()?;
-    let words: Vec<&str> = argv.iter().skip(1).map(String::as_str).collect();
+    let words: Vec<&str> = argv.words().iter().skip(1).map(String::as_str).collect();
     let at = words
         .iter()
         .position(|w| *w == spelling || w.starts_with(&format!("{spelling}=")))
         .unwrap_or(words.len());
-    let (path, typed_before) = cli::command_path(root, argv);
+    let path = argv.command_path(root).1.join(" ");
     let found = words.get(at..).unwrap_or_default();
     let found: &[&str] = if found.is_empty() { &[spelling] } else { found };
-    cli::misplaced_flag_error(found, &path, typed_before).map(|m| m.hint)
+    cli::misplaced_flag_error(found, &path, argv.typed_before()).map(|m| m.hint)
 }
 
 /// The line to follow clap's "unrecognized subcommand" when `cwd` is not in a
 /// project at all. A bare `tools/` already gets its own warning.
-fn no_project_hint(cwd: &std::path::Path) -> Option<String> {
-    match discover_project_root(cwd) {
+fn no_project_hint(run: &Invocation) -> Option<String> {
+    match run.root() {
         Err(e @ DiscoveryError::NotFound(_)) => Some(format!("toolr: {e}")),
         _ => None,
     }
@@ -143,20 +135,15 @@ fn no_project_hint(cwd: &std::path::Path) -> Option<String> {
 /// (they never reach this point: clap prints `-V` itself, and a `--help` that clap parsed
 /// is `help`). The `--` separator is clap's to find, so a wrapped command's own `--quiet`
 /// (`run -- pytest --quiet`) is not toolr's.
-fn maybe_emit_cache_hint(matches: &clap::ArgMatches, argv: &[String]) {
+fn maybe_emit_cache_hint(matches: &clap::ArgMatches) {
     if toolr_core::env::env_truthy("TOOLR_NO_CACHE_HINT")
         || matches.get_flag("quiet")
         || matches.get_flag("help")
-    {
-        return;
-    }
-    // Suppress for tab-completion and `self cache ...` invocations.
-    if bootstrap::is_tab_completion(argv) {
-        return;
-    }
-    if matches
-        .subcommand_matches("self")
-        .is_some_and(|m| m.subcommand_name() == Some("cache"))
+        // Tab completion and `self cache …` get no hint.
+        || matches.subcommand_name() == Some("__complete")
+        || matches
+            .subcommand_matches("self")
+            .is_some_and(|m| m.subcommand_name() == Some("cache"))
     {
         return;
     }
@@ -179,28 +166,27 @@ fn maybe_emit_cache_hint(matches: &clap::ArgMatches, argv: &[String]) {
 /// there turns a corrupt file into clap's misleading `unrecognized
 /// subcommand` (#542). Built-ins don't need the user's commands, and
 /// `project manifest rebuild` is the repair path, so they only warn.
-fn load_or_empty(cwd: &std::path::Path, argv: &[String]) -> anyhow::Result<Manifest> {
-    let root = match discover_project_root(cwd) {
+fn load_or_empty(run: &Invocation) -> anyhow::Result<Manifest> {
+    let root = match run.root() {
         Ok(root) => root,
         Err(e) => {
             // A bare `tools/` explains why a user command is missing; plain
             // `--help` stays quiet, since an unrelated `tools/` (such as
             // `C:\tools`) may sit above any directory.
-            if matches!(e, DiscoveryError::MissingPyproject { .. })
-                && bootstrap::names_user_command(argv)
+            if matches!(e, DiscoveryError::MissingPyproject { .. }) && run.argv.names_user_command()
             {
                 eprintln!("toolr: warning: {e}");
             }
             return Ok(Manifest::empty());
         }
     };
-    let manifest_path = toolr_core::manifest::manifest_path(&root);
+    let manifest_path = toolr_core::manifest::manifest_path(root);
     match load_manifest(&manifest_path) {
         Ok(m) => Ok(m),
         Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
             Ok(Manifest::empty())
         }
-        Err(e) if bootstrap::should_skip_auto_rebuild(argv) => {
+        Err(e) if run.argv.skips_manifest_build() => {
             eprintln!(
                 "toolr: warning: ignoring unreadable {}: {e}",
                 manifest_path.display()
@@ -227,7 +213,7 @@ mod tests {
             .collect();
         let root = cli::build_command(&Manifest::empty());
         let err = root.clone().try_get_matches_from(&argv).err()?;
-        misplaced_root_flag_hint(&err, &root, &argv)
+        misplaced_root_flag_hint(&err, &root, &crate::invocation::RootArgv::new(argv))
     }
 
     #[test]

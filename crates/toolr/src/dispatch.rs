@@ -6,13 +6,13 @@ use clap::ArgMatches;
 
 use crate::builtin_completions::RootScan;
 use crate::help::{self, HelpMode};
+use crate::invocation::{Invocation, RootArgv};
 use toolr_core::complete::{
     Candidate, Completion, InstallOptions, InstallOutcome, Matching, PriorState,
     Shell as CompletionShell, bash_completion_installed, complete_matching, completion_script,
     install_script, powershell_quote, resolve_manifest_at_tab, shell_quote,
     sort_and_dedup_by_value,
 };
-use toolr_core::discovery::discover_project_root;
 use toolr_core::env::{non_empty_env_path, xdg_dir_env};
 use toolr_core::execute::{ExecutionSpec, spawn_runner, wait_with_signals, write_spec_to_tempfile};
 use toolr_core::exit_status::process_exit_code;
@@ -28,18 +28,12 @@ use crate::execute_build::{
 // Help interception
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Walk the matched subcommand chain to find the deepest level where the
-/// help flag was set, resolving the corresponding `clap::Command` from the
-/// tree in parallel. Returns `(resolved_cmd, bin_path, mode)` when help
-/// was requested, or `None` otherwise.
-///
-/// `--help` and `-h` are a single global Arg in `cli.rs` — we determine
-/// Short vs Long mode by scanning raw argv, so users get terse `-h` output
-/// or the full `--help` body based on which form they typed.
+/// The deepest matched command with the help flag set, its `bin_path` and `mode`, or `None`
+/// when no help was asked for. `-h` and `--help` are one global arg, so `mode` comes from argv.
 fn resolve_help_target(
     root_cmd: &clap::Command,
     matches: &ArgMatches,
-    argv: &[String],
+    mode: HelpMode,
 ) -> Option<(clap::Command, String, HelpMode)> {
     let mut cur_cmd = root_cmd.clone();
     let mut cur_matches = matches;
@@ -57,52 +51,16 @@ fn resolve_help_target(
     if !cur_matches.get_flag("help") {
         return None;
     }
-    Some((cur_cmd, path.join(" "), help_mode_from_argv(argv)))
+    Some((cur_cmd, path.join(" "), mode))
 }
 
-/// `--help` wins over `-h` when both appear; absent both, default to
-/// Long (matters only for synthetic invocations of `print` without
-/// argv routing).
-fn help_mode_from_argv(argv: &[String]) -> HelpMode {
-    if argv.iter().any(|a| a == "--help") {
-        HelpMode::Long
-    } else if argv.iter().any(|a| a == "-h") {
-        HelpMode::Short
-    } else {
-        HelpMode::Long
-    }
-}
-
-/// Called by `main.rs` when clap's `try_get_matches_from` fails with a
-/// `MissingSubcommand` or similar error AND argv contains `--help` / `-h`.
-/// This happens because `subcommand_required(true)` commands (like `self`,
-/// `project`, `self cache`) enforce the subcommand constraint even when a
-/// global help flag is set — clap validates before we can intercept.
-///
-/// We resolve the target command by walking the raw argv token-by-token
-/// through the clap Command tree, stopping at the deepest named subcommand.
-pub fn dispatch_help_from_argv(argv: &[String], root: &mut clap::Command) -> anyhow::Result<()> {
-    let mode = help_mode_from_argv(argv);
-
-    let mut cur_cmd = &*root;
-    let mut path: Vec<String> = vec![cur_cmd.get_name().to_string()];
-
-    // Walk argv tokens (skip argv[0] = binary name). Stop when we hit a
-    // flag token or a token that isn't a known subcommand.
-    for token in argv.iter().skip(1) {
-        if token.starts_with('-') {
-            break;
-        }
-        if let Some(child) = cur_cmd.find_subcommand(token.as_str()) {
-            cur_cmd = child;
-            path.push(token.clone());
-        } else {
-            break;
-        }
-    }
-
-    help::print(cur_cmd, &path.join(" "), mode);
-    Ok(())
+/// Help for a request clap rejected first: `subcommand_required` commands (`self`, `project`,
+/// `self cache`) fail validation before the global help flag is seen. The target is the
+/// deepest command argv names.
+pub fn print_help_from_argv(argv: &RootArgv, root: &clap::Command, mode: HelpMode) {
+    let (cmd, names) = argv.command_path(root);
+    let path: Vec<&str> = std::iter::once(root.get_name()).chain(names).collect();
+    help::print(cmd, &path.join(" "), mode);
 }
 
 /// Turn a [`PathValueError`] into the one-line clap error clap itself
@@ -208,20 +166,21 @@ pub fn dispatch(
     matches: &ArgMatches,
     manifest: &Manifest,
     root: &mut clap::Command,
+    run: Invocation,
 ) -> anyhow::Result<ExitCode> {
-    let argv: Vec<String> = std::env::args().collect();
     // Intercept --help / -h before any other routing. Tab-completion
     // invocations (`__complete`) never set help flags, so they pass through
     // immediately.
+    let mode = run.argv.help_mode().unwrap_or(HelpMode::Long);
     if !matches!(matches.subcommand(), Some(("__complete", _)))
-        && let Some((resolved_cmd, bin_path, mode)) = resolve_help_target(root, matches, &argv)
+        && let Some((resolved_cmd, bin_path, mode)) = resolve_help_target(root, matches, mode)
     {
         help::print(&resolved_cmd, &bin_path, mode);
         return Ok(ExitCode::SUCCESS);
     }
 
     if let Some(("__complete", sub)) = matches.subcommand() {
-        return run_complete(sub);
+        return run_complete(sub, &run.argv);
     }
     if let Some(("self", self_matches)) = matches.subcommand() {
         return run_self(self_matches, matches.get_flag("quiet"));
@@ -257,8 +216,8 @@ pub fn dispatch(
     let cmd = find_command_for_path(manifest, &path)
         .ok_or_else(|| anyhow::anyhow!("unknown command: {}", path.join(" ")))?;
 
-    let cwd = std::env::current_dir()?;
-    let repo_root = discover_project_root(&cwd)?;
+    let (cwd, repo_root) = run.into_cwd_and_root();
+    let repo_root = repo_root?;
     let output_opts = output_options_from_matches(matches);
     let bases = PathBases {
         cwd: &cwd,
@@ -707,28 +666,17 @@ fn matching_from(value: Option<&str>) -> Matching {
     }
 }
 
-fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+fn run_complete(matches: &clap::ArgMatches, argv: &RootArgv) -> anyhow::Result<ExitCode> {
     // Tab completion must be quiet: any error produces a silent exit
     // code 1 so the shell falls back to its default completion. We do
     // not write to stderr here — that would clobber the user's prompt.
     let Some(cwd) = matches.get_one::<String>("cwd").map(PathBuf::from) else {
         return Ok(ExitCode::from(1));
     };
-    // Read tokens directly from argv rather than from clap's parsed
-    // `args` vec. clap consumes a bare `--` as the end-of-options
-    // marker before it reaches the trailing var arg, but shell
-    // completion scripts pass the user's in-progress `--<TAB>` word
-    // through unchanged. Falling back to raw argv keeps every literal
-    // token (including bare `--`) intact.
-    let raw: Vec<String> = raw_complete_tokens(matches).unwrap_or_else(|| {
-        matches
-            .get_many::<String>("args")
-            .map(|v| v.cloned().collect())
-            .unwrap_or_default()
-    });
+    let raw = argv.complete_tokens();
     // Root flags are not global and the engine has never heard of them: strip the leading run so
     // `toolr --quiet ci <TAB>` reaches it as `ci <TAB>`. A line clap would reject completes to nothing.
-    let scan = crate::builtin_completions::scan_root_flags(&raw);
+    let scan = crate::builtin_completions::scan_root_flags(raw);
     if scan.dead_end {
         return Ok(ExitCode::SUCCESS);
     }
@@ -761,21 +709,6 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
         println!("{}\t{}", candidate.value, candidate.description);
     }
     Ok(ExitCode::SUCCESS)
-}
-
-/// Re-derive the completion tokens from raw argv so a literal `--`
-/// typed as the in-progress word survives clap's end-of-options
-/// handling. Returns [`None`] when the structure doesn't look right
-/// (e.g. invoked as a library or via a non-standard entry point), in
-/// which case the caller falls back to clap's parsed view.
-fn raw_complete_tokens(matches: &clap::ArgMatches) -> Option<Vec<String>> {
-    let cwd = matches.get_one::<String>("cwd")?;
-    let argv: Vec<String> = std::env::args().collect();
-    let marker_pos = argv.iter().position(|a| a == "__complete")?;
-    let after_marker = argv.get(marker_pos + 1..)?;
-    let cwd_pos = after_marker.iter().position(|a| a == cwd)?;
-    // A leading `--` is kept: it is a committed terminator, and clap rejects `toolr -- ci`.
-    Some(after_marker[cwd_pos + 1..].to_vec())
 }
 
 /// When the user is completing a flag at the root (`toolr --<TAB>`, `toolr -<TAB>`, or after other root

@@ -178,8 +178,8 @@ fn build_root_command() -> Command {
         )
 }
 
-/// The root command, built once: `root_flag` looks every spelling up in it.
-fn root_command() -> &'static Command {
+/// The root command without subcommands, built once: `root_flag` and `RootArgv` read its args.
+pub(crate) fn root_command() -> &'static Command {
     static ROOT: std::sync::OnceLock<Command> = std::sync::OnceLock::new();
     ROOT.get_or_init(build_root_command)
 }
@@ -278,33 +278,6 @@ pub(crate) fn misplaced_flag_error(
         "toolr: `{spelling}` is a toolr option; put it before the command: `toolr {lead}{shown}{path} ...`"
     );
     Some(Misplaced { spelling, hint })
-}
-
-/// The subcommand names clap matches at the start of `argv`, joined by spaces
-/// (`project venv sync`), and whether root flags were typed before the first. The names are
-/// plain identifiers, so safe to echo.
-pub(crate) fn command_path(root: &Command, argv: &[String]) -> (String, bool) {
-    let mut cmd = root;
-    let mut path: Vec<&str> = Vec::new();
-    let mut typed_before = false;
-    let mut words = argv.iter().skip(1);
-    while let Some(w) = words.next() {
-        if let Some(sub) = cmd.find_subcommand(w) {
-            cmd = sub;
-            path.push(w);
-        } else if path.is_empty() && w.starts_with('-') {
-            typed_before = true;
-            let takes_value = root_flag_spelling(w).is_some_and(|sp| {
-                &sp == w && root_flag(&sp).is_some_and(|f| f.get_action().takes_values())
-            });
-            if takes_value {
-                words.next();
-            }
-        } else {
-            break;
-        }
-    }
-    (path.join(" "), typed_before)
 }
 
 /// The `-d` / `-q` / timing flags. Root-only: a copy on a command would let a Python
@@ -790,9 +763,25 @@ pub fn build_command(manifest: &Manifest) -> Command {
         root = root.subcommand(build_group_subtree(group, manifest, &children));
     }
 
-    root.subcommand(build_project_subcommand())
-        .subcommand(build_self_subcommand())
-        .subcommands(build_hidden_subcommands())
+    root.subcommands(builtin_subcommands())
+}
+
+/// toolr's own top-level commands, hidden ones included, in the order they join the root.
+fn builtin_subcommands() -> Vec<Command> {
+    let mut builtins = vec![build_project_subcommand(), build_self_subcommand()];
+    builtins.extend(build_hidden_subcommands());
+    builtins
+}
+
+/// The names of [`builtin_subcommands`]: a first word that is none of these names a user command.
+pub(crate) fn builtin_names() -> &'static [String] {
+    static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        builtin_subcommands()
+            .iter()
+            .map(|c| c.get_name().to_owned())
+            .collect()
+    })
 }
 
 /// The literal default clap gets for `arg`, if any. Only an `Optional`
