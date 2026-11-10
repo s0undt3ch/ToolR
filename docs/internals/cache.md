@@ -42,6 +42,7 @@ Written when toolr creates a venv; updated on every invocation.
 
 ```json
 {
+  "schema_version": 2,
   "repo_path": "/Users/you/code/my-repo",
   "toolr_version": "0.11.0",
   "python_version": "3.11.11",

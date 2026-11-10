@@ -5,13 +5,14 @@ reports, doc fixes, and well-scoped feature PRs are all welcome.
 
 ## Repo layout
 
-A Cargo workspace with three crates plus the Python source:
+A Cargo workspace with four crates plus the Python source:
 
 | Crate                | What it is                                                                                                              |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `crates/toolr-core/` | Pure-Rust library. Parser, manifest, freshness, argparse scanner, completion engine, cache. No `pyo3`.                  |
 | `crates/toolr/`      | The binary. `clap` CLI, dispatch, subprocess control.                                                                   |
 | `crates/toolr-py/`   | `pyo3` dynlib + the Python source at `crates/toolr-py/python/toolr/`. Ships as the `toolr-py` wheel.                    |
+| `crates/xtask/`      | Workspace automation, run as `cargo xtask <task>`.                                                                      |
 
 CI builds two PyPI wheels at the same workspace version:
 
@@ -185,7 +186,8 @@ prek run rumdl --files docs/internals/manifest.md
 ```
 
 Hooks include `ruff`, `mypy`, `clippy`, `rumdl`, `typos`, `jactionlint`,
-`shellcheck`, plus the project-local hooks (`pin-github-actions`, `regen-doc-snippets`).
+`shellcheck`, plus the project-local hooks (`toolr pre-commit regen-doc-snippets` and the other commands under `tools/precommit/`).
+`pin-github-actions` comes from `s0undt3ch/pre-commit-hooks`.
 
 ## Benchmarking
 

@@ -575,7 +575,7 @@ jobs:
       # build-binary-archive lets us use the same Rust binary CI builds
       # for testing — no per-job `cargo build --release`.
       - build-binary-archive
-      # `regen-doc-snippets.py` runs `toolr project manifest rebuild`
+      # `toolr pre-commit regen-doc-snippets` runs `toolr project manifest rebuild`
       # inside a fixture, which dispatches to Python and needs
       # `import toolr` to succeed. We install the prebuilt toolr-py
       # wheel into the venv (matching mise.toml's pinned CPython) so
@@ -631,7 +631,7 @@ jobs:
           echo "cp-tag=cp311" >> "$GITHUB_OUTPUT"
 
       - name: Download toolr-py wheel
-        # `regen-doc-snippets.py` runs `toolr project manifest rebuild`,
+        # `toolr pre-commit regen-doc-snippets` runs `toolr project manifest rebuild`,
         # which dispatches to a Python that must `import toolr`. The dev
         # venv (.venv) gets toolr-py via this pip install — no per-job
         # maturin rebuild. `toolr pre-commit check-python-versions` pins the cp-tag to

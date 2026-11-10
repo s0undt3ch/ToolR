@@ -146,7 +146,7 @@ the locks no remaining cache entry uses.
   { "kind": "file_path" }
   ```
 
-  See `src/parser/types.rs` for the full enum. `null` means the type
+  See `crates/toolr-core/src/parser/types/` for the full enum. `null` means the type
   layer couldn't resolve a supported type — third-party fragments
   built against the legacy schema fall through to string semantics.
   Path types (`path`, `absolute_path`, `new_path`, `resolved_path`,

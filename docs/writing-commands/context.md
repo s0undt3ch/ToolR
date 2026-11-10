@@ -104,8 +104,9 @@ raises and how it interacts with threads and `asyncio` tasks.
 See [`Context`][toolr.Context] in the API reference for every method
 and attribute. Highlights:
 
-- `ctx.print(...)` / `ctx.info(...)` / `ctx.error(...)` / `ctx.debug(...)`
+- `ctx.print(...)` / `ctx.info(...)` / `ctx.warn(...)` / `ctx.error(...)` / `ctx.debug(...)`
 - `ctx.run(*cmd, ...)` — subprocess execution
+- `ctx.which(name)` — find an executable on `PATH` (wraps `shutil.which`)
 - `ctx.prompt(prompt)` — read a line from stdin
 - `ctx.exit(code, message=None)` — early exit with a message
 - `ctx.chdir(path)` — context-manager to switch directories

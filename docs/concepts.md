@@ -73,7 +73,7 @@ never have to start Python. Has two layers (static + dynamic). It's a pure cache
 
 ## Tab completion
 
-Shell scripts for bash, zsh, and fish that call a hidden
+Shell scripts for bash, zsh, fish, and PowerShell that call a hidden
 `toolr __complete` endpoint on every Tab press. Install once per
 shell with `toolr self completion install <shell>`.
 
