@@ -34,3 +34,40 @@ fn root_flags_before_a_built_in_keep_its_help() {
         assert!(out.starts_with(about), "{args:?}:\n{out}");
     }
 }
+
+#[test]
+fn version_does_not_read_the_manifest() {
+    let p = Project::new();
+    std::fs::write(p.tools().join(".toolr-manifest.json"), "{bad").unwrap();
+
+    for args in [&["--version"][..], &["-V"]] {
+        let out = p.toolr(args).output().unwrap();
+        assert!(out.status.success(), "{args:?}");
+        assert!(
+            out.stderr.is_empty(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(String::from_utf8(out.stdout).unwrap().starts_with("toolr "));
+    }
+}
+
+#[test]
+fn a_user_group_named_like_a_hidden_built_in_is_ignored_with_a_warning() {
+    for name in ["__install-uv-now", "__complete", "self"] {
+        let p = Project::new();
+        p.write_tool(
+            "u.py",
+            &format!(
+                "\"\"\"U.\"\"\"\nfrom toolr import Context, command_group\n\
+                 group = command_group(\"{name}\", \"U\", \"U tools.\")\n\
+                 @group.command\ndef go(ctx: Context) -> None:\n    \"\"\"Go.\"\"\"\n"
+            ),
+        );
+        let err = p.stderr(&["--help"]);
+        assert!(
+            err.contains(&format!("ignoring user-defined group `{name}`")),
+            "{name}: {err}"
+        );
+    }
+}

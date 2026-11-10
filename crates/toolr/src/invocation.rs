@@ -30,6 +30,9 @@ fn spellings(arg: &Arg) -> Vec<String> {
 }
 
 impl RootArgv {
+    /// Root options that take a value must have no short spelling: `takes_value` matches whole
+    /// words, so `-qt 5` or `-t5` would leave the value as the command word. Handle clusters
+    /// here before giving one a short flag.
     pub(crate) fn new(words: Vec<String>) -> Self {
         let root = crate::cli::root_command();
         let takes_value = |word: &str| {
@@ -37,7 +40,11 @@ impl RootArgv {
                 .any(|a| a.get_action().takes_values() && spellings(a).iter().any(|s| s == word))
         };
         let mut first = 1;
-        while let Some(word) = words.get(first).filter(|w| w.starts_with('-')) {
+        // Like clap, stop at a `--` separator: nothing after it is a root flag or command.
+        while let Some(word) = words
+            .get(first)
+            .filter(|w| w.starts_with('-') && w.as_str() != "--")
+        {
             first += if takes_value(word) { 2 } else { 1 };
         }
         let first = first.min(words.len());
@@ -65,7 +72,7 @@ impl RootArgv {
 
     /// `--version` or `-V` (alone or in a short cluster) among the root flags: clap prints the
     /// version and exits.
-    fn wants_version(&self) -> bool {
+    pub(crate) fn wants_version(&self) -> bool {
         let version = crate::cli::root_command()
             .get_arguments()
             .find(|a| matches!(a.get_action(), ArgAction::Version))
@@ -140,7 +147,7 @@ impl RootArgv {
 pub(crate) struct Invocation {
     pub(crate) argv: RootArgv,
     pub(crate) cwd: PathBuf,
-    /// Looked up on first use, so Tab completion and `--version` never walk the tree.
+    /// Looked up on first use, so Tab completion and `--version` never walk the tree (`main::run` skips both).
     root: OnceCell<Result<PathBuf, DiscoveryError>>,
 }
 
@@ -182,6 +189,28 @@ mod tests {
                 .map(String::from)
                 .collect(),
         )
+    }
+
+    #[test]
+    fn no_root_option_that_takes_a_value_has_a_short_flag() {
+        for arg in crate::cli::root_command().get_arguments() {
+            assert!(
+                !(arg.get_action().takes_values() && arg.get_short().is_some()),
+                "`{}` takes a value and has a short flag; RootArgv::new matches whole words and \
+                 must learn short clusters (`-qt 5`) and attached values (`-t5`) first",
+                arg.get_id()
+            );
+        }
+    }
+
+    #[test]
+    fn nothing_after_the_separator_is_classified() {
+        for args in [&["--", "self"][..], &["--", "-V"], &["--", "__complete"]] {
+            let a = argv(args);
+            assert!(!a.skips_manifest_build(), "{args:?}");
+            assert!(!a.is_tab_completion() && !a.wants_version(), "{args:?}");
+        }
+        assert_eq!(argv(&["-q", "--", "self"]).first_word(), Some("--"));
     }
 
     #[test]

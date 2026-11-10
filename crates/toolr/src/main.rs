@@ -44,7 +44,11 @@ fn run() -> anyhow::Result<ExitCode> {
         Some(built) => built,
         // `__complete` resolves the manifest itself; loading it here too
         // would parse it twice per TAB and warn about a corrupt one.
-        None if run.argv.is_tab_completion() => Manifest::empty().into(),
+        // `--version` is answered by clap before the manifest is read, and neither should walk
+        // the tree.
+        None if run.argv.is_tab_completion() || run.argv.wants_version() => {
+            Manifest::empty().into()
+        }
         None => load_or_empty(&run)?.into(),
     };
     // Covers fragments and a hand-edited committed manifest alike. Tab
