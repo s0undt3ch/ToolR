@@ -320,6 +320,9 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
             .args(&comp_words)
             .args(&self.quote)
             .current_dir(fx.tmp.path())
+            // `current_dir` leaves the parent's `PWD`. A stale one makes bash call `getcwd`, which
+            // fails on a conda bash 5.1 for macOS and leaves `$PWD` empty.
+            .env("PWD", fx.tmp.path())
             .env("WORDBREAKS", WORDBREAKS)
             .env("PATH", path_with_toolr())
             // `~/` completes inside the fixture.
@@ -2149,6 +2152,8 @@ fn assert_bash_keys_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, w
         .arg(rcfile)
         .arg("-i")
         .current_dir(fx.tmp.path())
+        // As in `Drive::run`: a stale inherited `PWD` makes a conda bash 5.1 call `getcwd`.
+        .env("PWD", fx.tmp.path())
         .env("PATH", path_with_toolr())
         .env("HOME", fx.tmp.path())
         .env("XDG_CACHE_HOME", common::test_cache_home())
