@@ -5,12 +5,7 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use assert_cmd::Command;
 use tempfile::TempDir;
-
-fn cargo_bin() -> Command {
-    common::toolr()
-}
 
 fn detect_test_python() -> Option<PathBuf> {
     let candidate = std::env::var_os("TOOLR_TEST_PYTHON").map(PathBuf::from);
@@ -33,7 +28,7 @@ fn detect_test_python() -> Option<PathBuf> {
 #[test]
 fn init_no_sync_writes_three_files() {
     let tmp = TempDir::new().unwrap();
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--quiet"])
         .assert()
@@ -47,7 +42,7 @@ fn init_no_sync_writes_three_files() {
 #[test]
 fn init_no_example_skips_example_py() {
     let tmp = TempDir::new().unwrap();
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--no-example", "--quiet"])
         .assert()
@@ -63,7 +58,7 @@ fn init_writes_alongside_unrelated_files() {
     fs::create_dir(tmp.path().join("tools")).unwrap();
     fs::write(tmp.path().join("tools/my_tool.py"), "# custom").unwrap();
 
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--quiet"])
         .assert()
@@ -86,7 +81,7 @@ fn init_fails_on_conflict_non_interactive() {
     fs::create_dir(tmp.path().join("tools")).unwrap();
     fs::write(tmp.path().join("tools/pyproject.toml"), "# stale").unwrap();
 
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--quiet"])
         .output()
@@ -115,7 +110,7 @@ fn init_yes_overwrites_conflicts_non_interactive() {
     fs::write(tmp.path().join("tools/pyproject.toml"), "# stale").unwrap();
     fs::write(tmp.path().join("tools/.gitignore"), "# stale").unwrap();
 
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--yes", "--quiet"])
         .assert()
@@ -137,7 +132,7 @@ fn init_force_overwrites_existing_tools() {
     fs::create_dir(tmp.path().join("tools")).unwrap();
     fs::write(tmp.path().join("tools/pyproject.toml"), "# stale").unwrap();
 
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--force", "--quiet"])
         .assert()
@@ -150,14 +145,14 @@ fn init_force_overwrites_existing_tools() {
 #[test]
 fn init_idempotent() {
     let tmp = TempDir::new().unwrap();
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--quiet"])
         .assert()
         .success();
 
     // Second run: no conflicts, nothing written, exit 0.
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--quiet"])
         .assert()
@@ -173,7 +168,7 @@ fn init_with_only_a_too_old_python3_writes_the_supported_floor() {
     let python3 = bin.path().join("python3");
     fs::write(&python3, "#!/bin/sh\necho 'Python 3.9.18'\n").unwrap();
     fs::set_permissions(&python3, fs::Permissions::from_mode(0o755)).unwrap();
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .env("PATH", bin.path())
         .args(["project", "init", "--no-sync", "--quiet"])
@@ -200,7 +195,7 @@ fn init_with_repo_python3(path: &str) -> (String, bool) {
     );
     common::write_executable(&tmp.path().join("python3"), &body);
     common::write_executable(&tmp.path().join("rel-bin").join("python3"), &body);
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .env("PATH", path)
         .args(["project", "init", "--no-sync", "--quiet"])
@@ -242,7 +237,7 @@ fn init_relative_path_entry_does_not_run_repo_python3() {
 #[test]
 fn init_in_tree_writes_correct_venv_location() {
     let tmp = TempDir::new().unwrap();
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args([
             "project",
@@ -261,7 +256,7 @@ fn init_in_tree_writes_correct_venv_location() {
 #[test]
 fn init_example_has_all_four_commands() {
     let tmp = TempDir::new().unwrap();
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--quiet"])
         .assert()
@@ -284,7 +279,7 @@ fn init_then_run_example_hello() {
         return;
     };
     let tmp = TempDir::new().unwrap();
-    cargo_bin()
+    common::toolr()
         .current_dir(tmp.path())
         .args([
             "project",
@@ -301,7 +296,7 @@ fn init_then_run_example_hello() {
     let venv = python.parent().and_then(std::path::Path::parent).unwrap();
     std::os::unix::fs::symlink(venv, tmp.path().join("tools/.venv")).unwrap();
 
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .env("XDG_CACHE_HOME", tmp.path().join(".cache"))
         .args(["example", "hello", "--name", "Plan10"])

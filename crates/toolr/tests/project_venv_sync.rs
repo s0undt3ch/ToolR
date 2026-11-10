@@ -8,23 +8,18 @@
 
 use std::fs;
 
-use assert_cmd::Command;
 use tempfile::TempDir;
 
 #[path = "common/mod.rs"]
 mod common;
 use common::VenvFixture;
 
-fn cargo_bin() -> Command {
-    common::toolr()
-}
-
 /// `toolr project venv sync` (no flags) reports the missing project
 /// root when run outside a toolr-using directory.
 #[test]
 fn sync_errors_when_not_in_a_toolr_repo() {
     let tmp = TempDir::new().unwrap();
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "sync"])
         .output()
@@ -44,7 +39,7 @@ fn sync_errors_when_not_in_a_toolr_repo() {
 #[test]
 fn sync_quiet_silently_exits_when_not_a_toolr_repo() {
     let tmp = TempDir::new().unwrap();
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "sync", "--quiet"])
         .output()
@@ -72,7 +67,7 @@ fn sync_quiet_silently_exits_when_pyproject_missing() {
     fs::create_dir(tmp.path().join("tools")).unwrap();
     // No tools/pyproject.toml.
 
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "sync", "--quiet"])
         .output()
@@ -91,7 +86,7 @@ fn sync_quiet_silently_exits_when_pyproject_missing() {
 /// crates keeps the contract close to the behavior it tests.)
 #[test]
 fn sync_help_lists_force_and_quiet() {
-    let output = cargo_bin()
+    let output = common::toolr()
         .args(["project", "venv", "sync", "--help"])
         .output()
         .unwrap();
@@ -108,7 +103,7 @@ fn sync_help_lists_force_and_quiet() {
 /// `venv sync --help` lists the new -U / -P flags.
 #[test]
 fn sync_help_lists_upgrade_flags() {
-    let output = cargo_bin()
+    let output = common::toolr()
         .args(["project", "venv", "sync", "--help"])
         .output()
         .unwrap();
@@ -146,7 +141,7 @@ venv-location = "cache"
     )
     .unwrap();
 
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "sync", "-P", "nonexistent-package"])
         .output()
