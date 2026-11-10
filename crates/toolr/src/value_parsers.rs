@@ -309,6 +309,8 @@ fn is_executable(path: &std::path::Path) -> bool {
 }
 
 // Directory ACLs, not the read-only attribute, decide writability on Windows.
+// The probe creates a temp file because a Win32 ACL check is far more code; it can fire
+// directory watchers or fail spuriously when an antivirus holds the file.
 #[cfg(windows)]
 fn is_writable_dir(path: &std::path::Path) -> bool {
     tempfile::tempfile_in(path).is_ok()
