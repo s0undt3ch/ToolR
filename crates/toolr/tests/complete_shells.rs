@@ -378,9 +378,58 @@ fn bash_version(bash: &str) -> Option<u32> {
     String::from_utf8_lossy(&out.stdout).trim().parse().ok()
 }
 
-/// Every distinct bash 4.4+ on this machine. The script refuses older ones, so on
-/// CI having none fails the tests instead of skipping them.
+fn version_key(dir: &std::path::Path) -> Vec<u32> {
+    dir.file_name()
+        .map(|n| {
+            n.to_string_lossy()
+                .split('.')
+                .filter_map(|c| c.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `bin/bash` of the newest mise-installed `conda:bash`, which is where a contributor on a stock macOS
+/// checkout gets a bash 4.4+ from (`mise install`), plus the colon-separated `TOOLR_TEST_BASH`.
+fn extra_bash_candidates() -> Vec<String> {
+    let mut found: Vec<String> = std::env::var("TOOLR_TEST_BASH")
+        .unwrap_or_default()
+        .split(':')
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .collect();
+    let data = std::env::var_os("MISE_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share/mise"))
+        });
+    if let Some(dir) = data.map(|d| d.join("installs/conda-bash"))
+        && let Ok(entries) = std::fs::read_dir(dir)
+    {
+        // Newest only: the suite is run against the bash `mise install` gives, not every old one.
+        let mut versions: Vec<_> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.join("bin/bash").is_file())
+            .collect();
+        versions.sort_by_key(|p| version_key(p));
+        found.extend(
+            versions
+                .last()
+                .map(|p| p.join("bin/bash").to_string_lossy().into_owned()),
+        );
+    }
+    found
+}
+
+/// Every distinct bash 4.4+ on this machine. The script refuses older ones. With none, CI fails
+/// the tests; elsewhere they pass vacuously, so the warning says so.
 fn bashes() -> Vec<String> {
+    static FOUND: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    FOUND.get_or_init(find_bashes).clone()
+}
+
+fn find_bashes() -> Vec<String> {
     let mut candidates: Vec<String> = Vec::new();
     if let Ok(out) = StdCommand::new("sh")
         .args(["-c", "command -v bash"])
@@ -397,6 +446,7 @@ fn bashes() -> Vec<String> {
     ] {
         candidates.push(p.to_string());
     }
+    candidates.extend(extra_bash_candidates());
     let mut seen = Vec::new();
     let mut v = Vec::new();
     for p in candidates {
@@ -416,7 +466,9 @@ fn bashes() -> Vec<String> {
         "no bash 4.4 or newer found; CI must install one so the bash completion tests run"
     );
     if v.is_empty() {
-        eprintln!("skipping: no bash 4.4 or newer found");
+        let msg = "no bash 4.4 or newer found: the bash completion tests ran against nothing. \
+                   Run `mise install` (pins conda:bash) or set TOOLR_TEST_BASH=/path/to/bash.";
+        eprintln!("WARNING: {msg}");
     }
     v
 }
