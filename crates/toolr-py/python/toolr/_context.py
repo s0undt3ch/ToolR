@@ -19,15 +19,15 @@ from typing import NoReturn
 from typing import TextIO
 
 from msgspec import Struct
-from rich.prompt import Confirm
-from rich.prompt import FloatPrompt
-from rich.prompt import IntPrompt
-from rich.prompt import Prompt
 
 from toolr.utils import command
 
 if TYPE_CHECKING:
     from rich.console import Console
+    from rich.prompt import Confirm
+    from rich.prompt import FloatPrompt
+    from rich.prompt import IntPrompt
+    from rich.prompt import Prompt
     from rich.text import TextType
 
     from toolr.utils.command import CommandResult
@@ -123,6 +123,12 @@ class Context(Struct, frozen=True):
         """
         This is the actual implementation of the prompt method with two additional arguments to simplify testing.
         """
+        # Deferred: `rich.prompt` is only needed once a command prompts.
+        from rich.prompt import Confirm  # noqa: PLC0415
+        from rich.prompt import FloatPrompt  # noqa: PLC0415
+        from rich.prompt import IntPrompt  # noqa: PLC0415
+        from rich.prompt import Prompt  # noqa: PLC0415
+
         klass: type[Prompt | IntPrompt | FloatPrompt | Confirm]
         if expected_type in (str, None):
             klass = Prompt

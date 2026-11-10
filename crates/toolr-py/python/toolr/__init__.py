@@ -13,13 +13,6 @@ Implementation modules (not part of the user-facing API):
 
 from __future__ import annotations
 
-try:
-    import importlib.metadata
-
-    __version__ = importlib.metadata.version("toolr-py")
-except importlib.metadata.PackageNotFoundError:
-    __version__ = "0.0.0.not-installed"
-
 from toolr._context import Context
 from toolr._context import current_context
 from toolr._decorators import MANIFEST_SCHEMA_VERSION
@@ -30,6 +23,8 @@ from toolr.utils._imports import report_on_import_errors
 from toolr.utils._signature import ArgSection
 from toolr.utils._signature import arg
 from toolr.utils._signature import arg_section
+
+__version__: str
 
 __all__ = [
     "MANIFEST_SCHEMA_VERSION",
@@ -44,3 +39,19 @@ __all__ = [
     "current_context",
     "report_on_import_errors",
 ]
+
+
+def __getattr__(name: str) -> str:
+    # `importlib.metadata` is about a fifth of `import toolr`; only
+    # `toolr.__version__` readers should pay for it.
+    if name == "__version__":
+        import importlib.metadata  # noqa: PLC0415
+
+        try:
+            version = importlib.metadata.version("toolr-py")
+        except importlib.metadata.PackageNotFoundError:
+            version = "0.0.0.not-installed"
+        globals()["__version__"] = version
+        return version
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
