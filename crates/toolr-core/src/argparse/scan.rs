@@ -1148,10 +1148,8 @@ def add_arguments(self, parser):
     #[test]
     fn scan_paths_glob_under_bracketed_root() {
         let tmp = tempfile::tempdir().unwrap();
-        // Canonical, so Windows sees the `\\?\` prefix `discover_project_root` hands over.
-        let root = tmp
-            .path()
-            .canonicalize()
+        // Canonical, as `discover_project_root` returns it.
+        let root = dunce::canonicalize(tmp.path())
             .unwrap()
             .join("[wip]")
             .join("project");
