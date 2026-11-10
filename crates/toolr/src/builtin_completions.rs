@@ -13,9 +13,9 @@
 //! here: adding or changing a `self`/`project` subcommand in
 //! [`crate::cli::build_command`] flows through automatically. Hidden
 //! internal helpers (`__complete`, `__build-static-manifest`,
-//! `__install-uv-now`, the `project deps` migration shim) carry
-//! `.hide(true)` in the CLI builder and are skipped — they don't appear
-//! in `--help` and shouldn't be tab-completed either.
+//! `__install-uv-now`) carry `.hide(true)` in the CLI builder and are
+//! skipped — they don't appear in `--help` and shouldn't be tab-completed
+//! either.
 
 use clap::{Arg, ArgAction, Command as ClapCommand, ValueHint};
 use toolr_core::complete::Candidate;
@@ -558,12 +558,6 @@ mod tests {
                 "missing {expected} in {out:?}"
             );
         }
-        // `deps` is `.hide(true)` in cli.rs (a removed-command migration
-        // shim) and must NOT leak into completion candidates.
-        assert!(
-            !out.contains(&"deps".to_string()),
-            "`deps` is hidden and should not be a completion candidate, got: {out:?}"
-        );
     }
 
     #[test]

@@ -442,17 +442,6 @@ fn build_project_subcommand() -> Command {
         .about("Operations on the current repo's tools/ directory")
         .subcommand_required(true)
         .subcommand(build_project_init_subcommand())
-        .subcommand(
-            // Migration shim: parses `toolr project deps <anything>` so we
-            // can emit a tailored "removed in 0.22; use `project venv`"
-            // error from `dispatch_project`. Hidden from `--help`. Drop
-            // this subcommand after 0.23 once users have migrated.
-            Command::new("deps")
-                .disable_help_flag(true)
-                .hide(true)
-                .allow_external_subcommands(true)
-                .about("(removed in 0.22) use `toolr project venv` instead"),
-        )
         .subcommand(build_project_venv_subcommand())
         .subcommand(
             Command::new("manifest")

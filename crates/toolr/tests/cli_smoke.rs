@@ -628,27 +628,6 @@ fn project_venv_sync_help_lists_force_and_quiet() {
     );
 }
 
-/// `toolr project venv sync` (removed) prints the migration hint and exits non-zero.
-#[test]
-fn project_deps_removed_prints_migration_hint() {
-    let tmp = TempDir::new().unwrap();
-    let output = common::toolr()
-        .current_dir(tmp.path())
-        .args(["project", "deps", "sync"])
-        .output()
-        .expect("running toolr should succeed");
-    assert!(!output.status.success(), "expected non-zero exit");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("`project deps` was removed in 0.22"),
-        "stderr missing removal notice:\n{stderr}"
-    );
-    assert!(
-        stderr.contains("toolr project venv"),
-        "stderr missing pointer to new path:\n{stderr}"
-    );
-}
-
 /// F-17 repro tree: `tools/linked.py -> ../shared/linked.py` next to a
 /// regular `tools/demo.py`. Returns the project root.
 #[cfg(unix)]

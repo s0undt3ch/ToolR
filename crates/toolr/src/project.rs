@@ -22,7 +22,6 @@ use toolr_core::trust::{TrustError, TrustMode, TrustStore, require_trust, shown,
 pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     match matches.subcommand() {
         Some(("init", init_m)) => project_init(init_m, root_quiet),
-        Some(("deps", _)) => deps_migration_hint(),
         Some(("venv", venv_m)) => match venv_m.subcommand() {
             Some(("path", _)) => venv_path(),
             Some(("shell", _)) => venv_shell(root_quiet),
@@ -97,19 +96,6 @@ fn project_untrust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         eprintln!("toolr: {} was not trusted", shown(&repo));
     }
     Ok(ExitCode::SUCCESS)
-}
-
-/// Emit the migration hint for `toolr project deps <…>`. Returns exit
-/// code 2 (same code we use for "your inputs were valid but you're
-/// pointing at the wrong target" — see `project_init`'s scaffold-
-/// conflict path).
-fn deps_migration_hint() -> Result<ExitCode> {
-    eprintln!("error: `project deps` was removed in 0.22");
-    eprintln!("hint: use `toolr project venv` instead");
-    eprintln!("       project deps sync       →  toolr project venv sync");
-    eprintln!("       project deps upgrade …  →  toolr project venv sync -U <pkg>");
-    eprintln!("see CHANGELOG.md (0.22 BREAKING) for the rename");
-    Ok(ExitCode::from(2))
 }
 
 fn project_init(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
