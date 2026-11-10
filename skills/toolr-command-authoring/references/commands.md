@@ -486,7 +486,8 @@ Args:
         (e.g. ``"PATH"`` → ``--config <PATH>``).
     env: Read the default from this environment variable when the
         flag isn't passed. Maps to clap ``Arg::env(...)``. On a ``bool``
-        flag the variable must be ``true`` or ``false``.
+        flag the variable must be ``1``, ``true`` or ``yes``, or ``0``,
+        ``false`` or ``no``.
     hide: When ``True``, omit the argument from ``--help`` output.
         Still parseable on the command line.
     help_section: An :class:`ArgSection` returned by

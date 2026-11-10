@@ -125,7 +125,7 @@ impl UvError {
         match self {
             Self::UserRefusedInstall => "uv is required for this command. Install from \
                  https://docs.astral.sh/uv/getting-started/installation/ \
-                 and rerun, or set TOOLR_AUTO_INSTALL_UV=1."
+                 and rerun, or set TOOLR_AUTO_SYNC=1."
                 .into(),
             Self::VersionTooOld { found, required } => format!(
                 "uv on PATH is {}.{}.{}, but toolr requires \
@@ -426,7 +426,7 @@ mod tests {
         let s = UvError::UserRefusedInstall.user_message();
         assert!(s.contains("uv is required"));
         assert!(s.contains("https://docs.astral.sh/uv/"));
-        assert!(s.contains("TOOLR_AUTO_INSTALL_UV"));
+        assert!(s.contains("TOOLR_AUTO_SYNC"));
         // Anti-regression: must not double-prefix `toolr: ` — main.rs
         // adds that once at the CLI surface.
         assert!(!s.starts_with("toolr:"), "actual: {s}");

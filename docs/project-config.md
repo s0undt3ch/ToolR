@@ -70,7 +70,7 @@ the per-repo config caring.
 The same action also sets `TOOLR_TRUST_ALL=1`, which skips toolr's
 [repository trust](concepts.md#repository-trust) check. The workflow has
 already checked out the code it is about to run. Outside the action, set
-`TOOLR_TRUST_ALL=1` yourself; the value must be exactly `1`.
+`TOOLR_TRUST_ALL=1` yourself.
 
 ### Editable installs {#editable-install}
 

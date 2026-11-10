@@ -30,6 +30,7 @@ fn run(fx: &VenvFixture, data: &TempDir, path: &str) -> Output {
         .env("PATH", path)
         .env("XDG_DATA_HOME", data.path())
         .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .env_remove("TOOLR_AUTO_SYNC")
         .args(["--quiet", "project", "venv", "lock"])
         .output()
         .unwrap()
@@ -46,7 +47,7 @@ fn assert_repo_uv_never_ran(path: &str) {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success(), "expected failure:\n{stderr}");
     assert!(
-        stderr.contains("TOOLR_AUTO_INSTALL_UV=1"),
+        stderr.contains("TOOLR_AUTO_SYNC=1"),
         "missing the no-uv hint:\n{stderr}"
     );
 }

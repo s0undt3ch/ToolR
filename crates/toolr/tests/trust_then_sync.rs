@@ -69,6 +69,7 @@ impl Clone {
         let mut cmd = self.env.toolr(&self.fx.root);
         cmd.env("PATH", &self.fx.bin_dir)
             .env_remove("TOOLR_AUTO_INSTALL_UV")
+            .env_remove("TOOLR_AUTO_SYNC")
             .env_remove("TOOLR_VENV_LOCATION");
         cmd
     }
@@ -129,6 +130,7 @@ impl Clone {
             .current_dir(&self.fx.root)
             .env_remove("TOOLR_TRUST_ALL")
             .env_remove("TOOLR_AUTO_INSTALL_UV")
+            .env_remove("TOOLR_AUTO_SYNC")
             .env_remove("TOOLR_VENV_LOCATION")
             .env("PATH", &self.fx.bin_dir)
             .env("XDG_STATE_HOME", self.env.state.path())
@@ -231,7 +233,7 @@ fn trust_without_a_terminal_declines_with_hint() {
 fn trust_without_a_terminal_syncs_with_auto_install_uv() {
     let c = Clone::new();
     c.toolr()
-        .env("TOOLR_AUTO_INSTALL_UV", "1")
+        .env("TOOLR_AUTO_SYNC", "1")
         .args(["project", "trust"])
         .assert()
         .success()
@@ -331,11 +333,7 @@ fn dispatch_with_a_fresh_venv_asks_only_for_trust() {
 #[test]
 fn dispatch_auto_install_uv_answers_the_sync_prompt() {
     let c = Clone::new();
-    let tty_out = c.run_with_tty_env(
-        &["hello", "world"],
-        "y\n",
-        &[("TOOLR_AUTO_INSTALL_UV", "1")],
-    );
+    let tty_out = c.run_with_tty_env(&["hello", "world"], "y\n", &[("TOOLR_AUTO_SYNC", "1")]);
     let err = stderr(&tty_out);
     assert!(tty_out.status.success(), "{err}");
     assert!(!err.contains(SYNC_PROMPT), "{err}");

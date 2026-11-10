@@ -54,7 +54,7 @@ pub fn apply_value_parser(arg: Arg, ty: &SupportedType) -> Arg {
     match inner {
         SupportedType::Int => arg.value_parser(clap::value_parser!(i64)),
         SupportedType::Float => arg.value_parser(clap::value_parser!(f64)),
-        SupportedType::Bool => arg.value_parser(clap::value_parser!(bool)),
+        SupportedType::Bool => arg.value_parser(bool_parser()),
         SupportedType::Str => arg,
         SupportedType::Path
         | SupportedType::AbsolutePath
@@ -91,6 +91,14 @@ pub fn apply_value_parser(arg: Arg, ty: &SupportedType) -> Arg {
         SupportedType::Tuple(_) => arg,
         SupportedType::Optional(_) => unreachable!("unwrap_optional handled this"),
     }
+}
+
+/// `1/true/yes` and `0/false/no`, the same spellings the `TOOLR_*` booleans take.
+fn bool_parser() -> ValueParser {
+    ValueParser::new(|value: &str| {
+        toolr_core::env::parse_bool(value)
+            .ok_or_else(|| "expected one of 1, true, yes, 0, false, no".to_string())
+    })
 }
 
 /// If `ty` (after unwrapping `Optional`) is a heterogeneous `Tuple`,
@@ -378,6 +386,33 @@ mod tests {
 
     fn build_command_with(ty: &SupportedType) -> Command {
         Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty))
+    }
+
+    #[test]
+    fn bool_takes_the_shared_spellings_and_rejects_the_rest() {
+        let cmd = build_command_with(&SupportedType::Bool);
+        for (value, expected) in [
+            ("1", true),
+            ("YES", true),
+            ("true", true),
+            ("0", false),
+            ("no", false),
+            ("false", false),
+        ] {
+            let m = cmd
+                .clone()
+                .try_get_matches_from(["test", "--v", value])
+                .unwrap();
+            assert_eq!(m.get_one::<bool>("v"), Some(&expected), "{value}");
+        }
+        let err = cmd
+            .clone()
+            .try_get_matches_from(["test", "--v", "maybe"])
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("expected one of 1, true, yes"),
+            "{err}"
+        );
     }
 
     #[test]

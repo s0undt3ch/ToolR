@@ -2,7 +2,8 @@
 //! so one lock for the whole crate: a per-module lock only excludes its own module.
 //!
 //! Tests mutate `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `TOOLR_AUTO_INSTALL_UV`,
-//! `TOOLR_TRUST_ALL`, `TOOLR_VENV_LOCATION`, `PYTHONIOENCODING` and `TOOLR_TEST_VAR`. A test whose code reads one of
+//! `TOOLR_AUTO_SYNC`, `TOOLR_TRUST_ALL`, `TOOLR_VENV_LOCATION`, `PYTHONIOENCODING` and
+//! `TOOLR_TEST_VAR`. A test whose code reads one of
 //! these takes [`EnvGuard::read`].
 
 use std::ffi::{OsStr, OsString};

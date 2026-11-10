@@ -241,7 +241,7 @@ prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
   release that added trust. An older pinned action with a newer `version:`
   doesn't export it; set it yourself there.
 - **Running `toolr` in CI *without* the action?** Set it yourself. The
-  value must be exactly `1`; toolr does not infer trust from `CI=true`.
+  value must be `1`, `true` or `yes`; toolr does not infer trust from `CI=true`.
 
   ```yaml
   - run: toolr <group> <cmd>

@@ -151,7 +151,7 @@ silently so shell-enter hooks don't break. In CI,
 in pipes and in other non-interactive runs toolr also fails, unless you
 approve the install in advance:
 
-- Set `TOOLR_AUTO_INSTALL_UV=1` to install without asking. It also
+- Set `TOOLR_AUTO_SYNC=1` to install without asking (`TOOLR_AUTO_INSTALL_UV=1` still works). It also
   answers the sync prompt after
   [repository trust](../concepts.md#repository-trust).
 - Run [`toolr __install-uv-now`](../cli.md#__install-uv-now), for

@@ -144,7 +144,7 @@ fn no_project_hint(cwd: &std::path::Path) -> Option<String> {
 /// is `help`). The `--` separator is clap's to find, so a wrapped command's own `--quiet`
 /// (`run -- pytest --quiet`) is not toolr's.
 fn maybe_emit_cache_hint(matches: &clap::ArgMatches, argv: &[String]) {
-    if std::env::var_os("TOOLR_NO_CACHE_HINT").is_some()
+    if toolr_core::env::env_truthy("TOOLR_NO_CACHE_HINT")
         || matches.get_flag("quiet")
         || matches.get_flag("help")
     {
