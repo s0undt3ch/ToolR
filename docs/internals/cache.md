@@ -47,7 +47,8 @@ Written when toolr creates a venv; updated on every invocation.
   "toolr_version": "0.11.0",
   "python_version": "3.11.11",
   "created_at": "2026-04-02T14:23:11Z",
-  "last_used_at": "2026-05-12T09:18:42Z"
+  "last_used_at": "2026-05-12T09:18:42Z",
+  "layout_version": 1
 }
 ```
 
@@ -57,6 +58,13 @@ Written when toolr creates a venv; updated on every invocation.
 - **`created_at`** — set once when the venv is first materialised.
 - **`last_used_at`** — touched on every toolr invocation that hits
   this venv. Used to detect stale entries.
+- **`layout_version`** — the venv layout the entry was last synced
+  with. A toolr that builds a newer layout re-syncs the venv once and
+  stamps the new number. A sidecar without the field counts as layout 1.
+
+`<repo-key>` doesn't include toolr's version, so upgrading toolr, even
+across a major release, keeps every existing entry. A change to the venv
+layout is what `layout_version` is for.
 
 ## Orphan detection
 

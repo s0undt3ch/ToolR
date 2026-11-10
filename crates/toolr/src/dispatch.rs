@@ -353,6 +353,7 @@ fn resync_if_needed(
             format!("the tools venv is out of date with {SYNC_INPUTS_DESCRIPTION}")
         }
         Freshness::Broken => "the tools venv's Python interpreter no longer exists".to_owned(),
+        Freshness::OldLayout => "the tools venv was built by an older toolr layout".to_owned(),
         Freshness::Missing | Freshness::Fresh => return Ok(resolved),
     };
     if !quiet {
