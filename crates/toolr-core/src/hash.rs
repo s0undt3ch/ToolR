@@ -1244,11 +1244,13 @@ parent = "django"
         let tools = project.path().join("tools");
         let hostile = tools.join("a\x1b[31mb.py");
         std::fs::write(&hostile, "x = 1\n").unwrap();
-        if let Some(result) = with_unreadable(&hostile, || compute_static_hash(&tools)) {
+        // `None` (nothing to check) when this process can read the file anyway (root).
+        let checks = with_unreadable(&hostile, || compute_static_hash(&tools));
+        checks.into_iter().for_each(|result| {
             let err = format!("{:#}", result.unwrap_err());
             assert!(!err.chars().any(char::is_control), "{err:?}");
             assert!(err.contains("a\\u{1b}[31mb.py"), "{err}");
-        }
+        });
     }
 
     const AGED: std::time::Duration = std::time::Duration::from_secs(60);

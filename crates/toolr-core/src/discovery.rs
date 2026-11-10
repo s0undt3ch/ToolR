@@ -196,7 +196,7 @@ mod tests {
         mkfile(&root.join("a/tools/demo.py"));
         let start = mkdir(&root.join("a/b"));
         let err = find(&start, &root).expect_err("should not find");
-        let tools = root.join("a/tools");
+        let tools = root.join("a").join("tools");
         assert!(
             matches!(&err, DiscoveryError::MissingPyproject { start: s, tools: t } if s == &start && t == &tools),
             "unexpected error: {err:?}"
