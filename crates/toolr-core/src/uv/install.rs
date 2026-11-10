@@ -5,7 +5,7 @@ use std::io::{BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use super::{UvBinary, UvError, UvSource, managed_uv_path, probe};
-use crate::env::{env_truthy, parse_bool};
+use crate::env::env_truthy;
 use crate::path_search::find_on_path_in;
 
 /// What the discovery + consent flow tells the caller to do.
@@ -45,13 +45,15 @@ impl ConsentMode {
     }
 }
 
-/// `TOOLR_AUTO_SYNC` when it holds a boolean, so `TOOLR_AUTO_SYNC=0` beats a leftover
-/// `TOOLR_AUTO_INSTALL_UV=1`; otherwise the older `TOOLR_AUTO_INSTALL_UV`.
+/// `TOOLR_AUTO_SYNC` decides whenever it is set (an unparsable or empty value is off), so
+/// `TOOLR_AUTO_SYNC=0` beats a leftover `TOOLR_AUTO_INSTALL_UV=1`. The older
+/// `TOOLR_AUTO_INSTALL_UV` counts only while `TOOLR_AUTO_SYNC` is unset.
 fn auto_sync_from_env() -> bool {
-    std::env::var("TOOLR_AUTO_SYNC")
-        .ok()
-        .and_then(|v| parse_bool(&v))
-        .unwrap_or_else(|| env_truthy("TOOLR_AUTO_INSTALL_UV"))
+    if std::env::var_os("TOOLR_AUTO_SYNC").is_some() {
+        env_truthy("TOOLR_AUTO_SYNC")
+    } else {
+        env_truthy("TOOLR_AUTO_INSTALL_UV")
+    }
 }
 
 /// Pure decision logic. `path_found` is whether `find_uv_on_path` returned
@@ -737,11 +739,13 @@ mod tests {
         env.set("TOOLR_AUTO_SYNC", "maybe");
         assert!(!ConsentMode::from_env(false).auto_install_env);
 
-        // The new name wins when it holds a boolean; an unparsable one defers to the alias.
-        env.set("TOOLR_AUTO_SYNC", "0");
+        // Once set, the new name decides alone, even empty or unparsable.
         env.set("TOOLR_AUTO_INSTALL_UV", "1");
-        assert!(!ConsentMode::from_env(false).auto_install_env);
-        env.set("TOOLR_AUTO_SYNC", "maybe");
+        for value in ["0", "", "maybe"] {
+            env.set("TOOLR_AUTO_SYNC", value);
+            assert!(!ConsentMode::from_env(false).auto_install_env, "{value:?}");
+        }
+        env.remove("TOOLR_AUTO_SYNC");
         assert!(ConsentMode::from_env(false).auto_install_env);
     }
 

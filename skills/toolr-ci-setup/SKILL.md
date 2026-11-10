@@ -261,7 +261,7 @@ prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
   the check.
 - **`gh attestation verify` fails on a fork** — the action verifies
   the SLSA build provenance of every downloaded archive. On runners
-  without `gh` available, set `verify: none` *only* if you
+  without `gh` available, set `verify: checksum` *only* if you
   understand you are turning off the supply-chain gate. Prefer
   installing `gh` (it's already present on GitHub-hosted runners) or
   pre-baking it into self-hosted runner images.
@@ -276,7 +276,7 @@ prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
   from any other branch or pull request, and a release archive of
   another version or platform renamed into place are rejected.
   Install a published release version; don't reach for
-  `verify: none` to get around it.
+  `verify: checksum` to get around it.
 - **`tools/.venv` cache misses every run** — the venv cache key
   hashes `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml`
   and `tools/.python-version`; the root `uv.lock` is not part of

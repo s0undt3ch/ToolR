@@ -67,6 +67,11 @@ err() { printf "install.sh: %s\n" "$*" >&2; exit 1; }
 info() { printf "install.sh: %s\n" "$*" >&2; }
 warn() { printf "install.sh: WARNING: %s\n" "$*" >&2; }
 
+case "$VERIFY" in
+  full|auto|checksum|none) ;;
+  *) err "invalid --verify value: $VERIFY (use full|auto|checksum|none)" ;;
+esac
+
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || err "missing required command: $1"
 }

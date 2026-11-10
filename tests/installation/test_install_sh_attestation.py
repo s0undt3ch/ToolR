@@ -9,6 +9,7 @@ action's tests.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shlex
@@ -92,6 +93,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
         *,
         gh: bool = True,
         mode: str = "full",
+        legacy_no_checksum: bool = False,
         repo: str = "s0undt3ch/ToolR",
         hashers: tuple[str | tuple[str, str], ...] = ("sha256sum", "shasum"),
         **stub: Any,
@@ -116,6 +118,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
             "set -eu\n"
             f"REPO={shlex.quote(repo)}\n"
             f"VERIFY={shlex.quote(mode)}\n"
+            f"LEGACY_NO_CHECKSUM={int(legacy_no_checksum)}\n"
             f"{script}\n"
             f"verify_attestation {shlex.quote(archive.as_posix())}\n"
             "echo VERIFIED >&2\n"
@@ -383,3 +386,82 @@ def test_verify_flag_and_its_old_spellings(args: list[str], expected: str) -> No
     )
     assert result.returncode == 0, result.stderr
     assert expected in result.stderr
+
+
+def test_no_verify_does_not_disable_the_attestation(verify_runner: RunVerify) -> None:
+    """`--no-verify` skipped only the SHA-256: without `gh` the attestation still fails closed."""
+    result = verify_runner(gh=False, mode="full", legacy_no_checksum=True)
+    assert result.returncode != 0
+    assert SKIP_HINT in result.stderr
+
+
+def _run_verify_sha256(
+    tmp_path: Path, *, mode: str, legacy_no_checksum: bool, expected: str
+) -> subprocess.CompletedProcess[str]:
+    """Run install.sh's `verify_sha256` on a file whose digest is `sha256(b"archive")`."""
+    sh = shutil.which("sh")
+    assert sh is not None
+    text = INSTALL_SH.read_text()
+    helpers = re.findall(r"^(?:err|info|warn)\(\) \{.*\}$", text, flags=re.MULTILINE)
+    functions = [
+        re.search(rf"^{name}\(\) \{{\n.*?^\}}$", text, flags=re.MULTILINE | re.DOTALL).group(0)  # type: ignore[union-attr]
+        for name in ("sha256_of", "verify_sha256")
+    ]
+    archive = tmp_path / "archive.tar.gz"
+    archive.write_bytes(b"archive")
+    script = tmp_path / "sha.sh"
+    script.write_text(
+        "set -eu\n"
+        f"VERIFY={shlex.quote(mode)}\nLEGACY_NO_CHECKSUM={int(legacy_no_checksum)}\nDRY_RUN=0\n"
+        + "\n".join([*helpers, *functions])
+        + f"\nverify_sha256 {shlex.quote(archive.as_posix())} {shlex.quote(expected)}\necho CHECKED >&2\n",
+        newline="\n",
+    )
+    return subprocess.run(  # noqa: S603  # sh + script path are test-controlled
+        [sh, str(script)], capture_output=True, text=True, check=False
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "legacy_no_checksum", "enforced"),
+    [
+        ("full", False, True),
+        ("auto", False, True),
+        ("checksum", False, True),
+        ("none", False, False),
+        ("full", True, False),
+    ],
+)
+def test_checksum_mismatch_is_enforced_except_for_none_and_no_verify(
+    tmp_path: Path, mode: str, legacy_no_checksum: bool, enforced: bool
+) -> None:
+    wrong = "0" * 64
+    result = _run_verify_sha256(
+        tmp_path, mode=mode, legacy_no_checksum=legacy_no_checksum, expected=wrong
+    )
+    if enforced:
+        assert result.returncode != 0
+        assert "checksum mismatch" in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        assert "CHECKED" in result.stderr
+
+
+@pytest.mark.parametrize("mode", ["full", "auto", "checksum", "none"])
+def test_matching_checksum_passes_in_every_mode(tmp_path: Path, mode: str) -> None:
+    right = hashlib.sha256(b"archive").hexdigest()
+    result = _run_verify_sha256(tmp_path, mode=mode, legacy_no_checksum=False, expected=right)
+    assert result.returncode == 0, result.stderr
+
+
+def test_bogus_verify_value_fails_fast_even_on_a_dry_run() -> None:
+    sh = shutil.which("sh")
+    assert sh is not None
+    result = subprocess.run(  # noqa: S603  # sh + script path are test-controlled
+        [sh, str(INSTALL_SH), "--verify=bogus", "--dry-run", "--version", "0.0.0"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "invalid --verify value: bogus" in result.stderr

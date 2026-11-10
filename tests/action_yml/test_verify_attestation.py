@@ -97,7 +97,7 @@ def test_rejects_ci_built_archive(
     result = verify_runner(build_configs=[CI_BUILD])
     assert result.returncode != 0
     assert REJECTED in result.stderr
-    assert "verify: none" in result.stderr
+    assert "verify: checksum" in result.stderr
 
 
 def test_accepts_release_built_archive(
@@ -285,12 +285,12 @@ def test_rejects_name_and_digest_on_different_subjects(
 
 
 def test_verify_none_and_the_deprecated_input_both_skip_the_step() -> None:
-    """`verify: none` is the one spelling; `skip-attestation: true` still works but is deprecated."""
+    """`verify: checksum` is the one spelling; `skip-attestation: true` still works but is deprecated."""
     data = yaml.safe_load(ACTION_YML.read_text())
     assert data["inputs"]["verify"]["default"] == "full"
     assert "deprecationMessage" in data["inputs"]["skip-attestation"]
     condition = _step("verify-attestation")["if"]
-    assert "inputs.verify != 'none'" in condition
+    assert "inputs.verify != 'checksum'" in condition
     assert "inputs.skip-attestation != 'true'" in condition
 
 
@@ -310,7 +310,7 @@ def _validate_inputs(tmp_path: Path, value: str) -> subprocess.CompletedProcess[
     )
 
 
-@pytest.mark.parametrize("value", ["full", "none"])
+@pytest.mark.parametrize("value", ["full", "checksum"])
 def test_verify_accepts_the_action_modes(tmp_path: Path, value: str) -> None:
     assert _validate_inputs(tmp_path, value).returncode == 0
 
@@ -318,8 +318,8 @@ def test_verify_accepts_the_action_modes(tmp_path: Path, value: str) -> None:
 @pytest.mark.parametrize(
     ("value", "message"),
     [
-        ("auto", "no checksum-only mode"),
-        ("checksum", "no checksum-only mode"),
+        ("auto", "always checks the SHA-256"),
+        ("none", "always checks the SHA-256"),
         ("bogus", "invalid verify: 'bogus'"),
         ("", "invalid verify: ''"),
     ],

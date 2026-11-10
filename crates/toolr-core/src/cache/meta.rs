@@ -24,8 +24,8 @@ use thiserror::Error;
 /// longer written; they stay `#[serde(default)]` so older sidecars still parse.
 pub const SCHEMA_VERSION: u32 = 2;
 
-/// The venv layout this toolr builds. A venv whose sidecar records an older one is re-synced.
-/// Sidecars without the field count as layout 1, so every venv built before it existed is current.
+/// The venv layout this toolr builds, recorded in `meta.json` on every sync for a future check.
+/// Nothing reads it yet. Sidecars without the field count as layout 1.
 pub const VENV_LAYOUT_VERSION: u32 = 1;
 
 /// Filename used for the sidecar inside the per-repo cache directory.

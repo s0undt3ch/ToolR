@@ -143,7 +143,7 @@ when you're ready. This prompt replaces the uv install prompt, so it follows
 the same rules. With `toolr --quiet` or no terminal
 toolr doesn't ask and doesn't sync. `TOOLR_AUTO_SYNC=1` answers `y` without asking,
 including with `toolr --quiet` or no terminal, so the sync runs. `TOOLR_AUTO_INSTALL_UV` is the
-older name for the same switch and still works until 1.0.
+older name for the same switch and still works until 1.0, but only while `TOOLR_AUTO_SYNC` is unset.
 `toolr project trust --no-sync` only records the trust. If a sync you
 agreed to fails, the trust is kept and toolr exits non-zero.
 

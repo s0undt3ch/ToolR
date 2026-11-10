@@ -282,8 +282,8 @@ sh installation/install.sh --verify=checksum   # POSIX
 ./installation/install.ps1 -Verify checksum    # Windows
 ```
 
-The action takes `verify: full` (the default) or `verify: none`, and rejects anything else. Its `none` skips only the
-attestation: the SHA-256 is always checked. The installers' `--verify=none` skips both.
+The action takes `verify: full` (the default) or `verify: checksum`, with the same meaning as above, and rejects anything
+else. It has no `none` or `auto`: it always checks the SHA-256.
 
 Or verify a downloaded archive manually, from the directory you
 downloaded it to:
