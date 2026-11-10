@@ -74,7 +74,7 @@ fn untrusted_dispatch_is_refused() {
 fn quiet_sync_refusal_is_not_swallowed() {
     let h = Hostile::new();
     h.toolr()
-        .args(["project", "venv", "sync", "--quiet"])
+        .args(["--quiet", "project", "venv", "sync"])
         .assert()
         .failure()
         .stderr(contains(REFUSAL));
@@ -181,12 +181,12 @@ fn trust_all_run_does_not_leave_trust_behind() {
 }
 
 #[test]
-fn quiet_sync_in_untrusted_stray_tools_dir_is_silent() {
+fn if_project_sync_in_untrusted_stray_tools_dir_is_silent() {
     let env = TrustEnv::new();
     let dir = TempDir::new().unwrap();
     fs::create_dir(dir.path().join("tools")).unwrap();
     env.toolr(dir.path())
-        .args(["project", "venv", "sync", "--quiet"])
+        .args(["--quiet", "project", "venv", "sync", "--if-project"])
         .assert()
         .success()
         .stdout("")
@@ -322,7 +322,7 @@ fn a_venv_from_before_trust_does_not_trust_the_repo() {
     let h = Hostile::new();
     h.seed_pre_trust_venv_cache();
     h.toolr()
-        .args(["project", "venv", "sync", "--quiet"])
+        .args(["--quiet", "project", "venv", "sync"])
         .assert()
         .failure()
         .stderr(contains(REFUSAL));

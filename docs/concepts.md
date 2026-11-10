@@ -126,7 +126,7 @@ Trust a repository in either of two ways:
 - Run `toolr project trust [PATH]`. `toolr project untrust [PATH]`
   removes the record.
 - Answer `y` at the prompt toolr shows on a terminal. Anything else,
-  including bare Enter, refuses. With `--quiet` or no terminal, toolr
+  including bare Enter, refuses. With `toolr --quiet` or no terminal, toolr
   never prompts and refuses.
 
 Trusting a repository is also when toolr offers to build its tools venv.
@@ -140,9 +140,9 @@ again, and the command you ran carries on. Anything else keeps the
 trust and leaves the venv alone: `toolr project trust` still exits 0,
 and a command run stops with an error. Run `toolr project venv sync`
 when you're ready. This prompt replaces the uv install prompt, so it follows
-the same rules. With `--quiet` (or the root `toolr -q`) or no terminal
+the same rules. With `toolr --quiet` or no terminal
 toolr doesn't ask and doesn't sync. `TOOLR_AUTO_INSTALL_UV=1` answers `y` without asking,
-including with `--quiet` or no terminal, so the sync runs.
+including with `toolr --quiet` or no terminal, so the sync runs.
 `toolr project trust --no-sync` only records the trust. If a sync you
 agreed to fails, the trust is kept and toolr exits non-zero.
 

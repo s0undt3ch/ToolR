@@ -212,7 +212,7 @@ fn self_completion_install_force_overwrites() {
 
 // --------------------------------------------------------------------
 // output_options_from_matches() — flag propagation, observed via the
-// help-text plumbing (these flags appear under "Output Options:").
+// help-text plumbing (these flags appear under "ToolR Options:").
 // --------------------------------------------------------------------
 
 #[test]

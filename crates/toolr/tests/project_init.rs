@@ -30,7 +30,7 @@ fn init_no_sync_writes_three_files() {
     let tmp = TempDir::new().unwrap();
     common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync"])
         .assert()
         .success();
     assert!(tmp.path().join("tools/pyproject.toml").is_file());
@@ -44,7 +44,7 @@ fn init_no_example_skips_example_py() {
     let tmp = TempDir::new().unwrap();
     common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--no-example", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync", "--no-example"])
         .assert()
         .success();
     assert!(tmp.path().join("tools/pyproject.toml").is_file());
@@ -60,7 +60,7 @@ fn init_writes_alongside_unrelated_files() {
 
     common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync"])
         .assert()
         .success();
 
@@ -83,7 +83,7 @@ fn init_fails_on_conflict_non_interactive() {
 
     let output = common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync"])
         .output()
         .unwrap();
 
@@ -112,7 +112,7 @@ fn init_yes_overwrites_conflicts_non_interactive() {
 
     common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--yes", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync", "--yes"])
         .assert()
         .success();
 
@@ -125,6 +125,35 @@ fn init_yes_overwrites_conflicts_non_interactive() {
     );
 }
 
+/// The overwrite prompt takes `yes` as well as `y`, and Enter or anything else declines.
+#[cfg(unix)]
+#[test]
+fn init_overwrite_prompt_accepts_yes_and_declines_the_rest() {
+    for (answer, overwritten) in [
+        ("yes\n", true),
+        ("y\n", true),
+        ("\n", false),
+        ("no\n", false),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join("tools")).unwrap();
+        fs::write(tmp.path().join("tools/pyproject.toml"), "# stale").unwrap();
+
+        let mut cmd = common::toolr_std();
+        cmd.current_dir(tmp.path())
+            .args(["--quiet", "project", "init", "--no-sync"]);
+        let out = common::run_on_pty(cmd, answer);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{answer:?}: {stderr}");
+        assert!(
+            stderr.contains("overwrite tools/pyproject.toml? [y/N]"),
+            "{stderr}"
+        );
+        let kept = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
+        assert_eq!(kept != "# stale", overwritten, "{answer:?}");
+    }
+}
+
 /// --force overwrites conflict files without prompting.
 #[test]
 fn init_force_overwrites_existing_tools() {
@@ -134,7 +163,7 @@ fn init_force_overwrites_existing_tools() {
 
     common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--force", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync", "--force"])
         .assert()
         .success();
     let pyproject = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
@@ -147,14 +176,14 @@ fn init_idempotent() {
     let tmp = TempDir::new().unwrap();
     common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync"])
         .assert()
         .success();
 
     // Second run: no conflicts, nothing written, exit 0.
     common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync"])
         .assert()
         .success();
 }
@@ -171,7 +200,7 @@ fn init_with_only_a_too_old_python3_writes_the_supported_floor() {
     common::toolr()
         .current_dir(tmp.path())
         .env("PATH", bin.path())
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync"])
         .assert()
         .success();
     let pyproject = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
@@ -198,7 +227,7 @@ fn init_with_repo_python3(path: &str) -> (String, bool) {
     common::toolr()
         .current_dir(tmp.path())
         .env("PATH", path)
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync"])
         .assert()
         .success();
     let pyproject = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
@@ -240,12 +269,12 @@ fn init_in_tree_writes_correct_venv_location() {
     common::toolr()
         .current_dir(tmp.path())
         .args([
+            "--quiet",
             "project",
             "init",
             "--no-sync",
             "--venv-location",
             "in-tree",
-            "--quiet",
         ])
         .assert()
         .success();
@@ -258,7 +287,7 @@ fn init_example_has_all_four_commands() {
     let tmp = TempDir::new().unwrap();
     common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--no-sync"])
         .assert()
         .success();
     let example = fs::read_to_string(tmp.path().join("tools/example.py")).unwrap();
@@ -282,10 +311,10 @@ fn init_then_run_example_hello() {
     common::toolr()
         .current_dir(tmp.path())
         .args([
+            "--quiet",
             "project",
             "init",
             "--no-sync",
-            "--quiet",
             "--venv-location",
             "in-tree",
         ])

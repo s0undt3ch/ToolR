@@ -3,8 +3,6 @@ Refresh tools/uv.lock without applying (wraps uv lock)
 Usage: toolr project venv lock [OPTIONS]
 
 Options:
-  -q, --quiet
-          Pass --quiet to uv and never prompt to install it
   -U, --upgrade
           Re-resolve every package (--upgrade)
   -P, --upgrade-package <PACKAGE>

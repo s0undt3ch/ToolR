@@ -201,7 +201,7 @@ fn trust_no_sync_asks_nothing() {
 #[test]
 fn trust_quiet_on_a_terminal_declines_silently() {
     for args in [
-        &["project", "trust", "--quiet"][..],
+        &["--quiet", "project", "trust"][..],
         &["-q", "project", "trust"][..],
     ] {
         let c = Clone::new();

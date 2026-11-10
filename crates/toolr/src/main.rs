@@ -37,8 +37,6 @@ fn main() -> ExitCode {
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let argv: Vec<String> = std::env::args().collect();
-    // Emit the passive cache hint before clap touches argv.
-    maybe_emit_cache_hint_from_argv();
     let mut built = match bootstrap::ensure_manifest(&cwd, &argv)? {
         Some(built) => built,
         // `__complete` resolves the manifest itself; loading it here too
@@ -50,7 +48,7 @@ fn run() -> anyhow::Result<ExitCode> {
     // completion drops the same entries in `resolve_manifest_at_tab`.
     built.manifest.drop_unsafe_names();
     if !bootstrap::should_skip_auto_rebuild(&argv) {
-        // Printed under `-q` too (the rule is on the `-q` arg in `cli::build_command`).
+        // Printed under `-q` too (the rule is on the `-q` arg in `cli::root_flag_args`).
         // Build warnings come only from a manifest built on this run.
         for message in built.all_warnings() {
             eprintln!("toolr: warning: {message}");
@@ -84,6 +82,11 @@ fn run() -> anyhow::Result<ExitCode> {
                 dispatch::dispatch_help_from_argv(&argv, &mut command)?;
                 return Ok(ExitCode::SUCCESS);
             }
+            if let Some(hint) = misplaced_root_flag_hint(&e, &command, &argv) {
+                let _ = e.print();
+                eprintln!("{hint}");
+                return Ok(ExitCode::from(e.exit_code() as u8));
+            }
             // Genuine error: print it the way clap does; outside a project an
             // unknown command is most likely a wrong directory, so say so.
             if e.kind() == ErrorKind::InvalidSubcommand
@@ -97,7 +100,34 @@ fn run() -> anyhow::Result<ExitCode> {
             e.exit()
         }
     };
+    maybe_emit_cache_hint(&matches, &argv);
     dispatch::dispatch(&matches, &manifest, &mut command)
+}
+
+/// The line to follow clap's "unexpected argument" when the argument is one of toolr's root
+/// flags given after a subcommand: they are accepted only before the first one.
+fn misplaced_root_flag_hint(
+    err: &clap::Error,
+    root: &clap::Command,
+    argv: &[String],
+) -> Option<String> {
+    use clap::error::{ContextKind, ContextValue, ErrorKind};
+    if err.kind() != ErrorKind::UnknownArgument {
+        return None;
+    }
+    let Some(ContextValue::String(bad)) = err.get(ContextKind::InvalidArg) else {
+        return None;
+    };
+    let spelling = bad.split('=').next()?;
+    let words: Vec<&str> = argv.iter().skip(1).map(String::as_str).collect();
+    let at = words
+        .iter()
+        .position(|w| *w == spelling || w.starts_with(&format!("{spelling}=")))
+        .unwrap_or(words.len());
+    let (path, typed_before) = cli::command_path(root, argv);
+    let found = words.get(at..).unwrap_or_default();
+    let found: &[&str] = if found.is_empty() { &[spelling] } else { found };
+    cli::misplaced_flag_error(found, &path, typed_before).map(|m| m.hint)
 }
 
 /// The line to follow clap's "unrecognized subcommand" when `cwd` is not in a
@@ -109,34 +139,25 @@ fn no_project_hint(cwd: &std::path::Path) -> Option<String> {
     }
 }
 
-fn maybe_emit_cache_hint_from_argv() {
-    if std::env::var_os("TOOLR_NO_CACHE_HINT").is_some() {
-        return;
-    }
-    let argv: Vec<String> = std::env::args().collect();
-    // The passive hint is advice, which `-q` drops. We scan argv by hand
-    // because this runs before clap and because `--quiet` is accepted
-    // both root-level and per-subcommand. Detect both `--quiet` and any
-    // short cluster containing `q` (e.g. `-q`), and stop at the `--`
-    // separator so a wrapped command's own `--quiet`
-    // (`run -- pytest --quiet`) doesn't count.
-    if argv_requests_quiet(&argv) {
-        return;
-    }
-    if argv_requests_version_or_help(&argv) {
+/// The passive cache hint is advice, so `-q` drops it; help and version output stay clean
+/// (they never reach this point: clap prints `-V` itself, and a `--help` that clap parsed
+/// is `help`). The `--` separator is clap's to find, so a wrapped command's own `--quiet`
+/// (`run -- pytest --quiet`) is not toolr's.
+fn maybe_emit_cache_hint(matches: &clap::ArgMatches, argv: &[String]) {
+    if std::env::var_os("TOOLR_NO_CACHE_HINT").is_some()
+        || matches.get_flag("quiet")
+        || matches.get_flag("help")
+    {
         return;
     }
     // Suppress for tab-completion and `self cache ...` invocations.
-    if bootstrap::is_tab_completion(&argv) {
+    if bootstrap::is_tab_completion(argv) {
         return;
     }
-    let positional: Vec<&str> = argv
-        .iter()
-        .skip(1)
-        .filter(|a| !a.starts_with('-'))
-        .map(String::as_str)
-        .collect();
-    if positional.first().copied() == Some("self") && positional.get(1).copied() == Some("cache") {
+    if matches
+        .subcommand_matches("self")
+        .is_some_and(|m| m.subcommand_name() == Some("cache"))
+    {
         return;
     }
     let Ok(cache_root) = self_cache::resolve_cache_root() else {
@@ -149,26 +170,6 @@ fn maybe_emit_cache_hint_from_argv() {
     ) {
         eprintln!("{msg}");
     }
-}
-
-/// Best-effort scan of `argv` for toolr's own flags, used to gate the passive
-/// cache hint. Matches any of `exact`, or, when `cluster_char` is set, a short
-/// cluster containing it (`-q`, `-dq`, …). Stops at the `--` separator so a
-/// wrapped command's flags (`toolr project venv run -- <cmd> --quiet`) never count.
-fn argv_requests(argv: &[String], exact: &[&str], cluster_char: Option<char>) -> bool {
-    argv.iter().skip(1).take_while(|a| *a != "--").any(|a| {
-        exact.contains(&a.as_str())
-            || cluster_char
-                .is_some_and(|c| a.starts_with('-') && !a.starts_with("--") && a[1..].contains(c))
-    })
-}
-
-fn argv_requests_quiet(argv: &[String]) -> bool {
-    argv_requests(argv, &["--quiet"], Some('q'))
-}
-
-fn argv_requests_version_or_help(argv: &[String]) -> bool {
-    argv_requests(argv, &["--version", "-V", "--help", "-h"], None)
 }
 
 /// Read the on-disk manifest; "no project" and "no manifest file" mean an
@@ -228,63 +229,81 @@ fn empty_manifest() -> Manifest {
 
 #[cfg(test)]
 mod tests {
-    use super::{argv_requests_quiet, argv_requests_version_or_help};
+    use super::misplaced_root_flag_hint;
+    use crate::cli;
 
-    fn argv(args: &[&str]) -> Vec<String> {
-        std::iter::once("toolr")
+    fn hint(args: &[&str]) -> Option<String> {
+        let argv: Vec<String> = std::iter::once("toolr")
             .chain(args.iter().copied())
             .map(String::from)
-            .collect()
+            .collect();
+        let root = cli::build_command(&super::empty_manifest());
+        let err = root.clone().try_get_matches_from(&argv).err()?;
+        misplaced_root_flag_hint(&err, &root, &argv)
     }
 
     #[test]
-    fn detects_long_and_short_quiet() {
-        assert!(argv_requests_quiet(&argv(&[
-            "project", "venv", "sync", "--quiet"
-        ])));
-        assert!(argv_requests_quiet(&argv(&[
-            "-q", "project", "venv", "sync"
-        ])));
-        // Short cluster.
-        assert!(argv_requests_quiet(&argv(&["-dq", "ci", "hello"])));
+    fn a_misplaced_root_flag_gets_an_example_built_from_the_matched_command() {
+        let ends = |args: &[&str], tail: &str| {
+            let h = hint(args).unwrap_or_default();
+            assert!(h.ends_with(tail), "{args:?}: {h}");
+        };
+        ends(
+            &["project", "venv", "sync", "-q"],
+            "`toolr -q project venv sync ...`",
+        );
+        ends(
+            &["project", "venv", "sync", "--force", "--timeout-secs", "5"],
+            "`toolr --timeout-secs 5 project venv sync ...`",
+        );
+        ends(
+            &["project", "venv", "sync", "--timeout=5"],
+            "`toolr --timeout=5 project venv sync ...`",
+        );
+        // A missing or unsafe value gets the placeholder.
+        ends(
+            &["project", "venv", "sync", "--timeout-secs"],
+            "`toolr --timeout-secs <SECONDS> project venv sync ...`",
+        );
+        ends(
+            &["project", "venv", "sync", "--timeout-secs", "a b"],
+            "`toolr --timeout-secs <SECONDS> project venv sync ...`",
+        );
+        // A spaced argument elsewhere never reaches the example.
+        ends(
+            &["project", "venv", "add", "a b", "-q"],
+            "`toolr -q project venv add ...`",
+        );
+        // A cluster names only its root letter.
+        ends(
+            &["project", "venv", "sync", "-qx"],
+            "`toolr -q project venv sync ...`",
+        );
+        ends(
+            &["project", "venv", "sync", "-dev"],
+            "`toolr -d project venv sync ...`",
+        );
+        ends(
+            &["project", "venv", "sync", "-q", "-d"],
+            "`toolr -q project venv sync ...`",
+        );
+        // Root flags typed before the command stand as a literal ellipsis.
+        ends(
+            &["--timeout-secs", "5", "project", "venv", "sync", "-q"],
+            "`toolr \u{2026} -q project venv sync ...`",
+        );
+        ends(
+            &["-q", "project", "venv", "sync", "-d"],
+            "`toolr \u{2026} -d project venv sync ...`",
+        );
     }
 
     #[test]
-    fn absent_quiet_is_not_detected() {
-        assert!(!argv_requests_quiet(&argv(&["project", "venv", "sync"])));
-        assert!(!argv_requests_quiet(&argv(&["--debug", "ci", "hello"])));
-        // `--quiet` is a long flag; a bare `q` in a value must not match.
-        assert!(!argv_requests_quiet(&argv(&["ci", "hello", "queen"])));
-    }
-
-    #[test]
-    fn wrapped_command_quiet_after_separator_is_ignored() {
-        // The `--quiet` belongs to pytest, not toolr.
-        assert!(!argv_requests_quiet(&argv(&[
-            "project", "venv", "run", "--", "pytest", "--quiet",
-        ])));
-        // But toolr's own quiet before the separator still counts.
-        assert!(argv_requests_quiet(&argv(&[
-            "project", "venv", "run", "--quiet", "--", "pytest",
-        ])));
-    }
-
-    #[test]
-    fn detects_version_and_help_requests() {
-        for flag in ["--version", "-V", "--help", "-h"] {
-            assert!(argv_requests_version_or_help(&argv(&[flag])), "{flag}");
-            assert!(
-                argv_requests_version_or_help(&argv(&["ci", flag])),
-                "{flag}"
-            );
-        }
-    }
-
-    #[test]
-    fn ignores_version_and_help_after_the_separator_or_absent() {
-        assert!(!argv_requests_version_or_help(&argv(&["ci", "hello"])));
-        assert!(!argv_requests_version_or_help(&argv(&[
-            "project", "venv", "run", "--", "pytest", "--help"
-        ])));
+    fn other_errors_get_no_hint() {
+        assert_eq!(hint(&["project", "venv", "sync", "--nope"]), None);
+        assert_eq!(hint(&["project", "venv", "sync", "-x"]), None);
+        assert_eq!(hint(&["project", "venv", "sync", "-h"]), None);
+        assert_eq!(hint(&["project", "venv", "nope"]), None);
+        assert_eq!(hint(&["-q", "project", "venv", "sync"]), None);
     }
 }

@@ -13,7 +13,10 @@ Options:
   -V, --version
           Print version
 
-Output Options:
+ToolR Options:
+
+  toolr's options go before the command: toolr --debug <command> ...
+
   -d, --debug
           Increase verbosity (also enables DEBUG logging).
   -q, --quiet

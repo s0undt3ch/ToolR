@@ -4,7 +4,7 @@
 //! cache is dirty enough to trip the emission threshold.
 //!
 //! This is the contract the mise enter-hook recipe depends on: the hook
-//! runs `toolr project venv sync --quiet` on every `cd`, and must stay
+//! runs `toolr --quiet project venv sync --if-project` on every `cd`, and must stay
 //! silent in non-toolr directories regardless of the developer's cache
 //! state.
 
@@ -81,16 +81,32 @@ fn dirty_cache_surfaces_hint_without_quiet() {
 fn quiet_suppresses_passive_cache_hint() {
     let cache = dirty_cache();
     let work = TempDir::new().unwrap();
+    // `-q` is a root flag: long or short, before the subcommand.
+    for args in [
+        &["-q", "project", "venv", "sync"][..],
+        &["--quiet", "project", "venv", "sync"],
+    ] {
+        let out = toolr(cache.path(), work.path(), args);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stderr.contains("cache has"),
+            "{args:?}: --quiet must suppress the passive cache hint, got stderr:\n{stderr}"
+        );
+    }
+}
+
+/// A wrapped command's own `--quiet` is not toolr's: the hint stays.
+#[test]
+fn a_wrapped_commands_quiet_flag_does_not_suppress_the_hint() {
+    let cache = dirty_cache();
+    let work = TempDir::new().unwrap();
     let out = toolr(
         cache.path(),
         work.path(),
-        &["project", "venv", "sync", "--quiet"],
+        &["project", "venv", "run", "--", "true", "--quiet", "-q"],
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        !stderr.contains("cache has"),
-        "--quiet must suppress the passive cache hint, got stderr:\n{stderr}"
-    );
+    assert!(stderr.contains("cache has"), "{stderr}");
 }
 
 /// `self cache` commands are how the user acts on the hint, so they never show it.
@@ -98,13 +114,18 @@ fn quiet_suppresses_passive_cache_hint() {
 fn self_cache_commands_never_show_the_hint() {
     let cache = dirty_cache();
     let work = TempDir::new().unwrap();
-    let out = toolr(cache.path(), work.path(), &["self", "cache", "list"]);
-    assert!(out.status.success(), "{out:?}");
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        !stderr.contains("cache has"),
-        "`self cache list` must not show the passive cache hint, got stderr:\n{stderr}"
-    );
+    for args in [
+        &["self", "cache", "list"][..],
+        &["--timeout-secs", "5", "self", "cache", "list"],
+    ] {
+        let out = toolr(cache.path(), work.path(), args);
+        assert!(out.status.success(), "{args:?}: {out:?}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stderr.contains("cache has"),
+            "{args:?} must not show the passive cache hint, got stderr:\n{stderr}"
+        );
+    }
 }
 
 /// `--version` and `--help` are instant queries; they skip the hint.
@@ -112,13 +133,20 @@ fn self_cache_commands_never_show_the_hint() {
 fn version_and_help_never_show_the_hint() {
     let cache = dirty_cache();
     let work = TempDir::new().unwrap();
-    for flag in ["--version", "--help"] {
-        let out = toolr(cache.path(), work.path(), &[flag]);
-        assert!(out.status.success(), "{flag}: {out:?}");
+    for args in [
+        &["--version"][..],
+        &["-V"],
+        &["--help"],
+        &["-h"],
+        &["project", "--help"],
+        &["project", "venv", "sync", "-h"],
+    ] {
+        let out = toolr(cache.path(), work.path(), args);
+        assert!(out.status.success(), "{args:?}: {out:?}");
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(
             !stderr.contains("cache has"),
-            "`{flag}` must not show the passive cache hint, got stderr:\n{stderr}"
+            "{args:?} must not show the passive cache hint, got stderr:\n{stderr}"
         );
     }
 }

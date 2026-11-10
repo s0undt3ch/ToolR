@@ -22,7 +22,7 @@ use crate::value_parsers::{DeferredPath, deferred_path, passes_path_as_typed};
 /// - `matches`: clap's parsed matches *for this command* (not the root).
 /// - `bases`: the invocation cwd and the project root previously resolved
 ///   by `discover_project_root`.
-/// - `output_opts`: the values of toolr's root-level "Output Options"
+/// - `output_opts`: the values of toolr's "ToolR Options"
 ///   flags (`--debug` / `--quiet` / `--timestamps` /
 ///   `--timeout-secs` / `--no-output-timeout-secs`).
 pub fn build_spec(
@@ -314,7 +314,7 @@ fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
     }
 }
 
-/// Plumbing struct bundling the root-level "Output Options" flag
+/// Plumbing struct bundling the "ToolR Options" flag
 /// values for `build_spec`. Adding a new flag is a one-field change
 /// instead of growing the `build_spec` argument list again.
 #[derive(Debug, Clone)]

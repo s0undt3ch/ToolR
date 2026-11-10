@@ -177,13 +177,13 @@ reason.
 
 mise's `[hooks].enter` lets you run a command every time the shell
 enters this project's directory, before you've typed anything else.
-Wiring it to `toolr project venv sync --quiet` gives you a tools
+Wiring it to `toolr --quiet project venv sync --if-project` gives you a tools
 venv that's already fresh by the time your prompt returns:
 
 ```toml
 # In this project's mise.toml
 [hooks]
-enter = "toolr project venv sync --quiet"
+enter = "toolr --quiet project venv sync --if-project"
 ```
 
 That's the entire recipe. No `[tasks]` block, no
@@ -201,17 +201,16 @@ way, and the recipe never hard-codes a venv path.
 
 ### Unattended-mode guards
 
-`--quiet` does more than suppress output: it also tells `toolr` that
-it's running in an unattended context where blocking on a TTY prompt
-would freeze the shell. To honour that, `--quiet` exits 0 silently
-in three benign situations:
+`--quiet` suppresses output and tells `toolr` it's running in an unattended
+context where blocking on a TTY prompt would freeze the shell. It never turns an
+error into a success. `--if-project` does that, exiting 0 silently in three
+benign situations:
 
 - The current directory isn't a toolr-using repo (no
   `tools/pyproject.toml`). The hook fires on every `cd` even into
   non-toolr directories; this is normal, not an error.
-- `tools/uv.lock` is missing. The user probably hasn't run
-  `toolr project init` yet — that's their next step, not something
-  the hook should report.
+- toolr can't read where the tools venv lives, for example a bare `tools/`
+  directory without a `pyproject.toml`.
 - `uv` isn't installed and `TOOLR_AUTO_INSTALL_UV=1` isn't set.
   The hook can't reasonably prompt for consent on every shell
   enter, so it stays out of the way.

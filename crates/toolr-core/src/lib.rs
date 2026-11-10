@@ -34,6 +34,8 @@ pub mod parser;
 pub mod path_search;
 #[cfg(feature = "full")]
 pub mod project;
+#[cfg(feature = "full")]
+pub mod prompt;
 #[cfg(all(test, feature = "full"))]
 mod test_env;
 #[cfg(all(test, feature = "full"))]

@@ -297,6 +297,11 @@ fn push_options_by_heading(out: &mut String, cmd: &Command, mode: HelpMode, widt
     for (heading, args) in named_groups {
         let group_has_short = args.iter().any(|a| a.get_short().is_some());
         out.push_str(&format!("**{heading}:**\n"));
+        if heading == crate::cli::ROOT_HEADING {
+            out.push('\n');
+            push_wrapped(out, crate::cli::ROOT_HEADING_NOTE, 2, width);
+            out.push('\n');
+        }
         for arg in args {
             push_one_option(out, arg, mode, width, group_has_short);
         }

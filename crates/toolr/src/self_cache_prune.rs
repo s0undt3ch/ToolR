@@ -14,7 +14,7 @@ use toolr_core::cache::{
     sweep_rebuild_locks,
 };
 
-/// Output of one prune run. The `-q` rule is stated on the arg in `cli::build_command`.
+/// Output of one prune run. The `-q` rule is stated on the arg in `cli::root_flag_args`.
 struct Report<'a> {
     out: &'a mut dyn Write,
     /// Test seam for where warnings go; `None` is the process's stderr.
@@ -224,16 +224,12 @@ fn confirm_destroy_all(entries: &[CachedVenv]) -> Result<bool> {
             entries.len(),
         );
     }
-    eprint!(
-        "toolr: about to remove {} cache entries. continue? [y/N] ",
-        entries.len(),
-    );
-    io::stderr().flush().ok();
-    let mut line = String::new();
-    io::stdin().read_line(&mut line)?;
-    Ok(matches!(
-        line.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
+    Ok(toolr_core::prompt::yes_no_stdin(
+        &format!(
+            "toolr: about to remove {} cache entries. continue?",
+            entries.len()
+        ),
+        false,
     ))
 }
 

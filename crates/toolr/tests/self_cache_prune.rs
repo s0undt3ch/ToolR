@@ -167,6 +167,39 @@ fn prune_all_with_yes_nukes_everything() {
     assert!(!cache_root.join("b").exists());
 }
 
+/// `prune --all` without `--yes` asks on the terminal: `yes` and `y` wipe, anything else keeps.
+#[cfg(unix)]
+#[test]
+fn prune_all_asks_and_takes_yes_or_y() {
+    for (answer, wiped) in [
+        ("yes\n", true),
+        ("y\n", true),
+        ("\n", false),
+        ("no\n", false),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        let cache_root = tmp.path().join("toolr");
+        fs::create_dir_all(&cache_root).unwrap();
+        let live_repo = tmp.path().join("live-repo");
+        fs::create_dir_all(&live_repo).unwrap();
+        write_entry(&cache_root, "a", &live_repo, Utc::now());
+
+        let mut cmd = common::toolr_std();
+        cmd.env("XDG_CACHE_HOME", tmp.path())
+            .env_remove("HOME")
+            .env("TOOLR_NO_CACHE_HINT", "1")
+            .args(["self", "cache", "prune", "--all"]);
+        let out = common::run_on_pty(cmd, answer);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{answer:?}: {stderr}");
+        assert!(
+            stderr.contains("about to remove 1 cache entries. continue? [y/N]"),
+            "{stderr}"
+        );
+        assert_eq!(!cache_root.join("a").exists(), wiped, "{answer:?}");
+    }
+}
+
 #[test]
 fn passive_hint_appears_when_orphan_count_is_high() {
     let tmp = TempDir::new().unwrap();
