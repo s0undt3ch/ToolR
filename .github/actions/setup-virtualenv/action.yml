@@ -51,6 +51,7 @@ runs:
     # symptom seen on Windows test runs (matrix asked for 3.11, venv
     # ended up cp314 because that's what mise.toml pins).
     - name: Export MISE_PYTHON_VERSION
+      id: python-pin
       if: inputs.python-version != ''
       shell: bash
       run: |
@@ -60,7 +61,20 @@ runs:
           echo "::error::invalid python-version input: ${INPUTS_PYTHON_VERSION}" >&2
           exit 1
         fi
-        echo "MISE_PYTHON_VERSION=${INPUTS_PYTHON_VERSION}" >> "$GITHUB_ENV"
+        version="${INPUTS_PYTHON_VERSION}"
+        # mise.lock (format 4) matches entries by the exact version mise.toml pins, so
+        # `--locked` rejects a bare `3.11`; expand it to that pin.
+        if [[ "${version}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+          pin=$(sed -n 's/^python = \[\(.*\)\]$/\1/p' mise.toml | tr -d ' "' | tr ',' '\n' \
+            | grep -E "^${version//./\\.}\.[0-9]+$" | head -n 1 || true)
+          if [[ -z "${pin}" ]]; then
+            echo "::error::python ${version} is not pinned in mise.toml's python list" >&2
+            exit 1
+          fi
+          version="${pin}"
+        fi
+        echo "MISE_PYTHON_VERSION=${version}" >> "$GITHUB_ENV"
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
       env:
         INPUTS_PYTHON_VERSION: ${{ inputs.python-version }}
 
@@ -100,7 +114,7 @@ runs:
         # Belt-and-braces: also pass via the step `env:` so the override
         # takes effect even when the previous step is skipped (empty
         # `python-version` input).
-        MISE_PYTHON_VERSION: ${{ inputs.python-version }}
+        MISE_PYTHON_VERSION: ${{ steps.python-pin.outputs.version }}
       with:
         version: ${{ inputs.mise-version }}
         cache: true
