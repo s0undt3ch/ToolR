@@ -86,16 +86,25 @@ remaining entry uses. A lock held by a running rebuild stays.
 See [CLI reference → `self cache prune`](../cli.md#self-cache-prune)
 for the full flag matrix.
 
-## Passive size hint
+## Passive orphan hint
 
-When the cache exceeds a soft threshold (or accumulates orphans),
+When more than 10 cache entries belong to repositories that no longer exist,
 toolr prints a one-line hint to stderr on the next invocation:
 
 ```text
-toolr: cache is 1.4 GB across 18 entries (6 orphan); run `toolr self cache prune` to clean up.
+toolr: cache has 12 orphan entries. Run `toolr self cache prune` to clean up.
 ```
 
-Suppress with `TOOLR_NO_CACHE_HINT=1` in your environment.
+The hint reads each entry's `meta.json` only. It never walks the virtualenvs,
+so it adds no measurable time, and it does not mention sizes; `toolr self cache
+list` shows those. A large cache with few orphans prints nothing.
 
-The hint logic is conservative — it only prints once per (cache size,
-orphan count) bucket, so you won't get nagged on every invocation.
+The hint is skipped for:
+
+- `--version`, `-V`, `--help` and `-h`
+- `-q` / `--quiet`
+- tab completion
+- `toolr self cache ...` commands
+- any run with `TOOLR_NO_CACHE_HINT` set, for example `TOOLR_NO_CACHE_HINT=1`
+
+Arguments after a `--` separator are never read as toolr's own flags.

@@ -451,6 +451,45 @@ fn hint_ignores_a_large_cache_when_orphans_are_few() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn hint_does_not_walk_the_venvs() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr-cache");
+    std::fs::create_dir_all(&cache_root).unwrap();
+    for key in &["a", "b", "c"] {
+        make_entry(&cache_root, key, "/missing", now_fixture(), 32);
+    }
+    let locked = cache_root.join("a/venv/locked");
+    std::fs::create_dir_all(&locked).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let unreadable = std::fs::read_dir(&locked).is_err();
+
+    let sized = enumerate_caches(&cache_root);
+    let hint = compute_hint(
+        &cache_root,
+        &HintConfig {
+            orphan_threshold: 2,
+        },
+        now_fixture(),
+    );
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    if !unreadable {
+        return; // running as root: permissions do not bite
+    }
+    assert!(
+        sized.is_err(),
+        "the sized walk should hit the locked directory"
+    );
+    assert!(
+        hint.unwrap()
+            .is_some_and(|m| m.contains("3 orphan entries"))
+    );
+}
+
 #[test]
 fn enumerate_caches_unsized_skips_the_size_walk() {
     let tmp = TempDir::new().unwrap();
