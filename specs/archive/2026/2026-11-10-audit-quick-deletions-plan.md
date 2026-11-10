@@ -9,7 +9,7 @@ One commit per finding, in this order. Tests run through `cargo test -p toolr` (
 4. X-09: `Cargo.toml`, `crates/toolr-core/Cargo.toml`.
 5. P-05, P-08: `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `release.yml`.
 6. R-14: visibility changes in `toolr-core` and `toolr`.
-7. R-12: test helpers in `crates/toolr/tests`, `execute_build.rs`.
+7. R-12: test helpers in `crates/toolr/tests`.
 8. U-15: `cli.rs`, help test, docs snippet regen if affected.
-9. X-11, X-10: `Cargo.toml`, Renovate config.
+9. X-11 (dropped, Renovate already tracks it), X-10 (tried, reverted).
 10. Verify with `prek run --all-files`, cargo tests, patch coverage; archive these specs.

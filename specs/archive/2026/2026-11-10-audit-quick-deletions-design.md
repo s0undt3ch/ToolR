@@ -25,11 +25,13 @@ can be rejected alone.
 - **P-08.** `persist-credentials: false` on the `docs` job checkout; drop `environment: release`
   from the pipeline-gate job.
 - **R-14.** Narrow ten `pub fn`s with no external caller to `pub(crate)`, or delete if unused.
-- **R-12.** Replace the five `cargo_bin` aliases with `common::toolr`, and lock the unguarded
-  `set_var` in `execute_build.rs`. The six `fixture()` helpers are left as they are.
+- **R-12.** Replace the five `cargo_bin` aliases with `common::toolr`, and leave the
+  `set_var` in `execute_build.rs` as it was: the variable names are unique per test, so a lock
+  gained nothing. The six `fixture()` helpers are left as they are.
 - **U-15.** List `-V, --version` in `--help`.
 - **X-11.** Dropped: Renovate already tracks and groups the ruff crates (PRs #573, #638, #717).
-- **X-10 (profile).** `lto = "fat"` and `codegen-units = 1` in `[profile.release]`. Not
+- **X-10 (profile).** Tried `lto = "fat"` and `codegen-units = 1` in `[profile.release]`, then
+  reverted: release builds went from 1m42s to 2m40s for a 19% smaller binary. Never
   `panic = "abort"`: the profile is workspace-wide and would abort the Python process on a
   `toolr-py` panic.
 
