@@ -48,3 +48,7 @@ predicates = "3"
 
 [profile.release]
 strip = true
+lto = "fat"
+codegen-units = 1
+# No `panic = "abort"`: this profile also builds the toolr-py cdylib, where an abort would
+# kill the host Python process on a Rust panic.
