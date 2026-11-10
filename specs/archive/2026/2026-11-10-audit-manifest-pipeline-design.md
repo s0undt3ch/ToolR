@@ -110,6 +110,9 @@ Edge cases that change:
   `empty_third_party_hash()` instead of `""`, which stops a pointless second build.
 - A third-party hash I/O error during `project manifest rebuild` gains a
   `hashing third-party manifests` context line.
+- A broken plugin fragment in a venv that lacks `pyvenv.cfg` is now fatal on a trusted fresh
+  clone. The old bootstrap step only globbed the venv when `pyvenv.cfg` existed, so it wrote a
+  manifest without the plugin and the freshness step then warned and fell back to it.
 
 ## Non-goals
 

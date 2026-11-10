@@ -114,9 +114,9 @@ pub(crate) fn ensure_manifest(
         return Ok(None);
     }
     let manifest_path = root.join("tools").join(".toolr-manifest.json");
-    let fresh_clone = persist && !manifest_path.is_file();
     let venv = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
     let refreshed = refresh(&root, venv.as_deref(), persist)?;
+    let unreadable = refreshed.unreadable.is_some();
     if let Some(e) = refreshed.unreadable {
         eprintln!(
             "toolr: warning: ignoring unreadable {}: {e}; rebuilding",
@@ -126,7 +126,12 @@ pub(crate) fn ensure_manifest(
     Ok(match refreshed.refresh {
         Refresh::Fresh(cached) => Some(cached.into()),
         Refresh::Built(built) => Some(built),
-        Refresh::Failed { error, .. } if fresh_clone => return Err(error),
+        // A trusted fresh clone has no manifest to fall back to. Decided from
+        // the locked check, since another process may have written one meanwhile.
+        Refresh::Failed {
+            error,
+            cached: None,
+        } if persist && !unreadable => return Err(error),
         Refresh::Failed { error, cached } => {
             warn_and_keep_cache(&error, cached.is_some());
             cached.map(Into::into)
@@ -412,6 +417,31 @@ mod tests {
         assert!(!tmp.path().join("tools/.toolr-manifest.json").exists());
         let lock = toolr_core::manifest::lock_path_for_repo(&home.path().join("toolr"), tmp.path());
         assert!(!lock.exists());
+    }
+
+    /// A trusted fresh clone whose manifest another process writes while
+    /// this one waits on the rebuild lock: a failed build then warns and
+    /// serves that manifest instead of exiting.
+    #[test]
+    fn ensure_manifest_serves_a_manifest_written_while_waiting_on_the_lock() {
+        let (_home, _guard) = temp_cache_home();
+        let tmp = tools_repo();
+        let root = toolr_core::discovery::discover_project_root(tmp.path()).unwrap();
+        let path = root.join("tools/.toolr-manifest.json");
+        std::fs::write(root.join("tools/broken.py"), "def not closed(\n").unwrap();
+        let held = toolr_core::manifest::acquire_rebuild_lock(&path);
+        let cwd = tmp.path().to_path_buf();
+        let worker = std::thread::spawn(move || {
+            ensure_manifest(&cwd, &[], true).map(|m| m.map(|b| b.manifest))
+        });
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(!worker.is_finished());
+        let mut stale = manifest_with(Vec::new());
+        stale.toolr_version = "0.0.0-stale".into();
+        toolr_core::manifest::write_manifest(&path, &stale).unwrap();
+        drop(held);
+        let served = worker.join().unwrap().unwrap();
+        assert_eq!(served, Some(stale));
     }
 
     /// A trusted fresh clone with a venv: the build that serves the run is
