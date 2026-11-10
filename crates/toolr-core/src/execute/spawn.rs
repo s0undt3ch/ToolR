@@ -75,32 +75,15 @@ mod tests {
         assert_eq!(args, ["-P", "-m", "toolr._runner"]);
     }
 
-    fn env_of(cmd: &Command, key: &str) -> Option<Option<std::ffi::OsString>> {
-        cmd.get_envs()
-            .find(|(k, _)| *k == key)
-            .map(|(_, v)| v.map(ToOwned::to_owned))
-    }
-
     #[test]
-    fn runner_command_sets_utf8_stdio_by_default() {
-        let cmd = runner_command(
-            Path::new("python"),
-            Path::new("spec.json"),
-            Path::new("."),
-            false,
-        );
-        assert_eq!(env_of(&cmd, "PYTHONIOENCODING"), Some(Some("utf-8".into())));
-    }
-
-    #[test]
-    fn runner_command_leaves_a_user_set_io_encoding_mode_alone() {
+    fn runner_command_leaves_a_user_set_io_encoding_alone() {
         let cmd = runner_command(
             Path::new("python"),
             Path::new("spec.json"),
             Path::new("."),
             true,
         );
-        assert_eq!(env_of(&cmd, "PYTHONIOENCODING"), None);
+        assert!(cmd.get_envs().all(|(k, _)| k != "PYTHONIOENCODING"));
     }
 
     /// Runs a stand-in interpreter that records `PYTHONIOENCODING` as it sees it.
