@@ -312,10 +312,7 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
             "toolr: wrote {} groups / {} commands to {}",
             built.manifest.groups.len(),
             built.manifest.commands.len(),
-            repo_root
-                .join("tools")
-                .join(".toolr-manifest.json")
-                .display(),
+            toolr_core::manifest::manifest_path(&repo_root).display(),
         );
     }
     Ok(ExitCode::SUCCESS)

@@ -310,7 +310,8 @@ pub fn toolr_std() -> std::process::Command {
 /// as a project. The in-tree venv keeps the fixture away from the real cache.
 pub const TOOLS_PYPROJECT: &str = "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n";
 
-/// Write `root`'s manifest with `toolr project manifest rebuild`.
+/// Write `root`'s manifest with `toolr project manifest rebuild`, which
+/// needs `tools/pyproject.toml` to parse and the venv path to resolve.
 pub fn build_manifest(root: &Path) {
     toolr()
         .current_dir(root)

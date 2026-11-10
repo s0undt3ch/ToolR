@@ -39,8 +39,7 @@ fn run() -> anyhow::Result<ExitCode> {
     let argv: Vec<String> = std::env::args().collect();
     // Emit the passive cache hint before clap touches argv.
     maybe_emit_cache_hint_from_argv();
-    let persist = bootstrap::persist_manifest(&cwd, &argv);
-    let mut built = match bootstrap::ensure_manifest(&cwd, &argv, persist)? {
+    let mut built = match bootstrap::ensure_manifest(&cwd, &argv)? {
         Some(built) => built,
         // `__complete` resolves the manifest itself; loading it here too
         // would parse it twice per TAB and warn about a corrupt one.
@@ -194,7 +193,7 @@ fn load_or_empty(cwd: &std::path::Path, argv: &[String]) -> anyhow::Result<Manif
             return Ok(empty_manifest());
         }
     };
-    let manifest_path = root.join("tools").join(".toolr-manifest.json");
+    let manifest_path = toolr_core::manifest::manifest_path(&root);
     match load_manifest(&manifest_path) {
         Ok(m) => Ok(m),
         Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {

@@ -3,16 +3,16 @@
 //! stale.
 //!
 //! The build is written to disk only in a trusted repository (or with
-//! `TOOLR_TRUST_ALL=1`), see [`persist_manifest`]. An untrusted one gets an
-//! in-memory manifest and any existing file is left exactly as found.
-//!
-//! See `specs/archive/2026/2026-05-19-fill-the-gaps-design.md` (gap 1) for the
-//! decision logic.
+//! `TOOLR_TRUST_ALL=1`). An untrusted one gets an in-memory manifest and any
+//! existing file is left exactly as found. [`ensure_manifest`] holds the
+//! argv and trust policy; `toolr_core::manifest_build::refresh` does the
+//! rest.
 
 use std::path::Path;
 
 use toolr_core::discovery::discover_project_root;
-use toolr_core::manifest_build::{Refresh, refresh};
+use toolr_core::manifest::manifest_path;
+use toolr_core::manifest_build::{Persist, Refresh, refresh};
 use toolr_core::parser::BuiltManifest;
 use toolr_core::venv::resolve_venv_path;
 
@@ -22,11 +22,10 @@ const BUILTINS: &[&str] = &["__complete", "project", "self"];
 /// Decide whether the pre-clap bootstrap should skip building a missing
 /// manifest for this argv.
 ///
-/// Building the manifest is now a cheap, **execution-free** static parse
-/// (AST of `tools/*.py` + an execution-free third-party glob), so this
-/// skip is purely a latency optimisation — never a safety gate. No code
-/// path here (or downstream) ever executes repository Python; that only
-/// happens when the user explicitly dispatches a command.
+/// Building the manifest is an **execution-free** static parse (AST of
+/// `tools/*.py` + a third-party glob), so this skip is purely a latency
+/// optimisation — never a safety gate. Repository Python only runs when the
+/// user explicitly dispatches a command.
 ///
 /// We still skip the built-ins that manage their own state
 /// (`__complete`, `project`, `self`) and `--version` (prints
@@ -90,61 +89,63 @@ fn first_positional(argv: &[String]) -> Option<&str> {
 
 /// Build the manifest when it's missing or stale: a pure-Rust parse of
 /// `tools/*.py` plus an execution-free glob of the venv's plugin fragments,
-/// so no repository code runs. A rebuild that fails warns and falls back to
-/// the cached manifest, except on a trusted fresh clone, which has none to
-/// fall back to and returns the error.
+/// so no repository code runs. The build is written only in a trusted
+/// repository; tab completion and `--version` never read the trust store.
 ///
 /// Returns the manifest this step validated or rebuilt, so the caller
 /// dispatches against it instead of re-reading a file another toolr
 /// process may be rewriting (#542), with the warnings of a build this step
 /// ran; a cached manifest has none. `Ok(None)` means the step didn't
 /// apply (no project, skip-list argv) or the rebuild failed with no
-/// usable cache; the caller then reads the file itself. Errors propagate
-/// from writing the freshly rebuilt manifest and for symlinked modules
-/// (F-17), which never fall back to the cache.
+/// usable cache; the caller then reads the file itself.
 pub(crate) fn ensure_manifest(
     cwd: &Path,
     argv: &[String],
-    persist: bool,
 ) -> anyhow::Result<Option<BuiltManifest>> {
-    let Ok(root) = discover_project_root(cwd) else {
-        return Ok(None);
-    };
     if should_skip_auto_rebuild(argv) {
         return Ok(None);
     }
-    let manifest_path = root.join("tools").join(".toolr-manifest.json");
-    let venv = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
-    let refreshed = refresh(&root, venv.as_deref(), persist)?;
+    let Ok(root) = discover_project_root(cwd) else {
+        return Ok(None);
+    };
+    let persist = if toolr_core::trust::is_trusted_now(&root) {
+        Persist::Write
+    } else {
+        Persist::InMemory
+    };
+    ensure_manifest_at(&root, persist)
+}
+
+/// [`ensure_manifest`] for a discovered `root`. A rebuild that fails warns
+/// and falls back to the cached manifest, except on a trusted fresh clone,
+/// which has none to fall back to and returns the error. Errors also
+/// propagate from writing the rebuilt manifest and for symlinked modules
+/// (F-17), which never fall back to the cache.
+fn ensure_manifest_at(root: &Path, persist: Persist) -> anyhow::Result<Option<BuiltManifest>> {
+    let venv = resolve_venv_path(root).ok().map(|r| r.venv_dir);
+    let refreshed = refresh(root, venv.as_deref(), persist)?;
     let unreadable = refreshed.unreadable.is_some();
     if let Some(e) = refreshed.unreadable {
         eprintln!(
             "toolr: warning: ignoring unreadable {}: {e}; rebuilding",
-            manifest_path.display()
+            manifest_path(root).display()
         );
     }
     Ok(match refreshed.refresh {
         Refresh::Fresh(cached) => Some(cached.into()),
         Refresh::Built(built) => Some(built),
         // A trusted fresh clone has no manifest to fall back to. Decided from
-        // the locked check, since another process may have written one meanwhile.
+        // the locked check, since another process may have written one
+        // meanwhile; an unreadable file means a manifest existed, so it isn't one.
         Refresh::Failed {
             error,
             cached: None,
-        } if persist && !unreadable => return Err(error),
+        } if persist == Persist::Write && !unreadable => return Err(error),
         Refresh::Failed { error, cached } => {
             warn_and_keep_cache(&error, cached.is_some());
             cached.map(Into::into)
         }
     })
-}
-
-/// Whether the bootstrap step should write the manifest for this run:
-/// only in a trusted repository, and only when they would build at all
-/// (so `--version` and tab completion never read the trust store).
-pub(crate) fn persist_manifest(cwd: &Path, argv: &[String]) -> bool {
-    !should_skip_auto_rebuild(argv)
-        && discover_project_root(cwd).is_ok_and(|root| toolr_core::trust::is_trusted_now(&root))
 }
 
 fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
@@ -166,7 +167,10 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_manifest, is_tab_completion, names_user_command, should_skip_auto_rebuild};
+    use super::{
+        Persist, ensure_manifest_at, is_tab_completion, manifest_path, names_user_command,
+        should_skip_auto_rebuild,
+    };
     use toolr_core::freshness::{FreshnessVerdict, compare};
     use toolr_core::manifest::{Group, Manifest, SCHEMA_VERSION, load_manifest};
     use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
@@ -397,10 +401,10 @@ mod tests {
         let (home, _guard) = temp_cache_home();
         let tmp = tools_repo();
 
-        let fresh = ensure_manifest(tmp.path(), &[], true).unwrap();
+        let fresh = ensure_manifest_at(tmp.path(), Persist::Write).unwrap();
 
         assert!(fresh.is_some());
-        assert!(tmp.path().join("tools/.toolr-manifest.json").is_file());
+        assert!(manifest_path(tmp.path()).is_file());
         assert_one_lock_in(home.path(), tmp.path());
     }
 
@@ -411,37 +415,43 @@ mod tests {
         let (home, _guard) = temp_cache_home();
         let tmp = tools_repo();
 
-        let fresh = ensure_manifest(tmp.path(), &[], false).unwrap();
+        let fresh = ensure_manifest_at(tmp.path(), Persist::InMemory).unwrap();
 
         assert!(fresh.is_some());
-        assert!(!tmp.path().join("tools/.toolr-manifest.json").exists());
+        assert!(!manifest_path(tmp.path()).exists());
         let lock = toolr_core::manifest::lock_path_for_repo(&home.path().join("toolr"), tmp.path());
         assert!(!lock.exists());
     }
 
-    /// A trusted fresh clone whose manifest another process writes while
-    /// this one waits on the rebuild lock: a failed build then warns and
-    /// serves that manifest instead of exiting.
+    /// A failed build with a manifest to fall back to warns and serves it,
+    /// even when persisting: only a trusted fresh clone exits.
     #[test]
-    fn ensure_manifest_serves_a_manifest_written_while_waiting_on_the_lock() {
+    fn ensure_manifest_serves_the_cache_when_a_persisting_build_fails() {
         let (_home, _guard) = temp_cache_home();
         let tmp = tools_repo();
-        let root = toolr_core::discovery::discover_project_root(tmp.path()).unwrap();
-        let path = root.join("tools/.toolr-manifest.json");
-        std::fs::write(root.join("tools/broken.py"), "def not closed(\n").unwrap();
-        let held = toolr_core::manifest::acquire_rebuild_lock(&path);
-        let cwd = tmp.path().to_path_buf();
-        let worker = std::thread::spawn(move || {
-            ensure_manifest(&cwd, &[], true).map(|m| m.map(|b| b.manifest))
-        });
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        assert!(!worker.is_finished());
+        let path = manifest_path(tmp.path());
+        std::fs::write(tmp.path().join("tools/broken.py"), "def not closed(\n").unwrap();
         let mut stale = manifest_with(Vec::new());
         stale.toolr_version = "0.0.0-stale".into();
         toolr_core::manifest::write_manifest(&path, &stale).unwrap();
-        drop(held);
-        let served = worker.join().unwrap().unwrap();
-        assert_eq!(served, Some(stale));
+
+        let served = ensure_manifest_at(tmp.path(), Persist::Write).unwrap();
+
+        assert_eq!(served.map(|b| b.manifest), Some(stale));
+    }
+
+    /// An unreadable manifest means one existed, so a trusted run whose
+    /// build then fails warns instead of exiting like a fresh clone.
+    #[test]
+    fn ensure_manifest_warns_when_an_unreadable_manifest_fails_to_rebuild() {
+        let (_home, _guard) = temp_cache_home();
+        let tmp = tools_repo();
+        std::fs::write(manifest_path(tmp.path()), "not json").unwrap();
+        std::fs::write(tmp.path().join("tools/broken.py"), "def not closed(\n").unwrap();
+
+        let served = ensure_manifest_at(tmp.path(), Persist::Write).unwrap();
+
+        assert!(served.is_none());
     }
 
     /// A trusted fresh clone with a venv: the build that serves the run is
@@ -467,11 +477,11 @@ mod tests {
         )
         .unwrap();
 
-        let served = ensure_manifest(tmp.path(), &[], true).unwrap().unwrap();
-
         let root = toolr_core::discovery::discover_project_root(tmp.path()).unwrap();
+        let served = ensure_manifest_at(&root, Persist::Write).unwrap().unwrap();
+
         let venv = toolr_core::venv::resolve_venv_path(&root).unwrap().venv_dir;
-        let written = load_manifest(&root.join("tools/.toolr-manifest.json")).unwrap();
+        let written = load_manifest(&manifest_path(&root)).unwrap();
         assert_eq!(served.manifest, written);
         let plugin_hash = compute_third_party_hash(&venv).unwrap();
         assert_ne!(plugin_hash, empty_third_party_hash());

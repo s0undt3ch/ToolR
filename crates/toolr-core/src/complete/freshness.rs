@@ -6,16 +6,12 @@ use anyhow::{Context, Result};
 
 use crate::discovery::discover_project_root;
 use crate::manifest::Manifest;
-use crate::manifest_build::{Refresh, refresh};
+use crate::manifest_build::{Persist, Refresh, refresh};
 
 /// Outcome of resolving the manifest for a completion request.
 #[derive(Debug)]
 pub struct ResolvedManifest {
     pub manifest: Manifest,
-    /// `true` if the cached on-disk manifest was returned verbatim
-    /// (`static_hash`, `third_party_hash`, and `toolr_version` all
-    /// matched the live state).
-    pub from_cache: bool,
     /// The directory that contained `tools/` (the project root).
     pub project_root: PathBuf,
 }
@@ -33,14 +29,14 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     // written, so no lock. Every completion script sends stderr to
     // /dev/null, so an unreadable cache, like a failed build, is left to the
     // next non-TAB run to report.
-    let (mut manifest, from_cache) = match refresh(&project_root, None, false)?.refresh {
-        Refresh::Fresh(cached) => (cached, true),
-        Refresh::Built(fresh) => (fresh.manifest, false),
+    let mut manifest = match refresh(&project_root, None, Persist::InMemory)?.refresh {
+        Refresh::Fresh(cached) => cached,
+        Refresh::Built(fresh) => fresh.manifest,
         // A half-edited pyproject or a broken module must not empty TAB.
         Refresh::Failed {
             cached: Some(cached),
             ..
-        } => (cached, true),
+        } => cached,
         Refresh::Failed {
             error,
             cached: None,
@@ -50,7 +46,6 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     manifest.drop_unsafe_names();
     Ok(ResolvedManifest {
         manifest,
-        from_cache,
         project_root,
     })
 }

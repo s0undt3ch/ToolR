@@ -733,9 +733,17 @@ fn completion_serves_the_cache_when_the_pyproject_is_broken() {
 
 const BROKEN_PY: &str = "def not closed(\n";
 
-const PARSE_ERROR: &str = "parsing <root>/tools/broken.py: Expected an identifier, but found a \
-     keyword `not` that cannot be used here at byte range 4..7: Expected an identifier, but found \
-     a keyword `not` that cannot be used here";
+/// The toolr-owned head of a `BROKEN_PY` parse error; the parser's own text follows it.
+const PARSE_ERROR: &str = "parsing <root>/tools/broken.py: ";
+
+/// `stderr` is `prefix`, a `BROKEN_PY` parse error naming the file once, and a newline.
+fn assert_parse_error(stderr: &str, prefix: &str) {
+    let rest = stderr.strip_prefix(&format!("{prefix}{PARSE_ERROR}"));
+    assert!(
+        rest.is_some_and(|r| r.ends_with('\n') && !r.contains("broken.py")),
+        "{stderr}"
+    );
+}
 
 const FALLBACK_WARNING: &str = "toolr: warning: tools manifest is stale and a fresh build failed; \
      falling back to cached manifest\n";
@@ -774,11 +782,7 @@ fn fresh_clone_build_error_is_fatal() {
         p.write_tool("broken.py", BROKEN_PY);
         let (code, stderr) = run_in(p.toolr(&[]), &p.root, &["--help"]);
         assert_eq!(code, 2, "venv={with_venv}: {stderr}");
-        assert_eq!(
-            stderr,
-            format!("toolr: {PARSE_ERROR}\n"),
-            "venv={with_venv}"
-        );
+        assert_parse_error(&stderr, "toolr: ");
         assert!(!p.tools().join(".toolr-manifest.json").exists());
     }
 }
@@ -832,12 +836,9 @@ fn explicit_rebuild_build_error_message() {
         p.write_tool("broken.py", BROKEN_PY);
         let (code, stderr) = run_in(p.toolr(&[]), &p.root, &["project", "manifest", "rebuild"]);
         assert_eq!(code, 2, "venv={with_venv}: {stderr}");
-        assert_eq!(
-            stderr,
-            format!(
-                "toolr: building static manifest (incl. third-party fragments): {PARSE_ERROR}\n"
-            ),
-            "venv={with_venv}"
+        assert_parse_error(
+            &stderr,
+            "toolr: building static manifest (incl. third-party fragments): ",
         );
     }
 }
@@ -878,9 +879,9 @@ fn first_run_manifest_is_fresh_for_the_next_run() {
 #[test]
 fn fresh_clone_argparse_error_reads_the_same_with_or_without_a_venv() {
     for with_venv in [false, true] {
-        let tmp = TempDir::new().unwrap();
-        write_django_project(tmp.path());
-        let pyproject = tmp.path().join("tools/pyproject.toml");
+        let p = project_with_venv(with_venv);
+        write_django_project(&p.root);
+        let pyproject = p.tools().join("pyproject.toml");
         let valid = fs::read_to_string(&pyproject).unwrap();
         let bad_glob = valid.replace(
             r#"scan_paths = ["apps/*/management/commands/*.py"]"#,
@@ -888,14 +889,7 @@ fn fresh_clone_argparse_error_reads_the_same_with_or_without_a_venv() {
         );
         assert_ne!(bad_glob, valid);
         fs::write(&pyproject, bad_glob).unwrap();
-        let mut cmd = common::toolr();
-        if with_venv {
-            let venv = tmp.path().join("tools/.venv");
-            fs::create_dir_all(&venv).unwrap();
-            fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
-            cmd.env("TOOLR_VENV_LOCATION", "in-tree");
-        }
-        let (code, stderr) = run_in(cmd, tmp.path(), &["--help"]);
+        let (code, stderr) = run_in(p.toolr(&[]), &p.root, &["--help"]);
         assert_eq!(code, 2, "venv={with_venv}: {stderr}");
         // The glob error's position depends on the temp dir's length.
         let (head, tail) = stderr.split_once(" near position ").unwrap();

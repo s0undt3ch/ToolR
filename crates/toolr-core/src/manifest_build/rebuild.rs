@@ -4,6 +4,7 @@
 //! snapshot clock, the third-party hash and what a build carries forward
 //! from the cache.
 
+use std::ops::ControlFlow;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -12,19 +13,28 @@ use super::hash::{compute_third_party_hash, empty_third_party_hash};
 use crate::freshness::{FreshnessVerdict, compare};
 use crate::hash::{build_to_persist, context_unless_symlinked, is_symlinked_modules};
 use crate::manifest::{
-    Manifest, ManifestError, Origin, acquire_rebuild_lock, load_manifest, rebuild_if_stale,
-    write_manifest,
+    Manifest, ManifestError, Origin, acquire_rebuild_lock, load_manifest, manifest_path,
+    rebuild_if_stale, write_manifest,
 };
 use crate::parser::{
     BuildError, BuiltManifest, build_static_manifest, build_static_manifest_with_venv,
 };
+
+/// Whether [`refresh`] writes what it builds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Persist {
+    /// Rebuild under the rebuild lock (re-checked once held) and write.
+    Write,
+    /// Build in memory: no lock, no snapshot clock, no write.
+    InMemory,
+}
 
 /// What [`refresh`] served.
 #[derive(Debug)]
 pub enum Refresh {
     /// The manifest on disk matched the live state.
     Fresh(Manifest),
-    /// A new build, written when persisting.
+    /// A new build, written under [`Persist::Write`].
     Built(BuiltManifest),
     /// The build failed; `cached` is the manifest on disk, stale or not,
     /// when it loaded. Symlinked modules are an `Err` from [`refresh`]
@@ -43,21 +53,18 @@ pub struct Refreshed {
     pub unreadable: Option<ManifestError>,
 }
 
-/// Serve `project_root`'s manifest, rebuilding it when it's stale.
+/// Serve `project_root`'s manifest, rebuilding it only when it's stale.
 ///
 /// `venv` decides how a build treats third-party plugins: with one, their
 /// fragments are globbed and hashed afresh; without one (TAB, or a venv
 /// that doesn't resolve), the cached plugin entries, warnings and hash are
-/// carried forward. When `persist`, a stale manifest is rebuilt under the
-/// rebuild lock (re-checked once held) and written; otherwise it is built
-/// in memory with no lock, no clock and no write.
-pub fn refresh(project_root: &Path, venv: Option<&Path>, persist: bool) -> Result<Refreshed> {
+/// carried forward.
+pub fn refresh(project_root: &Path, venv: Option<&Path>, persist: Persist) -> Result<Refreshed> {
     let tools = project_root.join("tools");
-    let manifest_path = tools.join(".toolr-manifest.json");
+    let manifest_path = manifest_path(project_root);
     let mut unreadable = None;
-    let mut fresh = None;
-    // When persisting a stale manifest this runs twice, before and under the lock.
-    let check = || -> Result<Option<Option<Manifest>>> {
+    // Under `Persist::Write` a stale manifest is checked twice, before and under the lock.
+    let mut check = || -> Result<ControlFlow<Refresh, Option<Manifest>>> {
         let cached = match load_manifest(&manifest_path) {
             Ok(m) => Some(m),
             Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => None,
@@ -66,21 +73,19 @@ pub fn refresh(project_root: &Path, venv: Option<&Path>, persist: bool) -> Resul
                 None
             }
         };
-        if compare(cached.as_ref(), &tools, venv)? == FreshnessVerdict::Fresh {
-            fresh = cached;
-            return Ok(None);
-        }
-        Ok(Some(cached))
+        Ok(match (compare(cached.as_ref(), &tools, venv)?, cached) {
+            (FreshnessVerdict::Fresh, Some(fresh)) => ControlFlow::Break(Refresh::Fresh(fresh)),
+            (_, cached) => ControlFlow::Continue(cached),
+        })
     };
     let rebuild = |cached: Option<Manifest>| -> Result<Refresh> {
-        let built = if persist {
-            build_to_persist(&tools, || build(&tools, venv, cached.as_ref()))
-        } else {
-            build(&tools, venv, cached.as_ref())
+        let built = match persist {
+            Persist::Write => build_to_persist(&tools, || build(&tools, venv, cached.as_ref())),
+            Persist::InMemory => build(&tools, venv, cached.as_ref()),
         };
         match built {
             Ok(built) => {
-                if persist {
+                if persist == Persist::Write {
                     write_manifest(&manifest_path, &built.manifest)
                         .with_context(|| format!("writing {}", manifest_path.display()))?;
                 }
@@ -90,28 +95,25 @@ pub fn refresh(project_root: &Path, venv: Option<&Path>, persist: bool) -> Resul
             Err(error) => Ok(Refresh::Failed { error, cached }),
         }
     };
-    let rebuilt = if persist {
-        rebuild_if_stale(&manifest_path, check, rebuild)?
-    } else {
-        let mut check = check;
-        check()?.map(rebuild).transpose()?
+    let refresh = match persist {
+        Persist::Write => rebuild_if_stale(&manifest_path, check, rebuild)?,
+        Persist::InMemory => match check()? {
+            ControlFlow::Break(fresh) => fresh,
+            ControlFlow::Continue(cached) => rebuild(cached)?,
+        },
     };
-    // `compare` never calls a missing cache fresh, so one of the two is set.
-    let refresh = rebuilt
-        .or(fresh.map(Refresh::Fresh))
-        .context("manifest neither fresh nor rebuilt")?;
     Ok(Refreshed {
         refresh,
         unreadable,
     })
 }
 
-/// Rebuild `project_root`'s manifest unconditionally from the tree and the
-/// venv's plugin fragments, and write it. The lock only serialises this
-/// with concurrent auto-rebuilds.
+/// Always rebuild `project_root`'s manifest from the tree and the venv's
+/// plugin fragments, and write it. The lock only serialises this with
+/// concurrent auto-rebuilds.
 pub fn rebuild_manifest_full(project_root: &Path, venv: &Path) -> Result<BuiltManifest> {
     let tools = project_root.join("tools");
-    let manifest_path = tools.join(".toolr-manifest.json");
+    let manifest_path = manifest_path(project_root);
     let _lock = acquire_rebuild_lock(&manifest_path);
     let built = build_to_persist(&tools, || build(&tools, Some(venv), None)).map_err(|e| {
         context_unless_symlinked(e, "building static manifest (incl. third-party fragments)")
@@ -188,7 +190,7 @@ mod tests {
         std::fs::create_dir_all(venv.join("lib/python3.13/site-packages/foo-1.0.0.dist-info"))
             .unwrap();
         rebuild_manifest_full(project, &venv).unwrap();
-        let m = load_manifest(&tools.join(".toolr-manifest.json")).unwrap();
+        let m = load_manifest(&manifest_path(project)).unwrap();
         let group_names: Vec<_> = m.groups.iter().map(|g| g.name.as_str()).collect();
         assert!(group_names.contains(&"ci"));
         assert!(!m.third_party_hash.is_empty());
@@ -245,27 +247,66 @@ mod tests {
         );
     }
 
+    /// A worker that isn't blocked finishes well within this; too short a
+    /// wait can only make [`while_locked`] pass falsely, never fail falsely.
+    const BLOCKED_FOR: std::time::Duration = std::time::Duration::from_millis(200);
+
+    /// Run `work` on a thread while `project_root`'s rebuild lock is held,
+    /// assert it's still waiting after [`BLOCKED_FOR`], run `meanwhile`, then
+    /// release the lock and return what `work` returned.
+    fn while_locked<T: Send + 'static>(
+        project_root: &Path,
+        work: impl FnOnce() -> T + Send + 'static,
+        meanwhile: impl FnOnce(),
+    ) -> T {
+        let held = acquire_rebuild_lock(&manifest_path(project_root));
+        let worker = std::thread::spawn(work);
+        std::thread::sleep(BLOCKED_FOR);
+        assert!(!worker.is_finished(), "the worker didn't wait for the lock");
+        meanwhile();
+        drop(held);
+        worker.join().unwrap()
+    }
+
     /// An explicit rebuild serialises with auto-rebuilds on the repo's lock:
     /// it waits while another holder has it, then writes.
     #[test]
     fn full_rebuild_waits_for_the_rebuild_lock() {
-        let (_env, cache_home) = EnvGuard::temp_cache_home();
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
         let tmp = TempDir::new().unwrap();
         let project = tmp.path().to_path_buf();
         std::fs::create_dir(project.join("tools")).unwrap();
-        let manifest_path = project.join("tools/.toolr-manifest.json");
-        let held = acquire_rebuild_lock(&manifest_path);
-        let lock_file =
-            crate::manifest::lock_path_for_repo(&cache_home.path().join("toolr"), &project);
-        assert!(lock_file.is_file());
-        let venv = project.join("venv");
-        let worker = std::thread::spawn(move || rebuild_manifest_full(&project, &venv).map(|_| ()));
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        assert!(!worker.is_finished());
-        assert!(!manifest_path.exists());
-        drop(held);
-        worker.join().unwrap().unwrap();
-        assert!(manifest_path.is_file());
+        let path = manifest_path(&project);
+        let (root, venv) = (project.clone(), project.join("venv"));
+        let rebuilt = while_locked(
+            &project,
+            move || rebuild_manifest_full(&root, &venv).map(|_| ()),
+            || assert!(!path.exists()),
+        );
+        rebuilt.unwrap();
+        assert!(path.is_file());
+    }
+
+    /// A fresh tree whose manifest another process writes while this one
+    /// waits on the lock: a failed build hands back that manifest.
+    #[test]
+    fn refresh_serves_a_manifest_written_while_waiting_on_the_lock() {
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
+        let tmp = TempDir::new().unwrap();
+        let path = tools_tree(&tmp);
+        std::fs::write(tmp.path().join("tools/broken.py"), "def not closed(\n").unwrap();
+        let mut stale = manifest_with(vec![]);
+        stale.toolr_version = "0.0.0-stale".into();
+        let root = tmp.path().to_path_buf();
+        let served = while_locked(
+            tmp.path(),
+            move || refresh(&root, None, Persist::Write).unwrap().refresh,
+            || write_manifest(&path, &stale).unwrap(),
+        );
+        assert!(
+            matches!(&served, Refresh::Failed { cached: Some(c), .. } if *c == stale),
+            "{served:?}"
+        );
     }
 
     fn group(name: &str, parent: &str, origin: Origin) -> crate::manifest::Group {
@@ -316,22 +357,12 @@ mod tests {
         assert_eq!(fresh.third_party_hash, "cached-hash");
     }
 
-    /// `$refresh` destructured by `$pat`, or a panic naming what it was.
-    macro_rules! expect {
-        ($refresh:expr, $pat:pat => $out:expr) => {
-            match $refresh {
-                $pat => $out,
-                other => panic!("unexpected {other:?}"),
-            }
-        };
-    }
-
     /// A tools tree with one module, and its manifest path.
     fn tools_tree(tmp: &TempDir) -> std::path::PathBuf {
         let tools = tmp.path().join("tools");
         std::fs::create_dir(&tools).unwrap();
         std::fs::write(tools.join("demo.py"), "\"\"\"Demo.\"\"\"\n").unwrap();
-        tools.join(".toolr-manifest.json")
+        manifest_path(tmp.path())
     }
 
     /// Without a venv, a stale manifest's plugin state carries forward; a
@@ -341,14 +372,18 @@ mod tests {
         let (_env, cache_home) = EnvGuard::temp_cache_home();
         let tmp = TempDir::new().unwrap();
         let path = tools_tree(&tmp);
-        let served_by = refresh(tmp.path(), None, false).unwrap().refresh;
-        let first = expect!(served_by, Refresh::Built(first) => first);
+        let r = refresh(tmp.path(), None, Persist::InMemory)
+            .unwrap()
+            .refresh;
+        let Refresh::Built(first) = r else { panic!() };
         assert_eq!(first.manifest.third_party_hash, empty_third_party_hash());
         let mut cached = manifest_with(vec![group("image", "docker", Origin::ThirdParty)]);
         cached.toolr_version = "0.0.0-stale".into();
         write_manifest(&path, &cached).unwrap();
-        let served_by = refresh(tmp.path(), None, false).unwrap().refresh;
-        let built = expect!(served_by, Refresh::Built(built) => built);
+        let r = refresh(tmp.path(), None, Persist::InMemory)
+            .unwrap()
+            .refresh;
+        let Refresh::Built(built) = r else { panic!() };
         assert_eq!(built.manifest.third_party_hash, "cached-hash");
         assert_eq!(built.manifest.plugin_warnings, cached.plugin_warnings);
         assert_eq!(built.manifest.groups.len(), 1);
@@ -368,8 +403,10 @@ mod tests {
         cached.toolr_version = "0.0.0-stale".into();
         write_manifest(&path, &cached).unwrap();
         let venv = tmp.path().join("venv");
-        let served_by = refresh(tmp.path(), Some(&venv), false).unwrap().refresh;
-        let built = expect!(served_by, Refresh::Built(built) => built);
+        let r = refresh(tmp.path(), Some(&venv), Persist::InMemory)
+            .unwrap()
+            .refresh;
+        let Refresh::Built(built) = r else { panic!() };
         assert!(built.manifest.groups.is_empty());
         assert!(built.manifest.plugin_warnings.is_empty());
         assert_eq!(
@@ -386,15 +423,17 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = tools_tree(&tmp);
         let venv = tmp.path().join("venv");
-        let first = refresh(tmp.path(), Some(&venv), true).unwrap();
+        let first = refresh(tmp.path(), Some(&venv), Persist::Write).unwrap();
         assert!(matches!(first.refresh, Refresh::Built(_)));
         assert!(first.unreadable.is_none());
         let lock =
             crate::manifest::lock_path_for_repo(&cache_home.path().join("toolr"), tmp.path());
         assert!(lock.is_file());
         let written = load_manifest(&path).unwrap();
-        let served_by = refresh(tmp.path(), Some(&venv), true).unwrap().refresh;
-        let served = expect!(served_by, Refresh::Fresh(served) => served);
+        let r = refresh(tmp.path(), Some(&venv), Persist::Write)
+            .unwrap()
+            .refresh;
+        let Refresh::Fresh(served) = r else { panic!() };
         assert_eq!(served, written);
     }
 
@@ -404,7 +443,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = tools_tree(&tmp);
         std::fs::write(&path, "not json").unwrap();
-        let refreshed = refresh(tmp.path(), None, false).unwrap();
+        let refreshed = refresh(tmp.path(), None, Persist::InMemory).unwrap();
         assert!(matches!(refreshed.refresh, Refresh::Built(_)));
         assert!(
             matches!(refreshed.unreadable, Some(ManifestError::Json(_))),
@@ -422,11 +461,12 @@ mod tests {
         cached.toolr_version = "0.0.0-stale".into();
         write_manifest(&path, &cached).unwrap();
         std::fs::write(tmp.path().join("tools/broken.py"), "def not closed(\n").unwrap();
-        let served_by = refresh(tmp.path(), None, true).unwrap().refresh;
-        let (error, kept) =
-            expect!(served_by, Refresh::Failed { error, cached } => (error, cached));
-        assert!(error.to_string().starts_with("parsing "), "{error:#}");
-        assert_eq!(kept, Some(cached));
+        let r = refresh(tmp.path(), None, Persist::Write).unwrap().refresh;
+        assert!(
+            matches!(&r, Refresh::Failed { error, cached: Some(c) }
+                if *c == cached && error.to_string().starts_with("parsing ")),
+            "{r:?}"
+        );
         assert_eq!(load_manifest(&path).unwrap().toolr_version, "0.0.0-stale");
     }
 }

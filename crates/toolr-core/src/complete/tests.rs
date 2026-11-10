@@ -803,10 +803,8 @@ fn returns_fresh_manifest_when_no_cache_exists() {
     )]);
     let ResolvedManifest {
         manifest,
-        from_cache,
         project_root,
     } = resolve_manifest_at_tab(tmp.path()).unwrap();
-    assert!(!from_cache, "no cache file existed");
     assert_eq!(project_root, dunce::canonicalize(tmp.path()).unwrap());
     assert!(manifest.groups.iter().any(|g| g.name == "ci"));
     assert!(manifest.commands.iter().any(|c| c.name == "hello"));
@@ -829,7 +827,6 @@ fn returns_cached_manifest_when_hash_matches() {
     write_manifest(&manifest_path, &built).unwrap();
 
     let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
-    assert!(resolved.from_cache);
     assert_eq!(resolved.manifest, built);
 }
 
@@ -845,7 +842,6 @@ fn corrupt_manifest_at_tab_rebuilds_in_memory() {
     std::fs::write(&manifest_path, "{\"schema_ver").unwrap();
 
     let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
-    assert!(!resolved.from_cache);
     assert!(resolved.manifest.groups.iter().any(|g| g.name == "ci"));
     assert_eq!(
         std::fs::read_to_string(&manifest_path).unwrap(),
@@ -868,7 +864,6 @@ fn re_parses_when_cached_hash_is_stale() {
     write_manifest(&manifest_path, &stale).unwrap();
 
     let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
-    assert!(!resolved.from_cache, "stale hash should trigger reparse");
     assert_ne!(resolved.manifest.static_hash, "deliberately-stale");
 }
 
@@ -907,7 +902,6 @@ fn preserves_third_party_entries_from_cache_when_reparsing() {
     write_manifest(&manifest_path, &seeded).unwrap();
 
     let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
-    assert!(!resolved.from_cache);
     // Static-layer entry survives.
     assert!(resolved.manifest.commands.iter().any(|c| c.name == "hello"));
     // Third-party entry from the cache is preserved through the reparse.
@@ -949,7 +943,6 @@ fn failed_rebuild_serves_the_cache() {
         std::fs::write(tools.join("pyproject.toml"), pyproject).unwrap();
         write_manifest(&manifest_path, &built).unwrap();
         let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
-        assert!(resolved.from_cache, "{pyproject}");
         assert_eq!(resolved.manifest, built, "{pyproject}");
 
         std::fs::remove_file(&manifest_path).unwrap();
