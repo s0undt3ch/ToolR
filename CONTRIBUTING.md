@@ -188,7 +188,8 @@ the GitHub release, publish to PyPI. Where it failed decides what to do.
 - **After the push** (attest, GitHub release, or PyPI failed): the tag `vX.Y.Z` exists on the release
   commit. Re-running the job fails at the push step by design. Don't delete the tag. Check what exists
   (`gh release view vX.Y.Z`, the PyPI project page), then finish what is missing from the failed run's
-  artifacts. Download them as the workflow lays them out:
+  artifacts, within 7 days of the failed run (`retention-days: 7` on the notes, patch and tarballs); after
+  that, cut the next patch version instead. Download them as the workflow lays them out:
 
     ```sh
     run=<run-id>
@@ -214,8 +215,9 @@ the GitHub release, publish to PyPI. Where it failed decides what to do.
       without the PEP 740 attestations that `pypa/gh-action-pypi-publish` adds.
     - "Attest final release artifacts" needs the workflow's OIDC token and can't be redone by hand. A release
       recovered this way ships without those attestations; if they matter, cut the next patch version instead.
-- **`publish-packslip`** runs after a failed `publish-release` too, and re-signs with `--clobber`, so
-  re-running it once the release exists is safe.
+- **`publish-packslip`** runs after a failed `publish-release` too, and re-signs with `--clobber`. Once the
+  release exists, "Re-run failed jobs" is fine: `publish-release` fails at the push step by design and
+  `publish-packslip` still runs. Or re-run only the `publish-packslip` job.
 - If a half-published version can't be completed (for example PyPI rejected a file), leave it, and cut the
   next patch version instead of reusing the number: PyPI never accepts a deleted file name again.
 

@@ -399,7 +399,11 @@ fn render_option_signature(arg: &Arg, group_has_short: bool) -> String {
     };
     let long = arg.get_long().map(|l| format!("--{l}")).unwrap_or_default();
     let value = if arg.get_action().takes_values() {
-        format!(" <{}>", positional_placeholder(arg))
+        let name = arg.get_value_names().and_then(|n| n.first()).map_or_else(
+            || arg.get_id().as_str().replace('_', "-"),
+            |v| v.to_string(),
+        );
+        format!(" <{name}>")
     } else {
         String::new()
     };
@@ -511,7 +515,9 @@ fn push_two_column_block(out: &mut String, label: &str, width: usize, text: &str
 /// `<name>` or `[name]`, with a trailing `...` when it takes several values.
 fn positional_label(arg: &Arg) -> String {
     let p = positional_placeholder(arg);
-    let many = arg.get_num_args().is_some_and(|r| r.max_values() > 1);
+    let many = arg
+        .get_num_args()
+        .is_some_and(|r| r.max_values() > 1 && r.min_values() != r.max_values());
     let dots = if many { "..." } else { "" };
     if arg.is_required_set() {
         format!("<{p}>{dots}")
@@ -779,10 +785,11 @@ mod tests {
                     .required(true)
                     .help("many help"),
             )
-            .arg(Arg::new("rest").num_args(0..).help("rest help"));
+            .arg(Arg::new("rest").num_args(0..).help("rest help"))
+            .arg(Arg::new("pair").num_args(2).help("pair help"));
         let md = render_markdown(&cmd, "argy", HelpMode::Long, 100);
         assert!(
-            md.contains("argy <one> <PACKAGE>... [rest]..."),
+            md.contains("argy <one> <PACKAGE>... [rest]... [pair]"),
             "usage: {md}"
         );
         assert!(md.contains("  <PACKAGE>...  many help"), "arguments: {md}");
@@ -803,10 +810,12 @@ mod tests {
                     .value_name("FILE")
                     .help("Where to write."),
             )
+            .arg(Arg::new("max_age").long("max-age").help("Age."))
             .arg(Arg::new("force").long("force").action(ArgAction::SetTrue));
         let md = render_markdown(&cmd, "argy", HelpMode::Long, 100);
         assert!(md.contains("--name <name>"), "{md}");
         assert!(md.contains("--path <FILE>"), "{md}");
+        assert!(md.contains("--max-age <max-age>"), "{md}");
         assert!(!md.contains("--force <"), "{md}");
     }
 

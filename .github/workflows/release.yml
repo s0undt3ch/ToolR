@@ -500,7 +500,7 @@ jobs:
             tag_commit="$(awk -v ref="${tag}^{}" '$2 == ref { print $1 }' <<<"${tag_lines}")"
             tag_commit="${tag_commit:-$(awk -v ref="${tag}" '$2 == ref { print $1 }' <<<"${tag_lines}")}"
             if [[ "${tag_commit}" == "$(git rev-parse HEAD)" ]]; then
-              fail "origin already has v${RELEASE_VERSION} on this release commit, from an earlier attempt. Finish the publish-release steps after this one by hand: \"Attest final release artifacts\", \"Create GitHub release\" and \"Publish to PyPI (Trusted Publisher)\"."
+              fail "origin already has v${RELEASE_VERSION} on this release commit, from an earlier attempt. Finish the \"Create GitHub release\" and \"Publish to PyPI (Trusted Publisher)\" steps by hand, as described under \"Recovering a half-published release\" in CONTRIBUTING.md."
             fi
             fail "origin has v${RELEASE_VERSION} on another commit (${tag_commit}), not this release commit. Stop and find out where that tag came from."
           fi
