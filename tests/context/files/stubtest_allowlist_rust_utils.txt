@@ -1,0 +1,8 @@
+# TypedDicts the stub declares for the dicts `DocstringParser.parse` returns; the extension has no such classes.
+toolr\.utils\._rust_utils\.Example
+toolr\.utils\._rust_utils\.ParsedDocstring
+toolr\.utils\._rust_utils\.VersionChanged
+# The extension module defines no `__all__`.
+toolr\.utils\._rust_utils\.__all__
+# stubtest's @final / @disjoint_base demands for a pyo3 class; the marker needs typing_extensions on 3.11.
+toolr\.utils\._rust_utils\.DocstringParser

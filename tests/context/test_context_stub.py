@@ -1,5 +1,5 @@
 """mypy prefers `_context.pyi` over `_context.py`, so stub drift is invisible to runtime tests
-and stubtest checks it."""
+and stubtest checks it. `_rust_utils.pyi` stubs the compiled extension, which only stubtest can compare."""
 
 from __future__ import annotations
 
@@ -12,7 +12,12 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parents[2]
-ALLOWLIST = Path(__file__).parent / "files" / "stubtest_allowlist.txt"
+FILES = Path(__file__).parent / "files"
+# One allowlist per module: stubtest fails a module on an allowlist entry it never uses.
+ALLOWLISTS = {
+    "toolr._context": FILES / "stubtest_allowlist.txt",
+    "toolr.utils._rust_utils": FILES / "stubtest_allowlist_rust_utils.txt",
+}
 
 # CI builds the extension, so a missing one there is a failure, not a skip.
 pytestmark = pytest.mark.skipif(
@@ -21,10 +26,11 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_context_stub_matches_runtime() -> None:
+@pytest.mark.parametrize("module", list(ALLOWLISTS))
+def test_stub_matches_runtime(module: str) -> None:
     # cwd is the repo root so stubtest picks up `[tool.mypy]` (mypy_path) from pyproject.toml.
     result = subprocess.run(  # noqa: S603  # interpreter and allowlist path are test-controlled
-        [sys.executable, "-m", "mypy.stubtest", "toolr._context", "--allowlist", str(ALLOWLIST)],
+        [sys.executable, "-m", "mypy.stubtest", module, "--allowlist", str(ALLOWLISTS[module])],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
