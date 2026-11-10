@@ -20,10 +20,10 @@ fn help_styles() -> Styles {
 use toolr_core::manifest::{ArgumentKind, Group, Manifest};
 use toolr_core::text::strip_control_chars_per_line;
 
-const RESERVED_GROUPS: &[&str] = &["self", "project"];
-
+/// A user group may not take the name of any built-in command, hidden ones included: clap
+/// panics on a duplicated subcommand name.
 fn user_group_collides(name: &str) -> bool {
-    RESERVED_GROUPS.contains(&name)
+    builtin_names().iter().any(|b| b == name)
 }
 
 /// Index the manifest's groups by their parent's `full_path()`. Top-level
