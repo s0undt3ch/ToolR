@@ -137,4 +137,27 @@ mod tests {
             ]
         );
     }
+
+    /// An explicit rebuild serialises with auto-rebuilds on the repo's lock:
+    /// it waits while another holder has it, then writes.
+    #[test]
+    fn full_rebuild_waits_for_the_rebuild_lock() {
+        let (_env, cache_home) = EnvGuard::temp_cache_home();
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path().to_path_buf();
+        std::fs::create_dir(project.join("tools")).unwrap();
+        let manifest_path = project.join("tools/.toolr-manifest.json");
+        let held = acquire_rebuild_lock(&manifest_path);
+        let lock_file =
+            crate::manifest::lock_path_for_repo(&cache_home.path().join("toolr"), &project);
+        assert!(lock_file.is_file());
+        let venv = project.join("venv");
+        let worker = std::thread::spawn(move || rebuild_manifest_full(&project, &venv).map(|_| ()));
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(!worker.is_finished());
+        assert!(!manifest_path.exists());
+        drop(held);
+        worker.join().unwrap().unwrap();
+        assert!(manifest_path.is_file());
+    }
 }

@@ -731,3 +731,142 @@ fn completion_serves_the_cache_when_the_pyproject_is_broken() {
         assert!(commands.contains("migrate"), "{broken}\n{commands}");
     }
 }
+
+const BROKEN_PY: &str = "def not closed(\n";
+
+const PARSE_ERROR: &str = "parsing <root>/tools/broken.py: Expected an identifier, but found a \
+     keyword `not` that cannot be used here at byte range 4..7: Expected an identifier, but found \
+     a keyword `not` that cannot be used here";
+
+const FALLBACK_WARNING: &str = "toolr: warning: tools manifest is stale and a fresh build failed; \
+     falling back to cached manifest\n";
+
+const REBUILD_POINTER: &str =
+    "toolr: warning: run `toolr project manifest rebuild` to see the full error\n";
+
+/// Exit code and stderr of `toolr <args>`, with `root` replaced by `<root>`.
+fn run_in(mut cmd: assert_cmd::Command, root: &std::path::Path, args: &[&str]) -> (i32, String) {
+    let output = cmd.current_dir(root).args(args).output().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let root = root.canonicalize().unwrap().display().to_string();
+    (
+        output.status.code().unwrap(),
+        stderr.replace(&root, "<root>"),
+    )
+}
+
+/// A `common::Project` with or without its in-tree venv.
+fn project_with_venv(with_venv: bool) -> common::Project {
+    let p = common::Project::new();
+    if !with_venv {
+        fs::remove_dir_all(p.tools().join(".venv")).unwrap();
+    }
+    p
+}
+
+/// A trusted fresh clone has no manifest to fall back to, so a failed
+/// first build is fatal and writes nothing, venv or not.
+#[test]
+fn fresh_clone_build_error_is_fatal() {
+    for (with_venv, expected) in [
+        (false, format!("toolr: {PARSE_ERROR}\n")),
+        (
+            true,
+            format!("toolr: static build error: parsing <root>/tools/broken.py: {PARSE_ERROR}\n"),
+        ),
+    ] {
+        let p = project_with_venv(with_venv);
+        p.write_tool("broken.py", BROKEN_PY);
+        let (code, stderr) = run_in(p.toolr(&[]), &p.root, &["--help"]);
+        assert_eq!(code, 2, "venv={with_venv}: {stderr}");
+        assert_eq!(stderr, expected, "venv={with_venv}");
+        assert!(!p.tools().join(".toolr-manifest.json").exists());
+    }
+}
+
+/// An untrusted fresh clone builds in memory, so a failed build warns and
+/// falls back to toolr's own commands.
+#[test]
+fn untrusted_fresh_clone_build_error_warns() {
+    let p = project_with_venv(true);
+    p.write_tool("broken.py", BROKEN_PY);
+    let env = common::TrustEnv::new();
+    let (code, stderr) = run_in(env.toolr(&p.root), &p.root, &["--help"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        stderr,
+        format!(
+            "{FALLBACK_WARNING}toolr: warning: cause: static build error: parsing \
+             <root>/tools/broken.py\ntoolr: warning: no cached manifest available — `toolr \
+             <user-cmd>` will likely fail until you fix the build error\n{REBUILD_POINTER}"
+        )
+    );
+    assert!(!p.tools().join(".toolr-manifest.json").exists());
+}
+
+/// A stale manifest whose rebuild fails warns with the first line of the
+/// cause and serves the cache, venv or not.
+#[test]
+fn stale_manifest_build_error_cause_line() {
+    for with_venv in [false, true] {
+        let p = project_with_venv(with_venv);
+        p.toolr(&["--help"]).assert().success();
+        p.write_tool("broken.py", BROKEN_PY);
+        let (code, stderr) = run_in(p.toolr(&[]), &p.root, &["--help"]);
+        assert_eq!(code, 0, "venv={with_venv}: {stderr}");
+        assert_eq!(
+            stderr,
+            format!(
+                "{FALLBACK_WARNING}toolr: warning: cause: static build error: parsing \
+                 <root>/tools/broken.py\n{REBUILD_POINTER}"
+            ),
+            "venv={with_venv}"
+        );
+    }
+}
+
+/// `project manifest rebuild` prints the whole error chain.
+#[test]
+fn explicit_rebuild_build_error_message() {
+    for with_venv in [false, true] {
+        let p = project_with_venv(with_venv);
+        p.write_tool("broken.py", BROKEN_PY);
+        let (code, stderr) = run_in(p.toolr(&[]), &p.root, &["project", "manifest", "rebuild"]);
+        assert_eq!(code, 2, "venv={with_venv}: {stderr}");
+        assert_eq!(
+            stderr,
+            format!(
+                "toolr: building static manifest (incl. third-party fragments): static build \
+                 error: parsing <root>/tools/broken.py: {PARSE_ERROR}\n"
+            ),
+            "venv={with_venv}"
+        );
+    }
+}
+
+/// The manifest a fresh clone's first run writes is fresh for the next run,
+/// which leaves it untouched, and carries the venv's third-party hash.
+#[test]
+fn first_run_manifest_is_fresh_for_the_next_run() {
+    let p = common::Project::new();
+    p.add_plugin(
+        "demo",
+        r#"{"toolr_schema_version": 2, "package": "demo", "groups": [], "commands": []}"#,
+    );
+    let path = p.tools().join(".toolr-manifest.json");
+    p.toolr(&["--help"]).assert().success();
+    let first = fs::read(&path).unwrap();
+    let first_mtime = fs::metadata(&path).unwrap().modified().unwrap();
+    p.toolr(&["--help"]).assert().success();
+    assert_eq!(fs::read(&path).unwrap(), first);
+    assert_eq!(
+        fs::metadata(&path).unwrap().modified().unwrap(),
+        first_mtime
+    );
+    let manifest: serde_json::Value = serde_json::from_slice(&first).unwrap();
+    let venv = p.tools().join(".venv").canonicalize().unwrap();
+    assert_eq!(
+        manifest["third_party_hash"],
+        toolr_core::manifest_build::compute_third_party_hash(&venv).unwrap()
+    );
+}
