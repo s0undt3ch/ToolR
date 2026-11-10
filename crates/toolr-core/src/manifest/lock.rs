@@ -15,6 +15,7 @@ pub const LOCKS_DIR: &str = "locks";
 /// filesystem, ...); the caller then rebuilds unlocked, as it did before.
 #[derive(Debug)]
 pub struct ManifestRebuildLock {
+    // Held so the advisory lock lives until drop.
     _file: Option<File>,
 }
 

@@ -94,7 +94,7 @@ pub fn ensure_venv_ready(
 pub const SYNC_LATER_HINT: &str =
     "the tools venv isn't synced; run `toolr project venv sync` when you're ready.";
 
-/// Result of [`sync_after_trust`].
+/// Result of syncing after trust ([`sync_after_trust_on_tty`]).
 #[derive(Debug)]
 pub enum SyncAfterTrust {
     /// The venv was already fresh.
@@ -136,6 +136,7 @@ pub(crate) fn confirm_sync(input: &mut dyn BufRead, out: &mut dyn Write) -> bool
 /// Sync a trusted repository's venv if it needs it, asking first. The sync
 /// prompt follows the uv install prompt it replaces: `TOOLR_AUTO_INSTALL_UV=1`
 /// answers it, and `never_prompt` or no `prompt_io` (no terminal) declines it.
+/// Test-only: exists so tests can inject the prompt IO that the tty variant reads from stdin.
 #[cfg(test)]
 fn sync_after_trust(
     trusted: &Trusted,
@@ -147,7 +148,7 @@ fn sync_after_trust(
     finish_sync(trusted, quiet, choice)
 }
 
-/// [`sync_after_trust`] prompting on the terminal, when stdin is one.
+/// Sync after trust, prompting on the terminal when stdin is one.
 /// `quiet` both silences uv and stops the prompt.
 pub fn sync_after_trust_on_tty(trusted: &Trusted, quiet: bool) -> Result<SyncAfterTrust> {
     // The stdin lock isn't reentrant, and finding uv may lock stdin again.

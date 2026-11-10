@@ -424,20 +424,10 @@ mod tests {
         assert_eq!(super::first_positional(&argv(&["--timeout-secs"])), None);
     }
 
-    /// Every value-taking root option in the CLI, aliases included, is in
-    /// `ROOT_VALUE_OPTIONS`, and nothing else is.
+    /// Every `BUILTINS` name is a subcommand of the root command.
     #[test]
     fn builtins_are_root_subcommands() {
-        let command = crate::cli::build_command(&Manifest {
-            schema_version: SCHEMA_VERSION,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
-            groups: Vec::new(),
-            commands: Vec::new(),
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
-        });
+        let command = crate::cli::build_command(&manifest_with(Vec::new()));
         for name in super::BUILTINS {
             assert!(
                 command.get_subcommands().any(|c| c.get_name() == *name),
@@ -446,18 +436,11 @@ mod tests {
         }
     }
 
+    /// Every value-taking root option in the CLI, aliases included, is in
+    /// `ROOT_VALUE_OPTIONS`, and nothing else is.
     #[test]
     fn root_value_options_match_the_cli() {
-        let command = crate::cli::build_command(&Manifest {
-            schema_version: SCHEMA_VERSION,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
-            groups: Vec::new(),
-            commands: Vec::new(),
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
-        });
+        let command = crate::cli::build_command(&manifest_with(Vec::new()));
         let mut from_cli: Vec<String> = command
             .get_arguments()
             .filter(|a| !a.is_positional() && a.get_action().takes_values())
