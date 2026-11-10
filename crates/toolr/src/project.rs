@@ -228,13 +228,15 @@ pub(crate) fn run_project_init(
     // The user is authoring this repo; trust it before the sync below, which
     // would otherwise refuse to run. The files are already written, so a
     // failure only warns and leaves the sync's own check to prompt or refuse.
-    if let Some(store) = trust_store
-        && let Err(e) = store.trust(cwd)
-    {
-        eprintln!(
-            "toolr: warning: could not record trust for {}: {e:#}",
-            shown(cwd)
-        );
+    if let Some(store) = trust_store {
+        match store.trust(cwd) {
+            Ok(record) if !quiet => eprintln!("toolr: trusted {}", shown(&record.repo_path)),
+            Ok(_) => {}
+            Err(e) => eprintln!(
+                "toolr: warning: could not record trust for {}: {e:#}",
+                shown(cwd)
+            ),
+        }
     }
 
     if no_sync {

@@ -151,3 +151,33 @@ fn trusted_prune_drops_missing_paths() {
         .success()
         .stdout("");
 }
+
+#[test]
+fn init_says_it_trusted_the_repository() {
+    let env = TrustEnv::new();
+    let repo = TempDir::new().unwrap();
+    let root = fs::canonicalize(repo.path()).unwrap().display().to_string();
+    env.toolr(repo.path())
+        .args(["project", "init", "--yes", "--no-sync"])
+        .assert()
+        .success()
+        .stderr(contains(format!("toolr: trusted {root}")));
+    env.toolr(repo.path())
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout(format!("{root}\n"));
+}
+
+#[test]
+fn quiet_init_trusts_without_saying_so() {
+    let env = TrustEnv::new();
+    let repo = TempDir::new().unwrap();
+    let out = env
+        .toolr(repo.path())
+        .args(["project", "init", "--yes", "--no-sync", "--quiet"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("trusted"));
+}
