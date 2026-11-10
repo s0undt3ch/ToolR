@@ -1,6 +1,6 @@
 # Plan: test infrastructure honesty
 
-1. `complete_shells.rs`: `extra_bash_candidates`, `version_key`, cached `bashes()`, warning. Check with
+1. `complete_shells.rs`: `extra_bash_candidates`, `version_key`, cached `bashes()`, failing `a_bash_4_4_or_newer_was_found`. Check with
    `cargo test -p toolr --test complete_shells` on stock `PATH`.
 2. `complete_protocol_lockstep.rs`: two text-reading tests.
 3. `tests/tools/precommit/workflows/`: gate tests; add `ruamel.yaml` to `dev` and `pre-commit`, `uv lock`.

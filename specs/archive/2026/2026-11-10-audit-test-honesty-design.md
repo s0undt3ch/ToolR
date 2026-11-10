@@ -5,12 +5,14 @@ Audit findings C-02, C-07, P-04, P-07, P-09. A green local run should mean the t
 ## Per finding
 
 - **C-02, bash probe.** `bashes()` in `crates/toolr/tests/complete_shells.rs` also probes the newest
-  `conda-bash` install under `$MISE_DATA_DIR` (default `~/.local/share/mise`) and the colon-separated
-  `$TOOLR_TEST_BASH`. Newest only: bash 5.1.16 fails `bash_value_with_space_is_one_quoted_word`
-  (5.2.37 and 5.3 pass), so scanning every install would turn an old leftover into a red run.
-  With no bash 4.4+ found, CI still fails (existing assert); elsewhere the tests still pass but
-  `bashes()` now prints a `WARNING:` naming the two fixes. It is computed once (`OnceLock`), so the
-  warning appears once, not 73 times. A dev laptop without the optional tool is not turned red.
+  `conda-bash` install under `$MISE_DATA_DIR` (default `~/.local/share/mise`) and the PATH-style list
+  `$TOOLR_TEST_BASH`. Newest only, because every test loops over `bashes()` and each extra install
+  multiplies the run time; `TOOLR_TEST_BASH` targets an older one. The result is cached (`OnceLock`).
+  With no bash 4.4+, CI fails in `find_bashes`; elsewhere the new test `a_bash_4_4_or_newer_was_found`
+  fails unless `TOOLR_SKIP_BASH_COMPLETION_TESTS=1` waives it, so a vacuous pass is opt-in. An early
+  stderr warning was dropped: libtest hides it for passing tests. The bash 5.1 failure first seen here
+  was a harness artefact (the drivers left the parent's `PWD` set); a later commit sets `PWD` for the
+  drivers and 5.1 passes.
 - **C-02, `conda:bash` pin: not done.** CI runs `mise install --locked`, and `mise.lock` needs a
   `conda:bash` entry per platform, which needs network access that this change could not get. Left for
   the maintainer: add `"conda:bash" = "5.3"` to `mise.toml` and run `mise lock`. CI keeps using
@@ -36,5 +38,5 @@ Audit findings C-02, C-07, P-04, P-07, P-09. A green local run should mean the t
 
 ## Non-goals
 
-No old-shell CI, no change to the bash 4.4 floor, no fix for bash 5.1 behaviour, no restructuring of
+No old-shell CI, no change to the bash 4.4 floor, no restructuring of
 `complete_shells.rs`, no per-test bash process pooling for the attestation tests.

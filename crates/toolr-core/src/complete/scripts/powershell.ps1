@@ -240,7 +240,7 @@ if ($PSVersionTable.PSVersion -lt [version]'7.0') {
                     }
                     New-Object System.Management.Automation.CompletionResult (_toolr_quote $full $open), $full, 'ParameterValue', $tip
                 }
-            } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {   # COMPLETE_PATHS, COMPLETE_DIRS
+            } elseif ($reply.Code -eq 10 -or $reply.Code -eq 11) {   # COMPLETE_PATHS, COMPLETE_DIRECTORIES (pinned by complete_protocol_lockstep.rs; keep this line shape)
                 # Left unescaped, the partial stays a wildcard pattern, as in PowerShell's own completion.
                 $fileWord = _toolr_quote $value.Substring($prefix.Length) "'"
                 $fsHome = (Get-PSProvider FileSystem).Home

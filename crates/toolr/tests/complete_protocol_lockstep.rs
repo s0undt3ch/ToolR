@@ -72,8 +72,10 @@ fn scripts_handle_the_exit_codes_dispatch_emits() {
     for (file, ok) in checks {
         assert!(
             ok,
-            "{file} does not handle the exit codes; dispatch.rs has COMPLETE_PATHS={paths}, \
-             COMPLETE_DIRECTORIES={dirs}"
+            "{file} does not handle the exit codes dispatch.rs emits (COMPLETE_PATHS={paths}, \
+             COMPLETE_DIRECTORIES={dirs}). The match is formatting-sensitive; expected lines: \
+             bash `{paths} | {dirs})`, zsh `{paths}) ...` and `{dirs}) ...`, fish `case {paths}` \
+             and `case {dirs}`, powershell `$reply.Code -eq {paths} -or $reply.Code -eq {dirs}`"
         );
     }
 }
@@ -90,5 +92,8 @@ fn match_env_var_name_matches_the_scripts_that_set_it() {
         .0;
     assert!(script("zsh.zsh").contains(&format!("{name}=shell toolr __complete")));
     assert!(script("fish.fish").contains(&format!("set -lx {name} shell")));
-    assert!(!script("bash.sh").contains(name), "bash filters itself");
+    assert!(
+        !script("bash.sh").contains(name),
+        "bash.sh must not set {name} because it filters in-script"
+    );
 }

@@ -392,10 +392,13 @@ fn version_key(dir: &std::path::Path) -> Vec<u32> {
         .unwrap_or_default()
 }
 
+const TEST_BASH_VAR: &str = "TOOLR_TEST_BASH";
+const SKIP_BASH_VAR: &str = "TOOLR_SKIP_BASH_COMPLETION_TESTS";
+
 /// `bin/bash` of the newest mise-installed `conda:bash`, which is where a contributor on a stock macOS
 /// checkout gets a bash 4.4+ from (`mise use -g conda:bash@5.3`), plus the PATH-style list in `TOOLR_TEST_BASH`.
 fn extra_bash_candidates() -> Vec<String> {
-    let mut found: Vec<String> = std::env::var_os("TOOLR_TEST_BASH")
+    let mut found: Vec<String> = std::env::var_os(TEST_BASH_VAR)
         .map(|v| {
             std::env::split_paths(&v)
                 .filter(|p| !p.as_os_str().is_empty())
@@ -411,7 +414,8 @@ fn extra_bash_candidates() -> Vec<String> {
     if let Some(dir) = data.map(|d| d.join("installs/conda-bash"))
         && let Ok(entries) = std::fs::read_dir(dir)
     {
-        // Newest only: the suite is run against the newest mise bash, not every old one.
+        // Newest only: every test loops over `bashes()`, so each extra install multiplies the
+        // suite's run time. `TOOLR_TEST_BASH` targets a specific older one.
         let mut versions: Vec<_> = entries
             .flatten()
             .map(|e| e.path())
@@ -430,6 +434,7 @@ fn extra_bash_candidates() -> Vec<String> {
 /// Every distinct bash 4.4+ on this machine. The script refuses older ones. With none, CI fails
 /// the tests; elsewhere they pass vacuously, which `a_bash_4_4_or_newer_was_found` turns red.
 fn bashes() -> Vec<String> {
+    // Probe once: ~70 tests call this and each probe spawns bash.
     static FOUND: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     FOUND.get_or_init(find_bashes).clone()
 }
@@ -476,8 +481,7 @@ fn find_bashes() -> Vec<String> {
 #[test]
 fn a_bash_4_4_or_newer_was_found() {
     assert!(
-        !bashes().is_empty()
-            || std::env::var_os("TOOLR_SKIP_BASH_COMPLETION_TESTS").is_some_and(|v| v == "1"),
+        !bashes().is_empty() || std::env::var_os(SKIP_BASH_VAR).is_some_and(|v| v == "1"),
         "no bash 4.4+ found, so every bash completion test was a no-op. Install one \
          (`mise use -g conda:bash@5.3`, or `brew install bash`), point TOOLR_TEST_BASH at one, or \
          set TOOLR_SKIP_BASH_COMPLETION_TESTS=1 to accept skipping them (local runs only; CI \

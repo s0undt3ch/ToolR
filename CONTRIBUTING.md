@@ -70,7 +70,7 @@ The Rust integration tests spawn the built `toolr` binary via `assert_cmd`. Don'
 Python-level subprocess tests unless the behaviour can't be exercised in Rust.
 
 The completion tests drive real shells. bash 4.4+, zsh and fish come from your system package manager.
-The bash tests also find a mise-installed `conda:bash` (`mise use -g conda:bash@5.3`) or any bash listed in
+The bash tests also find the newest mise-installed `conda:bash` (`mise use -g conda:bash@5.3`) or any bash listed in
 `TOOLR_TEST_BASH` (a PATH-style list). With none, `a_bash_4_4_or_newer_was_found` fails;
 set `TOOLR_SKIP_BASH_COMPLETION_TESTS=1` to accept skipping them (local runs only; CI always fails without a bash).
 The PowerShell completion tests are `#[ignore]`d by default, because few dev machines have `pwsh`.
