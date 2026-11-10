@@ -1,3 +1,6 @@
+# mise.lock is lockfile format 4, which older mise refuses to read.
+min_version = "2026.11.1"
+
 [tools]
 # All CPython versions the CI test matrix runs. The first entry is
 # the default (used for the project venv); the rest exist so
