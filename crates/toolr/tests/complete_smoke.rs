@@ -179,23 +179,10 @@ def shiny(ctx):
 fn completes_builtins_when_no_tools_dir_anywhere() {
     let tmp = TempDir::new().unwrap();
     let cwd = tmp.path().to_path_buf();
-    // Only an ancestor `tools/pyproject.toml` makes a project, so a bare
-    // host `tools/` (the Windows runners' `C:\tools\`) is harmless. Skip
-    // when the tempdir sits inside a real project.
-    let mut walker = cwd.canonicalize().unwrap_or_else(|_| cwd.clone());
-    let ancestor_has_tools = loop {
-        if walker.join("tools").join("pyproject.toml").is_file() {
-            break true;
-        }
-        if !walker.pop() {
-            break false;
-        }
-    };
-    if ancestor_has_tools {
+    if let Some(host) = common::ancestor_with_tools_dir(&cwd) {
         eprintln!(
-            "skipping: an ancestor of {} has a tools/pyproject.toml; \
-             this host violates the test precondition.",
-            cwd.display(),
+            "skipping: {} has a tools/ dir; this host violates the test precondition.",
+            host.display()
         );
         return;
     }

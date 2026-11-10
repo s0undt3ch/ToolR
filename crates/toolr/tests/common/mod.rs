@@ -441,3 +441,18 @@ fn wait_or_kill(mut child: std::process::Child) -> std::process::Output {
         stderr: stderr.join().unwrap(),
     }
 }
+
+/// The nearest ancestor of `dir` (itself included) with a `tools/` directory, if any.
+/// Discovery stops at one, so a host `tools/` such as the Windows runners'
+/// `C:\tools` breaks tests that need "no project anywhere".
+pub fn ancestor_with_tools_dir(dir: &Path) -> Option<PathBuf> {
+    let mut walker = dunce::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    loop {
+        if walker.join("tools").is_dir() {
+            return Some(walker);
+        }
+        if !walker.pop() {
+            return None;
+        }
+    }
+}

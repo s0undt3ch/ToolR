@@ -161,20 +161,12 @@ fn trust_in_bare_tools_repo_says_pyproject_is_missing() {
 #[test]
 fn unknown_command_outside_a_project_says_no_project_was_found() {
     let tmp = TempDir::new().unwrap();
-    // GitHub's Windows runners ship `C:\tools`, which turns "no project" into
-    // "bare tools/"; skip when the host breaks the precondition.
-    let mut walker = dunce::canonicalize(tmp.path()).unwrap_or_else(|_| tmp.path().to_path_buf());
-    loop {
-        if walker.join("tools").is_dir() {
-            eprintln!(
-                "skipping: an ancestor of {} has a tools/ dir; this host violates the test precondition.",
-                tmp.path().display()
-            );
-            return;
-        }
-        if !walker.pop() {
-            break;
-        }
+    if let Some(host) = common::ancestor_with_tools_dir(tmp.path()) {
+        eprintln!(
+            "skipping: {} has a tools/ dir; this host violates the test precondition.",
+            host.display()
+        );
+        return;
     }
     let cache = TempDir::new().unwrap();
 
@@ -216,6 +208,9 @@ fn nested_builtin_typo_outside_a_project_gets_no_project_hint() {
 #[test]
 fn quiet_top_level_unknown_command_outside_a_project_still_gets_the_hint() {
     let tmp = TempDir::new().unwrap();
+    if common::ancestor_with_tools_dir(tmp.path()).is_some() {
+        return;
+    }
     let cache = TempDir::new().unwrap();
 
     toolr_in(tmp.path(), &cache)
