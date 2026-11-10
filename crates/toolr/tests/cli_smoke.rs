@@ -24,6 +24,32 @@ fn version_flag_works_with_no_project() {
 }
 
 #[test]
+fn root_help_lists_the_version_flag() {
+    let tmp = TempDir::new().unwrap();
+    let out = common::toolr()
+        .current_dir(tmp.path())
+        .arg("--help")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("-V, --version"),
+        "root help missing -V, --version:\n{stdout}"
+    );
+}
+
+#[test]
+fn short_version_flag_prints_the_version() {
+    let tmp = TempDir::new().unwrap();
+    common::toolr()
+        .current_dir(tmp.path())
+        .arg("-V")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
 fn help_lists_groups_from_manifest() {
     let json = r#"{
         "schema_version": 2,
