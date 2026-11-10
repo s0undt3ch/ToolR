@@ -114,10 +114,7 @@ fn run() -> anyhow::Result<ExitCode> {
 /// project at all. A bare `tools/` already gets its own warning.
 fn no_project_hint(cwd: &std::path::Path) -> Option<String> {
     match discover_project_root(cwd) {
-        Err(DiscoveryError::NotFound(start)) => Some(format!(
-            "toolr: no toolr project found above {} (looked for tools/pyproject.toml)",
-            toolr_core::trust::shown(&start)
-        )),
+        Err(e @ DiscoveryError::NotFound(_)) => Some(format!("toolr: {e}")),
         _ => None,
     }
 }
