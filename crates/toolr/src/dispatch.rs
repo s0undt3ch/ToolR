@@ -81,11 +81,7 @@ fn help_mode_from_argv(argv: &[String]) -> HelpMode {
 ///
 /// We resolve the target command by walking the raw argv token-by-token
 /// through the clap Command tree, stopping at the deepest named subcommand.
-pub fn dispatch_help_from_argv(
-    argv: &[String],
-    _manifest: &Manifest,
-    root: &mut clap::Command,
-) -> anyhow::Result<()> {
+pub fn dispatch_help_from_argv(argv: &[String], root: &mut clap::Command) -> anyhow::Result<()> {
     let mode = help_mode_from_argv(argv);
 
     let mut cur_cmd = &*root;
@@ -261,10 +257,6 @@ pub fn dispatch(
         current = next_matches;
     }
     let cmd_matches = current;
-    if path.len() < 2 {
-        // toolr <group> with no command → print group help
-        return Ok(ExitCode::SUCCESS);
-    }
     let cmd = find_command_for_path(manifest, &path)
         .ok_or_else(|| anyhow::anyhow!("unknown command: {}", path.join(" ")))?;
 
@@ -907,11 +899,9 @@ mod tests {
     //! In-process unit tests for the pure helpers in this module.
     //!
     //! Integration tests under `crates/toolr/tests/` spawn the `toolr`
-    //! binary via `assert_cmd`, so they exercise the dispatcher's
-    //! observable behaviour but don't contribute to tarpaulin's
-    //! line-coverage of this file (tarpaulin doesn't aggregate
-    //! subprocess profraws by default). These unit tests run inside the
-    //! test process so the coverage counter actually moves.
+    //! binary, so their coverage of this file only counts when llvm-cov
+    //! merges the subprocess profiles. These unit tests run inside the
+    //! test process.
     use super::*;
 
     fn cand(value: &str) -> Candidate {
