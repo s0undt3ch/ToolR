@@ -24,6 +24,32 @@ fn version_flag_works_with_no_project() {
 }
 
 #[test]
+fn root_help_lists_the_version_flag() {
+    let tmp = TempDir::new().unwrap();
+    let out = common::toolr()
+        .current_dir(tmp.path())
+        .arg("--help")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("-V, --version"),
+        "root help missing -V, --version:\n{stdout}"
+    );
+}
+
+#[test]
+fn short_version_flag_prints_the_version() {
+    let tmp = TempDir::new().unwrap();
+    common::toolr()
+        .current_dir(tmp.path())
+        .arg("-V")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
 fn help_lists_groups_from_manifest() {
     let json = r#"{
         "schema_version": 2,
@@ -625,27 +651,6 @@ fn project_venv_sync_help_lists_force_and_quiet() {
     assert!(
         stdout.contains("--quiet"),
         "missing --quiet in help:\n{stdout}"
-    );
-}
-
-/// `toolr project venv sync` (removed) prints the migration hint and exits non-zero.
-#[test]
-fn project_deps_removed_prints_migration_hint() {
-    let tmp = TempDir::new().unwrap();
-    let output = common::toolr()
-        .current_dir(tmp.path())
-        .args(["project", "deps", "sync"])
-        .output()
-        .expect("running toolr should succeed");
-    assert!(!output.status.success(), "expected non-zero exit");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("`project deps` was removed in 0.22"),
-        "stderr missing removal notice:\n{stderr}"
-    );
-    assert!(
-        stderr.contains("toolr project venv"),
-        "stderr missing pointer to new path:\n{stderr}"
     );
 }
 

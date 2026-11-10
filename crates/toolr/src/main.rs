@@ -91,7 +91,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 // passing an empty argv so clap can build a valid root-level
                 // ArgMatches. Dispatch's resolve_help_target will then walk
                 // the argv to find the right level.
-                dispatch::dispatch_help_from_argv(&argv, &manifest, &mut command)?;
+                dispatch::dispatch_help_from_argv(&argv, &mut command)?;
                 return Ok(ExitCode::SUCCESS);
             }
             // Genuine error: let clap print it and exit.

@@ -661,7 +661,6 @@ jobs:
           gh workflow run install-smoke.yml --repo "$GITHUB_REPOSITORY" --ref main -f version="$VERSION"
 
   set-pipeline-exit-status:
-    environment: release
     permissions: {}
     # This job gives the workflow a single check representing the whole run.
     # It must list EVERY job in `needs`: a job skipped because an upstream

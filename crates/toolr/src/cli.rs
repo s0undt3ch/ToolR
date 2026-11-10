@@ -148,6 +148,7 @@ fn build_root_command() -> Command {
         // help output (and tests asserting on it) would differ by platform.
         .bin_name("toolr")
         .version(env!("CARGO_PKG_VERSION"))
+        .disable_version_flag(true)
         .about("In-project CLI tooling support")
         .after_help(ROOT_AFTER_HELP)
         .styles(help_styles())
@@ -232,6 +233,15 @@ fn build_root_command() -> Command {
                 .action(ArgAction::SetTrue)
                 .global(true)
                 .help("Print help"),
+        )
+        // Declared explicitly: clap adds its own `-V` only when it builds the
+        // command, after the help renderer has listed the arguments.
+        .arg(
+            Arg::new("version")
+                .short('V')
+                .long("version")
+                .action(ArgAction::Version)
+                .help("Print version"),
         )
 }
 
@@ -442,17 +452,6 @@ fn build_project_subcommand() -> Command {
         .about("Operations on the current repo's tools/ directory")
         .subcommand_required(true)
         .subcommand(build_project_init_subcommand())
-        .subcommand(
-            // Migration shim: parses `toolr project deps <anything>` so we
-            // can emit a tailored "removed in 0.22; use `project venv`"
-            // error from `dispatch_project`. Hidden from `--help`. Drop
-            // this subcommand after 0.23 once users have migrated.
-            Command::new("deps")
-                .disable_help_flag(true)
-                .hide(true)
-                .allow_external_subcommands(true)
-                .about("(removed in 0.22) use `toolr project venv` instead"),
-        )
         .subcommand(build_project_venv_subcommand())
         .subcommand(
             Command::new("manifest")

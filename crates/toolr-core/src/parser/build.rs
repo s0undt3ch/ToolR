@@ -313,10 +313,6 @@ fn build_commands_inner(
     // Validate that every command points at a registered group. Catches
     // typos in `@command(group="ci.helm-diff-pre-comment")` and missing
     // `command_group("…")` declarations.
-    let registered: HashSet<&str> = all_groups
-        .iter()
-        .map(|g| g.name.as_str())
-        .collect::<HashSet<_>>();
     let registered_paths: HashSet<String> = all_groups.iter().map(|g| g.full_path()).collect();
     let mut unknown = Vec::new();
     for cmd in &all_commands {
@@ -338,7 +334,6 @@ fn build_commands_inner(
             });
         }
     }
-    drop(registered);
     if !unknown.is_empty() {
         return Err(BuildError::UnknownGroupRefs(unknown));
     }

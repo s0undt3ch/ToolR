@@ -473,7 +473,7 @@ runs:
         VENV_PATH: ${{ steps.venv-path.outputs.path }}
         SYNC_ARGS: ${{ inputs.sync-args }}
       # The action drives uv directly rather than going through
-      # `toolr project deps sync` so it can scope the install to
+      # `toolr project venv sync` so it can scope the install to
       # what CI actually needs:
       #
       # - `--no-default-groups` skips the workspace's `dev` /
@@ -518,6 +518,6 @@ runs:
           --frozen \
           $SYNC_ARGS
         # `.toolr-sync-stamp` is the freshness marker toolr writes
-        # when its own `project deps sync` succeeds. Mirror it here
+        # when its own `project venv sync` succeeds. Mirror it here
         # so a subsequent `toolr <cmd>` skips the redundant sync.
         : > "$VENV_PATH/.toolr-sync-stamp"

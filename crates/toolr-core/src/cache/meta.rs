@@ -88,7 +88,7 @@ impl Meta {
     }
 
     /// Path of the sidecar file inside `cache_dir`.
-    pub fn path_in(cache_dir: &Path) -> PathBuf {
+    pub(crate) fn path_in(cache_dir: &Path) -> PathBuf {
         cache_dir.join(FILE_NAME)
     }
 

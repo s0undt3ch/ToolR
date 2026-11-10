@@ -15,13 +15,15 @@ pub const LOCKS_DIR: &str = "locks";
 /// filesystem, ...); the caller then rebuilds unlocked, as it did before.
 #[derive(Debug)]
 pub struct ManifestRebuildLock {
-    file: Option<File>,
+    // Held so the advisory lock lives until drop.
+    _file: Option<File>,
 }
 
 impl ManifestRebuildLock {
     /// Whether the advisory lock is actually held.
-    pub fn is_held(&self) -> bool {
-        self.file.is_some()
+    #[cfg(test)]
+    fn is_held(&self) -> bool {
+        self._file.is_some()
     }
 }
 
@@ -81,7 +83,7 @@ fn lock_at(lock_path: Option<&Path>) -> ManifestRebuildLock {
             .ok()?;
         file.lock().ok().map(|()| file)
     });
-    ManifestRebuildLock { file }
+    ManifestRebuildLock { _file: file }
 }
 
 /// Rebuild only if `check` still reports the manifest stale.

@@ -1,19 +1,13 @@
 //! Integration tests for `toolr project venv add`. These don't run real
 //! uv — they cover the clap surface and the help/usage paths.
 
-use assert_cmd::Command;
-
 #[path = "common/mod.rs"]
 mod common;
 use common::VenvFixture;
 
-fn cargo_bin() -> Command {
-    common::toolr()
-}
-
 #[test]
 fn add_help_lists_package_positional() {
-    let output = cargo_bin()
+    let output = common::toolr()
         .args(["project", "venv", "add", "--help"])
         .output()
         .unwrap();
@@ -28,7 +22,7 @@ fn add_help_lists_package_positional() {
 
 #[test]
 fn add_requires_at_least_one_package() {
-    let output = cargo_bin()
+    let output = common::toolr()
         .args(["project", "venv", "add"])
         .output()
         .unwrap();

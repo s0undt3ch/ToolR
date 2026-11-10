@@ -83,7 +83,7 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
 }
 
 /// Top-level subcommands toolr itself provides.
-const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
+const BUILTINS: &[&str] = &["__complete", "project", "self"];
 
 /// Decide whether the pre-clap bootstrap should skip building a missing
 /// manifest for this argv.
@@ -95,7 +95,7 @@ const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
 /// happens when the user explicitly dispatches a command.
 ///
 /// We still skip the built-ins that manage their own state
-/// (`__complete`, `project`, `self`, `init`) and `--version` (prints
+/// (`__complete`, `project`, `self`) and `--version` (prints
 /// binary metadata only). `--help` and bare `toolr` take the static
 /// build so help renders the user's command tree.
 pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
@@ -368,7 +368,7 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 mod tests {
     use super::{
         carry_forward_cached_entries, ensure_manifest_fresh, ensure_manifest_present_or_bootstrap,
-        is_tab_completion, should_skip_auto_rebuild,
+        is_tab_completion, names_user_command, should_skip_auto_rebuild,
     };
     use toolr_core::freshness::FreshnessVerdict;
     use toolr_core::manifest::{
@@ -424,20 +424,23 @@ mod tests {
         assert_eq!(super::first_positional(&argv(&["--timeout-secs"])), None);
     }
 
+    /// Every `BUILTINS` name is a subcommand of the root command.
+    #[test]
+    fn builtins_are_root_subcommands() {
+        let command = crate::cli::build_command(&manifest_with(Vec::new()));
+        for name in super::BUILTINS {
+            assert!(
+                command.get_subcommands().any(|c| c.get_name() == *name),
+                "BUILTINS lists `{name}`, which isn't a root subcommand"
+            );
+        }
+    }
+
     /// Every value-taking root option in the CLI, aliases included, is in
     /// `ROOT_VALUE_OPTIONS`, and nothing else is.
     #[test]
     fn root_value_options_match_the_cli() {
-        let command = crate::cli::build_command(&Manifest {
-            schema_version: SCHEMA_VERSION,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
-            groups: Vec::new(),
-            commands: Vec::new(),
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
-        });
+        let command = crate::cli::build_command(&manifest_with(Vec::new()));
         let mut from_cli: Vec<String> = command
             .get_arguments()
             .filter(|a| !a.is_positional() && a.get_action().takes_values())
@@ -568,8 +571,9 @@ mod tests {
     }
 
     #[test]
-    fn skips_for_init() {
-        assert!(should_skip_auto_rebuild(&args(&["init"])));
+    fn fires_for_a_user_group_named_init() {
+        assert!(!should_skip_auto_rebuild(&args(&["init", "hello"])));
+        assert!(names_user_command(&args(&["init", "hello"])));
     }
 
     #[test]

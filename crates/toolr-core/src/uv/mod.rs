@@ -196,7 +196,7 @@ impl UvError {
 /// Where toolr keeps its private state (binaries, etc).
 /// Defaults to `$XDG_DATA_HOME/toolr`, falling back to
 /// `~/.local/share/toolr` if `XDG_DATA_HOME` is unset, empty or relative.
-pub fn toolr_data_dir() -> Option<PathBuf> {
+pub(crate) fn toolr_data_dir() -> Option<PathBuf> {
     crate::env::xdg_dir_env("XDG_DATA_HOME")
         .map(|v| v.join("toolr"))
         .or_else(|| dirs::data_dir().map(|d| d.join("toolr")))
@@ -204,7 +204,7 @@ pub fn toolr_data_dir() -> Option<PathBuf> {
 
 /// Where toolr keeps state that must survive a cache wipe, such as repository
 /// trust. Defaults to `$XDG_STATE_HOME/toolr` unless `XDG_STATE_HOME` is unset,
-/// empty or relative, then the platform state directory, then [`toolr_data_dir`]
+/// empty or relative, then the platform state directory, then `toolr_data_dir`
 /// (`dirs::state_dir()` is `None` on macOS and Windows).
 pub fn toolr_state_dir() -> Option<PathBuf> {
     crate::env::xdg_dir_env("XDG_STATE_HOME")

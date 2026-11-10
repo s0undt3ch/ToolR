@@ -3,20 +3,15 @@
 
 use std::fs;
 
-use assert_cmd::Command;
 use tempfile::TempDir;
 
 #[path = "common/mod.rs"]
 mod common;
 use common::VenvFixture;
 
-fn cargo_bin() -> Command {
-    common::toolr()
-}
-
 #[test]
 fn remove_help_lists_package_positional() {
-    let output = cargo_bin()
+    let output = common::toolr()
         .args(["project", "venv", "remove", "--help"])
         .output()
         .unwrap();
@@ -31,7 +26,7 @@ fn remove_help_lists_package_positional() {
 
 #[test]
 fn remove_requires_at_least_one_package() {
-    let output = cargo_bin()
+    let output = common::toolr()
         .args(["project", "venv", "remove"])
         .output()
         .unwrap();
@@ -63,7 +58,7 @@ venv-location = "cache"
     )
     .unwrap();
 
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "remove", "nonexistent-package"])
         .output()

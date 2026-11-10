@@ -30,7 +30,6 @@ full = [
     "dep:dirs",
     "dep:glob",
     "dep:humansize",
-    "dep:log",
     "dep:reqwest",
     "dep:flate2",
     "dep:tar",
@@ -59,7 +58,6 @@ toml = { workspace = true, optional = true }
 dirs = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
 humansize = { workspace = true, optional = true }
-log = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }
 tar = { workspace = true, optional = true }

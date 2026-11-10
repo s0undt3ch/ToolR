@@ -4,21 +4,16 @@
 
 use std::fs;
 
-use assert_cmd::Command;
 use tempfile::TempDir;
 
 #[path = "common/mod.rs"]
 mod common;
 use common::VenvFixture;
 
-fn cargo_bin() -> Command {
-    common::toolr()
-}
-
 /// `--help` lists the new -U / -P flags.
 #[test]
 fn lock_help_lists_upgrade_flags() {
-    let output = cargo_bin()
+    let output = common::toolr()
         .args(["project", "venv", "lock", "--help"])
         .output()
         .unwrap();
@@ -39,7 +34,7 @@ fn lock_help_lists_upgrade_flags() {
 #[test]
 fn lock_errors_when_not_in_a_toolr_repo() {
     let tmp = TempDir::new().unwrap();
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "lock"])
         .output()
@@ -76,7 +71,7 @@ venv-location = "cache"
     )
     .unwrap();
 
-    let output = cargo_bin()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "lock", "-P", "nonexistent-package"])
         .output()

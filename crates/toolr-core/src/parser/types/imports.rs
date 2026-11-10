@@ -229,7 +229,7 @@ impl SourcesImports {
     /// `toolr.sources.DispatchCommand` (e.g. `DispatchCommand` itself
     /// or any `as <alias>` rebinding). Used to resolve string
     /// forward-ref annotations without reparsing.
-    pub fn is_dispatch_command_name(&self, name: &str) -> bool {
+    pub(crate) fn is_dispatch_command_name(&self, name: &str) -> bool {
         self.direct_aliases.contains(name)
     }
 }
