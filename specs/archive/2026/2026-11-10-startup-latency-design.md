@@ -51,7 +51,8 @@ its consoles on every run.
 ### U-04: `ctx.prompt` without a terminal
 
 `Context._prompt` catches `EOFError` and exits through the normal error path with a message naming
-the prompt and saying input is not available, exit status 1, no traceback.
+the prompt and saying input is not available, exit status 1, no traceback. Only the real-stdin path is handled: a stream passed in by
+`make_context(prompt_input=...)` keeps raising `EOFError`, which its documented contract and tests rely on.
 
 ## Non-goals
 
