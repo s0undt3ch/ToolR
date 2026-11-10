@@ -338,6 +338,7 @@ mod tests {
     /// missing one gets the empty-venv hash.
     #[test]
     fn refresh_without_a_venv_keeps_the_cached_plugin_state() {
+        let (_env, cache_home) = EnvGuard::temp_cache_home();
         let tmp = TempDir::new().unwrap();
         let path = tools_tree(&tmp);
         let served_by = refresh(tmp.path(), None, false).unwrap().refresh;
@@ -352,6 +353,10 @@ mod tests {
         assert_eq!(built.manifest.plugin_warnings, cached.plugin_warnings);
         assert_eq!(built.manifest.groups.len(), 1);
         assert_eq!(load_manifest(&path).unwrap().toolr_version, "0.0.0-stale");
+        // Not persisting takes no lock either.
+        let lock =
+            crate::manifest::lock_path_for_repo(&cache_home.path().join("toolr"), tmp.path());
+        assert!(!lock.exists());
     }
 
     /// With a venv, the plugin state comes from the venv, not the cache.

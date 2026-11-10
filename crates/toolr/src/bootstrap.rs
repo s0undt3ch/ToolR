@@ -162,7 +162,9 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 #[cfg(test)]
 mod tests {
     use super::{ensure_manifest, is_tab_completion, names_user_command, should_skip_auto_rebuild};
-    use toolr_core::manifest::{Group, Manifest, SCHEMA_VERSION};
+    use toolr_core::freshness::{FreshnessVerdict, compare};
+    use toolr_core::manifest::{Group, Manifest, SCHEMA_VERSION, load_manifest};
+    use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
 
     fn manifest_with(groups: Vec<Group>) -> Manifest {
         Manifest {
@@ -397,14 +399,54 @@ mod tests {
         assert_one_lock_in(home.path(), tmp.path());
     }
 
-    /// An untrusted repository gets the rebuilt manifest in memory only.
+    /// An untrusted repository gets the rebuilt manifest in memory only, and
+    /// takes no rebuild lock.
     #[test]
     fn ensure_manifest_does_not_persist_when_untrusted() {
+        let (home, _guard) = temp_cache_home();
         let tmp = tools_repo();
 
         let fresh = ensure_manifest(tmp.path(), &[], false).unwrap();
 
         assert!(fresh.is_some());
         assert!(!tmp.path().join("tools/.toolr-manifest.json").exists());
+        let lock = toolr_core::manifest::lock_path_for_repo(&home.path().join("toolr"), tmp.path());
+        assert!(!lock.exists());
+    }
+
+    /// A trusted fresh clone with a venv: the build that serves the run is
+    /// the one written, stamped with the venv's plugin hash, so the file is
+    /// already fresh. A write that skips the hash (the old bootstrap step)
+    /// leaves it stale and forces a second build.
+    #[test]
+    fn ensure_manifest_writes_a_fresh_clone_once_with_the_plugin_hash() {
+        let (_home, _guard) = temp_cache_home();
+        let tmp = tools_repo();
+        let tools = tmp.path().join("tools");
+        std::fs::write(
+            tools.join("pyproject.toml"),
+            "[project]\nname = \"t\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
+        )
+        .unwrap();
+        let plugin = tools.join(".venv/lib/python3.13/site-packages/demo");
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(tools.join(".venv/pyvenv.cfg"), "home = /usr\n").unwrap();
+        std::fs::write(
+            plugin.join("toolr-manifest.json"),
+            r#"{"toolr_schema_version": 2, "package": "demo", "groups": [], "commands": []}"#,
+        )
+        .unwrap();
+
+        let served = ensure_manifest(tmp.path(), &[], true).unwrap().unwrap();
+
+        let root = toolr_core::discovery::discover_project_root(tmp.path()).unwrap();
+        let venv = toolr_core::venv::resolve_venv_path(&root).unwrap().venv_dir;
+        let written = load_manifest(&root.join("tools/.toolr-manifest.json")).unwrap();
+        assert_eq!(served.manifest, written);
+        let plugin_hash = compute_third_party_hash(&venv).unwrap();
+        assert_ne!(plugin_hash, empty_third_party_hash());
+        assert_eq!(written.third_party_hash, plugin_hash);
+        let verdict = compare(Some(&written), &root.join("tools"), Some(&venv)).unwrap();
+        assert_eq!(verdict, FreshnessVerdict::Fresh);
     }
 }

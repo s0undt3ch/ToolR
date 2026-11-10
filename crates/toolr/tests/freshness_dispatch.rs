@@ -842,8 +842,8 @@ fn explicit_rebuild_build_error_message() {
     }
 }
 
-/// The manifest a fresh clone's first run writes is fresh for the next run,
-/// which leaves it untouched, and carries the venv's third-party hash.
+/// A fresh clone's first run writes a manifest stamped with the venv's
+/// plugin hash, so the next run finds it fresh and leaves it untouched.
 #[test]
 fn first_run_manifest_is_fresh_for_the_next_run() {
     let p = common::Project::new();
@@ -861,6 +861,17 @@ fn first_run_manifest_is_fresh_for_the_next_run() {
         fs::metadata(&path).unwrap().modified().unwrap(),
         first_mtime
     );
+    let manifest: serde_json::Value = serde_json::from_slice(&first).unwrap();
+    // The hash covers the venv path as toolr resolves it: canonical, and on
+    // Windows without the verbatim prefix `canonicalize` adds.
+    let canonical = p.tools().join(".venv").canonicalize().unwrap();
+    let venv = std::path::PathBuf::from(canonical.to_string_lossy().trim_start_matches(r"\\?\"));
+    let plugin_hash = toolr_core::manifest_build::compute_third_party_hash(&venv).unwrap();
+    assert_ne!(
+        plugin_hash,
+        toolr_core::manifest_build::empty_third_party_hash()
+    );
+    assert_eq!(manifest["third_party_hash"], plugin_hash);
 }
 
 /// Any build error reads the same on a fresh clone with or without a venv.
