@@ -105,7 +105,8 @@ See [`Context`][toolr.Context] in the API reference for every method
 and attribute. Highlights:
 
 - `ctx.print(...)` / `ctx.info(...)` / `ctx.warn(...)` / `ctx.error(...)` / `ctx.debug(...)`
-- `ctx.run(*cmd, ...)` — subprocess execution
+- `ctx.run(*cmd, ...)` — subprocess execution; takes `cwd=`, `env=`, `input=`, `text=`,
+  `encoding=`, the timeout options and `interactive=`, and rejects any other keyword
 - `ctx.which(name)` — find an executable on `PATH` (wraps `shutil.which`)
 - `ctx.prompt(prompt)` — read a line from stdin
 - `ctx.exit(code, message=None)` — early exit with a message

@@ -10,15 +10,12 @@ Every name exposed by `import toolr` is documented below. The list is generated 
 from toolr import (
     ArgSection,
     Context,
-    DispatchCommand,
-    MANIFEST_SCHEMA_VERSION,
     __version__,
     arg,
     arg_section,
     command,
     command_group,
     current_context,
-    report_on_import_errors,
 )
 ```
 
@@ -265,7 +262,11 @@ def run(
     timeout_secs: float | None = None,
     no_output_timeout_secs: float | None = None,
     interactive: bool = False,
-    **kwargs: Any,
+    cwd: str | pathlib.Path | None = None,
+    env: dict[str, str] | None = None,
+    input: str | bytes | None = None,  # noqa: A002
+    text: bool | None = None,
+    encoding: str | None = "utf-8",
 ) -> CommandResult[str] | CommandResult[bytes]:
 ```
 
@@ -287,7 +288,11 @@ Args:
         child sees a TTY on all three streams (needed for `$EDITOR`, `sops`, prompts,
         etc). Incompatible with `capture_output`, `stream_output`,
         `no_output_timeout_secs`, and `input` — all of those require piping.
-    kwargs: Additional keyword arguments passed to the internal runner.
+    cwd: Directory to run the command in. Defaults to the current directory.
+    env: Environment variables to pass to the command.
+    input: Data to write to the command's stdin.
+    text: Whether to return output as text (the default) or bytes.
+    encoding: Encoding for text output. Defaults to `"utf-8"`.
 
 Returns:
     CommandResult instance.
@@ -337,105 +342,6 @@ This is a wrapper around [shutil.which][shutil.which].
 See [shutil.which][shutil.which] for more details.
 
 ```
-
-### `DispatchCommand`
-
-**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.sources._dispatch`
-
-```python
-class DispatchCommand
-```
-
-```text
-The payload a dispatcher command receives for a grafted external command.
-
-Declare it as a keyword-only parameter on a toolr command
-(``*, dispatched: DispatchCommand``). toolr finds the parameter by its
-annotation, so any name works. That command then becomes the dispatcher
-for every command an external source (a ``[tool.toolr.argparse.<block>]``
-table in ``tools/pyproject.toml``) attaches under it. On each invocation
-toolr fills in:
-
-- ``command``: the invoked command's name (its source file's stem).
-- ``command_args``: the parsed arguments, keyed by argument name.
-- ``schema``: the command's scanned argument schema.
-
-``argv`` rebuilds ``command_args`` into an argument vector for the
-upstream tool.
-
-```
-
-#### `command`
-
-```python
-command: str
-```
-
-#### `command_args`
-
-```python
-command_args: dict[str, Any]
-```
-
-#### `schema`
-
-```python
-schema: CommandSchema
-```
-
-#### `argv`
-
-```python
-@property
-def argv(self) -> list[str]:
-```
-
-```text
-Argparse-shaped argv reconstructed from `command_args` per `schema`.
-
-For each argument in `schema.arguments` that appears in
-`command_args`, emit the appropriate token(s):
-
-- `positional`, no `nargs` → bare value.
-- `positional`, `nargs == "?"` → bare value when present (an
-  absent zero-or-one value never appears in `command_args`).
-- `positional`, `nargs` an int or `"+"`/`"*"` (fixed arity, or
-  a variadic positional — argparse `nargs="+"`/`"*"`/
-  `REMAINDER`, or native `*args`) → each element as a bare
-  value, in order.
-- `flag` → `--name` when truthy, omitted when falsy.
-- `optional`, no `nargs` → `--name value`, omitted when
-  value == default.
-- `optional`, `nargs` an int (fixed arity) → `--name` once,
-  followed by all N values.
-- `repeated`, `nargs in ("+", "*")` → `--name value1 value2 ...`
-  in one occurrence (argparse `nargs="+"`/`"*"` on a
-  keyword-style arg). An empty list omits the flag entirely:
-  `command_args` can't distinguish "flag typed with no values"
-  from "flag never typed", so an empty list is treated as the
-  latter for both arities.
-- `repeated`, `nargs is None` (`action="append"`) →
-  `--name value` once per element.
-
-`"positional"` is reserved for args with no CLI flag at all —
-`VarPositional`/`OptionalPositional` sources always map there,
-never to `"repeated"` — so this method never has to guess
-whether a `"repeated"` arg has a flag to emit.
-
-Keys in `command_args` not found in `schema.arguments` raise
-ValueError so typos surface loudly.
-
-```
-
-### `MANIFEST_SCHEMA_VERSION`
-
-**Kind:** constant &nbsp;·&nbsp; **Source:** `toolr._decorators`
-
-```python
-MANIFEST_SCHEMA_VERSION: int = 2
-```
-
-_No docstring on the source definition._
 
 ### `__version__`
 
@@ -676,20 +582,5 @@ Raises `NoCurrentContextError` if called from code that isn't running
 inside a toolr command — for example, interactively, from a script
 invoked outside toolr's dispatch, or during test collection — or from a
 thread or async task that wasn't given the context explicitly.
-
-```
-
-### `report_on_import_errors`
-
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.utils._imports`
-
-```python
-@contextmanager
-def report_on_import_errors(message: str) -> Iterator[None]:
-```
-
-```text
-
-Catch import errors and raise a CommandDependencyNotFoundError.
 
 ```

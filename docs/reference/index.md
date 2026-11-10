@@ -11,4 +11,5 @@ under [`crates/toolr-py/python/toolr/`](https://github.com/s0undt3ch/ToolR/tree/
 - [`command`](command.md) — string-path decorator for attaching
   commands to a group without holding its binding.
 - [`arg`](arg.md) — annotation for advanced argument options.
+- [`arg_section`](arg_section.md) — a named `--help` heading for grouping arguments.
 - [`testing`](testing.md) — helpers for testing your commands.

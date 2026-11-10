@@ -52,7 +52,7 @@ def test_run_with_options(ctx):
         capture_output=True,
         timeout_secs=10,
         no_output_timeout_secs=5,
-        custom_kwarg="value",
+        input="value",
     )
     run_impl.assert_called_once_with(
         ("ls", "-l"),
@@ -61,7 +61,7 @@ def test_run_with_options(ctx):
         timeout_secs=10,
         no_output_timeout_secs=5,
         interactive=False,
-        custom_kwarg="value",
+        input="value",
     )
 
 

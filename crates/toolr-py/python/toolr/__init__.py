@@ -1,8 +1,8 @@
 """ToolR Python package.
 
 Importable surface: :class:`toolr.Context`, :func:`toolr.command_group`,
-:func:`toolr.command`, :func:`toolr.arg`,
-:func:`toolr.report_on_import_errors`.
+:func:`toolr.command`, :func:`toolr.arg`, :func:`toolr.arg_section`,
+:func:`toolr.current_context`. ``DispatchCommand`` lives in :mod:`toolr.sources`.
 
 Implementation modules (not part of the user-facing API):
 
@@ -15,11 +15,8 @@ from __future__ import annotations
 
 from toolr._context import Context
 from toolr._context import current_context
-from toolr._decorators import MANIFEST_SCHEMA_VERSION
 from toolr._decorators import command
 from toolr._decorators import command_group
-from toolr.sources import DispatchCommand
-from toolr.utils._imports import report_on_import_errors
 from toolr.utils._signature import ArgSection
 from toolr.utils._signature import arg
 from toolr.utils._signature import arg_section
@@ -28,17 +25,14 @@ from toolr.utils._signature import arg_section
 __version__: str
 
 __all__ = [
-    "MANIFEST_SCHEMA_VERSION",
     "ArgSection",
     "Context",
-    "DispatchCommand",
     "__version__",
     "arg",
     "arg_section",
     "command",
     "command_group",
     "current_context",
-    "report_on_import_errors",
 ]
 
 
