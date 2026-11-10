@@ -55,7 +55,7 @@ fn write_table(out: &mut dyn Write, caches: &[CachedVenv]) -> Result<()> {
     let rows: Vec<(String, String, String)> = caches
         .iter()
         .map(|c| {
-            let repo = c.meta.repo_path.display().to_string();
+            let repo = toolr_core::trust::shown(&c.meta.repo_path);
             let size = format_size(c.size_bytes, BINARY);
             let last = human_ago(now, c.meta.last_used_at);
             w_repo = w_repo.max(repo.len());

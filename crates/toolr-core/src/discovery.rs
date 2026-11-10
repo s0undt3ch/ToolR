@@ -6,19 +6,23 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::trust::shown;
+
 #[derive(Debug, Error)]
 pub enum DiscoveryError {
-    #[error("I/O error resolving {0}: {1}")]
+    #[error("I/O error resolving {}: {}", shown(.0), .1)]
     Io(PathBuf, #[source] std::io::Error),
     #[error(
-        "no toolr project found above {0}: no `tools/pyproject.toml`. \
-         Run `toolr project init` to create one"
+        "no toolr project found above {}: no `tools/pyproject.toml`. \
+         Run `toolr project init` to create one",
+        shown(.0)
     )]
     NotFound(PathBuf),
     #[error(
-        "no toolr project found above {start}: {} has no `pyproject.toml`. \
+        "no toolr project found above {}: {} has no `pyproject.toml`. \
          toolr needs `tools/pyproject.toml`; run `toolr project init` there to create it",
-        tools.display()
+        shown(start),
+        shown(tools)
     )]
     MissingPyproject { start: PathBuf, tools: PathBuf },
 }
@@ -82,6 +86,25 @@ mod tests {
     fn mkdir(path: &Path) -> PathBuf {
         std::fs::create_dir_all(path).unwrap();
         path.to_path_buf()
+    }
+
+    #[test]
+    fn errors_escape_control_characters_in_paths() {
+        let hostile = PathBuf::from("a\x1b[31mb");
+        let tools = PathBuf::from("c\x1b]0;x\x07d");
+        let errors = [
+            DiscoveryError::NotFound(hostile.clone()),
+            DiscoveryError::MissingPyproject {
+                start: hostile.clone(),
+                tools,
+            },
+            DiscoveryError::Io(hostile, std::io::Error::other("boom")),
+        ];
+        for e in errors {
+            let msg = e.to_string();
+            assert!(!msg.chars().any(char::is_control), "{msg:?}");
+            assert!(msg.contains("\\u{1b}"), "{msg}");
+        }
     }
 
     fn find(start: &Path, ceiling: &Path) -> Result<PathBuf, DiscoveryError> {

@@ -101,3 +101,24 @@ fn empty_xdg_cache_home_uses_the_platform_default() {
     );
     assert!(!cwd.path().join("toolr").exists());
 }
+
+#[test]
+fn list_escapes_control_characters_in_repo_paths() {
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr");
+    fs::create_dir_all(&cache_root).unwrap();
+    // The JSON escape decodes to a real ESC byte in the stored path.
+    write_entry(&cache_root, "key-a", r"/repo/\u001b[31mred", 4096);
+
+    let output = common::toolr()
+        .env("XDG_CACHE_HOME", tmp.path())
+        .env_remove("HOME")
+        .env("TOOLR_NO_CACHE_HINT", "1")
+        .args(["self", "cache", "list"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains('\u{1b}'), "stdout:\n{stdout}");
+    assert!(stdout.contains(r"/repo/\u{1b}[31mred"), "stdout:\n{stdout}");
+}

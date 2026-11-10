@@ -336,14 +336,14 @@ pub fn dispatch(
     if !python.is_file() {
         anyhow::bail!(
             "Python interpreter not found at {}.\nRun `toolr project venv sync` to materialise the tools venv.",
-            python.display()
+            shown(&python)
         );
     }
 
     warn_on_toolr_py_mismatch(&resolved.venv_dir);
 
     let mut child = spawn_runner(&python, tempfile.path(), &repo_root)
-        .with_context(|| format!("spawning Python runner at {}", python.display()))?;
+        .with_context(|| format!("spawning Python runner at {}", shown(&python)))?;
     let status = wait_with_signals(&mut child)?;
 
     Ok(ExitCode::from(process_exit_code(status)))
@@ -494,7 +494,7 @@ fn run_self_build_manifest(matches: &clap::ArgMatches, quiet: bool) -> anyhow::R
             "toolr build-manifest: wrote {} group(s) / {} command(s) to {}",
             fragment.groups.len(),
             fragment.commands.len(),
-            output_path.display(),
+            shown(&output_path),
         );
     }
     Ok(ExitCode::SUCCESS)
@@ -533,7 +533,7 @@ fn check_against_disk(path: &std::path::Path, serialised: &str) -> anyhow::Resul
         let diff = similar::TextDiff::from_lines(existing.as_str(), serialised);
         eprintln!(
             "toolr build-manifest: {} is out of date - regenerate with `toolr self build-manifest <pkg>`",
-            path.display(),
+            shown(path),
         );
         eprintln!("{}", diff.unified_diff().header("on-disk", "regenerated"));
         Ok(ExitCode::from(2))
