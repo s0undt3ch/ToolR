@@ -35,11 +35,11 @@ from typing import Annotated
 from typing import Any
 from typing import TypeVar
 from typing import Union
+from typing import cast
 from typing import get_args
 from typing import get_origin
 
 import msgspec
-from packaging.version import Version
 
 from toolr._context import Context
 from toolr._context import _current_ctx
@@ -396,8 +396,12 @@ def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
             return ipaddress.IPv4Address(obj)
         if target_type is ipaddress.IPv6Address:
             return ipaddress.IPv6Address(obj)
-        if target_type is Version:
-            return Version(obj)
+        # Match by name so the runner need not import `packaging` at start-up.
+        if (
+            getattr(target_type, "__module__", None) == "packaging.version"
+            and target_type.__name__ == "Version"
+        ):
+            return cast("Any", target_type)(obj)
     msg = f"toolr runner: don't know how to coerce {type(obj).__name__} → {target_type!r}"
     raise TypeError(msg)
 

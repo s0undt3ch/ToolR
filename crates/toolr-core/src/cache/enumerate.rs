@@ -17,7 +17,8 @@ pub struct CachedVenv {
     /// Parsed sidecar.
     pub meta: Meta,
     /// Disk usage of the entire `cache_dir` subtree (`venv/` plus
-    /// `meta.json` plus anything else inside).
+    /// `meta.json` plus anything else inside). Always 0 from
+    /// `enumerate_caches_unsized`; do not read it there.
     pub size_bytes: u64,
     /// True iff `meta.repo_path` does not exist as a directory anymore.
     /// Populated in classification; enumeration defaults to `false`.
@@ -48,6 +49,16 @@ pub fn dir_size_bytes(dir: &Path) -> Result<u64> {
 /// are silently skipped — they predate the sidecar format or were
 /// partially created.
 pub fn enumerate_caches(cache_root: &Path) -> Result<Vec<CachedVenv>> {
+    scan_caches(cache_root, true)
+}
+
+/// Like [`enumerate_caches`] but leaves `size_bytes` at 0, skipping the
+/// per-entry directory walk. For callers that only need `meta.json`.
+pub fn enumerate_caches_unsized(cache_root: &Path) -> Result<Vec<CachedVenv>> {
+    scan_caches(cache_root, false)
+}
+
+fn scan_caches(cache_root: &Path, with_sizes: bool) -> Result<Vec<CachedVenv>> {
     let mut out = Vec::new();
     let read = match std::fs::read_dir(cache_root) {
         Ok(r) => r,
@@ -71,7 +82,11 @@ pub fn enumerate_caches(cache_root: &Path) -> Result<Vec<CachedVenv>> {
             Ok(m) => m,
             Err(_) => continue, // malformed sidecars are ignored
         };
-        let size_bytes = dir_size_bytes(&cache_dir)?;
+        let size_bytes = if with_sizes {
+            dir_size_bytes(&cache_dir)?
+        } else {
+            0
+        };
         let repo_key = entry.file_name().to_string_lossy().into_owned();
         out.push(CachedVenv {
             repo_key,

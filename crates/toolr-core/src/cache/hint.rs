@@ -1,89 +1,38 @@
-//! Compute the passive "your cache is big, consider pruning" message.
+//! Compute the passive "you have orphaned caches" message.
 
 use std::path::Path;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use humansize::{BINARY, format_size};
 
-use super::classify::{Classification, classify_entries};
-use super::enumerate::enumerate_caches;
+use super::classify::classify_entries;
+use super::enumerate::enumerate_caches_unsized;
 
-/// Tunables for hint emission.
-#[derive(Debug, Clone, Copy)]
-pub struct HintConfig {
-    /// Aggregate cache size threshold in bytes. Default 1 GiB.
-    pub size_threshold_bytes: u64,
-    /// Orphan-entry count threshold. Default 10.
-    pub orphan_threshold: usize,
-}
+/// Orphan count above which the hint fires; a handful is normal churn.
+pub const HINT_ORPHAN_THRESHOLD: usize = 10;
 
-impl Default for HintConfig {
-    fn default() -> Self {
-        Self {
-            size_threshold_bytes: 1024 * 1024 * 1024,
-            orphan_threshold: 10,
-        }
-    }
-}
-
-/// Inspect the cache and return a single-line message if either
-/// threshold is exceeded. Returns `Ok(None)` when nothing should be
-/// printed.
+/// Return a single-line message when more than `orphan_threshold` cache
+/// entries point at repos that no longer exist, else `Ok(None)`. Runs on
+/// ordinary commands, so it reads `meta.json` sidecars only and never walks
+/// the venvs for sizes.
 pub fn compute_hint(
     cache_root: &Path,
-    config: &HintConfig,
+    orphan_threshold: usize,
     now: DateTime<Utc>,
 ) -> Result<Option<String>> {
-    let entries = enumerate_caches(cache_root)?;
+    let entries = enumerate_caches_unsized(cache_root)?;
     if entries.is_empty() {
         return Ok(None);
     }
-
-    let total_bytes: u64 = entries.iter().map(|e| e.size_bytes).sum();
-    let Classification {
-        keep: _,
-        orphan,
-        stale,
-    } = classify_entries(entries, now, 30);
-
-    let orphan_bytes: u64 = orphan.iter().map(|c| c.entry.size_bytes).sum();
-    let prune_target_count = orphan.len() + stale.len();
-    let oversized = total_bytes >= config.size_threshold_bytes;
-    let too_many_orphans = orphan.len() > config.orphan_threshold;
-
-    if !oversized && !too_many_orphans {
+    // The stale-days argument is unused: only `.orphan` is read.
+    let unused_stale_days = 30;
+    let orphans = classify_entries(entries, now, unused_stale_days)
+        .orphan
+        .len();
+    if orphans <= orphan_threshold {
         return Ok(None);
     }
-
-    // Messages that count *orphan* entries report *orphan* bytes, not the
-    // whole cache's — otherwise a couple of large live/stale entries make
-    // a handful of kilobyte-sized orphan stubs look like the culprit.
-    let orphan_size = format_size(orphan_bytes, BINARY);
-    let msg = if oversized && too_many_orphans {
-        format!(
-            "toolr: cache has {} orphan entries (~{}). Run `toolr self cache prune` to clean up.",
-            orphan.len(),
-            orphan_size,
-        )
-    } else if oversized {
-        let pretty_size = format_size(total_bytes, BINARY);
-        format!(
-            "toolr: cache has {} entr{} (~{}). Run `toolr self cache prune` to clean up.",
-            prune_target_count.max(1),
-            if prune_target_count.max(1) == 1 {
-                "y"
-            } else {
-                "ies"
-            },
-            pretty_size,
-        )
-    } else {
-        format!(
-            "toolr: cache has {} orphan entries (~{}). Run `toolr self cache prune` to clean up.",
-            orphan.len(),
-            orphan_size,
-        )
-    };
-    Ok(Some(msg))
+    Ok(Some(format!(
+        "toolr: cache has {orphans} orphan entries. Run `toolr self cache prune` to clean up."
+    )))
 }

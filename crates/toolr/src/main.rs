@@ -37,8 +37,7 @@ fn main() -> ExitCode {
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let argv: Vec<String> = std::env::args().collect();
-    // Emit the passive cache hint before clap touches argv, so `--version`
-    // and `--help` (which would otherwise exit inside clap) still see it.
+    // Emit the passive cache hint before clap touches argv.
     maybe_emit_cache_hint_from_argv();
     let persist = bootstrap::persist_manifest(&cwd, &argv);
     let bootstrap_warnings = bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv, persist)?;
@@ -115,6 +114,9 @@ fn maybe_emit_cache_hint_from_argv() {
     if argv_requests_quiet(&argv) {
         return;
     }
+    if argv_requests_version_or_help(&argv) {
+        return;
+    }
     // Suppress for tab-completion and `self cache ...` invocations.
     if bootstrap::is_tab_completion(&argv) {
         return;
@@ -131,30 +133,33 @@ fn maybe_emit_cache_hint_from_argv() {
     let Ok(cache_root) = self_cache::resolve_cache_root() else {
         return;
     };
-    let cfg = toolr_core::cache::HintConfig::default();
-    if let Ok(Some(msg)) = toolr_core::cache::compute_hint(&cache_root, &cfg, chrono::Utc::now()) {
+    if let Ok(Some(msg)) = toolr_core::cache::compute_hint(
+        &cache_root,
+        toolr_core::cache::HINT_ORPHAN_THRESHOLD,
+        chrono::Utc::now(),
+    ) {
         eprintln!("{msg}");
     }
 }
 
-/// Best-effort scan of `argv` for a `--quiet` / `-q` request, used to
-/// gate the passive cache hint. Stops at the `--` separator so args
-/// belonging to a wrapped command (`toolr project venv run -- <cmd>
-/// --quiet`) are never mistaken for toolr's own quiet flag.
+/// Best-effort scan of `argv` for toolr's own flags, used to gate the passive
+/// cache hint. Matches any of `exact`, or, when `cluster_char` is set, a short
+/// cluster containing it (`-q`, `-dq`, …). Stops at the `--` separator so a
+/// wrapped command's flags (`toolr project venv run -- <cmd> --quiet`) never count.
+fn argv_requests(argv: &[String], exact: &[&str], cluster_char: Option<char>) -> bool {
+    argv.iter().skip(1).take_while(|a| *a != "--").any(|a| {
+        exact.contains(&a.as_str())
+            || cluster_char
+                .is_some_and(|c| a.starts_with('-') && !a.starts_with("--") && a[1..].contains(c))
+    })
+}
+
 fn argv_requests_quiet(argv: &[String]) -> bool {
-    for arg in argv.iter().skip(1) {
-        if arg == "--" {
-            break;
-        }
-        if arg == "--quiet" {
-            return true;
-        }
-        // Short-flag cluster (`-q`, `-dq`, …) but not a long flag.
-        if arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('q') {
-            return true;
-        }
-    }
-    false
+    argv_requests(argv, &["--quiet"], Some('q'))
+}
+
+fn argv_requests_version_or_help(argv: &[String]) -> bool {
+    argv_requests(argv, &["--version", "-V", "--help", "-h"], None)
 }
 
 /// Read the on-disk manifest; "no project" and "no manifest file" mean an
@@ -214,7 +219,7 @@ fn empty_manifest() -> Manifest {
 
 #[cfg(test)]
 mod tests {
-    use super::argv_requests_quiet;
+    use super::{argv_requests_quiet, argv_requests_version_or_help};
 
     fn argv(args: &[&str]) -> Vec<String> {
         std::iter::once("toolr")
@@ -252,6 +257,25 @@ mod tests {
         // But toolr's own quiet before the separator still counts.
         assert!(argv_requests_quiet(&argv(&[
             "project", "venv", "run", "--quiet", "--", "pytest",
+        ])));
+    }
+
+    #[test]
+    fn detects_version_and_help_requests() {
+        for flag in ["--version", "-V", "--help", "-h"] {
+            assert!(argv_requests_version_or_help(&argv(&[flag])), "{flag}");
+            assert!(
+                argv_requests_version_or_help(&argv(&["ci", flag])),
+                "{flag}"
+            );
+        }
+    }
+
+    #[test]
+    fn ignores_version_and_help_after_the_separator_or_absent() {
+        assert!(!argv_requests_version_or_help(&argv(&["ci", "hello"])));
+        assert!(!argv_requests_version_or_help(&argv(&[
+            "project", "venv", "run", "--", "pytest", "--help"
         ])));
     }
 }

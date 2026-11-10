@@ -181,14 +181,16 @@ fn passive_hint_appears_when_orphan_count_is_high() {
         );
     }
 
+    let work = TempDir::new().unwrap();
     let output = common::toolr()
+        .current_dir(work.path())
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env_remove("TOOLR_NO_CACHE_HINT")
-        .args(["--version"])
+        // Not `--version`: the hint skips it.
+        .args(["project", "venv", "sync"])
         .output()
         .unwrap();
-    assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("toolr self cache prune"),

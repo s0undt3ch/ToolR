@@ -19,15 +19,16 @@ from typing import NoReturn
 from typing import TextIO
 
 from msgspec import Struct
-from rich.prompt import Confirm
-from rich.prompt import FloatPrompt
-from rich.prompt import IntPrompt
-from rich.prompt import Prompt
+from rich.markup import escape
 
 from toolr.utils import command
 
 if TYPE_CHECKING:
     from rich.console import Console
+    from rich.prompt import Confirm
+    from rich.prompt import FloatPrompt
+    from rich.prompt import IntPrompt
+    from rich.prompt import Prompt
     from rich.text import TextType
 
     from toolr.utils.command import CommandResult
@@ -123,6 +124,12 @@ class Context(Struct, frozen=True):
         """
         This is the actual implementation of the prompt method with two additional arguments to simplify testing.
         """
+        # Deferred: `rich.prompt` slows runner start-up and most commands never prompt.
+        from rich.prompt import Confirm  # noqa: PLC0415
+        from rich.prompt import FloatPrompt  # noqa: PLC0415
+        from rich.prompt import IntPrompt  # noqa: PLC0415
+        from rich.prompt import Prompt  # noqa: PLC0415
+
         klass: type[Prompt | IntPrompt | FloatPrompt | Confirm]
         if expected_type in (str, None):
             klass = Prompt
@@ -140,17 +147,30 @@ class Context(Struct, frozen=True):
             err_msg = "choices cannot be an empty list"
             raise ValueError(err_msg)
 
-        return klass.ask(
-            prompt,
-            console=console or self._console_stdout,
-            password=password,
-            choices=choices,
-            default=default,  # type: ignore[arg-type]
-            case_sensitive=case_sensitive,
-            show_default=show_default,
-            show_choices=show_choices,
-            stream=stream,
-        )
+        try:
+            return klass.ask(
+                prompt,
+                console=console or self._console_stdout,
+                password=password,
+                choices=choices,
+                default=default,  # type: ignore[arg-type]
+                case_sensitive=case_sensitive,
+                show_default=show_default,
+                show_choices=show_choices,
+                stream=stream,
+            )
+        except EOFError:
+            if stream is not None:
+                # A caller-supplied stream (`make_context(prompt_input=...)`) keeps raising.
+                raise
+            self._console_stderr.print()  # end the unanswered prompt's line
+            self.exit(
+                1,
+                escape(
+                    f"Cannot prompt for '{prompt}': no input available "
+                    "(standard input is closed or not a terminal)."
+                ),
+            )
 
     def print(self, *args: Any, **kwargs: Any) -> None:
         """

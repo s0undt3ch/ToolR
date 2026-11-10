@@ -57,9 +57,13 @@ import datetime as _dt
 import ipaddress as _ip
 import pathlib as _pathlib
 import uuid as _uuid
+from typing import TYPE_CHECKING
+from typing import Any
 from typing import NewType
 
-from packaging.version import Version as _Version
+if TYPE_CHECKING:
+    # At runtime `Version` resolves lazily through `__getattr__` below.
+    from packaging.version import Version
 
 DateTime = _dt.datetime
 Date = _dt.date
@@ -82,7 +86,6 @@ WritableDirectoryPath = NewType("WritableDirectoryPath", DirectoryPath)
 # value reaching the command function is guaranteed to be a syntactically
 # valid `local@domain` address.
 Email = str
-Version = _Version
 # Count is just an int at runtime; the rust parser detects the
 # `toolr.types.Count` annotation and configures clap with
 # ArgAction::Count so `-v -v -v` (or `-vvv`) increments the slot.
@@ -106,3 +109,15 @@ __all__ = [
     "Version",
     "WritableDirectoryPath",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    # Deferred: `packaging` slows runner start-up and most commands never use `Version`.
+    if name == "Version":
+        import packaging.version  # noqa: PLC0415
+
+        version = packaging.version.Version
+        globals()["Version"] = version
+        return version
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
