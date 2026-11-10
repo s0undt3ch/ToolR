@@ -16,7 +16,7 @@ use toolr_core::discovery::discover_project_root;
 use toolr_core::env::{non_empty_env_path, xdg_dir_env};
 use toolr_core::execute::{ExecutionSpec, spawn_runner, wait_with_signals, write_spec_to_tempfile};
 use toolr_core::exit_status::process_exit_code;
-use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
+use toolr_core::manifest::Manifest;
 use toolr_core::trust::shown;
 use toolr_core::venv::resolve_venv_path;
 
@@ -738,7 +738,7 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     // manifest so the built-in injection below covers the cwd.
     let mut manifest = resolve_manifest_at_tab(&cwd)
         .map(|r| r.manifest)
-        .unwrap_or_else(|_| empty_manifest_for_completion());
+        .unwrap_or_else(|_| Manifest::empty());
     // The engine is purely manifest-driven, but the binary owns its own
     // built-in `self` / `project` subtree. Inject synthetic entries that
     // mirror `cli::build_command` so those subcommands also complete.
@@ -798,19 +798,6 @@ fn merge_root_flags(scan: &RootScan, candidates: &mut Vec<Candidate>, matching: 
         }
     }
     sort_and_dedup_by_value(candidates);
-}
-
-fn empty_manifest_for_completion() -> Manifest {
-    Manifest {
-        schema_version: SCHEMA_VERSION,
-        static_hash: String::new(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
-        groups: Vec::new(),
-        commands: Vec::new(),
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
-    }
 }
 
 fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
@@ -1041,25 +1028,8 @@ mod tests {
     // output_options_from_matches: every flag knob.
     // ----------------------------------------------------------------
 
-    /// Build a one-group manifest so `cli::build_command` can produce a
-    /// root command we can call `try_get_matches_from` on. The manifest
-    /// content doesn't matter for output-option tests — only the root
-    /// flags do.
-    fn empty_manifest() -> Manifest {
-        Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
-            groups: Vec::new(),
-            commands: Vec::new(),
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
-        }
-    }
-
     fn parse(args: &[&str]) -> ArgMatches {
-        let manifest = empty_manifest();
+        let manifest = Manifest::empty();
         let root = crate::cli::build_command(&manifest);
         let mut full: Vec<String> = vec!["toolr".into()];
         full.extend(args.iter().map(|s| (*s).to_string()));
@@ -1156,14 +1126,8 @@ mod path_lookup_tests {
 
     fn manifest_with(commands: Vec<Command>) -> Manifest {
         Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
-            groups: vec![],
             commands,
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         }
     }
 

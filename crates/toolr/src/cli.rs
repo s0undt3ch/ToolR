@@ -1090,14 +1090,9 @@ mod cli_tree_tests {
         let runserver = child("runserver", "jenkins.job", "tools.job", "job");
 
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, runserver],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let jenkins = build_for(manifest);
@@ -1119,14 +1114,9 @@ mod cli_tree_tests {
         let image_child = child("push", "docker.image", "tools.image", "image");
 
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("docker")],
             commands: vec![build_cmd, image_cmd, build_child, image_child],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let docker = build_for(manifest);
@@ -1146,14 +1136,9 @@ mod cli_tree_tests {
         let status = normal_leaf("status", "jenkins");
 
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, status],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let jenkins = build_for(manifest);
@@ -1463,14 +1448,9 @@ mod cli_tree_tests {
         let migrate = child("migrate", "django", "tools.dispatcher", "django");
 
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("django")],
             commands: vec![dispatcher_cmd, migrate],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let django = build_for(manifest);
@@ -1481,18 +1461,13 @@ mod cli_tree_tests {
     #[test]
     fn user_groups_precede_built_ins_and_reserved_names_are_skipped() {
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("ci"), group("self"), group("project")],
             commands: vec![
                 normal_leaf("hello", "ci"),
                 normal_leaf("hijack", "self"),
                 normal_leaf("hijack", "project"),
             ],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let root = build_command(&manifest);
@@ -1515,14 +1490,9 @@ mod cli_tree_tests {
             empty_arg("debug", ArgumentKind::Flag),
         ];
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("ci")],
             commands: vec![run],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
         build_command(&manifest)
             .try_get_matches_from(std::iter::once("toolr").chain(args.iter().copied()))

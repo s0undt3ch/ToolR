@@ -15,7 +15,7 @@ mod value_parsers;
 use std::process::ExitCode;
 
 use toolr_core::discovery::{DiscoveryError, discover_project_root};
-use toolr_core::manifest::{Manifest, ManifestError, SCHEMA_VERSION, load_manifest};
+use toolr_core::manifest::{Manifest, ManifestError, load_manifest};
 
 fn main() -> ExitCode {
     match run() {
@@ -41,7 +41,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Some(built) => built,
         // `__complete` resolves the manifest itself; loading it here too
         // would parse it twice per TAB and warn about a corrupt one.
-        None if bootstrap::is_tab_completion(&argv) => empty_manifest().into(),
+        None if bootstrap::is_tab_completion(&argv) => Manifest::empty().into(),
         None => load_or_empty(&cwd, &argv)?.into(),
     };
     // Covers fragments and a hand-edited committed manifest alike. Tab
@@ -191,21 +191,21 @@ fn load_or_empty(cwd: &std::path::Path, argv: &[String]) -> anyhow::Result<Manif
             {
                 eprintln!("toolr: warning: {e}");
             }
-            return Ok(empty_manifest());
+            return Ok(Manifest::empty());
         }
     };
     let manifest_path = toolr_core::manifest::manifest_path(&root);
     match load_manifest(&manifest_path) {
         Ok(m) => Ok(m),
         Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
-            Ok(empty_manifest())
+            Ok(Manifest::empty())
         }
         Err(e) if bootstrap::should_skip_auto_rebuild(argv) => {
             eprintln!(
                 "toolr: warning: ignoring unreadable {}: {e}",
                 manifest_path.display()
             );
-            Ok(empty_manifest())
+            Ok(Manifest::empty())
         }
         Err(e) => Err(anyhow::anyhow!(
             "cannot read {}: {e}; run `toolr project manifest rebuild` to regenerate it",
@@ -214,30 +214,18 @@ fn load_or_empty(cwd: &std::path::Path, argv: &[String]) -> anyhow::Result<Manif
     }
 }
 
-fn empty_manifest() -> Manifest {
-    Manifest {
-        schema_version: SCHEMA_VERSION,
-        static_hash: String::new(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
-        groups: Vec::new(),
-        commands: Vec::new(),
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::misplaced_root_flag_hint;
     use crate::cli;
+    use toolr_core::manifest::Manifest;
 
     fn hint(args: &[&str]) -> Option<String> {
         let argv: Vec<String> = std::iter::once("toolr")
             .chain(args.iter().copied())
             .map(String::from)
             .collect();
-        let root = cli::build_command(&super::empty_manifest());
+        let root = cli::build_command(&Manifest::empty());
         let err = root.clone().try_get_matches_from(&argv).err()?;
         misplaced_root_flag_hint(&err, &root, &argv)
     }

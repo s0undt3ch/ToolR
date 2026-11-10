@@ -13,7 +13,7 @@ use tempfile::TempDir;
 
 use common::{TrustEnv, hostile_repo, write_executable};
 use toolr_core::cache::Meta;
-use toolr_core::manifest::{Manifest, SCHEMA_VERSION, write_manifest};
+use toolr_core::manifest::{Manifest, write_manifest};
 
 const REFUSAL: &str = "refusing to run code from an untrusted repository";
 
@@ -405,14 +405,9 @@ fn stale_manifest_in_untrusted_repo_is_not_rewritten() {
     let repo = demo_repo();
     let path = manifest_path(&repo);
     let stale = Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "stale".into(),
-        third_party_hash: String::new(),
         toolr_version: env!("CARGO_PKG_VERSION").into(),
-        groups: vec![],
-        commands: vec![],
-        plugin_warnings: vec![],
-        input_records: Default::default(),
+        ..Manifest::empty()
     };
     write_manifest(&path, &stale).unwrap();
     let bytes = fs::read_to_string(&path).unwrap();

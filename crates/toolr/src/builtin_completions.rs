@@ -18,29 +18,11 @@
 
 use clap::{Arg, ArgAction, Command as ClapCommand, ValueHint};
 use toolr_core::complete::Candidate;
-use toolr_core::manifest::{
-    ArgMetadata, Argument, ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION,
-};
+use toolr_core::manifest::{ArgMetadata, Argument, ArgumentKind, Command, Group, Manifest, Origin};
 use toolr_core::parser::SupportedType;
 
 /// The two top-level builtin subtrees, walked out of the clap command.
 const BUILTIN_ROOTS: &[&str] = &["project", "self"];
-
-/// A manifest with no user/third-party entries, so
-/// [`crate::cli::build_command`] yields *only* the hardcoded `self` /
-/// `project` builtin subtrees plus the root flags.
-fn empty_manifest() -> Manifest {
-    Manifest {
-        schema_version: SCHEMA_VERSION,
-        static_hash: String::new(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
-        groups: Vec::new(),
-        commands: Vec::new(),
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
-    }
-}
 
 /// Synthetic [`Group`] + [`Command`] entries derived from the built-in
 /// subcommand tree wired up in [`crate::cli::build_command`]. Callers
@@ -48,7 +30,7 @@ fn empty_manifest() -> Manifest {
 /// loaded manifest before delegating to
 /// [`toolr_core::complete::serve_completions`].
 pub fn built_in_completion_entries() -> (Vec<Group>, Vec<Command>) {
-    let root = crate::cli::build_command(&empty_manifest());
+    let root = crate::cli::build_command(&Manifest::empty());
     let mut groups = Vec::new();
     let mut commands = Vec::new();
 
@@ -253,7 +235,7 @@ impl RootScan {
 }
 
 fn root_flag_specs() -> Vec<RootFlagSpec> {
-    let mut root = crate::cli::build_command(&empty_manifest());
+    let mut root = crate::cli::build_command(&Manifest::empty());
     // Unbuilt, clap has not added `--version` / `-V` yet, so build before reading the args.
     root.build();
     let mut specs: Vec<RootFlagSpec> = root
@@ -460,14 +442,9 @@ mod tests {
     fn merged_empty_manifest() -> Manifest {
         let (groups, commands) = built_in_completion_entries();
         Manifest {
-            schema_version: SCHEMA_VERSION,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups,
             commands,
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         }
     }
 

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use crate::hash::{SymlinkedModules, list_python_files, snapshot_from, static_hash_of};
-use crate::manifest::{ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
+use crate::manifest::{ArgumentKind, Command, Group, Manifest, Origin};
 use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
@@ -71,14 +71,12 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<BuiltMan
     let built = build_commands_inner(tools_dir, &py_files, "tools", false)?;
 
     let mut manifest = Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: static_hash_of(&input_records.files),
-        third_party_hash: String::new(),
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: built.groups,
         commands: built.commands,
-        plugin_warnings: Vec::new(),
         input_records,
+        ..Manifest::empty()
     };
 
     // Run the user's argparse scanner ([tool.toolr.argparse.*] in
@@ -1049,6 +1047,7 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manifest::SCHEMA_VERSION;
     use crate::manifest::{ArgMetadata, Argument, Command, Origin};
     use crate::parser::commands::UnsupportedCommandKind;
     use crate::parser::names::{CONTROL, NameItem, WHITESPACE};

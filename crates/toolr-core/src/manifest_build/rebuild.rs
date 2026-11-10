@@ -321,19 +321,15 @@ mod tests {
 
     fn manifest_with(groups: Vec<crate::manifest::Group>) -> Manifest {
         Manifest {
-            schema_version: crate::manifest::SCHEMA_VERSION,
-            static_hash: String::new(),
             third_party_hash: "cached-hash".into(),
-            toolr_version: String::new(),
             groups,
-            commands: vec![],
             plugin_warnings: vec![crate::manifest::PluginWarning {
                 package: "demo".into(),
                 path: "site-packages/demo/toolr-manifest.json".into(),
                 kind: crate::manifest::PluginWarningKind::Shadowed,
                 message: "tools/ci.py defines ci lint, hiding the one from demo".into(),
             }],
-            input_records: Default::default(),
+            ..Manifest::empty()
         }
     }
 

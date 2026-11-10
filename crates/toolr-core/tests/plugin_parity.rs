@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use tempfile::TempDir;
-use toolr_core::manifest::{ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
+use toolr_core::manifest::{ArgumentKind, Command, Group, Manifest, Origin};
 use toolr_core::parser::{SupportedType, build_static_manifest};
 use toolr_core::third_party::discover_and_merge;
 use toolr_core::{build_third_party_fragment, serialise_fragment};
@@ -65,19 +65,6 @@ fn write_tree(dir: &Path) {
     fs::write(dir.join("__init__.py"), "").unwrap();
     fs::write(dir.join("enums.py"), ENUMS_PY).unwrap();
     fs::write(dir.join("commands.py"), COMMANDS_PY).unwrap();
-}
-
-fn empty_base() -> Manifest {
-    Manifest {
-        schema_version: SCHEMA_VERSION,
-        static_hash: String::new(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
-        groups: vec![],
-        commands: vec![],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
-    }
 }
 
 fn normalised(manifest: &Manifest, origin: Origin) -> String {
@@ -146,7 +133,7 @@ fn a_command_behaves_the_same_built_locally_and_as_a_plugin() {
         serialise_fragment(&fragment).unwrap(),
     )
     .unwrap();
-    let plugin = discover_and_merge(&venv, empty_base()).unwrap();
+    let plugin = discover_and_merge(&venv, Manifest::empty()).unwrap();
 
     let local_side = normalised(&local, Origin::Static)
         .replace("\"tools.", "\"parpkg.")

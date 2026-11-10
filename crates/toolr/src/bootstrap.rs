@@ -172,19 +172,13 @@ mod tests {
         should_skip_auto_rebuild,
     };
     use toolr_core::freshness::{FreshnessVerdict, compare};
-    use toolr_core::manifest::{Group, Manifest, SCHEMA_VERSION, load_manifest};
+    use toolr_core::manifest::{Group, Manifest, load_manifest};
     use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
 
     fn manifest_with(groups: Vec<Group>) -> Manifest {
         Manifest {
-            schema_version: SCHEMA_VERSION,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups,
-            commands: vec![],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         }
     }
 
