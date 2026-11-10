@@ -97,6 +97,7 @@ fn run() -> anyhow::Result<ExitCode> {
             // Genuine error: print it the way clap does; outside a project an
             // unknown command is most likely a wrong directory, so say so.
             if e.kind() == ErrorKind::InvalidSubcommand
+                && bootstrap::names_user_command(&argv)
                 && let Some(hint) = no_project_hint(&cwd)
             {
                 let _ = e.print();
