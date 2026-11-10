@@ -60,7 +60,7 @@ fn skin_for(is_tty: bool, no_color: bool) -> MadSkin {
 
 /// Resolve the rendering width. Order: `$COLUMNS` if set and parseable;
 /// otherwise `termimad::terminal_size().0 as usize`. Honoring `$COLUMNS`
-/// keeps `regen-doc-snippets.py` (which pins `COLUMNS=100`) producing
+/// keeps `toolr pre-commit regen-doc-snippets` (which pins `COLUMNS=100`) producing
 /// stable captures even when stdout is not a TTY and crossterm's ioctl
 /// fallback would return termimad's 50-col default.
 fn resolve_width() -> usize {
@@ -153,13 +153,8 @@ fn push_usage(out: &mut String, cmd: &Command, bin_path: &str) {
         spec.push_str(" [OPTIONS]");
     }
     for arg in cmd.get_positionals().filter(|a| !a.is_hide_set()) {
-        let placeholder = positional_placeholder(arg);
-        let bracketed = if arg.is_required_set() {
-            format!(" <{placeholder}>")
-        } else {
-            format!(" [{placeholder}]")
-        };
-        spec.push_str(&bracketed);
+        spec.push(' ');
+        spec.push_str(&positional_label(arg));
     }
     if has_subs {
         spec.push_str(if subs_required {
@@ -183,17 +178,7 @@ fn push_positionals(out: &mut String, cmd: &Command, mode: HelpMode, width: usiz
         return;
     }
     out.push_str("**Arguments:**\n");
-    let labels: Vec<String> = args
-        .iter()
-        .map(|a| {
-            let p = positional_placeholder(a);
-            if a.is_required_set() {
-                format!("<{p}>")
-            } else {
-                format!("[{p}]")
-            }
-        })
-        .collect();
+    let labels: Vec<String> = args.iter().map(|a| positional_label(a)).collect();
     let label_width = labels.iter().map(|l| l.len()).max().unwrap_or(0);
     for (arg, label) in args.iter().zip(labels.iter()) {
         let mut body = arg.get_help().map(|h| h.to_string()).unwrap_or_default();
@@ -414,10 +399,12 @@ fn render_option_signature(arg: &Arg, group_has_short: bool) -> String {
     };
     let long = arg.get_long().map(|l| format!("--{l}")).unwrap_or_default();
     let value = if arg.get_action().takes_values() {
-        arg.get_value_names()
-            .and_then(|names| names.first())
-            .map(|v| format!(" <{v}>"))
-            .unwrap_or_default()
+        // Hyphenated like the flag; positionals keep the raw id, which is what clap's own errors print.
+        let name = arg.get_value_names().and_then(|n| n.first()).map_or_else(
+            || arg.get_id().as_str().replace('_', "-"),
+            |v| v.to_string(),
+        );
+        format!(" <{name}>")
     } else {
         String::new()
     };
@@ -523,6 +510,20 @@ fn push_two_column_block(out: &mut String, label: &str, width: usize, text: &str
     ));
     for line in lines {
         out.push_str(&format!("{indent}{line}\n"));
+    }
+}
+
+/// `<name>` or `[name]`, with a trailing `...` when it takes several values.
+fn positional_label(arg: &Arg) -> String {
+    let p = positional_placeholder(arg);
+    let many = arg
+        .get_num_args()
+        .is_some_and(|r| r.max_values() > 1 && r.min_values() != r.max_values());
+    let dots = if many { "..." } else { "" };
+    if arg.is_required_set() {
+        format!("<{p}>{dots}")
+    } else {
+        format!("[{p}]{dots}")
     }
 }
 
@@ -772,6 +773,51 @@ mod tests {
             md.contains("  [optional]  opt help"),
             "optional positional uses 2-space gap: {md}"
         );
+    }
+
+    #[test]
+    fn multi_value_positionals_get_an_ellipsis() {
+        let cmd = Command::new("argy")
+            .arg(Arg::new("one").required(true).help("one help"))
+            .arg(
+                Arg::new("many")
+                    .value_name("PACKAGE")
+                    .num_args(1..)
+                    .required(true)
+                    .help("many help"),
+            )
+            .arg(Arg::new("rest").num_args(0..).help("rest help"))
+            .arg(Arg::new("pair").num_args(2).help("pair help"));
+        let md = render_markdown(&cmd, "argy", HelpMode::Long, 100);
+        assert!(
+            md.contains("argy <one> <PACKAGE>... [rest]... [pair]"),
+            "usage: {md}"
+        );
+        assert!(md.contains("  <PACKAGE>...  many help"), "arguments: {md}");
+        assert!(md.contains("  <one>"), "single value has no ellipsis: {md}");
+        assert!(
+            !md.contains("<one>..."),
+            "single value has no ellipsis: {md}"
+        );
+    }
+
+    #[test]
+    fn value_options_show_a_placeholder_named_after_the_option() {
+        let cmd = Command::new("argy")
+            .arg(Arg::new("name").long("name").help("Who to greet."))
+            .arg(
+                Arg::new("path")
+                    .long("path")
+                    .value_name("FILE")
+                    .help("Where to write."),
+            )
+            .arg(Arg::new("max_age").long("max-age").help("Age."))
+            .arg(Arg::new("force").long("force").action(ArgAction::SetTrue));
+        let md = render_markdown(&cmd, "argy", HelpMode::Long, 100);
+        assert!(md.contains("--name <name>"), "{md}");
+        assert!(md.contains("--path <FILE>"), "{md}");
+        assert!(md.contains("--max-age <max-age>"), "{md}");
+        assert!(!md.contains("--force <"), "{md}");
     }
 
     #[test]

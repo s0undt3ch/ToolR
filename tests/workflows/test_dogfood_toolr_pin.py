@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 GITHUB_DIR = REPO_ROOT / ".github"
 WRAPPER = ".github/actions/setup-toolr"
 WRAPPER_PATH = REPO_ROOT / WRAPPER / "action.yml"

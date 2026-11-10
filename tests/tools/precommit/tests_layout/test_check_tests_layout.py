@@ -58,3 +58,17 @@ def test_ignores_bytecode_caches_and_dotfiles(make_tree: Callable[..., Path]) ->
         "sub/.DS_Store",
     )
     assert layout_problems(root) == []
+
+
+def test_top_level_test_modules_are_reported(make_tree: Callable[..., Path]) -> None:
+    root = make_tree(
+        "__init__.py", "conftest.py", "test_a.py", "area/__init__.py", "area/test_b.py"
+    )
+    assert layout_problems(root) == [
+        "move tests/test_a.py into a `tests/<area>/` directory that mirrors the source it covers"
+    ]
+
+
+def test_top_level_support_modules_are_allowed(make_tree: Callable[..., Path]) -> None:
+    root = make_tree("__init__.py", "conftest.py", "_git.py", "area/__init__.py", "area/test_b.py")
+    assert layout_problems(root) == []

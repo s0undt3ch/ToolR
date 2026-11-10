@@ -6,7 +6,7 @@ Demonstrates Literal[...] rendering as a --level
 Usage: toolr example setlog [OPTIONS]
 
 Options:
-      --level
+      --level <level>
           Which log level to use.
           [possible values: debug, info, warning]
           [default: info]

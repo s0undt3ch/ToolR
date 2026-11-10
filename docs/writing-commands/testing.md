@@ -247,13 +247,13 @@ tempting — don't: `Context` is a frozen `msgspec.Struct`, and that assignment 
 `prompt_input` parameter instead:
 
 ```python
---8<-- "tests/test_make_context.py:mock-prompt-example"
+--8<-- "tests/testing/test_make_context.py:mock-prompt-example"
 ```
 
 Feed a "no" answer the same way to test the abort path of a confirm-style command:
 
 ```python
---8<-- "tests/test_make_context.py:mock-prompt-abort-example"
+--8<-- "tests/testing/test_make_context.py:mock-prompt-abort-example"
 ```
 
 `make_context` returns a `ContextForTesting` — a `Context` subclass — so `ctx.repo_root` is
@@ -279,7 +279,7 @@ result (and its already-read stream) on every call, so it's only safe for a comm
 `make_command_result(...)` each time:
 
 ```python
---8<-- "tests/test_make_context.py:mock-run-example"
+--8<-- "tests/testing/test_make_context.py:mock-run-example"
 ```
 
 ### Mocking `ctx.chdir`
@@ -289,7 +289,7 @@ a test that wants to assert *which* directory a command tried to move into, with
 real filesystem, passes a bare `unittest.mock.Mock` as `chdir`:
 
 ```python
---8<-- "tests/test_make_context.py:mock-chdir-example"
+--8<-- "tests/testing/test_make_context.py:mock-chdir-example"
 ```
 
 ## Stability

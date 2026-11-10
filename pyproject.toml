@@ -172,13 +172,13 @@ ignore = [
   "TCH002",   # Move third-party import into a type-checking block
   "BLE001",   # Do not catch blind exception: `Exception`
 ]
-"tests/cli/**/*.py" = [
-  "RUF013",   # PEP 484 prohibits implicit `Optional`
-]
 "tests/utils/**/*.py" = [
   "PLC0415", # `import` should be at the top-level of a file
 ]
-"tests/test_make_context.py" = [
+"tests/types/__init__.py" = [
+  "A005",   # imports as `tests.types`, so it cannot shadow the stdlib `types`
+]
+"tests/testing/test_make_context.py" = [
   "PLC0415", # local imports keep the `--8<--` doc snippets self-contained
 ]
 "scripts/*.py" = [
@@ -268,11 +268,3 @@ disallow_untyped_calls = false
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
-
-[[tool.mypy.overrides]]
-module = [
-  "tests.cli.*",
-]
-disable_error_code = [
-  "assignment",
-]

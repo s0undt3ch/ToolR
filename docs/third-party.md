@@ -129,7 +129,7 @@ that declares `M` like this:
 
 A skipped plugin doesn't break the CLI: local commands and other plugins keep working, and toolr
 prints `toolr: warning: skipping plugin <pkg>: ...` on stderr on every run (except for tab
-completion, `project`, `self`, `init`, `--version` and `-V`). The same happens to a plugin
+completion, `project`, `self`, `--version` and `-V`). The same happens to a plugin
 with a command whose argument fails validation. Malformed JSON and the same command declared by two plugins
 still fail the manifest build.
 
@@ -198,8 +198,7 @@ between the committed manifest and what regeneration would produce:
 toolr self build-manifest my_pkg --check
 ```
 
-Exit code 0 if in sync; non-zero (with a diff on stderr) if
-drifted.
+Exit code 0 if in sync; `2` (with a unified diff) if drifted.
 
 ### Pre-commit hook
 
@@ -326,8 +325,9 @@ vote on [#522](https://github.com/s0undt3ch/ToolR/issues/522).
   `package-data` (setuptools), `packages` (hatchling), or the
   equivalent in your build backend. Verify it's in the built wheel
   before publishing.
-- Pin a compatible `toolr` version in your package's dependencies:
-  a plugin built with this format needs `toolr>=0.34.0`.
+- Pin a compatible `toolr-py` version in your package's dependencies:
+  a plugin built with this format needs `toolr-py>=0.34.0`. Depend on `toolr-py`,
+  the Python package, not `toolr`, which is the binary-only wheel.
   A fragment is loaded only when its `toolr_schema_version` is in the
   range the installed toolr reads (see [Schema version](#schema-version)).
   There are no schema migrations: a fragment outside that range is

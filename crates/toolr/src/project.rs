@@ -259,7 +259,7 @@ pub(crate) fn run_project_init(
         println!("toolr:   toolr example hello");
         println!("toolr:   toolr example commit");
         println!(
-            "toolr:   toolr self completion install <bash|zsh|fish>   # optional, for tab completion"
+            "toolr:   toolr self completion install <bash|zsh|fish|powershell>   # optional, for tab completion"
         );
         println!(
             "toolr:   toolr project venv run -- pytest tests/            # run your tests in the managed venv"

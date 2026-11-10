@@ -92,7 +92,7 @@ to dodge the metric.
   test modules import as `tests.…` and can't shadow real packages such as `tools`.
 - Test fixtures, Python or not, live in a `files/` directory next to the tests that use them; `files/`
   trees are data, not packages.
-- `toolr pre-commit check-tests-layout` enforces both.
+- `toolr pre-commit check-tests-layout` enforces both, and rejects a `test_*.py` directly in `tests/`.
 - Skills shipped from this repo:
   `skills/toolr-ci-setup/`, `skills/toolr-command-authoring/`, `skills/toolr-command-packaging/`.
 

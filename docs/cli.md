@@ -63,7 +63,7 @@ Scaffold `tools/` in the current directory.
 
 ```text
 toolr project init [--force] [--no-sync] [--venv-location {cache,in-tree}]
-                   [--no-example] [--python <version>] [--quiet]
+                   [--no-example] [--python <version>] [-y | --yes] [-q | --quiet]
 ```
 
 **Flags:**
@@ -75,7 +75,8 @@ toolr project init [--force] [--no-sync] [--venv-location {cache,in-tree}]
 - `--no-example` — skip generating `tools/example.py`.
 - `--python` — `requires-python` value for `tools/pyproject.toml`
   (defaults to `python3`'s `>=major.minor`, never below the oldest Python toolr supports).
-- `--quiet` — suppress informational output and never prompt to install uv.
+- `-y` / `--yes` — auto-approve overwriting any conflicting scaffold files.
+- `-q` / `--quiet` — suppress informational output and never prompt to install uv.
 
 ```sh
 toolr project init --help
