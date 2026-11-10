@@ -157,3 +157,30 @@ fn trust_in_bare_tools_repo_says_pyproject_is_missing() {
     assert!(!output.status.success(), "{output:?}");
     assert_names_missing_pyproject(&String::from_utf8_lossy(&output.stderr), &tools);
 }
+
+#[test]
+fn unknown_command_outside_a_project_says_no_project_was_found() {
+    let tmp = TempDir::new().unwrap();
+    let cache = TempDir::new().unwrap();
+
+    toolr_in(tmp.path(), &cache)
+        .args(["example", "hello"])
+        .assert()
+        .failure()
+        .stderr(contains("unrecognized subcommand 'example'"))
+        .stderr(contains("no toolr project found above"));
+}
+
+#[test]
+fn unknown_command_inside_a_project_gets_no_project_hint() {
+    let tmp = TempDir::new().unwrap();
+    common::write_project(tmp.path());
+    let cache = TempDir::new().unwrap();
+
+    toolr_in(tmp.path(), &cache)
+        .args(["example", "hello"])
+        .assert()
+        .failure()
+        .stderr(contains("unrecognized subcommand 'example'"))
+        .stderr(contains("no toolr project found").not());
+}
