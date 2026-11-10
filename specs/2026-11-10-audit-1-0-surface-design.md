@@ -30,7 +30,8 @@ its own release note and the replacement spelled out. It builds on the startup-l
 
 The action has no checksum-only mode of its own (it always checks the SHA-256), so it accepts `full`
 (default) and `none` (the old `skip-attestation: true`). The old spellings keep working, hidden from help
-and docs, for one release. In the action, `skip-attestation` gains a `deprecationMessage`.
+and docs, for one release; `--no-verify` stays a separate legacy switch because it skipped only the SHA-256.
+In the action, `skip-attestation` gains a `deprecationMessage`.
 
 ## U-06: remove the deprecated surface
 
@@ -68,8 +69,9 @@ nothing is orphaned by this release, and nothing will be at 1.0. A test pins the
 The old key did double duty, letting a major release change the venv layout safely. `meta.json` takes
 that job: a new `layout_version` field (serde default 1, so every existing sidecar reads as the current
 layout; schema version unchanged; older toolr builds ignore the unknown field). `check_freshness` reports
-`Stale` when the sidecar's layout is older than `VENV_LAYOUT_VERSION`, and a successful sync stamps the
-current value, so the venv is re-synced once. A missing sidecar counts as current (nothing to compare).
+a new `OldLayout` state when the sidecar's layout is older than `VENV_LAYOUT_VERSION` (dispatch re-syncs,
+`venv run --no-sync` refuses), and a successful sync stamps the current value, so the venv is re-synced once.
+A missing sidecar counts as current (nothing to compare).
 Bumping the constant is the lever for a future layout change; a change that needs a fresh venv rather than
 an in-place `uv sync` has to remove it in the sync path. That is out of scope until one exists.
 

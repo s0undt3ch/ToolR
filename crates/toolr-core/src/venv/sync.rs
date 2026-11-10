@@ -109,11 +109,9 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
 /// Whether the venv's sidecar records an older layout than [`VENV_LAYOUT_VERSION`]. A sidecar that is
 /// missing or unreadable has nothing to compare, so it counts as current.
 fn has_old_layout(resolved: &ResolvedVenv, tools_dir: &Path) -> bool {
-    let Some(repo_root) = tools_dir.parent() else {
-        return false;
-    };
-    crate::project::meta_cache_dir(repo_root, resolved)
-        .ok()
+    tools_dir
+        .parent()
+        .and_then(|repo_root| crate::project::meta_cache_dir(repo_root, resolved).ok())
         .and_then(|dir| Meta::load(&dir).ok())
         .is_some_and(|meta| meta.layout_version < VENV_LAYOUT_VERSION)
 }

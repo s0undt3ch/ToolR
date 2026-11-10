@@ -190,6 +190,30 @@ fn venv_sync_rebuilds_a_dead_interpreter() {
 }
 
 #[test]
+fn a_venv_from_an_older_layout_is_synced_before_dispatch() {
+    let p = synced_project();
+    common::write_old_layout_sidecar(&p.fx.root, &p.cache);
+    let output = p
+        .toolr(&p.path_with_uv())
+        .args(["hello", "world"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("built by an older toolr layout; syncing it first"),
+        "stderr:\n{stderr}"
+    );
+    assert!(uv_synced(&p.fx.uv_argv()), "expected a `uv sync`");
+    p.reset_observations();
+    p.toolr(&p.path_with_uv())
+        .args(["hello", "world"])
+        .assert()
+        .success();
+    assert_eq!(p.fx.uv_argv(), "", "the sync stamped the current layout");
+}
+
+#[test]
 fn stale_venv_without_uv_refuses_to_run() {
     let p = synced_project();
     p.bump_lock();

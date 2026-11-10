@@ -21,6 +21,28 @@ use std::path::{Path, PathBuf};
 use assert_cmd::Command;
 use tempfile::TempDir;
 
+/// Record that the venv of the repo at `repo` was last synced with an older venv layout, in the
+/// sidecar toolr keeps under `cache_home`.
+pub fn write_old_layout_sidecar(repo: &Path, cache_home: &Path) {
+    use toolr_core::venv::VenvLocation;
+    let resolved = toolr_core::venv::resolve_venv_path(repo).unwrap();
+    let location = if resolved.is_in_tree() {
+        VenvLocation::InTree
+    } else {
+        VenvLocation::Cache
+    };
+    let slot = toolr_core::venv::cache_slot_dir(
+        &cache_home.join("toolr"),
+        repo,
+        &resolved.python_version,
+        location,
+    )
+    .unwrap();
+    let mut meta = toolr_core::cache::Meta::new(repo, "0.35.1", &resolved.python_version);
+    meta.layout_version = 0;
+    meta.write(&slot).unwrap();
+}
+
 pub struct VenvFixture {
     /// Backing tempdir keeping the files alive.
     pub _tmp: TempDir,

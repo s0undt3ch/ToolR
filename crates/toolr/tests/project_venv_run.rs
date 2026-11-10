@@ -156,6 +156,25 @@ fn no_sync_errors_when_stale() {
 
 #[cfg(unix)]
 #[test]
+fn no_sync_refuses_a_venv_from_an_older_layout() {
+    let tmp = TempDir::new().unwrap();
+    let xdg = TempDir::new().unwrap();
+    let venv = fake_in_tree_venv(tmp.path(), "#!/bin/sh\nexit 0\n");
+    mark_fresh(tmp.path(), &venv);
+    common::write_old_layout_sidecar(tmp.path(), xdg.path());
+    let output = common::toolr()
+        .current_dir(tmp.path())
+        .env("XDG_CACHE_HOME", xdg.path())
+        .args(["project", "venv", "run", "--no-sync", "--", "true"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr:\n{stderr}");
+    assert!(stderr.contains("older toolr layout"), "stderr:\n{stderr}");
+}
+
+#[cfg(unix)]
+#[test]
 fn no_sync_refuses_after_pyproject_edit() {
     let tmp = TempDir::new().unwrap();
     let venv = fake_in_tree_venv(tmp.path(), "#!/bin/sh\nexit 0\n");
