@@ -25,6 +25,9 @@
 #    outside the quote (`bash_tab_keeps_a_bang_literal_in_double_quotes_end_to_end`).
 # 6. A `$` in `COMP_WORDBREAKS` never splits a `$'…'` word, so `_toolr_parse_word` doesn't
 #    break there (`bash_tab_completes_ansi_c_quoted_paths_end_to_end`).
+#
+# This script is frozen: the list above is the acceptance gate for any change, and a new
+# shell-specific layer needs a new invariant with its own test first.
 
 # Sets the caller's `_toolr_esc_out` to the `$'…'` escape for the control character `$1`: the
 # inside of its `printf %q` form, which escapes each byte, so a C1 control in UTF-8 becomes two.

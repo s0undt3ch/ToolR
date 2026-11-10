@@ -84,6 +84,10 @@ choices and paths alike. One catch: the shell doesn't expand `~` after
 `--opt=$HOME/x` instead. A script installed by an older toolr doesn't do
 either: re-run `toolr self completion install <shell> --force`.
 
+Pressing Tab after a bare `-` offers the long forms (`--verbose`) and never
+the short aliases (`-v`). This is deliberate. A short alias you type
+yourself still works.
+
 ## The per-repo cache
 
 `$XDG_CACHE_HOME/toolr/` — one entry per repo, each holding its
@@ -113,7 +117,8 @@ A few cases differ from what you might expect:
   `~/Downloads/foo`, which asks on its own. A project with its own `.git`
   is unaffected.
 - A `.git` that is a symlink, or one owned by another user, is trusted only
-  by its own path.
+  by its own path. On Windows toolr doesn't check who owns `.git`, so only
+  the symlink case applies.
 - A main checkout made with `git init --separate-git-dir` is trusted
   separately from its worktrees.
 - A worktree moved with plain `mv` asks again. If you moved it yourself, run
@@ -194,6 +199,9 @@ Trust doesn't cover:
   deleted worktree's path before `git worktree prune`, or a non-git
   project at a trusted project's path. Trust follows the path there, so run
   `toolr project untrust` before you delete a checkout you won't recreate.
+  A record outlives its repository, and mise's trust works the same way.
+  `toolr self trusted --prune` only removes records whose path no longer
+  exists, so it can't catch a path that has since been reused.
 - A trusted repository that later pulls hostile `tools/*.py` or
   `[tool.uv]` changes.
 - Editor and LSP integrations that import `tools/*.py` themselves.
@@ -201,3 +209,10 @@ Trust doesn't cover:
 - `toolr project init` in a directory that already holds someone else's
   files. It records trust for content you didn't write, and inside a git
   repository it trusts that whole repository.
+
+## Windows notes
+
+There is no Ctrl-C handler on Windows. An interrupt ends toolr at once, so
+the command's temporary `toolr-spec-*.json` file stays in `%TEMP%` and the
+Python runner may still be running as the prompt returns. Delete leftover
+spec files by hand if you interrupt often.
