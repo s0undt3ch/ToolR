@@ -183,16 +183,37 @@ job runs these steps in order: Test PyPI dress rehearsal, push the release commi
 the GitHub release, publish to PyPI. Where it failed decides what to do.
 
 - **Before "Push the release commit and tag"** (build, tests, Test PyPI, or the push itself because `main`
-  moved): nothing is public. Fix the cause and dispatch the release again. Test PyPI uploads use
-  `skip-existing`, so files an earlier attempt uploaded don't fail the retry.
+  moved): nothing is on PyPI, GitHub or the tag, only the dress-rehearsal files on Test PyPI. Fix the cause
+  and dispatch the release again. Test PyPI uploads use `skip-existing`, so a retry gets past them.
 - **After the push** (attest, GitHub release, or PyPI failed): the tag `vX.Y.Z` exists on the release
-  commit. Re-running the job fails at the push step by design, because the tag is already there. Don't
-  delete the tag. Check what exists (`gh release view vX.Y.Z`, the PyPI project page), then finish what is
-  missing from the failed run's `dist` and `toolr-archive-*` artifacts:
-    - No GitHub release: `gh release create vX.Y.Z --verify-tag --notes-file <notes> dist/* release-assets/*`,
-      with `--prerelease` instead of `--latest` for an `-rc` version.
-    - Files missing on PyPI: Trusted Publishing only works from the workflow, so a maintainer uploads the
-      remaining files from `dist/` with `twine upload --skip-existing` and a short-lived project API token.
+  commit. Re-running the job fails at the push step by design. Don't delete the tag. Check what exists
+  (`gh release view vX.Y.Z`, the PyPI project page), then finish what is missing from the failed run's
+  artifacts. Download them as the workflow lays them out:
+
+    ```sh
+    run=<run-id>
+    gh run download "$run" -p 'cibw-wheel-*' -D dist
+    gh run download "$run" -n <binary-release-tarball-name> -D dist
+    gh run download "$run" -n <py-release-tarball-name> -D dist
+    gh run download "$run" -p 'toolr-archive-*' -D release-assets
+    gh run download "$run" -n <release-notes-filename> -D .
+    ```
+
+  The tarball and notes names are the `prepare-release` job's outputs (`binary-release-tarball-name`,
+  `py-release-tarball-name`, `release-notes-filename`). `-p` puts each artifact in its own subdirectory, so
+  move the files up into `dist/` and `release-assets/` before the next step.
+    - No GitHub release: run the workflow's own command (`--latest` becomes `--prerelease` for an `-rc` version):
+
+      ```sh
+      gh release create "vX.Y.Z" --repo s0undt3ch/ToolR --verify-tag --title "X.Y.Z" \
+        --notes-file <release-notes-filename> --latest dist/* release-assets/*
+      ```
+
+    - Files missing on PyPI: Trusted Publishing only works from the workflow, so upload the remaining files
+      from `dist/` with `twine upload --skip-existing` and a short-lived project API token. This publishes
+      without the PEP 740 attestations that `pypa/gh-action-pypi-publish` adds.
+    - "Attest final release artifacts" needs the workflow's OIDC token and can't be redone by hand. A release
+      recovered this way ships without those attestations; if they matter, cut the next patch version instead.
 - **`publish-packslip`** runs after a failed `publish-release` too, and re-signs with `--clobber`, so
   re-running it once the release exists is safe.
 - If a half-published version can't be completed (for example PyPI rejected a file), leave it, and cut the
