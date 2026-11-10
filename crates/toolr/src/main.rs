@@ -93,11 +93,29 @@ fn run() -> anyhow::Result<ExitCode> {
                 dispatch::dispatch_help_from_argv(&argv, &mut command)?;
                 return Ok(ExitCode::SUCCESS);
             }
-            // Genuine error: let clap print it and exit.
+            // Genuine error: print it the way clap does; outside a project an
+            // unknown command is most likely a wrong directory, so say so.
+            if e.kind() == ErrorKind::InvalidSubcommand
+                && bootstrap::names_user_command(&argv)
+                && let Some(hint) = no_project_hint(&cwd)
+            {
+                let _ = e.print();
+                eprintln!("{hint}");
+                return Ok(ExitCode::from(e.exit_code() as u8));
+            }
             e.exit()
         }
     };
     dispatch::dispatch(&matches, &manifest, &mut command)
+}
+
+/// The line to follow clap's "unrecognized subcommand" when `cwd` is not in a
+/// project at all. A bare `tools/` already gets its own warning.
+fn no_project_hint(cwd: &std::path::Path) -> Option<String> {
+    match discover_project_root(cwd) {
+        Err(e @ DiscoveryError::NotFound(_)) => Some(format!("toolr: {e}")),
+        _ => None,
+    }
 }
 
 fn maybe_emit_cache_hint_from_argv() {

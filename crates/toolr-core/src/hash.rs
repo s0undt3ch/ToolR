@@ -10,6 +10,7 @@ use walkdir::WalkDir;
 use crate::manifest::{Content, InputRecord, InputRecords};
 use crate::parser::BuiltManifest;
 use crate::text::escape_control_chars;
+use crate::trust::shown;
 
 /// One file that feeds `static_hash`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -319,7 +320,7 @@ fn record(
         // Deleted since it was listed: hash the tree as it now is.
         std::io::ErrorKind::NotFound => Ok(None),
         _ if input.kind == InputKind::Module => {
-            Err(anyhow::Error::new(e).context(format!("reading {}", input.path.display())))
+            Err(anyhow::Error::new(e).context(format!("reading {}", shown(&input.path))))
         }
         kind => Ok(Some(
             Stat::default().record(&input.key, Content::Unreadable(kind.to_string())),
@@ -1233,6 +1234,23 @@ parent = "django"
             let prefix = format!("reading {}: ", dispatcher.display());
             assert!(err.starts_with(&prefix), "{err}");
         }
+    }
+
+    /// A file name is repo content: the error must not carry its control characters.
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_module_error_escapes_control_characters() {
+        let project = django_project();
+        let tools = project.path().join("tools");
+        let hostile = tools.join("a\x1b[31mb.py");
+        std::fs::write(&hostile, "x = 1\n").unwrap();
+        // `None` (nothing to check) when this process can read the file anyway (root).
+        let checks = with_unreadable(&hostile, || compute_static_hash(&tools));
+        checks.into_iter().for_each(|result| {
+            let err = format!("{:#}", result.unwrap_err());
+            assert!(!err.chars().any(char::is_control), "{err:?}");
+            assert!(err.contains("a\\u{1b}[31mb.py"), "{err}");
+        });
     }
 
     const AGED: std::time::Duration = std::time::Duration::from_secs(60);

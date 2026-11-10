@@ -290,6 +290,30 @@ fn hash_errors_name_the_tools_dir_except_symlinked_modules() {
     );
 }
 
+/// The tools dir's path comes from the repository, so the error shows it escaped.
+#[cfg(unix)]
+#[test]
+fn hash_errors_escape_control_characters_in_the_tools_dir() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path().join("r\x1b[31mred");
+    make_tools(&root, &[("a.py", "x = 1\n")]);
+    let cached = manifest_for(&root);
+    let tools = root.join("tools");
+    let unreadable = tools.join("a.py");
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o0)).unwrap();
+    let root_can_read = fs::read(&unreadable).is_ok();
+    let result = compare(Some(&cached), &tools, None);
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644)).unwrap();
+    if root_can_read {
+        return;
+    }
+    let msg = format!("{:#}", result.unwrap_err());
+    let shown = crate::trust::shown(&tools);
+    assert!(msg.starts_with(&format!("hashing {shown}: ")), "{msg}");
+    assert!(shown.contains("\\u{1b}"), "{shown}");
+}
+
 /// #655: editing a file an argparse block scans is static drift, even
 /// though it lives outside `tools/`.
 #[test]

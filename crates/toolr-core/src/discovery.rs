@@ -6,19 +6,23 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::trust::shown;
+
 #[derive(Debug, Error)]
 pub enum DiscoveryError {
-    #[error("I/O error resolving {0}: {1}")]
+    #[error("I/O error resolving {}: {}", shown(.0), .1)]
     Io(PathBuf, #[source] std::io::Error),
     #[error(
-        "no toolr project found above {0}: no `tools/pyproject.toml`. \
-         Run `toolr project init` to create one"
+        "no toolr project found above {}: no `tools/pyproject.toml`. \
+         Run `toolr project init` to create one",
+        shown(.0)
     )]
     NotFound(PathBuf),
     #[error(
-        "no toolr project found above {start}: {} has no `pyproject.toml`. \
+        "no toolr project found above {}: {} has no `pyproject.toml`. \
          toolr needs `tools/pyproject.toml`; run `toolr project init` there to create it",
-        tools.display()
+        shown(start),
+        shown(tools)
     )]
     MissingPyproject { start: PathBuf, tools: PathBuf },
 }
@@ -39,9 +43,10 @@ pub fn discover_project_root(start: &Path) -> Result<PathBuf, DiscoveryError> {
 /// [`discover_project_root`], stopping after `ceiling` when given, so tests
 /// can ignore `tools/` directories on the host above their tempdir.
 fn discover_below(start: &Path, ceiling: Option<&Path>) -> Result<PathBuf, DiscoveryError> {
-    let mut current = start
-        .canonicalize()
-        .map_err(|e| DiscoveryError::Io(start.to_path_buf(), e))?;
+    // `dunce` drops Windows' `\\?\` verbatim prefix when the plain form is
+    // valid: this root reaches Python as `ctx.repo_root` and is the runner's cwd.
+    let mut current =
+        dunce::canonicalize(start).map_err(|e| DiscoveryError::Io(start.to_path_buf(), e))?;
     let mut first_bare: Option<PathBuf> = None;
     loop {
         let tools = current.join("tools");
@@ -70,7 +75,7 @@ mod tests {
     /// host `tools/` (the Windows runners' `C:\tools`) can't leak in.
     fn sandbox() -> (TempDir, PathBuf) {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = dunce::canonicalize(tmp.path()).unwrap();
         (tmp, root)
     }
 
@@ -82,6 +87,39 @@ mod tests {
     fn mkdir(path: &Path) -> PathBuf {
         std::fs::create_dir_all(path).unwrap();
         path.to_path_buf()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn root_is_not_a_verbatim_path_on_windows() {
+        let (_tmp, root) = sandbox();
+        mkfile(&root.join("tools/pyproject.toml"));
+        let found = discover_project_root(&root).unwrap();
+        assert!(
+            !found.to_string_lossy().starts_with(r"\\?\"),
+            "verbatim root: {}",
+            found.display()
+        );
+        assert_eq!(found, root);
+    }
+
+    #[test]
+    fn errors_escape_control_characters_in_paths() {
+        let hostile = PathBuf::from("a\x1b[31mb");
+        let tools = PathBuf::from("c\x1b]0;x\x07d");
+        let errors = [
+            DiscoveryError::NotFound(hostile.clone()),
+            DiscoveryError::MissingPyproject {
+                start: hostile.clone(),
+                tools,
+            },
+            DiscoveryError::Io(hostile, std::io::Error::other("boom")),
+        ];
+        for e in errors {
+            let msg = e.to_string();
+            assert!(!msg.chars().any(char::is_control), "{msg:?}");
+            assert!(msg.contains("\\u{1b}"), "{msg}");
+        }
     }
 
     fn find(start: &Path, ceiling: &Path) -> Result<PathBuf, DiscoveryError> {
@@ -158,7 +196,7 @@ mod tests {
         mkfile(&root.join("a/tools/demo.py"));
         let start = mkdir(&root.join("a/b"));
         let err = find(&start, &root).expect_err("should not find");
-        let tools = root.join("a/tools");
+        let tools = root.join("a").join("tools");
         assert!(
             matches!(&err, DiscoveryError::MissingPyproject { start: s, tools: t } if s == &start && t == &tools),
             "unexpected error: {err:?}"

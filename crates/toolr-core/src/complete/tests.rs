@@ -810,7 +810,7 @@ fn returns_fresh_manifest_when_no_cache_exists() {
         project_root,
     } = resolve_manifest_at_tab(tmp.path()).unwrap();
     assert!(!from_cache, "no cache file existed");
-    assert_eq!(project_root, tmp.path().canonicalize().unwrap());
+    assert_eq!(project_root, dunce::canonicalize(tmp.path()).unwrap());
     assert!(manifest.groups.iter().any(|g| g.name == "ci"));
     assert!(manifest.commands.iter().any(|c| c.name == "hello"));
 }

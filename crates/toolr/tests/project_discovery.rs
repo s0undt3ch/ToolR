@@ -63,7 +63,7 @@ fn manifest_rebuild_below_unrelated_tools_dir_writes_root_manifest() {
         .assert()
         .success()
         .stdout(contains(
-            manifest_in(&tmp.path().canonicalize().unwrap())
+            manifest_in(&dunce::canonicalize(tmp.path()).unwrap())
                 .display()
                 .to_string(),
         ));
@@ -100,7 +100,7 @@ fn bare_tools_repo() -> (TempDir, PathBuf) {
     let tools = tmp.path().join("tools");
     fs::create_dir_all(&tools).unwrap();
     fs::write(tools.join("demo.py"), DEMO).unwrap();
-    let tools = tools.canonicalize().unwrap();
+    let tools = dunce::canonicalize(&tools).unwrap();
     (tmp, tools)
 }
 
@@ -156,4 +156,82 @@ fn trust_in_bare_tools_repo_says_pyproject_is_missing() {
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
     assert_names_missing_pyproject(&String::from_utf8_lossy(&output.stderr), &tools);
+}
+
+#[test]
+fn unknown_command_outside_a_project_says_no_project_was_found() {
+    let tmp = TempDir::new().unwrap();
+    if let Some(host) = common::ancestor_with_tools_dir(tmp.path()) {
+        eprintln!(
+            "skipping: {} has a tools/ dir; this host violates the test precondition.",
+            host.display()
+        );
+        return;
+    }
+    let cache = TempDir::new().unwrap();
+
+    toolr_in(tmp.path(), &cache)
+        .args(["example", "hello"])
+        .assert()
+        .failure()
+        .stderr(contains("unrecognized subcommand 'example'"))
+        .stderr(contains("no toolr project found above"));
+}
+
+#[test]
+fn unknown_command_inside_a_project_gets_no_project_hint() {
+    let tmp = TempDir::new().unwrap();
+    common::write_project(tmp.path());
+    let cache = TempDir::new().unwrap();
+
+    toolr_in(tmp.path(), &cache)
+        .args(["example", "hello"])
+        .assert()
+        .failure()
+        .stderr(contains("unrecognized subcommand 'example'"))
+        .stderr(contains("no toolr project found").not());
+}
+
+#[test]
+fn nested_builtin_typo_outside_a_project_gets_no_project_hint() {
+    let tmp = TempDir::new().unwrap();
+    let cache = TempDir::new().unwrap();
+
+    toolr_in(tmp.path(), &cache)
+        .args(["self", "cache", "frob"])
+        .assert()
+        .failure()
+        .stderr(contains("unrecognized subcommand 'frob'"))
+        .stderr(contains("no toolr project found").not());
+}
+
+#[test]
+fn quiet_top_level_unknown_command_outside_a_project_still_gets_the_hint() {
+    let tmp = TempDir::new().unwrap();
+    if common::ancestor_with_tools_dir(tmp.path()).is_some() {
+        return;
+    }
+    let cache = TempDir::new().unwrap();
+
+    toolr_in(tmp.path(), &cache)
+        .args(["-q", "example"])
+        .assert()
+        .failure()
+        .stderr(contains("no toolr project found above"));
+}
+
+#[test]
+fn unknown_command_in_bare_tools_repo_gets_only_the_existing_warning() {
+    let (tmp, _tools) = bare_tools_repo();
+    let cache = TempDir::new().unwrap();
+
+    let out = toolr_in(tmp.path(), &cache).arg("nope").output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success());
+    assert_eq!(
+        stderr.matches("no toolr project found").count(),
+        1,
+        "{stderr}"
+    );
+    assert!(stderr.contains("has no `pyproject.toml`"), "{stderr}");
 }
