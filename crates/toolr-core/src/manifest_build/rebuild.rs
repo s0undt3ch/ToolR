@@ -316,6 +316,16 @@ mod tests {
         assert_eq!(fresh.third_party_hash, "cached-hash");
     }
 
+    /// `$refresh` destructured by `$pat`, or a panic naming what it was.
+    macro_rules! expect {
+        ($refresh:expr, $pat:pat => $out:expr) => {
+            match $refresh {
+                $pat => $out,
+                other => panic!("unexpected {other:?}"),
+            }
+        };
+    }
+
     /// A tools tree with one module, and its manifest path.
     fn tools_tree(tmp: &TempDir) -> std::path::PathBuf {
         let tools = tmp.path().join("tools");
@@ -330,16 +340,14 @@ mod tests {
     fn refresh_without_a_venv_keeps_the_cached_plugin_state() {
         let tmp = TempDir::new().unwrap();
         let path = tools_tree(&tmp);
-        let Refresh::Built(first) = refresh(tmp.path(), None, false).unwrap().refresh else {
-            panic!("a missing manifest is built");
-        };
+        let served_by = refresh(tmp.path(), None, false).unwrap().refresh;
+        let first = expect!(served_by, Refresh::Built(first) => first);
         assert_eq!(first.manifest.third_party_hash, empty_third_party_hash());
         let mut cached = manifest_with(vec![group("image", "docker", Origin::ThirdParty)]);
         cached.toolr_version = "0.0.0-stale".into();
         write_manifest(&path, &cached).unwrap();
-        let Refresh::Built(built) = refresh(tmp.path(), None, false).unwrap().refresh else {
-            panic!("a stale manifest is rebuilt");
-        };
+        let served_by = refresh(tmp.path(), None, false).unwrap().refresh;
+        let built = expect!(served_by, Refresh::Built(built) => built);
         assert_eq!(built.manifest.third_party_hash, "cached-hash");
         assert_eq!(built.manifest.plugin_warnings, cached.plugin_warnings);
         assert_eq!(built.manifest.groups.len(), 1);
@@ -355,9 +363,8 @@ mod tests {
         cached.toolr_version = "0.0.0-stale".into();
         write_manifest(&path, &cached).unwrap();
         let venv = tmp.path().join("venv");
-        let Refresh::Built(built) = refresh(tmp.path(), Some(&venv), false).unwrap().refresh else {
-            panic!("a stale manifest is rebuilt");
-        };
+        let served_by = refresh(tmp.path(), Some(&venv), false).unwrap().refresh;
+        let built = expect!(served_by, Refresh::Built(built) => built);
         assert!(built.manifest.groups.is_empty());
         assert!(built.manifest.plugin_warnings.is_empty());
         assert_eq!(
@@ -381,9 +388,8 @@ mod tests {
             crate::manifest::lock_path_for_repo(&cache_home.path().join("toolr"), tmp.path());
         assert!(lock.is_file());
         let written = load_manifest(&path).unwrap();
-        let Refresh::Fresh(served) = refresh(tmp.path(), Some(&venv), true).unwrap().refresh else {
-            panic!("the written manifest is fresh");
-        };
+        let served_by = refresh(tmp.path(), Some(&venv), true).unwrap().refresh;
+        let served = expect!(served_by, Refresh::Fresh(served) => served);
         assert_eq!(served, written);
     }
 
@@ -411,13 +417,9 @@ mod tests {
         cached.toolr_version = "0.0.0-stale".into();
         write_manifest(&path, &cached).unwrap();
         std::fs::write(tmp.path().join("tools/broken.py"), "def not closed(\n").unwrap();
-        let Refresh::Failed {
-            error,
-            cached: kept,
-        } = refresh(tmp.path(), None, true).unwrap().refresh
-        else {
-            panic!("a broken module fails the build");
-        };
+        let served_by = refresh(tmp.path(), None, true).unwrap().refresh;
+        let (error, kept) =
+            expect!(served_by, Refresh::Failed { error, cached } => (error, cached));
         assert!(error.to_string().starts_with("parsing "), "{error:#}");
         assert_eq!(kept, Some(cached));
         assert_eq!(load_manifest(&path).unwrap().toolr_version, "0.0.0-stale");
