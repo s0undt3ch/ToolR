@@ -10,6 +10,7 @@ use walkdir::WalkDir;
 use crate::manifest::{Content, InputRecord, InputRecords};
 use crate::parser::BuiltManifest;
 use crate::text::escape_control_chars;
+use crate::trust::shown;
 
 /// One file that feeds `static_hash`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -315,16 +316,16 @@ fn record(
     reuse: &Reuse,
     on_read: impl FnOnce(&[u8]),
 ) -> Result<Option<InputRecord>> {
-    let failed =
-        |e: std::io::Error| match e.kind() {
-            // Deleted since it was listed: hash the tree as it now is.
-            std::io::ErrorKind::NotFound => Ok(None),
-            _ if input.kind == InputKind::Module => Err(anyhow::Error::new(e)
-                .context(format!("reading {}", crate::trust::shown(&input.path)))),
-            kind => Ok(Some(
-                Stat::default().record(&input.key, Content::Unreadable(kind.to_string())),
-            )),
-        };
+    let failed = |e: std::io::Error| match e.kind() {
+        // Deleted since it was listed: hash the tree as it now is.
+        std::io::ErrorKind::NotFound => Ok(None),
+        _ if input.kind == InputKind::Module => {
+            Err(anyhow::Error::new(e).context(format!("reading {}", shown(&input.path))))
+        }
+        kind => Ok(Some(
+            Stat::default().record(&input.key, Content::Unreadable(kind.to_string())),
+        )),
+    };
     let meta = match std::fs::metadata(&input.path) {
         Ok(meta) => meta,
         Err(e) => return failed(e),

@@ -7,6 +7,7 @@ use anyhow::Result;
 use crate::hash::{context_unless_symlinked, snapshot_static_inputs, static_hash_of};
 use crate::manifest::Manifest;
 use crate::manifest_build::compute_third_party_hash;
+use crate::trust::shown;
 
 /// Outcome of comparing the live filesystem state to a cached manifest.
 ///
@@ -81,9 +82,7 @@ pub fn compare(
 
     let live_static = snapshot_static_inputs(tools_dir, Some(&cached.input_records))
         .map(|records| static_hash_of(&records.files))
-        .map_err(|e| {
-            context_unless_symlinked(e, format!("hashing {}", crate::trust::shown(tools_dir)))
-        })?;
+        .map_err(|e| context_unless_symlinked(e, format!("hashing {}", shown(tools_dir))))?;
 
     // Third-party axis is only checked when the caller actually has a
     // venv. When `venv_dir` is `None`, the caller has explicitly opted
