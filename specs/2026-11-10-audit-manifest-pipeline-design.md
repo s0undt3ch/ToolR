@@ -80,13 +80,15 @@ Callers:
   `project manifest rebuild` through a `common::build_manifest(root)` helper. Some test rows
   existed only to cover the command itself: the symlink and warnings rows in `cli_smoke.rs`, the
   `-q` row in `root_quiet_builtins.rs` and the hidden-command lists. Those rows are dropped.
-- **Error text.** `BuildError::into_anyhow` now unwraps `BuildError::Build` to its inner error,
-  the way `build_static_manifest` already does, and `build_static_manifest` calls it. Today a
+- **Error text.** `BuildError::into_anyhow` now converts exactly the way `build_static_manifest`
+  already did: it unwraps `BuildError::Build` and flattens the other variants, whose messages
+  already include their sources. `build_static_manifest` then calls it. Today a
   parse error reads differently depending on the path. It is
   `static build error: parsing X: parsing X: …` with a venv and `parsing X: …` without one, and
   the fallback warning's cause line is `static build error: parsing X`. After this change every
   path prints `parsing X: …` (cause line `parsing X`). This is user-visible, so it gets a release
-  note. The characterisation tests pin today's text first, so the diff shows the change.
+  note. The characterisation tests pin today's text first, so the diff shows the change. An
+  argparse error on the venv path also stops repeating its message.
 
 ## Behaviour kept (pinned by tests)
 
@@ -117,4 +119,17 @@ Edge cases that change:
 
 ## Line counts
 
-Filled in from `git diff --stat` against the base branch once the implementation lands.
+Measured against the base branch. Production code means the touched `src/` files up to their
+`#[cfg(test)]` module.
+
+| | Before | After | Change |
+| --- | --- | --- | --- |
+| Production code in the touched `src/` files | 4987 | 4791 | -196 |
+| Inline `#[cfg(test)]` code in those files and `complete/tests.rs` | | | +69 |
+| Integration tests (`crates/toolr/tests`) | | | +136 |
+| `docs/cli.md` | | | -6 |
+
+`bootstrap.rs` loses 272 lines and `complete/freshness.rs` 74. The core `rebuild.rs` grows by 287,
+most of it tests moved in from `bootstrap.rs` and `complete/tests.rs` plus new ones. The
+integration-test growth is the characterisation tests that pin the error text and first-run
+freshness.
