@@ -54,21 +54,21 @@ fn assert_refused_without_prompt(out: &Output) {
 #[test]
 fn init_quiet_does_not_prompt_for_uv() {
     let tmp = TempDir::new().unwrap();
-    let out = run_with_tty_stdin(tmp.path(), &["project", "init", "--quiet"]);
+    let out = run_with_tty_stdin(tmp.path(), &["--quiet", "project", "init"]);
     assert_refused_without_prompt(&out);
 }
 
 #[test]
 fn venv_lock_quiet_does_not_prompt_for_uv() {
     let fx = VenvFixture::new();
-    let out = run_with_tty_stdin(&fx.root, &["project", "venv", "lock", "--quiet"]);
+    let out = run_with_tty_stdin(&fx.root, &["--quiet", "project", "venv", "lock"]);
     assert_refused_without_prompt(&out);
 }
 
 #[test]
 fn venv_add_quiet_does_not_prompt_for_uv() {
     let fx = VenvFixture::new();
-    let out = run_with_tty_stdin(&fx.root, &["project", "venv", "add", "--quiet", "rich"]);
+    let out = run_with_tty_stdin(&fx.root, &["--quiet", "project", "venv", "add", "rich"]);
     assert_refused_without_prompt(&out);
 }
 
@@ -77,7 +77,7 @@ fn venv_remove_quiet_does_not_prompt_for_uv() {
     let fx = VenvFixture::new();
     let out = run_with_tty_stdin(
         &fx.root,
-        &["project", "venv", "remove", "--quiet", "requests"],
+        &["--quiet", "project", "venv", "remove", "requests"],
     );
     assert_refused_without_prompt(&out);
 }
@@ -87,20 +87,23 @@ fn venv_run_quiet_does_not_prompt_for_uv() {
     let fx = VenvFixture::new();
     let out = run_with_tty_stdin(
         &fx.root,
-        &["project", "venv", "run", "--quiet", "--", "true"],
+        &["--quiet", "project", "venv", "run", "--", "true"],
     );
     assert_refused_without_prompt(&out);
 }
 
 #[test]
-fn venv_sync_quiet_still_exits_silently() {
+fn venv_sync_if_project_exits_silently_when_uv_is_refused() {
     let fx = VenvFixture::new();
     // Without --quiet the same fixture reaches the prompt, so the silent exit
     // below comes from the uv refusal and not another benign failure.
     let loud = run_with_tty_stdin(&fx.root, &["project", "venv", "sync"]);
     assert!(String::from_utf8_lossy(&loud.stderr).contains(PROMPT));
 
-    let out = run_with_tty_stdin(&fx.root, &["project", "venv", "sync", "--quiet"]);
+    let out = run_with_tty_stdin(
+        &fx.root,
+        &["--quiet", "project", "venv", "sync", "--if-project"],
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.is_empty(), "expected no output:\n{stderr}");
     assert!(out.status.success(), "{stderr}");
@@ -138,8 +141,8 @@ fn root_quiet_before_project_venv_shell_does_not_prompt_for_uv() {
     assert_refused_without_prompt(&out);
 }
 
-// The root flag only stops the prompt. The silent exit for benign failures
-// stays tied to `venv sync`'s own `--quiet`.
+// `-q` only stops the prompt. The silent exit for benign failures is
+// `venv sync --if-project`.
 #[test]
 fn root_quiet_before_project_venv_sync_refuses_without_prompt() {
     let fx = VenvFixture::new();
@@ -165,7 +168,7 @@ fn trust_quiet_does_not_prompt_for_uv() {
     let state = TempDir::new().unwrap();
     let out = run_with_tty_stdin_env(
         &fx.root,
-        &["project", "trust", "--quiet"],
+        &["--quiet", "project", "trust"],
         &[("XDG_STATE_HOME", state.path())],
     );
     assert_trust_synced_nothing_without_prompt(&out);

@@ -81,7 +81,7 @@ fn quiet_trust_and_untrust_print_only_the_root() {
     let repo = repo();
     let root = fs::canonicalize(repo.path()).unwrap().display().to_string();
     for args in [
-        &["project", "trust", "--quiet", "--no-sync"][..],
+        &["--quiet", "project", "trust", "--no-sync"][..],
         &["-q", "project", "trust", "--no-sync"][..],
         &["-q", "project", "untrust"][..],
     ] {
@@ -175,7 +175,7 @@ fn quiet_init_trusts_without_saying_so() {
     let repo = TempDir::new().unwrap();
     let out = env
         .toolr(repo.path())
-        .args(["project", "init", "--yes", "--no-sync", "--quiet"])
+        .args(["--quiet", "project", "init", "--yes", "--no-sync"])
         .output()
         .unwrap();
     assert!(out.status.success());

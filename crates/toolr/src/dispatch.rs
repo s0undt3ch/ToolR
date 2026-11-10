@@ -358,14 +358,8 @@ fn resync_if_needed(
     if !quiet {
         eprintln!("toolr: {problem}; syncing it first");
     }
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
-    let opts = toolr_core::project::EnsureOpts::default()
-        .with_quiet(quiet)
-        .with_trust(toolr_core::trust::TrustMode {
-            never_prompt: quiet,
-        });
-    let (resolved, _uv) = toolr_core::project::ensure_venv_ready(repo_root, consent, opts)
-        .with_context(|| {
+    let (resolved, _uv) =
+        crate::project::ready_venv(repo_root, quiet, |o| o).with_context(|| {
             format!("{problem} and could not be synced; run `toolr project venv sync`")
         })?;
     Ok(resolved)
@@ -837,7 +831,7 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
     Ok(std::process::ExitCode::SUCCESS)
 }
 
-/// Read the root-level "Output Options" flags from the parsed matches
+/// Read the "ToolR Options" flags from the parsed matches
 /// into an `OutputOptions`. Centralised so every command path produces
 /// the same shape; missing flags fall back to `Default`.
 fn output_options_from_matches(matches: &ArgMatches) -> OutputOptions {

@@ -338,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn fires_with_leading_global_flag() {
+    fn fires_with_leading_root_flag() {
         assert!(!should_skip_auto_rebuild(&args(&[
             "--debug", "django", "migrate"
         ])));

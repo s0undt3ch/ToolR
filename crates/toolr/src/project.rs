@@ -1,7 +1,7 @@
 //! Implementation of `toolr project <...>` subcommands.
 
 use std::collections::HashSet;
-use std::io::{IsTerminal as _, Write as _};
+use std::io::IsTerminal as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -11,35 +11,73 @@ use clap::ArgMatches;
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 use toolr_core::exit_status::process_exit_code;
-use toolr_core::trust::{TrustError, TrustMode, TrustStore, require_trust, shown, trust_all_env};
+use toolr_core::trust::{TrustMode, TrustStore, require_trust, shown, trust_all_env};
 
-/// `root_quiet` is the root `toolr --quiet`. Handlers OR it into their own `--quiet` for
-/// output, uv's `--quiet` and the uv install prompt. It must never feed a guard that turns
-/// an error into exit 0: only the subcommand's own flag does that, for the mise hook (see
-/// `venv_sync_unattended_quiet_exit`). A new handler that may install uv must honour it and
-/// get a case in `tests/quiet_uv_consent.rs`. The `-q` output rule is stated on the
-/// arg in `cli::build_command`.
-pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
+/// `quiet` is the root `-q`, the only place toolr takes it. A handler that may install uv must honour it and get a case in
+/// `tests/quiet_uv_consent.rs`. The `-q` output rule is stated on the arg in
+/// `cli::root_flag_args`.
+pub fn dispatch_project(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     match matches.subcommand() {
-        Some(("init", init_m)) => project_init(init_m, root_quiet),
+        Some(("init", init_m)) => project_init(init_m, quiet),
         Some(("venv", venv_m)) => match venv_m.subcommand() {
             Some(("path", _)) => venv_path(),
-            Some(("shell", _)) => venv_shell(root_quiet),
-            Some(("run", run_m)) => venv_run(run_m, root_quiet),
-            Some(("sync", sync_m)) => venv_sync(sync_m, root_quiet),
-            Some(("lock", lock_m)) => venv_lock(lock_m, root_quiet),
-            Some(("add", add_m)) => venv_add(add_m, root_quiet),
-            Some(("remove", remove_m)) => venv_remove(remove_m, root_quiet),
+            Some(("shell", _)) => venv_shell(quiet),
+            Some(("run", run_m)) => venv_run(run_m, quiet),
+            Some(("sync", sync_m)) => venv_sync(sync_m, quiet),
+            Some(("lock", lock_m)) => venv_lock(lock_m, quiet),
+            Some(("add", add_m)) => venv_add(add_m, quiet),
+            Some(("remove", remove_m)) => venv_remove(remove_m, quiet),
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("manifest", manifest_m)) => match manifest_m.subcommand() {
-            Some(("rebuild", _)) => manifest_rebuild(root_quiet),
+            Some(("rebuild", _)) => manifest_rebuild(quiet),
             _ => unreachable!("clap enforces subcommand_required"),
         },
-        Some(("trust", trust_m)) => project_trust(trust_m, root_quiet),
-        Some(("untrust", untrust_m)) => project_untrust(untrust_m, root_quiet),
+        Some(("trust", trust_m)) => project_trust(trust_m, quiet),
+        Some(("untrust", untrust_m)) => project_untrust(untrust_m, quiet),
         _ => unreachable!("clap enforces subcommand_required"),
     }
+}
+
+/// Make the tools venv under `cwd` ready: the uv consent, uv's `--quiet` and the trust prompt
+/// all follow `quiet`, and `tweak` adds what the caller needs on top.
+pub(crate) fn ready_venv(
+    cwd: &Path,
+    quiet: bool,
+    tweak: impl FnOnce(toolr_core::project::EnsureOpts) -> toolr_core::project::EnsureOpts,
+) -> Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> {
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
+    let opts = toolr_core::project::EnsureOpts::default()
+        .with_quiet(quiet)
+        .with_trust(TrustMode {
+            never_prompt: quiet,
+        });
+    toolr_core::project::ensure_venv_ready(cwd, consent, tweak(opts))
+}
+
+/// What a `project` handler that works on the tools venv starts from.
+struct ProjectCtx {
+    cwd: PathBuf,
+}
+
+impl ProjectCtx {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            cwd: std::env::current_dir()?,
+        })
+    }
+
+    fn repo_root(&self) -> Result<PathBuf> {
+        toolr_core::discovery::discover_project_root(&self.cwd)
+            .context(toolr_core::project::NothingToSync::NoProject)
+    }
+}
+
+/// `venv sync --if-project`'s exit: success, silently, when `result` failed because there
+/// was nothing to sync.
+fn nothing_to_sync_exit<T>(result: &Result<T>, if_project: bool) -> Option<ExitCode> {
+    let e = result.as_ref().err()?;
+    (if_project && toolr_core::project::is_nothing_to_sync(e)).then_some(ExitCode::SUCCESS)
 }
 
 fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
@@ -52,9 +90,8 @@ fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
 
 /// Trust first, then sync: stdout stays the trusted root alone (the human
 /// confirmation goes to stderr), and a declined sync keeps the trust and exits
-/// 0. The root `-q` means the same as `--quiet`.
-fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
-    let quiet = matches.get_flag("quiet") || root_quiet;
+/// 0.
+fn project_trust(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     let root = root_from_path_arg(matches)?;
     let was_trusted = TrustStore::open_default()?.is_trusted(&root)?;
     let (record, trusted) = toolr_core::trust::grant_trust(&root)?;
@@ -83,13 +120,13 @@ fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn project_untrust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
+fn project_untrust(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     let root = root_from_path_arg(matches)?;
     let store = TrustStore::open_default()?;
     let (repo, existed) = store.untrust(&root)?;
     if existed {
         println!("{}", shown(&repo));
-        if !root_quiet {
+        if !quiet {
             eprintln!("toolr: untrusted {}", shown(&repo));
         }
     } else {
@@ -98,11 +135,10 @@ fn project_untrust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn project_init(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
+fn project_init(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     let force = matches.get_flag("force");
     let no_sync = matches.get_flag("no-sync");
     let no_example = matches.get_flag("no-example");
-    let quiet = matches.get_flag("quiet") || root_quiet;
     let yes_all = matches.get_flag("yes");
     let venv_location_str = matches
         .get_one::<String>("venv-location")
@@ -237,17 +273,7 @@ pub(crate) fn run_project_init(
     }
 
     // Auto-sync — same path as `toolr project venv sync --force`.
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
-    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
-        cwd,
-        consent,
-        toolr_core::project::EnsureOpts::default()
-            .with_force_sync(true)
-            .with_quiet(quiet)
-            .with_trust(TrustMode {
-                never_prompt: quiet,
-            }),
-    )?;
+    let (resolved, uv) = ready_venv(cwd, quiet, |o| o.with_force_sync(true))?;
     if !quiet {
         println!(
             "toolr: synced venv at {} using uv {}.{}.{}",
@@ -270,16 +296,13 @@ pub(crate) fn run_project_init(
     Ok(ExitCode::SUCCESS)
 }
 
-/// Prompt the user whether to overwrite a single conflicting file.
-/// Returns `Ok(true)` if approved, `Ok(false)` if declined (including EOF).
+/// Prompt the user whether to overwrite a single conflicting file; EOF declines.
 fn prompt_overwrite_file(dest: &Path, cwd: &Path) -> Result<bool> {
     let rel = dest.strip_prefix(cwd).unwrap_or(dest);
-    eprint!("toolr: overwrite {}? [y/N] ", rel.display());
-    std::io::stderr().flush()?;
-    let mut answer = String::new();
-    std::io::stdin().read_line(&mut answer)?;
-    // EOF (0 bytes read) is treated as "no" — same as pressing Enter.
-    Ok(answer.trim().eq_ignore_ascii_case("y"))
+    Ok(toolr_core::prompt::yes_no_stdin(
+        &format!("toolr: overwrite {}?", rel.display()),
+        false,
+    ))
 }
 
 /// Default `requires-python` value for new projects, from the `python3` in an
@@ -318,12 +341,9 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
+fn venv_sync(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new()?;
     let force = matches.get_flag("force");
-    // The root `-q` silences output but, unlike the subcommand flag, never turns an
-    // error into a silent exit 0 (the unattended guard below).
-    let own_quiet = matches.get_flag("quiet");
-    let quiet = own_quiet || root_quiet;
     let upgrade_all = matches.get_flag("upgrade");
     let upgrade_pkgs: Vec<String> = matches
         .get_many::<String>("upgrade-package")
@@ -335,10 +355,11 @@ fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     // Pre-flight pyproject guard for -P entries (matches the old
     // `venv upgrade` behavior). -U on its own skips the check because
     // uv re-locks everything.
-    let cwd = std::env::current_dir()?;
-    if !upgrade_pkgs.is_empty() {
-        let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
-        let pyproject = repo_root.join("tools/pyproject.toml");
+    let preflight = || -> Result<()> {
+        if upgrade_pkgs.is_empty() {
+            return Ok(());
+        }
+        let pyproject = ctx.repo_root()?.join("tools/pyproject.toml");
         for pkg in &upgrade_pkgs {
             if !pyproject_declares_dependency(&pyproject, pkg)? {
                 anyhow::bail!(
@@ -347,25 +368,31 @@ fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
                 );
             }
         }
+        Ok(())
+    }();
+    let if_project = matches.get_flag("if-project");
+    if let Some(code) = nothing_to_sync_exit(&preflight, if_project) {
+        return Ok(code);
     }
+    preflight?;
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
+    let result = ready_venv(&ctx.cwd, quiet, |o| {
+        o.with_force_sync(force).with_upgrade(upgrade)
+    });
 
-    let opts = toolr_core::project::EnsureOpts::default()
-        .with_force_sync(force)
-        .with_quiet(quiet)
-        .with_upgrade(upgrade)
-        .with_trust(TrustMode {
-            never_prompt: quiet,
-        });
-
-    let result = toolr_core::project::ensure_venv_ready(&cwd, consent, opts);
-
-    if own_quiet && let Some(code) = venv_sync_unattended_quiet_exit(&result) {
+    if let Some(code) = nothing_to_sync_exit(&result, if_project) {
         return Ok(code);
     }
 
-    let (resolved, uv) = result?;
+    let (resolved, uv) = result.map_err(|e| {
+        if toolr_core::project::is_nothing_to_sync(&e) {
+            anyhow::anyhow!(
+                "{e:#}\nhint: pass --if-project to exit 0 when there is nothing to sync"
+            )
+        } else {
+            e
+        }
+    })?;
 
     if !quiet {
         println!(
@@ -397,18 +424,15 @@ fn build_upgrade_mode(all: bool, pkgs: Vec<String>) -> toolr_core::venv::Upgrade
     }
 }
 
-fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
-    let quiet = matches.get_flag("quiet") || root_quiet;
+fn venv_lock(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new()?;
     let upgrade_all = matches.get_flag("upgrade");
     let upgrade_pkgs: Vec<String> = matches
         .get_many::<String>("upgrade-package")
         .map(|vals| vals.cloned().collect())
         .unwrap_or_default();
 
-    let cwd = std::env::current_dir()?;
-    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
-        .context("locating project root for the tools venv")?;
-    let tools_dir = repo_root.join("tools");
+    let tools_dir = ctx.repo_root()?.join("tools");
 
     // -P pre-flight guard — same as venv sync.
     if !upgrade_pkgs.is_empty() {
@@ -425,16 +449,7 @@ fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
 
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
-    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
-        &cwd,
-        consent,
-        toolr_core::project::EnsureOpts::default()
-            .with_quiet(quiet)
-            .with_trust(TrustMode {
-                never_prompt: quiet,
-            }),
-    )?;
+    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o)?;
 
     let status = toolr_core::venv::run_uv_lock(&uv, &tools_dir, &resolved, &upgrade, quiet)?;
     if !status.success() {
@@ -447,29 +462,17 @@ fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_add(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
-    let quiet = matches.get_flag("quiet") || root_quiet;
+fn venv_add(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new()?;
     let specs: Vec<String> = matches
         .get_many::<String>("packages")
         .expect("clap marks this required")
         .cloned()
         .collect();
 
-    let cwd = std::env::current_dir()?;
-    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
-        .context("locating project root for the tools venv")?;
-    let tools_dir = repo_root.join("tools");
+    let tools_dir = ctx.repo_root()?.join("tools");
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
-    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
-        &cwd,
-        consent,
-        toolr_core::project::EnsureOpts::default()
-            .with_quiet(quiet)
-            .with_trust(TrustMode {
-                never_prompt: quiet,
-            }),
-    )?;
+    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o)?;
 
     let status = toolr_core::venv::run_uv_add(&uv, &tools_dir, &resolved, &specs, quiet)?;
     if !status.success() {
@@ -486,18 +489,15 @@ fn venv_add(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
-    let quiet = matches.get_flag("quiet") || root_quiet;
+fn venv_remove(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new()?;
     let packages: Vec<String> = matches
         .get_many::<String>("packages")
         .expect("clap marks this required")
         .cloned()
         .collect();
 
-    let cwd = std::env::current_dir()?;
-    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
-        .context("locating project root for the tools venv")?;
-    let tools_dir = repo_root.join("tools");
+    let tools_dir = ctx.repo_root()?.join("tools");
 
     // Pre-flight: every named package must already be declared.
     let pyproject = tools_dir.join("pyproject.toml");
@@ -510,16 +510,7 @@ fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         }
     }
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
-    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
-        &cwd,
-        consent,
-        toolr_core::project::EnsureOpts::default()
-            .with_quiet(quiet)
-            .with_trust(TrustMode {
-                never_prompt: quiet,
-            }),
-    )?;
+    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o)?;
 
     let status = toolr_core::venv::run_uv_remove(&uv, &tools_dir, &resolved, &packages, quiet)?;
     if !status.success() {
@@ -534,48 +525,6 @@ fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         );
     }
     Ok(ExitCode::SUCCESS)
-}
-
-/// Unattended-mode guard table for `venv_sync --quiet` (the subcommand flag only; the root
-/// `-q` is excluded on purpose, see `dispatch_project`). Returns
-/// `Some(ExitCode::SUCCESS)` when the failure is one of the benign rows
-/// that `--quiet` swallows (not-a-toolr-repo, missing tools/, uv-consent
-/// absent). Returns `None` to let the error propagate normally (lock
-/// unparsable, uv sync failed, etc).
-fn venv_sync_unattended_quiet_exit(
-    result: &Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)>,
-) -> Option<ExitCode> {
-    let err = result.as_ref().err()?;
-    // The refusal names the repository path, which could contain a marker.
-    if err
-        .chain()
-        .any(|e| e.downcast_ref::<TrustError>().is_some())
-    {
-        return None;
-    }
-    let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
-    let joined = chain.join(" :: ");
-
-    // Benign markers from error contexts emitted by `ensure_venv_ready`
-    // and the `uv` install path. We match substrings the error chain
-    // already produces — keep this list aligned with:
-    //   - discover_project_root (no project)    → "locating project root"
-    //   - resolve_venv_path failure             → "resolving the tools venv path"
-    //     (both run before the trust check, so an untrusted stray `tools/`
-    //     without a pyproject still exits quietly)
-    //   - ensure_uv with never_prompt=true      → UvError::UserRefusedInstall
-    //     whose Display is "user declined uv install; ..."
-    // A trust refusal must never match: `--quiet` would turn it into exit 0.
-    let benign_markers = [
-        "locating project root",
-        "resolving the tools venv path",
-        "user declined uv install",
-    ];
-
-    if benign_markers.iter().any(|m| joined.contains(m)) {
-        return Some(ExitCode::SUCCESS);
-    }
-    None
 }
 
 /// Light TOML inspection: does `[project].dependencies` (or any
@@ -653,20 +602,10 @@ fn venv_path() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_shell(root_quiet: bool) -> Result<ExitCode> {
+fn venv_shell(quiet: bool) -> Result<ExitCode> {
     use std::process::Command;
 
-    let cwd = std::env::current_dir()?;
-    let consent = toolr_core::uv::install::ConsentMode::from_env(root_quiet);
-    let (resolved, _) = toolr_core::project::ensure_venv_ready(
-        &cwd,
-        consent,
-        toolr_core::project::EnsureOpts::default()
-            .with_quiet(root_quiet)
-            .with_trust(TrustMode {
-                never_prompt: root_quiet,
-            }),
-    )?;
+    let (resolved, _) = ready_venv(&ProjectCtx::new()?.cwd, quiet, |o| o)?;
 
     let shell = default_shell_path();
     let bin_dir = venv_bin_dir(&resolved.venv_dir);
@@ -681,22 +620,27 @@ fn venv_shell(root_quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::from(process_exit_code(status)))
 }
 
-fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
+fn venv_run(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new()?;
     let no_sync = matches.get_flag("no-sync");
-    let quiet = matches.get_flag("quiet") || root_quiet;
     let argv: Vec<String> = matches
         .get_many::<String>("command")
         .expect("clap marks command required")
         .cloned()
         .collect();
-
-    let cwd = std::env::current_dir()?;
+    // `venv run` takes the command with hyphen values allowed, so a toolr flag put after it
+    // (`venv run -q pytest`) reaches here as the command. Say where the root `-q` goes instead
+    // of running it.
+    // The passive cache hint has already run by now; it is advice on stderr and harmless here.
+    let words: Vec<&str> = argv.iter().map(String::as_str).collect();
+    if let Some(m) = crate::cli::misplaced_flag_error(&words, "project venv run", false) {
+        anyhow::bail!("{}", m.message());
+    }
 
     let resolved = if no_sync {
         // Pure path: never touch the venv. Resolve, gate on freshness,
         // validate, then run. Needs no uv / consent / network.
-        let repo_root = toolr_core::discovery::discover_project_root(&cwd)
-            .context("locating project root for the tools venv")?;
+        let repo_root = ctx.repo_root()?;
         require_trust(
             &repo_root,
             TrustMode {
@@ -726,17 +670,7 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         // Default: freshness-gated auto-sync (same path as `venv sync`,
         // and as `venv shell`), then run. `--quiet` forwards to uv's
         // --quiet inside the sync.
-        let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
-        let (resolved, _uv) = toolr_core::project::ensure_venv_ready(
-            &cwd,
-            consent,
-            toolr_core::project::EnsureOpts::default()
-                .with_quiet(quiet)
-                .with_trust(TrustMode {
-                    never_prompt: quiet,
-                }),
-        )?;
-        resolved
+        ready_venv(&ctx.cwd, quiet, |o| o)?.0
     };
 
     run_command_in_venv(&resolved.venv_dir, &argv)
@@ -826,31 +760,6 @@ mod tests {
     use crate::init_templates::{ScaffoldOptions, VenvLocation};
     use std::fs;
     use tempfile::TempDir;
-
-    #[test]
-    fn trust_refusal_is_never_a_benign_quiet_exit() {
-        let path = PathBuf::from("/x/locating project root/resolving the tools venv path");
-        for err in [
-            TrustError::Untrusted {
-                repo: path.clone(),
-                repair: None,
-            },
-            TrustError::StoreInsideRepo(path.clone()),
-        ] {
-            let bare: Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> =
-                Err(anyhow::anyhow!(err));
-            assert!(venv_sync_unattended_quiet_exit(&bare).is_none());
-            let wrapped = bare.context("user declined uv install");
-            assert!(venv_sync_unattended_quiet_exit(&wrapped).is_none());
-        }
-    }
-
-    #[test]
-    fn missing_pyproject_is_a_benign_quiet_exit() {
-        let result: Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> =
-            Err(anyhow::anyhow!("no pyproject")).context("resolving the tools venv path");
-        assert!(venv_sync_unattended_quiet_exit(&result).is_some());
-    }
 
     /// Mutating SHELL / PATH and observing their effects requires
     /// process-wide env coordination — serialise so cargo's parallel

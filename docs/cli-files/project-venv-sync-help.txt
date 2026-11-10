@@ -4,11 +4,12 @@ since the last sync)
 Usage: toolr project venv sync [OPTIONS]
 
 Options:
+      --if-project
+          Exit 0, silently, when there is nothing to sync: not in a toolr project, no readable venv
+          location, or uv absent and not installable without asking (for shell and editor hooks)
   -f, --force
           Re-run uv sync even when none of those files changed (e.g. after changing UV_*
           environment variables or user-level uv config)
-  -q, --quiet
-          Silent on success and on benign unattended-mode exits (no toolr/uv output)
   -U, --upgrade
           Re-resolve every package (passes --upgrade to uv). Combine with -P to also force specific
           packages.

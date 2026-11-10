@@ -129,12 +129,15 @@ fn build_dispatcher_command(
     c
 }
 
-// All root-level "output" flags live under a single `--help` heading
-// so users see them as a coherent block. They tweak how toolr's own
-// output renders *and* how `ctx.run(...)` subprocesses behave by
-// default (timeouts, output watchdog). Per-call `ctx.run(timeout_secs=)`
-// / `no_output_timeout_secs=` arguments still override these.
-const OUTPUT_HEADING: &str = "Output Options";
+// These flags tweak how toolr's own output renders *and* how `ctx.run(...)` subprocesses
+// behave by default (timeouts, output watchdog); per-call `ctx.run(timeout_secs=)` /
+// `no_output_timeout_secs=` arguments still override the latter. They belong to toolr, so
+// they are accepted only at the root, before the first subcommand: `toolr --debug ci hello`.
+pub(crate) const ROOT_HEADING: &str = "ToolR Options";
+
+/// Printed under [`ROOT_HEADING`] in root help, so the placement rule sits next to the flags.
+pub(crate) const ROOT_HEADING_NOTE: &str =
+    "toolr's options go before the command: toolr --debug <command> ...";
 
 // Root help only: an every-page footer was removed for costing a line on every help page.
 const ROOT_AFTER_HELP: &str = "Documentation: https://toolr.readthedocs.io/\n\
@@ -154,83 +157,13 @@ fn build_root_command() -> Command {
         .styles(help_styles())
         .disable_help_flag(true)
         .disable_help_subcommand(true)
-        // `--debug` / `--quiet` and the new timing flags are root-level
-        // options — they go before the subcommand (`toolr --debug ci
-        // hello`). They're intentionally *not* `global(true)` so they
-        // don't clutter every subcommand's --help output.
-        .next_help_heading(OUTPUT_HEADING)
-        .arg(
-            Arg::new("debug")
-                .short('d')
-                .long("debug")
-                .action(ArgAction::SetTrue)
-                .help_heading(OUTPUT_HEADING)
-                .help("Increase verbosity (also enables `DEBUG` logging)."),
-        )
-        // The `-q` rule, stated once: it drops success lines, progress and advice, never
-        // errors, refusals or warnings. A warning means the result may be incomplete, and
-        // a script that hides it can't tell. Other code points here instead of restating it.
-        .arg(
-            Arg::new("quiet")
-                .short('q')
-                .long("quiet")
-                .action(ArgAction::SetTrue)
-                .conflicts_with("debug")
-                .help_heading(OUTPUT_HEADING)
-                .help("Suppress non-error output except warnings, and never prompt to install uv."),
-        )
-        .arg(
-            Arg::new("timestamps")
-                .long("timestamps")
-                .alias("ts")
-                .action(ArgAction::SetTrue)
-                .conflicts_with("no-timestamps")
-                .help_heading(OUTPUT_HEADING)
-                .help("Prepend ISO-8601 timestamps to log lines."),
-        )
-        .arg(
-            Arg::new("no-timestamps")
-                .long("no-timestamps")
-                .alias("nts")
-                .action(ArgAction::SetTrue)
-                .help_heading(OUTPUT_HEADING)
-                .help("Suppress log-line timestamps (default; overrides `--timestamps`)."),
-        )
-        .arg(
-            Arg::new("timeout-secs")
-                .long("timeout-secs")
-                .alias("timeout")
-                .value_name("SECONDS")
-                .value_parser(clap::value_parser!(f64))
-                .help_heading(OUTPUT_HEADING)
-                .help(
-                    "Default timeout applied to every `ctx.run(...)` subprocess \
-                     (per-call `timeout_secs=` wins when set).",
-                ),
-        )
-        .arg(
-            Arg::new("no-output-timeout-secs")
-                .long("no-output-timeout-secs")
-                .alias("nots")
-                .value_name("SECONDS")
-                .value_parser(clap::value_parser!(f64))
-                .help_heading(OUTPUT_HEADING)
-                .help(
-                    "Default no-output watchdog applied to every `ctx.run(...)` \
-                     subprocess — abort if no stdout/stderr for this many \
-                     seconds. Per-call `no_output_timeout_secs=` wins when set.",
-                ),
-        )
-        // Reset the help heading so the global help arg lands in the
-        // default Options: section, not "Output Options:" inherited
-        // above. `-h` and `--help` are combined into one Arg — dispatch
-        // distinguishes Short vs Long mode by scanning raw argv.
-        .next_help_heading(None)
+        .args(root_flag_args())
         .arg(
             Arg::new("help")
                 .short('h')
                 .long("help")
                 .action(ArgAction::SetTrue)
+                // Help only: the other root flags stay root-only.
                 .global(true)
                 .help("Print help"),
         )
@@ -243,6 +176,193 @@ fn build_root_command() -> Command {
                 .action(ArgAction::Version)
                 .help("Print version"),
         )
+}
+
+/// The root command, built once: `root_flag` looks every spelling up in it.
+fn root_command() -> &'static Command {
+    static ROOT: std::sync::OnceLock<Command> = std::sync::OnceLock::new();
+    ROOT.get_or_init(build_root_command)
+}
+
+/// The root flag `spelling` names (`-q`, `--timeout-secs`, an alias such as `--timeout`).
+/// Sitting under `ROOT_HEADING` is what makes a root arg one of these flags: one without
+/// the heading is never hinted.
+fn root_flag(spelling: &str) -> Option<&'static Arg> {
+    root_command().get_arguments().find(|a| {
+        a.get_help_heading() == Some(ROOT_HEADING)
+            && match spelling.strip_prefix("--") {
+                Some(long) => {
+                    a.get_long() == Some(long)
+                        || a.get_all_aliases().is_some_and(|al| al.contains(&long))
+                }
+                None => spelling
+                    .strip_prefix('-')
+                    .is_some_and(|c| c.chars().count() == 1 && a.get_short() == c.chars().next()),
+            }
+    })
+}
+
+/// The root flag a command-line token names, as a spelling: `--timeout-secs=5` names
+/// `--timeout-secs`, a short cluster of root letters only (`-qd`) names its first letter, and
+/// anything else, such as `-qx` or `-dev`, names nothing.
+fn root_flag_spelling(word: &str) -> Option<String> {
+    if let Some(long) = word.strip_prefix("--") {
+        let spelling = format!("--{}", long.split('=').next()?);
+        return root_flag(&spelling).map(|_| spelling);
+    }
+    let letters = word.strip_prefix('-').filter(|l| !l.is_empty())?;
+    letters
+        .chars()
+        .all(|c| root_flag(&format!("-{c}")).is_some())
+        .then(|| format!("-{}", letters.chars().next().unwrap_or_default()))
+}
+
+/// A toolr root flag found where it does not belong, with the line telling where it goes.
+pub(crate) struct Misplaced {
+    spelling: String,
+    pub(crate) hint: String,
+}
+
+impl Misplaced {
+    /// The clap-style error and the hint, for callers that raise the error themselves.
+    pub(crate) fn message(&self) -> String {
+        format!(
+            "unexpected argument '{}' found\n{}",
+            self.spelling, self.hint
+        )
+    }
+}
+
+/// Characters that can be pasted into a shell without quoting. A value is echoed in the
+/// example only when it is made of these, and does not start with `-` (it would read as a flag).
+const SHELL_SAFE: &str = "_.,:/@%+-";
+
+/// The root flag that `words[0]` names after the command `path`, if it is one. The example
+/// puts the flag in front of `path`, with `...` for everything else; when root flags were
+/// already typed before the command (`typed_before`) a literal `…` stands for them. The flag's
+/// value is shown only when plain (`--x=v`, or the next word), otherwise its placeholder.
+pub(crate) fn misplaced_flag_error(
+    words: &[&str],
+    path: &str,
+    typed_before: bool,
+) -> Option<Misplaced> {
+    let spelling = root_flag_spelling(words.first()?)?;
+    let flag = root_flag(&spelling)?;
+    let plain = |v: &str| {
+        !v.is_empty()
+            && !v.starts_with('-')
+            && v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || SHELL_SAFE.contains(c))
+    };
+    let shown = match words {
+        _ if !flag.get_action().takes_values() => spelling.clone(),
+        [w, ..] if w.starts_with(&format!("{spelling}=")) && plain(&w[spelling.len() + 1..]) => {
+            (*w).to_string()
+        }
+        [w, v, ..] if *w == spelling && plain(v) => format!("{spelling} {v}"),
+        _ => {
+            let name = flag
+                .get_value_names()
+                .and_then(|n| n.first())
+                .map_or("VALUE", |n| n.as_str());
+            format!("{spelling} <{name}>")
+        }
+    };
+    let lead = if typed_before { "\u{2026} " } else { "" };
+    let path = if path.is_empty() {
+        String::new()
+    } else {
+        format!(" {path}")
+    };
+    let hint = format!(
+        "toolr: `{spelling}` is a toolr option; put it before the command: `toolr {lead}{shown}{path} ...`"
+    );
+    Some(Misplaced { spelling, hint })
+}
+
+/// The subcommand names clap matches at the start of `argv`, joined by spaces
+/// (`project venv sync`), and whether root flags were typed before the first. The names are
+/// plain identifiers, so safe to echo.
+pub(crate) fn command_path(root: &Command, argv: &[String]) -> (String, bool) {
+    let mut cmd = root;
+    let mut path: Vec<&str> = Vec::new();
+    let mut typed_before = false;
+    let mut words = argv.iter().skip(1);
+    while let Some(w) = words.next() {
+        if let Some(sub) = cmd.find_subcommand(w) {
+            cmd = sub;
+            path.push(w);
+        } else if path.is_empty() && w.starts_with('-') {
+            typed_before = true;
+            let takes_value = root_flag_spelling(w).is_some_and(|sp| {
+                &sp == w && root_flag(&sp).is_some_and(|f| f.get_action().takes_values())
+            });
+            if takes_value {
+                words.next();
+            }
+        } else {
+            break;
+        }
+    }
+    (path.join(" "), typed_before)
+}
+
+/// The `-d` / `-q` / timing flags. Root-only: a copy on a command would let a Python
+/// parameter of the same name or short collide with toolr's own flag. A new one also needs a
+/// row in docs/cli.md and a read in `dispatch::output_options_from_matches`.
+fn root_flag_args() -> Vec<Arg> {
+    vec![
+        Arg::new("debug")
+            .short('d')
+            .long("debug")
+            .action(ArgAction::SetTrue)
+            .help_heading(ROOT_HEADING)
+            .help("Increase verbosity (also enables `DEBUG` logging)."),
+        // The `-q` rule, stated once: it drops success lines, progress and advice, never
+        // errors, refusals or warnings. A warning means the result may be incomplete, and
+        // a script that hides it can't tell. Other code points here instead of restating it.
+        Arg::new("quiet")
+            .short('q')
+            .long("quiet")
+            .action(ArgAction::SetTrue)
+            .conflicts_with("debug")
+            .help_heading(ROOT_HEADING)
+            .help("Suppress non-error output except warnings, and never prompt to install uv."),
+        Arg::new("timestamps")
+            .long("timestamps")
+            .alias("ts")
+            .action(ArgAction::SetTrue)
+            .conflicts_with("no-timestamps")
+            .help_heading(ROOT_HEADING)
+            .help("Prepend ISO-8601 timestamps to log lines."),
+        Arg::new("no-timestamps")
+            .long("no-timestamps")
+            .alias("nts")
+            .action(ArgAction::SetTrue)
+            .help_heading(ROOT_HEADING)
+            .help("Suppress log-line timestamps (default; overrides `--timestamps`)."),
+        Arg::new("timeout-secs")
+            .long("timeout-secs")
+            .alias("timeout")
+            .value_name("SECONDS")
+            .value_parser(clap::value_parser!(f64))
+            .help_heading(ROOT_HEADING)
+            .help(
+                "Default timeout applied to every `ctx.run(...)` subprocess \
+                 (per-call `timeout_secs=` wins when set).",
+            ),
+        Arg::new("no-output-timeout-secs")
+            .long("no-output-timeout-secs")
+            .alias("nots")
+            .value_name("SECONDS")
+            .value_parser(clap::value_parser!(f64))
+            .help_heading(ROOT_HEADING)
+            .help(
+                "Default no-output watchdog applied to every `ctx.run(...)` \
+                 subprocess — abort if no stdout/stderr for this many \
+                 seconds. Per-call `no_output_timeout_secs=` wins when set.",
+            ),
+    ]
 }
 
 /// `toolr project init`.
@@ -293,13 +413,6 @@ fn build_project_init_subcommand() -> Command {
                 .action(ArgAction::SetTrue)
                 .help("Auto-approve overwriting any conflicting scaffold files"),
         )
-        .arg(
-            Arg::new("quiet")
-                .long("quiet")
-                .short('q')
-                .action(ArgAction::SetTrue)
-                .help("Suppress informational output and never prompt to install uv"),
-        )
 }
 
 /// `toolr project venv` and its subcommands.
@@ -329,12 +442,6 @@ fn build_project_venv_subcommand() -> Command {
                         .help("Do not sync first; run against the existing venv and error if it is missing or stale (CI-deterministic)"),
                 )
                 .arg(
-                    Arg::new("quiet")
-                        .long("quiet")
-                        .action(ArgAction::SetTrue)
-                        .help("Pass --quiet to the auto-sync step and never prompt to install uv (no effect with --no-sync)"),
-                )
-                .arg(
                     Arg::new("command")
                         .value_name("CMD")
                         .required(true)
@@ -349,18 +456,17 @@ fn build_project_venv_subcommand() -> Command {
                 .disable_help_flag(true)
                 .about("Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed since the last sync)")
                 .arg(
+                    Arg::new("if-project")
+                        .long("if-project")
+                        .action(ArgAction::SetTrue)
+                        .help("Exit 0, silently, when there is nothing to sync: not in a toolr project, no readable venv location, or uv absent and not installable without asking (for shell and editor hooks)"),
+                )
+                .arg(
                     Arg::new("force")
                         .long("force")
                         .short('f')
                         .action(ArgAction::SetTrue)
                         .help("Re-run `uv sync` even when none of those files changed (e.g. after changing UV_* environment variables or user-level uv config)"),
-                )
-                .arg(
-                    Arg::new("quiet")
-                        .long("quiet")
-                        .short('q')
-                        .action(ArgAction::SetTrue)
-                        .help("Silent on success and on benign unattended-mode exits (no toolr/uv output)"),
                 )
                 .arg(
                     Arg::new("upgrade")
@@ -382,13 +488,6 @@ fn build_project_venv_subcommand() -> Command {
             Command::new("lock")
                 .disable_help_flag(true)
                 .about("Refresh tools/uv.lock without applying (wraps `uv lock`)")
-                .arg(
-                    Arg::new("quiet")
-                        .long("quiet")
-                        .short('q')
-                        .action(ArgAction::SetTrue)
-                        .help("Pass --quiet to uv and never prompt to install it"),
-                )
                 .arg(
                     Arg::new("upgrade")
                         .long("upgrade")
@@ -415,13 +514,6 @@ fn build_project_venv_subcommand() -> Command {
                         .num_args(1..)
                         .required(true)
                         .help("Package spec (`name`, `name@version`, `name>=1.2`, …) — passed through to uv"),
-                )
-                .arg(
-                    Arg::new("quiet")
-                        .long("quiet")
-                        .short('q')
-                        .action(ArgAction::SetTrue)
-                        .help("Pass --quiet to uv and never prompt to install it"),
                 ),
         )
         .subcommand(
@@ -434,13 +526,6 @@ fn build_project_venv_subcommand() -> Command {
                         .num_args(1..)
                         .required(true)
                         .help("Package name to remove (must already appear in tools/pyproject.toml)"),
-                )
-                .arg(
-                    Arg::new("quiet")
-                        .long("quiet")
-                        .short('q')
-                        .action(ArgAction::SetTrue)
-                        .help("Pass --quiet to uv and never prompt to install it"),
                 ),
         )
 }
@@ -479,13 +564,6 @@ fn build_project_subcommand() -> Command {
                         .long("no-sync")
                         .action(ArgAction::SetTrue)
                         .help("Only record the trust; don't offer to sync the tools venv"),
-                )
-                .arg(
-                    Arg::new("quiet")
-                        .long("quiet")
-                        .short('q')
-                        .action(ArgAction::SetTrue)
-                        .help("Print only the trusted root and never prompt; sync only with TOOLR_AUTO_INSTALL_UV=1"),
                 ),
         )
         .subcommand(
@@ -1427,5 +1505,43 @@ mod cli_tree_tests {
             let built_in = root.find_subcommand(reserved).unwrap();
             assert!(built_in.find_subcommand("hijack").is_none());
         }
+    }
+
+    /// One `ci run` command whose parameters are named like toolr's root flags.
+    fn parse_ci_run(args: &[&str]) -> clap::ArgMatches {
+        let mut run = normal_leaf("run", "ci");
+        run.arguments = vec![
+            empty_arg("quiet", ArgumentKind::Flag),
+            empty_arg("debug", ArgumentKind::Flag),
+        ];
+        let manifest = Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            third_party_hash: String::new(),
+            toolr_version: String::new(),
+            groups: vec![group("ci")],
+            commands: vec![run],
+            plugin_warnings: Vec::new(),
+            input_records: Default::default(),
+        };
+        build_command(&manifest)
+            .try_get_matches_from(std::iter::once("toolr").chain(args.iter().copied()))
+            .unwrap()
+    }
+
+    #[test]
+    fn parameters_named_like_root_flags_are_ordinary_arguments() {
+        // The command's own flags set: toolr's stay false.
+        let m = parse_ci_run(&["ci", "run", "--quiet", "--debug"]);
+        let (_, ci) = m.subcommand().unwrap();
+        let (_, run) = ci.subcommand().unwrap();
+        assert!(run.get_flag("quiet") && run.get_flag("debug"));
+        assert!(!m.get_flag("quiet") && !m.get_flag("debug"));
+        // toolr's own flags set: the command's stay false.
+        let m = parse_ci_run(&["-q", "ci", "run"]);
+        let (_, ci) = m.subcommand().unwrap();
+        let (_, run) = ci.subcommand().unwrap();
+        assert!(m.get_flag("quiet"));
+        assert!(!run.get_flag("quiet") && !run.get_flag("debug"));
     }
 }

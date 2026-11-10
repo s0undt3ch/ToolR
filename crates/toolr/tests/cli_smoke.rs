@@ -649,8 +649,8 @@ fn project_venv_sync_help_lists_force_and_quiet() {
         "missing --force in help:\n{stdout}"
     );
     assert!(
-        stdout.contains("--quiet"),
-        "missing --quiet in help:\n{stdout}"
+        stdout.contains("--if-project"),
+        "missing --if-project in help:\n{stdout}"
     );
 }
 

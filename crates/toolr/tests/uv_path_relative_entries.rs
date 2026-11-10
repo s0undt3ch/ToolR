@@ -30,7 +30,7 @@ fn run(fx: &VenvFixture, data: &TempDir, path: &str) -> Output {
         .env("PATH", path)
         .env("XDG_DATA_HOME", data.path())
         .env_remove("TOOLR_AUTO_INSTALL_UV")
-        .args(["project", "venv", "lock", "--quiet"])
+        .args(["--quiet", "project", "venv", "lock"])
         .output()
         .unwrap()
 }

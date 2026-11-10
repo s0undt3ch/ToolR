@@ -19,18 +19,24 @@ toolr --help
   long form prints the full docstring (rendered via termimad);
   `-h` prints the same content as a one-line summary.
 
-### Output Options {#output-options}
+### ToolR Options {#toolr-options}
 
-Five root-level flags that tweak how toolr's own output renders **and**
+Six flags that tweak how toolr's own output renders **and**
 the defaults for any `ctx.run(...)` subprocess your command starts.
-They're root-only — place them before the subcommand
-(`toolr -d --timeout-secs 30 ci hello`, not
-`toolr ci hello -d --timeout-secs 30`).
+They belong to toolr, so they go before the command, in every case
+(`toolr --debug --timeout-secs 30 ci hello`, `toolr --quiet project venv sync --if-project`).
+Put one after the command and toolr adds a hint to clap's error, with the flag moved
+to the front, built from the command names toolr matched:
+`` `--debug` is a toolr option; put it before the command: `toolr --debug ci hello ...` ``.
+When other root flags were typed before the command, a literal `…` stands for them.
+A command's own parameters are separate: one named `quiet` or `debug`, or spelled `-d`,
+is an ordinary argument and never changes toolr's flags. Root `--help` lists these
+under "ToolR Options"; no other help page does.
 
 | Flag | What it does |
 |---|---|
 | `-d` / `--debug` | Increase verbosity. Also enables Python `DEBUG` logging in the runner. Mutually exclusive with `--quiet`. |
-| `-q` / `--quiet` | Suppress non-error output except warnings, and never prompt to install uv. |
+| `-q` / `--quiet` | Suppress non-error output except warnings, and never prompt to install uv. It never turns an error into a success. |
 | `--timestamps` / `--ts` | Prepend ISO-8601 timestamps to log lines. |
 | `--no-timestamps` / `--nts` | Suppress log-line timestamps (default; wins over `--timestamps`). |
 | `--timeout-secs SECONDS` / `--timeout` | Default timeout passed to every `ctx.run(...)` call. Per-call `timeout_secs=` still wins. |
@@ -63,7 +69,7 @@ Scaffold `tools/` in the current directory.
 
 ```text
 toolr project init [--force] [--no-sync] [--venv-location {cache,in-tree}]
-                   [--no-example] [--python <version>] [-y | --yes] [-q | --quiet]
+                   [--no-example] [--python <version>] [-y | --yes]
 ```
 
 **Flags:**
@@ -76,7 +82,6 @@ toolr project init [--force] [--no-sync] [--venv-location {cache,in-tree}]
 - `--python` — `requires-python` value for `tools/pyproject.toml`
   (defaults to `python3`'s `>=major.minor`, never below the oldest Python toolr supports).
 - `-y` / `--yes` — auto-approve overwriting any conflicting scaffold files.
-- `-q` / `--quiet` — suppress informational output and never prompt to install uv.
 
 ```sh
 toolr project init --help
@@ -96,11 +101,13 @@ Default behaviour is idempotent. `sync` runs `uv sync` only when
 `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml` or
 `tools/.python-version` changed since the last sync. Otherwise it exits without spawning `uv`.
 Pass `--force` to re-run unconditionally, for example after changing
-`UV_*` environment variables or a user-level `uv.toml`. Pass `--quiet` for an
-unattended-safe path (silent on success, silent on benign exits like
-"not a toolr repo" or "uv install needs consent"); see
+`UV_*` environment variables or a user-level `uv.toml`. Pass the root `--quiet`
+(`toolr --quiet project venv sync`) to silence it and stop it asking to install uv.
+Add `--if-project` for an unattended-safe path (`toolr --quiet project venv sync --if-project`):
+it exits 0, silently, when there is nothing to sync ("not a toolr repo" or
+"uv install needs consent"); see
 [Auto-sync the tools venv on shell-enter](installation/mise.md#auto-sync-the-tools-venv-on-shell-enter)
-for the mise enter-hook recipe that builds on `--quiet`.
+for the mise enter-hook recipe that builds on both.
 
 Pass `-U` to re-resolve every package to its latest allowed version
 before syncing, or `-P <pkg>` (repeatable) to re-resolve specific
@@ -237,7 +244,7 @@ Trust the repository at `PATH` (default: the current directory's project
 root) and print the repository path on stdout: the main checkout, or a bare
 repository's `foo.git` directory. This covers every worktree of it. stderr
 says `toolr: trusted <repo>`, or `toolr: <repo> was already trusted`;
-`--quiet` drops that line. Then it offers to sync its tools venv if it needs
+`toolr --quiet` drops that line. Then it offers to sync its tools venv if it needs
 one. `--no-sync` only records the trust. When it asks, syncs or exits
 non-zero is in [Repository trust](concepts.md#repository-trust).
 
@@ -253,7 +260,7 @@ toolr project trust --help
 
 Remove the trust record for the repository at `PATH`, which untrusts every
 worktree of it. Prints the repository path on stdout and
-`toolr: untrusted <repo>` on stderr when a record was removed (the root `-q`
+`toolr: untrusted <repo>` on stderr when a record was removed (`toolr --quiet`
 drops the stderr line); says so on stderr when there was none.
 
 ```sh

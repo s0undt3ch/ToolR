@@ -263,13 +263,6 @@ fn init_is_silent_under_root_quiet_and_quiets_uv() {
 }
 
 #[test]
-fn init_subcommand_quiet_also_quiets_uv() {
-    let (fx, _cwd, out) = init_project(&[], &["--quiet"]);
-    assert_silent_success(&out);
-    assert!(uv_got_quiet(&fx), "{}", fx.uv_argv());
-}
-
-#[test]
 fn init_no_sync_is_silent_under_root_quiet() {
     let cwd = TempDir::new().unwrap();
     let out = common::toolr()
@@ -336,8 +329,8 @@ fn venv_remove_quiet_still_reports_an_undeclared_package() {
     assert!(stderr(&out).contains("is not declared"), "{}", stderr(&out));
 }
 
-/// The subcommand's own `--quiet` turns "not a toolr repo" into a silent
-/// success for the mise hook. The root `-q` must not: it still fails loudly.
+/// `-q` is output control only: "not a toolr repo" still fails loudly. The silent
+/// success for the mise hook is `venv sync --if-project`.
 #[test]
 fn venv_sync_root_quiet_does_not_swallow_a_missing_project() {
     let tmp = TempDir::new().unwrap();
@@ -356,7 +349,7 @@ fn venv_shell_and_run_quiet_the_auto_sync_uv() {
     for args in [
         &["-q", "project", "venv", "shell"][..],
         &["-q", "project", "venv", "run", "--", "/usr/bin/true"][..],
-        &["project", "venv", "run", "--quiet", "--", "/usr/bin/true"][..],
+        &["--quiet", "project", "venv", "run", "--", "/usr/bin/true"][..],
     ] {
         let fx = VenvFixture::new();
         let out = common::toolr()

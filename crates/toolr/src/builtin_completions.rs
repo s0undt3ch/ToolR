@@ -583,13 +583,13 @@ mod tests {
     }
 
     #[test]
-    fn project_venv_sync_offers_force_and_quiet_flags() {
+    fn project_venv_sync_offers_its_own_flags() {
         let m = merged_empty_manifest();
         let out = values(serve_completions(
             &m,
             &tokens(&["project", "venv", "sync", "--"]),
         ));
-        for expected in ["--force", "--quiet"] {
+        for expected in ["--force", "--if-project"] {
             assert!(
                 out.contains(&expected.to_string()),
                 "missing {expected} in project venv sync flags, got: {out:?}"

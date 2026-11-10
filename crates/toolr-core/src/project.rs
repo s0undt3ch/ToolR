@@ -57,6 +57,28 @@ impl EnsureOpts {
     }
 }
 
+/// Failures of [`ensure_venv_ready`] that mean there is no tools venv to ready: attached
+/// as the context of the underlying error, so `venv sync --if-project` recognises them by
+/// type ([`is_nothing_to_sync`]) and the message stays what it was.
+#[derive(Debug, thiserror::Error)]
+pub enum NothingToSync {
+    #[error("locating project root for the tools venv")]
+    NoProject,
+    #[error("resolving the tools venv path")]
+    NoVenvPath,
+}
+
+/// Whether `err` says there was nothing to sync: no project, no readable venv location, or
+/// uv absent and not installable without asking. A trust refusal, a failed sync and the
+/// rest are not.
+pub fn is_nothing_to_sync(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<NothingToSync>().is_some()
+        || matches!(
+            err.downcast_ref::<UvError>(),
+            Some(UvError::UserRefusedInstall)
+        )
+}
+
 /// One-stop "make the venv ready" entrypoint. Returns the resolved venv
 /// + the chosen uv binary on success.
 pub fn ensure_venv_ready(
@@ -64,9 +86,8 @@ pub fn ensure_venv_ready(
     consent: ConsentMode,
     opts: EnsureOpts,
 ) -> Result<(ResolvedVenv, UvBinary)> {
-    let repo_root =
-        discover_project_root(cwd).context("locating project root for the tools venv")?;
-    let resolved = resolve_venv_path(&repo_root).context("resolving the tools venv path")?;
+    let repo_root = discover_project_root(cwd).context(NothingToSync::NoProject)?;
+    let resolved = resolve_venv_path(&repo_root).context(NothingToSync::NoVenvPath)?;
     // After the static pyproject read, so a broken one stays a benign
     // `--quiet` exit; before anything repo-controlled runs.
     if !opts.trusted.as_ref().is_some_and(|t| t.covers(&repo_root)) {
@@ -118,19 +139,9 @@ pub(crate) fn confirm_sync(input: &mut dyn BufRead, out: &mut dyn Write) -> bool
     let _ = write!(
         out,
         "The tools venv needs a sync before toolr can run this repository's commands.\n\
-         Syncing may download uv and a Python, and installs the dependencies in tools/pyproject.toml.\n\
-         Sync it now? [y/N] "
+         Syncing may download uv and a Python, and installs the dependencies in tools/pyproject.toml.\n"
     );
-    let _ = out.flush();
-    let mut answer = String::new();
-    match input.read_line(&mut answer) {
-        Ok(n) if n > 0 => matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"),
-        _ => {
-            // EOF echoes no newline, so whatever follows would land on the prompt line.
-            let _ = writeln!(out);
-            false
-        }
-    }
+    crate::prompt::yes_no(input, out, "Sync it now?", false)
 }
 
 /// Sync a trusted repository's venv if it needs it, asking first. The sync
@@ -305,6 +316,31 @@ mod tests {
             chain.iter().any(|m| m.contains("locating project root")),
             "expected discovery to fail, got: {chain:?}"
         );
+        assert!(is_nothing_to_sync(&err), "{err:#}");
+    }
+
+    #[test]
+    fn nothing_to_sync_is_recognised_by_type_not_by_text() {
+        use crate::trust::TrustError;
+        let no_project = anyhow::anyhow!("boom").context(NothingToSync::NoProject);
+        let no_venv_path = anyhow::anyhow!("boom").context(NothingToSync::NoVenvPath);
+        let refused = UvError::UserRefusedInstall.into_anyhow();
+        let wrapped = UvError::UserRefusedInstall
+            .into_anyhow()
+            .context("uv sync against tools");
+        for err in [&no_project, &no_venv_path, &refused, &wrapped] {
+            assert!(is_nothing_to_sync(err), "{err:#}");
+        }
+
+        // The same words from another source, and a trust refusal, are not it.
+        let lookalike = anyhow::anyhow!("locating project root for the tools venv");
+        let path = PathBuf::from("/x/locating project root/user declined uv install");
+        let untrusted = anyhow::Error::new(TrustError::StoreInsideRepo(path))
+            .context(NothingToSync::NoProject.to_string());
+        let failed_sync = anyhow::anyhow!("uv sync failed");
+        for err in [&lookalike, &untrusted, &failed_sync] {
+            assert!(!is_nothing_to_sync(err), "{err:#}");
+        }
     }
 
     #[test]

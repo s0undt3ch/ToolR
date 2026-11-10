@@ -352,16 +352,10 @@ fn confirm(input: &mut dyn BufRead, out: &mut dyn Write, repo: &Path) -> bool {
         out,
         "toolr hasn't run code from this repository before:\n  {}\n\
          Trusting it also trusts its git worktrees.\n\
-         Running its commands executes tools/*.py and syncs tools/pyproject.toml with uv.\n\
-         Trust it? [y/N] ",
+         Running its commands executes tools/*.py and syncs tools/pyproject.toml with uv.\n",
         shown(repo)
     );
-    let _ = out.flush();
-    let mut answer = String::new();
-    match input.read_line(&mut answer) {
-        Ok(n) if n > 0 => matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"),
-        _ => false,
-    }
+    crate::prompt::yes_no(input, out, "Trust it?", false)
 }
 
 /// The decision flow: env override, existing record, prompt, refuse.

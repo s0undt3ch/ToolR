@@ -33,31 +33,52 @@ fn sync_errors_when_not_in_a_toolr_repo() {
     );
 }
 
-/// `--quiet` swallows the not-a-toolr-repo case: exit 0, silent.
+/// `--quiet --if-project` swallows the not-a-toolr-repo case: exit 0, silent.
 /// This is the contract the mise enter-hook recipe depends on.
 #[test]
-fn sync_quiet_silently_exits_when_not_a_toolr_repo() {
+fn sync_if_project_silently_exits_when_not_a_toolr_repo() {
     let tmp = TempDir::new().unwrap();
     let output = common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "venv", "sync", "--quiet"])
+        .args(["--quiet", "project", "venv", "sync", "--if-project"])
         .output()
         .unwrap();
 
     assert!(
         output.status.success(),
-        "--quiet must exit 0 when not in a toolr repo; stderr was:\n{}",
+        "--if-project must exit 0 when not in a toolr repo; stderr was:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
         output.stdout.is_empty() && output.stderr.is_empty(),
-        "--quiet must produce no output;\nstdout={:?}\nstderr={:?}",
+        "--quiet --if-project must produce no output;\nstdout={:?}\nstderr={:?}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
 }
 
-/// `--quiet` swallows the missing-pyproject case too. The hook fires
+/// `--if-project` covers the `-P` pre-flight too: there is no project to read it from.
+#[test]
+fn sync_if_project_with_upgrade_package_exits_silently_outside_a_project() {
+    let tmp = TempDir::new().unwrap();
+    let output = common::toolr()
+        .current_dir(tmp.path())
+        .args([
+            "--quiet",
+            "project",
+            "venv",
+            "sync",
+            "--if-project",
+            "-P",
+            "rich",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty() && output.stderr.is_empty());
+}
+
+/// `--if-project` swallows the missing-pyproject case too. The hook fires
 /// on every `cd` and toolr should never surface noise for non-toolr
 /// directories — even ones whose ancestor happened to be a toolr repo.
 #[test]
@@ -68,13 +89,13 @@ fn sync_quiet_silently_exits_when_pyproject_missing() {
 
     let output = common::toolr()
         .current_dir(tmp.path())
-        .args(["project", "venv", "sync", "--quiet"])
+        .args(["--quiet", "project", "venv", "sync", "--if-project"])
         .output()
         .unwrap();
 
     assert!(
         output.status.success(),
-        "--quiet must exit 0 when tools/pyproject.toml is missing; stderr was:\n{}",
+        "--if-project must exit 0 when tools/pyproject.toml is missing; stderr was:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 }
@@ -84,7 +105,7 @@ fn sync_quiet_silently_exits_when_pyproject_missing() {
 /// venv-sync-specific test file so a future split of these test
 /// crates keeps the contract close to the behavior it tests.)
 #[test]
-fn sync_help_lists_force_and_quiet() {
+fn sync_help_lists_force_and_if_project() {
     let output = common::toolr()
         .args(["project", "venv", "sync", "--help"])
         .output()
@@ -92,7 +113,10 @@ fn sync_help_lists_force_and_quiet() {
     assert!(output.status.success(), "help should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--force"), "help missing --force: {stdout}");
-    assert!(stdout.contains("--quiet"), "help missing --quiet: {stdout}");
+    assert!(
+        stdout.contains("--if-project"),
+        "help missing --if-project: {stdout}"
+    );
     assert!(
         stdout.contains("no-op unless") && stdout.contains("pyproject.toml"),
         "help should describe the no-op-when-fresh default and its inputs: {stdout}"
