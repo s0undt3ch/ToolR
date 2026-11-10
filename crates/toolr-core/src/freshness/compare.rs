@@ -81,7 +81,9 @@ pub fn compare(
 
     let live_static = snapshot_static_inputs(tools_dir, Some(&cached.input_records))
         .map(|records| static_hash_of(&records.files))
-        .map_err(|e| context_unless_symlinked(e, format!("hashing {}", tools_dir.display())))?;
+        .map_err(|e| {
+            context_unless_symlinked(e, format!("hashing {}", crate::trust::shown(tools_dir)))
+        })?;
 
     // Third-party axis is only checked when the caller actually has a
     // venv. When `venv_dir` is `None`, the caller has explicitly opted

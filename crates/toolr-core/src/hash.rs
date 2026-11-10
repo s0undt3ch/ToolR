@@ -315,16 +315,16 @@ fn record(
     reuse: &Reuse,
     on_read: impl FnOnce(&[u8]),
 ) -> Result<Option<InputRecord>> {
-    let failed = |e: std::io::Error| match e.kind() {
-        // Deleted since it was listed: hash the tree as it now is.
-        std::io::ErrorKind::NotFound => Ok(None),
-        _ if input.kind == InputKind::Module => {
-            Err(anyhow::Error::new(e).context(format!("reading {}", input.path.display())))
-        }
-        kind => Ok(Some(
-            Stat::default().record(&input.key, Content::Unreadable(kind.to_string())),
-        )),
-    };
+    let failed =
+        |e: std::io::Error| match e.kind() {
+            // Deleted since it was listed: hash the tree as it now is.
+            std::io::ErrorKind::NotFound => Ok(None),
+            _ if input.kind == InputKind::Module => Err(anyhow::Error::new(e)
+                .context(format!("reading {}", crate::trust::shown(&input.path)))),
+            kind => Ok(Some(
+                Stat::default().record(&input.key, Content::Unreadable(kind.to_string())),
+            )),
+        };
     let meta = match std::fs::metadata(&input.path) {
         Ok(meta) => meta,
         Err(e) => return failed(e),
