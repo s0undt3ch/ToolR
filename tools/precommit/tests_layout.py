@@ -34,6 +34,7 @@ def layout_problems(tests_dir: Path) -> list[str]:
 
     1. A directory holding ``.py`` files has an ``__init__.py``.
     2. A non-``.py`` file lives inside a ``files/`` directory.
+    3. No ``test_*.py`` sits directly in ``tests/``; tests live in ``tests/<area>/``.
 
     ``files/`` trees are fixture data: they are exempt from rule 1 and are where rule 2 sends data.
     """
@@ -49,6 +50,11 @@ def layout_problems(tests_dir: Path) -> list[str]:
         for path in paths
         if path.suffix != ".py"
     )
+    problems.extend(
+        f"move tests/{path.as_posix()} into a `tests/<area>/` directory that mirrors the source it covers"
+        for path in paths
+        if len(path.parts) == 1 and path.suffix == ".py" and path.name.startswith("test_")
+    )
     return problems
 
 
@@ -59,7 +65,7 @@ def check_tests_layout(ctx: Context) -> None:
     Every directory holding a ``.py`` file has an ``__init__.py`` (no namespace packages), so test
     modules import as ``tests.…`` and can't shadow real packages such as ``tools``. Every non-``.py``
     file lives in a ``files/`` directory next to the tests that use it, and ``files/`` trees are data,
-    not packages.
+    not packages. No ``test_*.py`` sits directly in ``tests/``.
     """
     problems = layout_problems(REPO_ROOT / "tests")
     for problem in problems:

@@ -145,7 +145,7 @@ The compiler doesn't check the rest. Tests catch some of it, but not all:
    convert the string the binary sends.
 4. Add the name to the three pinned lists: `toolr_types_names_match_python_surface` in
    `parser/types/mod.rs`, `catalogue_covers_every_toolr_types_name` in `supported.rs`, and
-   `EXPECTED_TOOLR_TYPES_NAMES` in `tests/test_types_module.py`.
+   `EXPECTED_TOOLR_TYPES_NAMES` in `tests/toolr_types/test_types_module.py`.
 5. Run `cargo xtask build-skill-refs` and commit the regenerated type tables in `docs/` and
    `skills/`.
 6. Queue a release note with `toolr release-notes add`. A new type makes the next release a minor one.

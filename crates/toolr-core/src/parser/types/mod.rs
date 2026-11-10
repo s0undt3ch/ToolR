@@ -483,7 +483,7 @@ mod tests {
 
     /// Pin every `toolr.types.X` name the rust side knows about.
     ///
-    /// The python-side companion lives at `tests/test_types_module.py`
+    /// The python-side companion lives at `tests/toolr_types/test_types_module.py`
     /// (`EXPECTED_TOOLR_TYPES_NAMES`). Anything added in one place
     /// without the other will break this test or its python twin,
     /// so the public surface can't silently drift.
@@ -513,7 +513,7 @@ mod tests {
                 "rust resolver doesn't know about `toolr.types.{name}` — \
                  add it to `resolve_toolr_types_name` or remove it from \
                  the EXPECTED_TOOLR_TYPES_NAMES list in \
-                 tests/test_types_module.py"
+                 tests/toolr_types/test_types_module.py"
             );
         }
         // Anything else should be rejected.
