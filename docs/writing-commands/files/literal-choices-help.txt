@@ -3,7 +3,7 @@ Set the active log level.
 Usage: toolr logs set-level [OPTIONS]
 
 Options:
-      --level
+      --level <level>
           Which level to use.
           [possible values: debug, info, warning, error]
           [default: info]

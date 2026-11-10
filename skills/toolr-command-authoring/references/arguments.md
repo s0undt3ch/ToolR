@@ -121,7 +121,7 @@ Say hello.
 Usage: toolr greeting hello [OPTIONS]
 
 Options:
-      --name
+      --name <name>
           The name of the person to greet.
           [default: World]
   -h, --help
@@ -238,7 +238,7 @@ Set the active log level.
 Usage: toolr logs set-level [OPTIONS]
 
 Options:
-      --level
+      --level <level>
           Which level to use.
           [possible values: debug, info, warning, error]
           [default: info]

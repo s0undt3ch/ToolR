@@ -1,10 +1,10 @@
 Run a command inside the managed tools venv (auto-syncs first; use --no-sync in CI)
 
-Usage: toolr project venv run [OPTIONS] <CMD>
+Usage: toolr project venv run [OPTIONS] <CMD>...
 
 Arguments:
-  <CMD>  Command to run in the venv, e.g. pytest tests/. toolr's own flags must come before the
-         command (or a --).
+  <CMD>...  Command to run in the venv, e.g. pytest tests/. toolr's own flags must come before the
+            command (or a --).
 
 Options:
       --no-sync
