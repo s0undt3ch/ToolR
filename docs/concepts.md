@@ -85,8 +85,8 @@ choices and paths alike. One catch: the shell doesn't expand `~` after
 either: re-run `toolr self completion install <shell> --force`.
 
 Pressing Tab after a bare `-` offers the long forms (`--verbose`) and never
-the short aliases (`-v`). This is deliberate. A short alias still completes
-once you have typed it.
+the short aliases (`-v`). This is deliberate. A short alias you type
+yourself still works.
 
 ## The per-repo cache
 
