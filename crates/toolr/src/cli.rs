@@ -26,6 +26,14 @@ fn user_group_collides(name: &str) -> bool {
     builtin_names().iter().any(|b| b == name)
 }
 
+/// Drop every user group (and its commands) rooted at a name [`user_group_collides`] rejects, so
+/// completion offers what a run would accept. Silent: the warning is [`build_command`]'s.
+pub(crate) fn drop_reserved_user_groups(manifest: &mut Manifest) {
+    let reserved = |path: &str| user_group_collides(path.split('.').next().unwrap_or(path));
+    manifest.groups.retain(|g| !reserved(&g.full_path()));
+    manifest.commands.retain(|c| !reserved(&c.group));
+}
+
 /// Index the manifest's groups by their parent's `full_path()`. Top-level
 /// groups (no parent) live under the `None` key.
 fn children_by_parent(manifest: &Manifest) -> HashMap<Option<String>, Vec<&Group>> {

@@ -71,3 +71,41 @@ fn a_user_group_named_like_a_hidden_built_in_is_ignored_with_a_warning() {
         );
     }
 }
+
+#[test]
+fn completion_does_not_offer_user_groups_reserved_by_built_ins() {
+    let p = Project::new();
+    for (file, name) in [("a.py", "__install-uv-now"), ("b.py", "self")] {
+        p.write_tool(
+            file,
+            &format!(
+                "\"\"\"U.\"\"\"\nfrom toolr import Context, command_group\n\
+                 group = command_group(\"{name}\", \"U\", \"U tools.\")\n\
+                 @group.command\ndef go(ctx: Context) -> None:\n    \"\"\"Go.\"\"\"\n"
+            ),
+        );
+    }
+    let cwd = p.tools().parent().unwrap().to_str().unwrap().to_owned();
+    // Tab never builds the manifest; a normal run does.
+    p.stderr(&["--help"]);
+    let complete = |words: &[&str]| {
+        let mut args = vec!["__complete", cwd.as_str()];
+        args.extend(words);
+        let out = p.toolr(&args).output().unwrap();
+        assert!(
+            out.stderr.is_empty(),
+            "{words:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap()
+    };
+
+    assert!(!complete(&["__"]).contains("__install-uv-now"));
+    let after_self = complete(&["self", ""]);
+    assert!(
+        !after_self.lines().any(|l| l.starts_with("go\t")),
+        "{after_self}"
+    );
+    assert!(after_self.contains("cache"), "{after_self}");
+    assert!(complete(&["__install-uv-now", ""]).trim().is_empty());
+}

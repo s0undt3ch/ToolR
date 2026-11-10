@@ -62,6 +62,8 @@ pub(super) fn run_complete(
     let mut manifest = resolve_manifest_at_tab(&cwd)
         .map(|r| r.manifest)
         .unwrap_or_else(|_| Manifest::empty());
+    // A normal run ignores user groups named like a built-in; Tab must not offer them either.
+    crate::cli::drop_reserved_user_groups(&mut manifest);
     // The engine is purely manifest-driven, but the binary owns its own
     // built-in `self` / `project` subtree. Inject synthetic entries that
     // mirror `cli::build_command` so those subcommands also complete.
