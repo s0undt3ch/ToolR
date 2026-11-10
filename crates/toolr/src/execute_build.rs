@@ -48,7 +48,7 @@ pub fn build_spec(
         args,
         context: ContextSpec {
             repo_root: repo_root.to_string_lossy().into_owned(),
-            verbosity: output_opts.verbosity.clone(),
+            verbosity: output_opts.verbosity.as_str().to_owned(),
             timestamps: output_opts.timestamps,
             log_level: output_opts.log_level.clone(),
             default_timeout_secs: output_opts.default_timeout_secs,
@@ -156,7 +156,7 @@ pub fn build_dispatch_spec(
         args: parent_args,
         context: ContextSpec {
             repo_root: repo_root.to_string_lossy().into_owned(),
-            verbosity: output_opts.verbosity.clone(),
+            verbosity: output_opts.verbosity.as_str().to_owned(),
             timestamps: output_opts.timestamps,
             log_level: output_opts.log_level.clone(),
             default_timeout_secs: output_opts.default_timeout_secs,
@@ -314,13 +314,31 @@ fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
     }
 }
 
+/// How much toolr and the runner print; a string on the runner spec's wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Verbosity {
+    Quiet,
+    #[default]
+    Normal,
+    Verbose,
+}
+
+impl Verbosity {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Quiet => "quiet",
+            Self::Normal => "normal",
+            Self::Verbose => "verbose",
+        }
+    }
+}
+
 /// Plumbing struct bundling the "ToolR Options" flag
 /// values for `build_spec`. Adding a new flag is a one-field change
 /// instead of growing the `build_spec` argument list again.
 #[derive(Debug, Clone)]
 pub struct OutputOptions {
-    /// One of `"quiet"` / `"normal"` / `"verbose"`.
-    pub verbosity: String,
+    pub verbosity: Verbosity,
     pub timestamps: bool,
     /// Python `logging` level name.
     pub log_level: String,
@@ -331,7 +349,7 @@ pub struct OutputOptions {
 impl Default for OutputOptions {
     fn default() -> Self {
         Self {
-            verbosity: "normal".to_string(),
+            verbosity: Verbosity::Normal,
             timestamps: false,
             log_level: "INFO".to_string(),
             default_timeout_secs: None,
@@ -1418,7 +1436,9 @@ mod tests {
         // strings here so a Rust-side rename gets caught by a unit
         // test instead of a CLI smoke run.
         let opts = OutputOptions::default();
-        assert_eq!(opts.verbosity, "normal");
+        assert_eq!(opts.verbosity.as_str(), "normal");
+        assert_eq!(Verbosity::Quiet.as_str(), "quiet");
+        assert_eq!(Verbosity::Verbose.as_str(), "verbose");
         assert!(!opts.timestamps);
         assert_eq!(opts.log_level, "INFO");
         assert!(opts.default_timeout_secs.is_none());

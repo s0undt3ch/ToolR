@@ -21,7 +21,8 @@ use toolr_core::trust::shown;
 use toolr_core::venv::resolve_venv_path;
 
 use crate::execute_build::{
-    OutputOptions, PathBases, PathValueError, build_dispatch_spec, build_spec, pack_child_args,
+    OutputOptions, PathBases, PathValueError, Verbosity, build_dispatch_spec, build_spec,
+    pack_child_args,
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -238,14 +239,14 @@ pub fn dispatch(
     let trusted = toolr_core::trust::require_trust(
         &repo_root,
         toolr_core::trust::TrustMode {
-            never_prompt: output_opts.verbosity == "quiet",
+            never_prompt: output_opts.verbosity == Verbosity::Quiet,
         },
     )?;
 
     let tempfile = write_spec_to_tempfile(&spec)?;
     let resolved = resolve_venv_path(&repo_root)?;
-    let quiet = output_opts.verbosity == "quiet";
-    let verbose = output_opts.verbosity == "verbose";
+    let quiet = output_opts.verbosity == Verbosity::Quiet;
+    let verbose = output_opts.verbosity == Verbosity::Verbose;
     let resolved = if trusted.granted_at_prompt() {
         sync_after_trust_prompt(&trusted, resolved)?
     } else {
@@ -757,10 +758,10 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
 fn output_options_from_matches(matches: &ArgMatches) -> OutputOptions {
     let mut opts = OutputOptions::default();
     if matches.get_flag("quiet") {
-        opts.verbosity = "quiet".into();
+        opts.verbosity = Verbosity::Quiet;
         opts.log_level = "INFO".into();
     } else if matches.get_flag("debug") {
-        opts.verbosity = "verbose".into();
+        opts.verbosity = Verbosity::Verbose;
         opts.log_level = "DEBUG".into();
     }
     // `--no-timestamps` wins over `--timestamps`; clap enforces the
@@ -984,7 +985,7 @@ mod tests {
     fn output_options_quiet_overrides_verbosity_and_log_level() {
         let m = parse(&["--quiet"]);
         let opts = output_options_from_matches(&m);
-        assert_eq!(opts.verbosity, "quiet");
+        assert_eq!(opts.verbosity, Verbosity::Quiet);
         assert_eq!(opts.log_level, "INFO");
     }
 
@@ -992,7 +993,7 @@ mod tests {
     fn output_options_debug_overrides_verbosity_and_log_level() {
         let m = parse(&["--debug"]);
         let opts = output_options_from_matches(&m);
-        assert_eq!(opts.verbosity, "verbose");
+        assert_eq!(opts.verbosity, Verbosity::Verbose);
         assert_eq!(opts.log_level, "DEBUG");
     }
 
