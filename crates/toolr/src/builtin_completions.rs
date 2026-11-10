@@ -446,6 +446,17 @@ mod tests {
         candidates.into_iter().map(|c| c.value).collect()
     }
 
+    #[test]
+    fn walk_group_skips_hidden_children() {
+        let group = ClapCommand::new("grp")
+            .subcommand(ClapCommand::new("shown"))
+            .subcommand(ClapCommand::new("secret").hide(true));
+        let (mut groups, mut commands) = (Vec::new(), Vec::new());
+        walk_group(&group, None, &mut groups, &mut commands);
+        let names: Vec<_> = commands.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["shown"]);
+    }
+
     fn merged_empty_manifest() -> Manifest {
         let (groups, commands) = built_in_completion_entries();
         Manifest {
