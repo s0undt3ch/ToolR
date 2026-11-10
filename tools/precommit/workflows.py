@@ -95,7 +95,7 @@ def check_gate_needs(ctx: Context, *, check: bool = False) -> None:
     yaml = _round_trip_yaml()
     drifted = False
     for workflow in sorted((ctx.repo_root / ".github" / "workflows").glob("*.yml")):
-        data = yaml.load(workflow.read_text())
+        data = yaml.load(workflow.read_text(encoding="utf-8"))
         jobs = data.get("jobs") or {}
         gates = {job_id: job for job_id, job in jobs.items() if _gate_steps(job)}
         if not gates:
@@ -143,7 +143,8 @@ def check_gate_needs(ctx: Context, *, check: bool = False) -> None:
                 ctx.error(f"{workflow.name}: {message}")
             if check:
                 continue
-            with workflow.open("w") as wfh:
+            # Workflows are UTF-8 with LF endings; the platform defaults are neither on Windows.
+            with workflow.open("w", encoding="utf-8", newline="\n") as wfh:
                 yaml.dump(data, wfh)
             ctx.info(f"{workflow.name}: gate wiring rewritten")
     if drifted and check:
