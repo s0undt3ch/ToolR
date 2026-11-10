@@ -27,7 +27,7 @@ on:
       rust-python:
         required: true
         type: string
-        description: "Matrix Python version whose job also runs the Rust suite with coverage (and the PowerShell completion tests when `run-powershell-tests` is set) and, on Linux, the example-plugin and skill-refs drift gates. None of these depend on the matrix Python, so one job per OS is enough."
+        description: "The one entry of `pythons` whose job also runs the Rust tests with coverage, the PowerShell completion tests (when `run-powershell-tests` is set) and, on Linux, the example-plugin and skill-refs drift checks. Must be one of `pythons`; if it is not, none of them run."
       pythons:
         required: true
         type: string
@@ -47,6 +47,11 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ${{ fromJson(inputs.pythons) }}
+
+    env:
+      # The Rust work does not depend on the matrix Python, so one entry per OS runs it. The
+      # example-plugin and skill-refs drift gates also need only one OS, and Linux is the cheapest.
+      RUST_JOB: ${{ matrix.python-version == inputs.rust-python }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -202,11 +207,12 @@ jobs:
         run: brew install bash fish
 
       - id: rust-version-checksum
+        if: env.RUST_JOB == 'true'
         shell: bash
         run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache `~/.cargo`
-        if: matrix.python-version == inputs.rust-python
+        if: env.RUST_JOB == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -215,8 +221,7 @@ jobs:
           key: ${{ inputs.cache-seed }}|${{ runner.os }}|cargo|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Verify example-plugin manifest is in sync
-        # OS-independent: one Linux job covers it.
-        if: runner.os == 'Linux' && matrix.python-version == inputs.rust-python
+        if: runner.os == 'Linux' && env.RUST_JOB == 'true'
         # Build-time invariant: the canonical example plugin's shipped
         # `toolr-manifest.json` must match what `toolr self build-manifest`
         # would regenerate from its current Python source. Drift here means
@@ -245,7 +250,7 @@ jobs:
           fi
 
       - name: Verify skill references and generated docs snippets are in sync
-        if: runner.os == 'Linux' && matrix.python-version == inputs.rust-python
+        if: runner.os == 'Linux' && env.RUST_JOB == 'true'
         # Drift gate for the three in-tree agent skills
         # (`toolr-command-authoring`, `toolr-command-packaging`,
         # `toolr-ci-setup`) and the generated
@@ -297,18 +302,8 @@ jobs:
           uv run --no-sync coverage report
 
       - name: Add the llvm-tools component
-        if: matrix.python-version == inputs.rust-python
-        # `cargo-llvm-cov` comes from `mise.toml`; it replaced cargo-tarpaulin, whose ptrace engine segfaulted
-        # non-deterministically on nested subprocess trees (toolr → sh →
-        # python) used by cli_smoke and cache_fixtures (~50% repro on
-        # Linux GHA; tarpaulin issues #461 / #790 / #317). cargo-llvm-cov
-        # uses LLVM source-based coverage with LLVM_PROFILE_FILE=…%p.profraw
-        # so each spawned process writes a unique profraw and they're
-        # merged at the end — subprocess coverage works without ptrace.
-        #
-        # `llvm-tools-preview` is required for the underlying llvm-profdata
-        # / llvm-cov binaries. cargo-llvm-cov can install it on demand but
-        # we add it explicitly so any failure surfaces here, not mid-run.
+        if: env.RUST_JOB == 'true'
+        # The shared `~/.rustup` cache may have been saved by a job that never added this component.
         shell: bash
         run: rustup component add llvm-tools-preview
 
@@ -319,7 +314,12 @@ jobs:
       # pyo3 wrapper is exercised by Python-side tests via the cdylib;
       # excluding it from the Rust coverage run is the right call.
       - name: Run Rust Tests with Coverage
-        if: matrix.python-version == inputs.rust-python
+        if: env.RUST_JOB == 'true'
+        # cargo-llvm-cov (pinned in `mise.toml`) replaced cargo-tarpaulin, whose ptrace engine
+        # segfaulted on nested subprocess trees (toolr → sh → python) in cli_smoke and
+        # cache_fixtures (~50% repro on Linux GHA; tarpaulin issues #461 / #790 / #317). It uses
+        # LLVM source-based coverage: each spawned process writes its own profraw, merged at the end.
+        # `--exclude toolr-py` below: see the pyo3 note above.
         # The `#[ignore]`d PowerShell completion tests run in a second pass, in the same job when
         # `run-powershell-tests` is set. `--no-report` runs accumulate profiles; `report` merges them.
         # -- --test-threads=1 keeps the subprocess-heavy integration suite serialised.
@@ -331,6 +331,7 @@ jobs:
         env:
           RUN_POWERSHELL_TESTS: ${{ inputs.run-powershell-tests }}
         run: |
+          # `report` is not relied on to create the output directory.
           mkdir -p target/coverage
           cargo llvm-cov --no-report --workspace --exclude toolr-py --tests -- --test-threads=1
           if [ "$RUN_POWERSHELL_TESTS" = true ]; then cargo llvm-cov --no-report -p toolr --test complete_powershell -- --ignored --test-threads=1; fi
@@ -339,6 +340,7 @@ jobs:
       # The completion tests run under pwsh through `-File`; these load the script into a real host
       # session, the way a profile does, with the toolr on PATH. Windows PowerShell 5.1 is below the
       # floor: it must print the version warning and register no completer.
+      # Unlike the Rust work, both smoke steps run in every Windows matrix entry.
       - name: Smoke-test PowerShell completion (Windows PowerShell 5.1 gets the warning)
         if: runner.os == 'Windows'
         shell: powershell
@@ -373,8 +375,9 @@ jobs:
           flags: ${{ inputs.os }},${{ matrix.python-version }}
 
       - name: Upload Rust coverage to Codecov
-        if: matrix.python-version == inputs.rust-python
+        if: env.RUST_JOB == 'true'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        # Flags are `<os>,rust`: the Python upload carries `<os>,<python>`.
         with:
           use_oidc: true
           files: target/coverage/cobertura.xml

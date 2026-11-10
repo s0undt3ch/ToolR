@@ -469,6 +469,7 @@ jobs:
       display-name: Linux
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      # First entry carries the once-per-OS Rust pass; must be a member of `pythons` below.
       rust-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons)[0] }}
       pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
       run-powershell-tests: true
@@ -490,6 +491,7 @@ jobs:
       display-name: Windows
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      # First entry carries the once-per-OS Rust pass; must be a member of `pythons` below.
       rust-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons-narrow)[0] }}
       pythons: ${{ needs.prepare-ci.outputs.test-pythons-narrow }}
       run-powershell-tests: true
@@ -511,6 +513,7 @@ jobs:
       display-name: macOS
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      # First entry carries the once-per-OS Rust pass; must be a member of `pythons` below.
       rust-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons-narrow)[0] }}
       pythons: ${{ needs.prepare-ci.outputs.test-pythons-narrow }}
     permissions:

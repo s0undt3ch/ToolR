@@ -23,8 +23,12 @@ Only the Python suite and its coverage vary per interpreter.
    The `llvm-tools-preview` rustup component stays an explicit step: the `rust` entry in `mise.toml`
    pins only clippy and rustfmt, and adding a component would grow every job's toolchain.
 2. New required `rust-python` input on `_test.yml`. The one matrix entry whose Python equals it
-   (the first of each OS's list) runs the Rust coverage pass and the Rust Codecov upload. The cargo and
-   `target/coverage` caches are restored only there.
+   (the first of each OS's list) runs the Rust coverage pass and the Rust Codecov upload. The cargo cache is
+   restored only there. A job-level `RUST_JOB` env var computes the test once.
+   The `#[ignore]`d PowerShell pass runs in that same job, switched per OS by a boolean
+   `run-powershell-tests` input (on for Linux and Windows, off for macOS).
+   The `target/coverage` cache is removed: it held only the `cobertura.xml` output, since
+   cargo-llvm-cov builds into `target/llvm-cov-target`.
 3. The two drift gates run only in the Linux job of that entry: one job holds both. Both are
    OS-independent.
 4. The Codecov upload splits in two: the Python `coverage.xml` keeps its `<os>,<python>` flags in every
