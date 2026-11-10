@@ -2585,7 +2585,10 @@ fn zsh_completion_never_executes_values() {
         .collect();
     assert!(!compadds.is_empty());
     for l in compadds {
-        assert!(l.contains("-a values"), "{l}");
+        assert!(
+            l.contains("-a candidates") || l.contains("-a shown_values"),
+            "{l}"
+        );
         assert!(!l.contains("-Q"), "{l}");
     }
     assert!(!script.contains("eval "), "zsh script must not eval values");
@@ -2596,14 +2599,47 @@ fn zsh_completion_never_executes_values() {
 fn zsh_complete(fx: &Fixture, words: &[&str]) -> Vec<String> {
     zsh_run_with(fx, "", "", words)
         .into_iter()
-        .filter(|l| !l.starts_with("VALUE:") && !l.starts_with("DESC:"))
+        .filter(|l| !is_stub_detail(l))
         .collect()
+}
+
+/// A line the `compadd` stub prints for the candidates it was given, not the call itself.
+fn is_stub_detail(line: &str) -> bool {
+    ["VALUE:", "DISP:"].iter().any(|p| line.starts_with(p))
+}
+
+/// The `-d` display entries in `lines`, from the stub's `DISP:` lines.
+fn disp_lines(lines: &[String]) -> Vec<&str> {
+    lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("DISP:"))
+        .collect()
+}
+
+/// The `compadd` flags of a script that lists names with their descriptions.
+const DESCRIBED_FLAGS: &str = "-l -d display -a shown_values";
+
+/// The `compadd` flags of a script that lists the plain grid.
+const GRID_FLAGS: &str = "-a candidates";
+
+/// The stub's `COMPADD:` line for `flags`.
+fn compadd_line(flags: &str) -> String {
+    format!("COMPADD:{flags}")
+}
+
+/// The `display` array of a script run against a toolr that replies with `shim`'s output.
+fn zsh_display_for(shim: &str) -> Vec<String> {
+    let fx = fixture();
+    let lines = zsh_run_with(&fx, "", shim, &["toolr", "x"]);
+    disp_lines(&lines).into_iter().map(String::from).collect()
 }
 
 /// The stub driver: it sets `compstate` states a test needs, including ones live zsh never
 /// produces; [`zsh_tab`] checks what real zsh does. `quote` is the quote character zsh reports
-/// at the cursor, `prelude` runs after the script loads, each `compadd` candidate is a
-/// `VALUE:` line, and each description passed with `-d` a `DESC:` line.
+/// at the cursor and `prelude` runs after the script loads. The stub `compadd` prints the call,
+/// then a `VALUE:` line for each element of the array its last argument names (the script's
+/// `shown_values` or `candidates`), then a `DISP:` line for each element of the script's
+/// `display`. It reads those by name through dynamic scope, so a rename in `zsh.zsh` must follow.
 fn zsh_run_with(fx: &Fixture, quote: &str, prelude: &str, words: &[&str]) -> Vec<String> {
     zsh_run_script(fx, &print_script("zsh"), quote, prelude, words)
 }
@@ -2616,16 +2652,16 @@ fn zsh_run_script(
     prelude: &str,
     words: &[&str],
 ) -> Vec<String> {
-    // The `compadd` stub reads the script's own `values`: zsh functions see their caller's locals.
+    // The `compadd` stub reads the script's own locals by name: zsh functions see their caller's.
     const DRIVER: &str = r#"
 compdef() { :; }
 _files() { print -r -- "FILES:$*"; }
 _description() { :; }
 compadd() {
     # `-O` matches without adding; this stub's matcher accepts every candidate.
-    if [[ $1 == -O ]]; then set -A "$2" "${values[@]}"; return; fi
-    print -r -- "COMPADD:$*"; print -rl -- "${values[@]/#/VALUE:}"
-    if (( ${#descriptions} )); then print -rl -- "${descriptions[@]/#/DESC:}"; fi
+    if [[ $1 == -O ]]; then set -A "$2" "${(@P)${@[-1]}}"; return; fi
+    print -r -- "COMPADD:$*"; print -rl -- "${(@P)${@[-1]}/#/VALUE:}"
+    if (( ${#display} )); then print -rl -- "${display[@]/#/DISP:}"; fi
 }
 compset() { print -r -- "COMPSET:$*"; }
 typeset -A compstate
@@ -2721,10 +2757,7 @@ fn zsh_attached_option_with_escaped_value_matches() {
     let calls = zsh_complete(&fx, &["toolr", "ci", "lint", r"--mode=dry\ r"]);
     assert_eq!(
         calls,
-        vec![
-            "COMPSET:-P 1 *=".to_string(),
-            "COMPADD:-d descriptions -a values".to_string(),
-        ]
+        vec!["COMPSET:-P 1 *=".to_string(), compadd_line(DESCRIBED_FLAGS),]
     );
     let (word, values) = zsh_engine_word(&fx, "", &["toolr", "ci", "lint", r"--mode=dry\ r"]);
     assert_eq!(word, "--mode=dry r");
@@ -2805,7 +2838,7 @@ fn zsh_path_slots_use_native_file_completion() {
     let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--out", "files/"]);
     assert_eq!(calls, vec!["FILES:-/".to_string()]);
     let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--mode", "fa"]);
-    assert_eq!(calls, vec!["COMPADD:-d descriptions -a values".to_string()]);
+    assert_eq!(calls, vec![compadd_line(DESCRIBED_FLAGS)]);
 }
 
 /// The bash script with `=` taken out of `COMP_WORDBREAKS`, and the breaks the driver splits at.
@@ -3001,10 +3034,7 @@ fn zsh_attached_value_moves_the_option_into_the_prefix() {
     let compset = "COMPSET:-P 1 *=".to_string();
     assert_eq!(
         zsh_complete(&fx, &with("--mode=fa")),
-        vec![
-            compset.clone(),
-            "COMPADD:-d descriptions -a values".to_string()
-        ]
+        vec![compset.clone(), compadd_line(DESCRIBED_FLAGS)]
     );
     assert_eq!(
         zsh_complete(&fx, &with("--cfg=files/")),
@@ -3021,10 +3051,10 @@ fn zsh_attached_value_moves_the_option_into_the_prefix() {
     // A partial no choice starts with still reaches `compadd`; zsh's matcher decides.
     assert_eq!(
         zsh_complete(&fx, &with("--mode=zz")),
-        vec![compset, "COMPADD:-d descriptions -a values".to_string()]
+        vec![compset, compadd_line(DESCRIBED_FLAGS)]
     );
     let calls = zsh_complete(&fx, &["toolr", "ci", "lint", "--mode", "fa"]);
-    assert_eq!(calls, vec!["COMPADD:-d descriptions -a values".to_string()]);
+    assert_eq!(calls, vec![compadd_line(DESCRIBED_FLAGS)]);
 }
 
 /// The first word of each candidate line `complete -C` printed.
@@ -3306,7 +3336,7 @@ fn sorted_choices(fx: &Fixture) -> Vec<String> {
 
 /// The `COMPADD:` line for `flags`, then a `VALUE:` line per value.
 fn compadd_lines(flags: &str, values: &[String]) -> Vec<String> {
-    std::iter::once(format!("COMPADD:{flags}"))
+    std::iter::once(compadd_line(flags))
         .chain(values.iter().map(|v| format!("VALUE:{v}")))
         .collect()
 }
@@ -3345,16 +3375,17 @@ fn zsh_uppercase_partial_reaches_compadd() {
     ] {
         let mut words = vec!["toolr", "ci", "lint"];
         words.extend(word);
-        let calls: Vec<String> = zsh_run_with(&fx, "", "", &words)
-            .into_iter()
-            .filter(|l| !l.starts_with("DESC:"))
+        let lines = zsh_run_with(&fx, "", "", &words);
+        let calls: Vec<String> = lines
+            .iter()
+            .filter(|l| !l.starts_with("DISP:"))
+            .cloned()
             .collect();
         let mut want: Vec<String> = compset.map(String::from).into_iter().collect();
-        want.extend(compadd_lines(
-            "-d descriptions -a values",
-            &sorted_choices(&fx),
-        ));
+        want.extend(compadd_lines(DESCRIBED_FLAGS, &sorted_choices(&fx)));
         assert_eq!(calls, want, "{words:?}");
+        // The choices carry no description, so each is displayed as itself.
+        assert_eq!(disp_lines(&lines), sorted_choices(&fx), "{words:?}");
     }
 }
 
@@ -3374,7 +3405,7 @@ fn zsh_command_slot_offers_all_commands_for_any_partial() {
     );
 }
 
-/// Descriptions line up with their values: a missing one shows the value itself.
+/// Descriptions line up with their values, padded to the widest name.
 #[test]
 fn zsh_descriptions_follow_their_values() {
     if !require("zsh") {
@@ -3385,25 +3416,106 @@ fn zsh_descriptions_follow_their_values() {
     assert_eq!(
         lines,
         vec![
-            "COMPADD:-d descriptions -a values".to_string(),
+            compadd_line(DESCRIBED_FLAGS),
             "VALUE:lint".to_string(),
             "VALUE:pos".to_string(),
-            "DESC:Lint things.".to_string(),
-            "DESC:A positional and a flag.".to_string(),
+            "DISP:lint  -- Lint things.".to_string(),
+            "DISP:pos   -- A positional and a flag.".to_string(),
         ]
     );
     let lines = zsh_run_with(&fx, "", "", &["toolr", "ci", "lint", "--mode", ""]);
-    let descs: Vec<&str> = lines
+    // Choices have no description, so the listing shows each value alone, unpadded.
+    assert_eq!(disp_lines(&lines), sorted_choices(&fx));
+}
+
+/// A tab in a choice never reaches `compadd`: the engine drops the value, and its neighbour
+/// keeps its own entry. A tab in a description becomes a space. The manifest is hand-built
+/// because the build rejects such a choice from source.
+#[test]
+fn zsh_value_with_a_tab_never_reaches_compadd() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    common::write_fresh_manifest(
+        fx.tmp.path(),
+        r#"{
+            "schema_version": 1, "static_hash": "h", "third_party_hash": "",
+            "groups": [{"name": "probe", "title": "Probe", "description": "", "origin": "static"}],
+            "commands": [{
+                "name": "go", "group": "probe", "module": "tools.probe", "function": "go",
+                "summary": "Go\tfast.", "description": "",
+                "arguments": [{
+                    "name": "mode", "kind": "positional", "help": "Mode.",
+                    "allowed_values": ["a\tb", "plain"]
+                }],
+                "imports": [], "origin": "static"
+            }]
+        }"#,
+    );
+    let lines = zsh_run_with(&fx, "", "", &["toolr", "probe", "go", ""]);
+    let values: Vec<&str> = lines
         .iter()
-        .filter_map(|l| l.strip_prefix("DESC:"))
+        .filter_map(|l| l.strip_prefix("VALUE:"))
         .collect();
-    let all = sorted_choices(&fx);
-    assert_eq!(descs, all.iter().map(String::as_str).collect::<Vec<_>>());
+    assert_eq!(values, vec!["plain"], "{lines:?}");
+    assert!(lines.contains(&"DISP:plain".to_string()), "{lines:?}");
+    let lines = zsh_run_with(&fx, "", "", &["toolr", "probe", ""]);
+    assert!(lines.contains(&"VALUE:go".to_string()), "{lines:?}");
+    assert!(
+        lines.contains(&"DISP:go  -- Go fast.".to_string()),
+        "{lines:?}"
+    );
+    assert!(lines.iter().all(|l| !l.contains('\t')), "{lines:?}");
+}
+
+/// Names pad by display width, not by character count: a double-width name counts two columns
+/// and a combining mark none, so the `--` of every row lands in the same column.
+#[test]
+fn zsh_display_pads_wide_and_combining_names() {
+    if !require("zsh") {
+        return;
+    }
+    let shim = r#"toolr() { printf 'ab\tfirst\n日本語\tsecond\ne\u0301e\tthird\nx\n'; }"#;
+    // The widest name is 日本語 at six columns.
+    assert_eq!(
+        zsh_display_for(shim),
+        vec![
+            "ab      -- first",
+            "日本語  -- second",
+            "e\u{301}e      -- third",
+            "x",
+        ]
+    );
+}
+
+/// A value holding glob characters finds its own line: the lookup takes it literally, so
+/// `a*c` doesn't resolve to `abc` nor `a[b]` to `ab`, which come first in the reply.
+#[test]
+fn zsh_display_looks_values_up_literally() {
+    if !require("zsh") {
+        return;
+    }
+    let shim = r#"toolr() { printf 'abc\tone\na*c\ttwo\nab\tthree\na[b]\tfour\n'; }"#;
+    assert_eq!(
+        zsh_display_for(shim),
+        vec![
+            "abc   -- one",
+            "a*c   -- two",
+            "ab    -- three",
+            "a[b]  -- four",
+        ]
+    );
 }
 
 /// Adds a `big` group of 25 commands, `cmd00` to `cmd24`, each with its own summary.
 fn big_described_group(fx: &Fixture) {
-    let commands: String = (0..25)
+    described_group(fx, 25);
+}
+
+/// Adds a `big` group of `count` commands, `cmd00` onwards, each with its own summary.
+fn described_group(fx: &Fixture, count: usize) {
+    let commands: String = (0..count)
         .map(|i| {
             format!(
                 "@group.command\ndef cmd{i:02}(ctx):\n    \"\"\"Summary number {i:02}.\"\"\"\n\n"
@@ -3417,7 +3529,7 @@ fn big_described_group(fx: &Fixture) {
     .unwrap();
 }
 
-/// Past 20 matches the compact grid is used, so no description array is built. The stub
+/// Past 20 matches the compact grid is used, so no `display` array is built. The stub
 /// `compadd -O` matches every candidate, so all 25 commands count.
 #[test]
 fn zsh_large_choice_set_skips_descriptions() {
@@ -3428,7 +3540,7 @@ fn zsh_large_choice_set_skips_descriptions() {
     big_described_group(&fx);
     let many: Vec<String> = (0..25).map(|i| format!("cmd{i:02}")).collect();
     let lines = zsh_run_with(&fx, "", "", &["toolr", "big", "C"]);
-    assert_eq!(lines, compadd_lines("-a values", &many));
+    assert_eq!(lines, compadd_lines(GRID_FLAGS, &many));
 }
 
 /// A live Tab on a slot of more than 20 described commands: descriptions are listed once the
@@ -3469,6 +3581,80 @@ fn zsh_tab_lists_descriptions_when_the_matches_are_few() {
                 assert!(tty.contains("cmd24"), "{typed:?}: {tty}");
                 assert!(!tty.contains("Summary number"), "{typed:?}: {tty}");
             }
+        }
+    }
+}
+
+/// The rows of `tty` that hold `needle`.
+fn tty_rows<'a>(tty: &'a str, needle: &str) -> Vec<&'a str> {
+    tty.lines().filter(|l| l.contains(needle)).collect()
+}
+
+/// A live Tab on 20 or fewer described commands lists one row per match, each holding its own
+/// name ahead of its own description, also when the `matcher-list` widened the match.
+#[test]
+fn zsh_tab_lists_each_name_with_its_description() {
+    if !require("zsh") {
+        return;
+    }
+    let fx = fixture();
+    big_described_group(&fx);
+    let matcher = "zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}'\n\
+                   unsetopt LIST_AMBIGUOUS";
+    for (rc, typed) in [("", "cmd0"), (matcher, "CMD0")] {
+        let (_, tty) = zsh_session(
+            &fx,
+            ZshLoad::Sourced,
+            rc,
+            &format!("toolr big {typed}\t\x18dexit\n"),
+        );
+        for i in 0..10 {
+            let rows = tty_rows(&tty, &format!("Summary number 0{i}."));
+            assert_eq!(rows.len(), 1, "{typed:?} {i}: {tty}");
+            let (name, desc) = (
+                rows[0].find(&format!("cmd0{i}")),
+                rows[0].find(&format!("Summary number 0{i}.")),
+            );
+            assert!(
+                name.is_some() && name < desc,
+                "{typed:?} {i}: {:?}\n{tty}",
+                rows[0]
+            );
+            assert_eq!(
+                rows[0].matches("cmd").count(),
+                1,
+                "{typed:?}: {:?}",
+                rows[0]
+            );
+        }
+        assert_eq!(
+            tty_rows(&tty, "Summary number").len(),
+            10,
+            "{typed:?}: {tty}"
+        );
+    }
+}
+
+/// A live Tab on 20 matches shows names with descriptions; on 21 the grid takes over.
+#[test]
+fn zsh_tab_names_appear_at_exactly_twenty_matches() {
+    if !require("zsh") {
+        return;
+    }
+    for (count, listed) in [(20, true), (21, false)] {
+        let fx = fixture();
+        described_group(&fx, count);
+        let (_, tty) = zsh_session(&fx, ZshLoad::Sourced, "", "toolr big cmd\t\x18dexit\n");
+        if listed {
+            let rows = tty_rows(&tty, "Summary number 00.");
+            assert!(
+                rows.len() == 1 && rows[0].contains("cmd00"),
+                "{count}: {tty}"
+            );
+            assert_eq!(tty_rows(&tty, "Summary number").len(), 20, "{count}: {tty}");
+        } else {
+            assert!(tty.contains("cmd20"), "{count}: {tty}");
+            assert!(!tty.contains("Summary number"), "{count}: {tty}");
         }
     }
 }
@@ -3570,9 +3756,9 @@ fn new_zsh_script_degrades_on_a_binary_that_ignores_the_variable() {
     assert_eq!(
         lines,
         vec![
-            "COMPADD:-d descriptions -a values".to_string(),
+            compadd_line(DESCRIBED_FLAGS),
             "VALUE:fast".to_string(),
-            "DESC:fast".to_string(),
+            "DISP:fast".to_string(),
         ]
     );
     let lines = zsh_run_with(&fx, "", shim, &["toolr", "ci", "lint", "--mode", "FA"]);
