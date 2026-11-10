@@ -46,7 +46,7 @@ def make_workflows(tmp_path: Path) -> Callable[[dict[str, str]], Path]:
         directory = tmp_path / ".github" / "workflows"
         directory.mkdir(parents=True)
         for name, text in files.items():
-            (directory / name).write_text(text)
+            (directory / name).write_text(text, encoding="utf-8", newline="\n")
         return tmp_path
 
     return factory
@@ -156,6 +156,17 @@ def test_check_mode_reports_and_exits_without_rewriting(
     assert exc.value.code == 1
     assert "`test` is missing" in ctx.stderr
     assert (root / ".github/workflows/ci.yml").read_text() == drifted
+
+
+def test_rewrite_keeps_non_ascii_text_and_lf_endings(
+    make_workflows: Callable[[dict[str, str]], Path],
+) -> None:
+    drifted = "# Runs the tests \u2014 every PR\n" + CORRECT.replace("[build, test]", "[build]")
+    root = make_workflows({"ci.yml": drifted})
+    check_gate_needs(make_context(root))
+    fixed = (root / ".github/workflows/ci.yml").read_bytes()
+    assert "\u2014 every PR".encode() in fixed
+    assert b"\r\n" not in fixed
 
 
 def test_repo_workflows_are_wired() -> None:
