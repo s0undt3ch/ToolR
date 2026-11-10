@@ -72,9 +72,9 @@ with `sh -s -- --version X.Y.Z`. Custom prefix:
 `$XDG_BIN_HOME` (or `~/.local/bin`).
 
 Other flags: `--triple TRIPLE` overrides the auto-detected target triple,
-`--dry-run` prints what would happen without installing, and `--no-verify`
-skips the SHA-256 check of the archive (not recommended; the attestation
-check is controlled separately by `--verify-attestation`).
+`--dry-run` prints what would happen without installing, and `--verify=MODE`
+chooses how much to verify (see
+[Supply-chain verification](#supply-chain-verification-slsa-attestations)).
 
 ### PowerShell (Windows)
 
