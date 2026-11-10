@@ -12,10 +12,9 @@
 //! Because the entries are derived, there is nothing to hand-maintain
 //! here: adding or changing a `self`/`project` subcommand in
 //! [`crate::cli::build_command`] flows through automatically. Hidden
-//! internal helpers (`__complete`, `__build-static-manifest`,
-//! `__install-uv-now`) carry `.hide(true)` in the CLI builder and are
-//! skipped — they don't appear in `--help` and shouldn't be tab-completed
-//! either.
+//! internal helpers (`__complete`, `__install-uv-now`) carry
+//! `.hide(true)` in the CLI builder and are skipped — they don't appear in
+//! `--help` and shouldn't be tab-completed either.
 
 use clap::{Arg, ArgAction, Command as ClapCommand, ValueHint};
 use toolr_core::complete::Candidate;
@@ -639,7 +638,7 @@ mod tests {
         // must never appear as completion candidates.
         let m = merged_empty_manifest();
         let out = values(serve_completions(&m, &tokens(&[""])));
-        for hidden in ["__complete", "__build-static-manifest", "__install-uv-now"] {
+        for hidden in ["__complete", "__install-uv-now"] {
             assert!(
                 !out.contains(&hidden.to_string()),
                 "hidden helper {hidden} leaked into candidates: {out:?}"

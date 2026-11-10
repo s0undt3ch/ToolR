@@ -183,15 +183,11 @@ fn manifest_rebuild_prints_its_wrote_line_without_the_flag() {
 }
 
 #[test]
-fn manifest_rebuild_and_static_build_are_silent_under_root_quiet() {
-    for args in [
-        &["-q", "project", "manifest", "rebuild"][..],
-        &["--quiet", "__build-static-manifest"][..],
-    ] {
-        let p = Project::new();
-        assert_silent_success(&p.toolr(args).output().unwrap());
-        assert!(p.tools().join(".toolr-manifest.json").is_file(), "{args:?}");
-    }
+fn manifest_rebuild_is_silent_under_root_quiet() {
+    let p = Project::new();
+    let args = ["-q", "project", "manifest", "rebuild"];
+    assert_silent_success(&p.toolr(&args).output().unwrap());
+    assert!(p.tools().join(".toolr-manifest.json").is_file());
 }
 
 #[test]

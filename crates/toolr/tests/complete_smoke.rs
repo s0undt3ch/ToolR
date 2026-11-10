@@ -33,11 +33,7 @@ def deploy(ctx, env: Literal["staging", "production"]):
     .unwrap();
 
     // Build the manifest in-process so the static_hash matches.
-    common::toolr()
-        .current_dir(tmp.path())
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    common::build_manifest(tmp.path());
 
     tmp
 }
@@ -84,11 +80,7 @@ fn description_newline_does_not_forge_candidates() {
         "\"\"\"CI.\"\"\"\nfrom toolr import command_group\n\ngroup = command_group(\"ci\", \"x\\nevil\\tdesc\\x1b[2J\", \"CI.\")\n",
     )
     .unwrap();
-    common::toolr()
-        .current_dir(tmp.path())
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    common::build_manifest(tmp.path());
     let out = complete_raw(&tmp, &["c"]);
     assert_eq!(out.lines().count(), 1, "output: {out:?}");
     assert!(!out.contains('\x1b'), "output: {out:?}");
@@ -359,11 +351,7 @@ def deploy(ctx, env: Literal["staging", "production"]):
 "#,
     )
     .unwrap();
-    common::toolr()
-        .current_dir(tmp.path())
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    common::build_manifest(tmp.path());
 
     assert_eq!(
         complete(&tmp, &["ci", "deploy", "--", ""]),
@@ -659,11 +647,7 @@ def lint(ctx, cfg: pathlib.Path | None = None, out: DirectoryPath | None = None)
 "#,
     )
     .unwrap();
-    common::toolr()
-        .current_dir(tmp.path())
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    common::build_manifest(tmp.path());
     for value in [None, Some("shell")] {
         assert_eq!(
             complete_matching(&tmp, value, &["ci", "lint", "--cfg", "ZZ"]),

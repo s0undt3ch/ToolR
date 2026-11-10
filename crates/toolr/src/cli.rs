@@ -669,12 +669,8 @@ fn build_self_subcommand() -> Command {
 }
 
 /// The hidden internal commands, in the order they join the root.
-fn build_hidden_subcommands() -> [Command; 3] {
+fn build_hidden_subcommands() -> [Command; 2] {
     [
-        Command::new("__build-static-manifest")
-            .disable_help_flag(true)
-            .hide(true)
-            .about("(internal) Regenerate the static manifest in place"),
         Command::new("__complete")
             .disable_help_flag(true)
             .hide(true)
@@ -1425,14 +1421,7 @@ mod cli_tree_tests {
         let names: Vec<&str> = root.get_subcommands().map(|c| c.get_name()).collect();
         assert_eq!(
             names,
-            vec![
-                "ci",
-                "project",
-                "self",
-                "__build-static-manifest",
-                "__complete",
-                "__install-uv-now",
-            ]
+            vec!["ci", "project", "self", "__complete", "__install-uv-now",]
         );
         for reserved in ["project", "self"] {
             let built_in = root.find_subcommand(reserved).unwrap();

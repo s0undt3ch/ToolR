@@ -44,12 +44,7 @@ def hello(ctx):
     .unwrap();
 
     // 1. Build the static manifest.
-    common::toolr()
-        .current_dir(tmp.path())
-        .args(["__build-static-manifest"])
-        .env("TOOLR_AUTO_INSTALL_UV", "1")
-        .assert()
-        .success();
+    common::build_manifest(tmp.path());
 
     // 2. Sync the venv (will install uv on first run if needed).
     common::toolr()

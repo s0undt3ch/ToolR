@@ -758,7 +758,7 @@ fn symlinked_tools_module_is_rejected_in_an_untrusted_repo() {
 }
 
 /// A link added after the cache was built is found by the freshness hash
-/// (dispatch) and by the explicit rebuilds; all print the same message as
+/// (dispatch) and by the explicit rebuild; all print the same message as
 /// every other path, with no `hashing <dir>:` or `building …:` prefix.
 #[cfg(unix)]
 #[test]
@@ -770,7 +770,6 @@ fn symlinked_tools_module_added_after_the_cache_reads_the_same_everywhere() {
         &["--help"][..],
         &["demo", "hello"][..],
         &["project", "manifest", "rebuild"][..],
-        &["__build-static-manifest"][..],
     ] {
         assert_rejected(toolr_in(&root), args);
     }
@@ -873,12 +872,10 @@ fn group_conflict_warns_once_per_build() {
     std::fs::write(root.join("tools/m3.py"), "x = 2\n").unwrap();
     assert_eq!(stderr_of(root, &["--help"]), GROUP_CONFLICT_WARNING);
 
-    for args in [
-        &["project", "manifest", "rebuild"][..],
-        &["__build-static-manifest"][..],
-    ] {
-        assert_eq!(stderr_of(root, args), GROUP_CONFLICT_WARNING, "{args:?}");
-    }
+    assert_eq!(
+        stderr_of(root, &["project", "manifest", "rebuild"]),
+        GROUP_CONFLICT_WARNING
+    );
 }
 
 /// An untrusted repository builds in memory on every run, so it warns on every run.

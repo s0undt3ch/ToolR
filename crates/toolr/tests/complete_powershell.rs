@@ -134,11 +134,7 @@ def pick(ctx, first: str, second: Literal["x1", "x2"]):
 "#
     );
     std::fs::write(fx.tmp.path().join("tools/ci.py"), src).unwrap();
-    common::toolr()
-        .current_dir(fx.tmp.path())
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    common::build_manifest(fx.tmp.path());
     let script = common::toolr()
         .args(["self", "completion", "print", "powershell"])
         .output()

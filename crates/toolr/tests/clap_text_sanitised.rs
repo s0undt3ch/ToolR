@@ -170,10 +170,9 @@ fn fragment_with_dirty_names_never_reaches_clap() {
 /// toolr trusts it without a rebuild.
 fn project_with_manifest_edit(edit: impl FnOnce(&mut serde_json::Value)) -> Project {
     let p = Project::new();
-    p.toolr(&["__build-static-manifest"]).assert().success();
-    // The first run stamps the third-party hash, so the edit below stays fresh.
-    let (ok, text) = run(&p, &["--help"]);
-    assert!(ok, "{text}");
+    p.toolr(&["project", "manifest", "rebuild"])
+        .assert()
+        .success();
     let path = p.tools().join(".toolr-manifest.json");
     let mut manifest: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
