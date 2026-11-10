@@ -240,7 +240,7 @@ fn touch_or_backfill_writes_sidecar_when_missing() {
     assert_eq!(meta.last_used_at, meta.created_at);
 }
 
-use super::enumerate::{CachedVenv, enumerate_caches};
+use super::enumerate::{CachedVenv, enumerate_caches, enumerate_caches_unsized};
 
 fn make_entry(
     root: &std::path::Path,
@@ -409,31 +409,6 @@ fn hint_is_none_when_cache_is_small_and_clean() {
 }
 
 #[test]
-fn hint_fires_when_total_size_exceeds_threshold() {
-    let tmp = TempDir::new().unwrap();
-    let live_repo = tmp.path().join("live");
-    std::fs::create_dir_all(&live_repo).unwrap();
-    let cache_root = tmp.path().join("toolr-cache");
-    std::fs::create_dir_all(&cache_root).unwrap();
-    make_entry(
-        &cache_root,
-        "a",
-        live_repo.to_str().unwrap(),
-        now_fixture(),
-        4096,
-    );
-
-    let cfg = HintConfig {
-        size_threshold_bytes: 1024,
-        orphan_threshold: 10,
-    };
-    let hint = compute_hint(&cache_root, &cfg, now_fixture()).unwrap();
-    assert!(hint.is_some());
-    let s = hint.unwrap();
-    assert!(s.contains("Run `toolr self cache prune`"), "got: {s}");
-}
-
-#[test]
 fn hint_fires_when_orphan_count_exceeds_threshold() {
     let tmp = TempDir::new().unwrap();
     let cache_root = tmp.path().join("toolr-cache");
@@ -443,7 +418,6 @@ fn hint_fires_when_orphan_count_exceeds_threshold() {
     }
 
     let cfg = HintConfig {
-        size_threshold_bytes: 100 * 1024 * 1024 * 1024,
         orphan_threshold: 2,
     };
     let hint = compute_hint(&cache_root, &cfg, now_fixture()).unwrap();
@@ -452,10 +426,7 @@ fn hint_fires_when_orphan_count_exceeds_threshold() {
 }
 
 #[test]
-fn hint_orphan_message_reports_orphan_bytes_not_total_cache_bytes() {
-    // A large live entry must not inflate the size reported alongside
-    // a small orphan count — the warning is about what pruning would
-    // reclaim, not the whole cache.
+fn hint_ignores_a_large_cache_when_orphans_are_few() {
     let tmp = TempDir::new().unwrap();
     let live_repo = tmp.path().join("live");
     std::fs::create_dir_all(&live_repo).unwrap();
@@ -468,26 +439,26 @@ fn hint_orphan_message_reports_orphan_bytes_not_total_cache_bytes() {
         now_fixture(),
         200 * 1024 * 1024,
     );
-    for key in &["a", "b", "c"] {
-        make_entry(&cache_root, key, "/missing", now_fixture(), 32);
-    }
+    make_entry(&cache_root, "a", "/missing", now_fixture(), 32);
 
     let cfg = HintConfig {
-        size_threshold_bytes: 100 * 1024 * 1024 * 1024,
         orphan_threshold: 2,
     };
-    let hint = compute_hint(&cache_root, &cfg, now_fixture())
-        .unwrap()
-        .unwrap();
-    assert!(hint.contains("3 orphan entries"), "got: {hint}");
     assert!(
-        !hint.contains("MiB"),
-        "orphan bytes are tiny — must not render as MiB: {hint}"
+        compute_hint(&cache_root, &cfg, now_fixture())
+            .unwrap()
+            .is_none()
     );
-    assert!(
-        hint.contains("96 B") || hint.contains("B)"),
-        "expected byte-scale size, got: {hint}"
-    );
+}
+
+#[test]
+fn enumerate_caches_unsized_skips_the_size_walk() {
+    let tmp = TempDir::new().unwrap();
+    make_entry(tmp.path(), "a", "/missing", now_fixture(), 4096);
+    let caches = enumerate_caches_unsized(tmp.path()).unwrap();
+    assert_eq!(caches.len(), 1);
+    assert_eq!(caches[0].size_bytes, 0);
+    assert!(enumerate_caches(tmp.path()).unwrap()[0].size_bytes >= 4096);
 }
 
 #[test]

@@ -10,7 +10,7 @@ pub mod meta;
 pub mod touch;
 
 pub use classify::{Candidate, Classification, PruneReason, classify_entries};
-pub use enumerate::{CachedVenv, dir_size_bytes, enumerate_caches};
+pub use enumerate::{CachedVenv, dir_size_bytes, enumerate_caches, enumerate_caches_unsized};
 pub use hint::{HintConfig, compute_hint};
 pub use init::write_meta_for_new_venv;
 pub use locks::{LockSweep, sweep_rebuild_locks};

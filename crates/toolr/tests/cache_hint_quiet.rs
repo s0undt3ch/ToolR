@@ -106,3 +106,19 @@ fn self_cache_commands_never_show_the_hint() {
         "`self cache list` must not show the passive cache hint, got stderr:\n{stderr}"
     );
 }
+
+/// `--version` and `--help` are instant queries; they skip the hint.
+#[test]
+fn version_and_help_never_show_the_hint() {
+    let cache = dirty_cache();
+    let work = TempDir::new().unwrap();
+    for flag in ["--version", "--help"] {
+        let out = toolr(cache.path(), work.path(), &[flag]);
+        assert!(out.status.success(), "{flag}: {out:?}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stderr.contains("cache has"),
+            "`{flag}` must not show the passive cache hint, got stderr:\n{stderr}"
+        );
+    }
+}

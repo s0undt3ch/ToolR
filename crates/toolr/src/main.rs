@@ -37,8 +37,7 @@ fn main() -> ExitCode {
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let argv: Vec<String> = std::env::args().collect();
-    // Emit the passive cache hint before clap touches argv, so `--version`
-    // and `--help` (which would otherwise exit inside clap) still see it.
+    // Emit the passive cache hint before clap touches argv.
     maybe_emit_cache_hint_from_argv();
     let persist = bootstrap::persist_manifest(&cwd, &argv);
     let bootstrap_warnings = bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv, persist)?;
@@ -115,6 +114,9 @@ fn maybe_emit_cache_hint_from_argv() {
     if argv_requests_quiet(&argv) {
         return;
     }
+    if argv_requests_version_or_help(&argv) {
+        return;
+    }
     // Suppress for tab-completion and `self cache ...` invocations.
     if bootstrap::is_tab_completion(&argv) {
         return;
@@ -135,6 +137,15 @@ fn maybe_emit_cache_hint_from_argv() {
     if let Ok(Some(msg)) = toolr_core::cache::compute_hint(&cache_root, &cfg, chrono::Utc::now()) {
         eprintln!("{msg}");
     }
+}
+
+/// True when toolr's own `--version` / `--help` (or `-V` / `-h`) is asked
+/// for. Stops at `--` like [`argv_requests_quiet`].
+fn argv_requests_version_or_help(argv: &[String]) -> bool {
+    argv.iter()
+        .skip(1)
+        .take_while(|a| *a != "--")
+        .any(|a| matches!(a.as_str(), "--version" | "-V" | "--help" | "-h"))
 }
 
 /// Best-effort scan of `argv` for a `--quiet` / `-q` request, used to
@@ -214,7 +225,7 @@ fn empty_manifest() -> Manifest {
 
 #[cfg(test)]
 mod tests {
-    use super::argv_requests_quiet;
+    use super::{argv_requests_quiet, argv_requests_version_or_help};
 
     fn argv(args: &[&str]) -> Vec<String> {
         std::iter::once("toolr")
@@ -252,6 +263,25 @@ mod tests {
         // But toolr's own quiet before the separator still counts.
         assert!(argv_requests_quiet(&argv(&[
             "project", "venv", "run", "--quiet", "--", "pytest",
+        ])));
+    }
+
+    #[test]
+    fn detects_version_and_help_requests() {
+        for flag in ["--version", "-V", "--help", "-h"] {
+            assert!(argv_requests_version_or_help(&argv(&[flag])), "{flag}");
+            assert!(
+                argv_requests_version_or_help(&argv(&["ci", flag])),
+                "{flag}"
+            );
+        }
+    }
+
+    #[test]
+    fn ignores_version_and_help_after_the_separator_or_absent() {
+        assert!(!argv_requests_version_or_help(&argv(&["ci", "hello"])));
+        assert!(!argv_requests_version_or_help(&argv(&[
+            "project", "venv", "run", "--", "pytest", "--help"
         ])));
     }
 }
