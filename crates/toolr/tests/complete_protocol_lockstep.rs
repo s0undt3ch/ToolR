@@ -25,26 +25,54 @@ fn dispatch_const(source: &str, name: &str) -> String {
     rest.split_once(';').expect("terminating `;`").0.to_string()
 }
 
+/// Whether some line of `text`, trimmed, satisfies `pred`.
+fn has_line(text: &str, pred: impl Fn(&str) -> bool) -> bool {
+    text.lines().any(|l| pred(l.trim()))
+}
+
 #[test]
 fn scripts_handle_the_exit_codes_dispatch_emits() {
     let dispatch = repo_file("crates/toolr/src/dispatch.rs");
     let paths = dispatch_const(&dispatch, "COMPLETE_PATHS");
     let dirs = dispatch_const(&dispatch, "COMPLETE_DIRECTORIES");
-    let cases = [
-        ("bash.sh", format!("{paths} | {dirs})")),
-        ("zsh.zsh", format!("{paths}) ")),
-        ("zsh.zsh", format!("{dirs}) ")),
-        ("fish.fish", format!("case {paths}")),
-        ("fish.fish", format!("case {dirs}")),
+    let bash = script("bash.sh");
+    let zsh = script("zsh.zsh");
+    let fish = script("fish.fish");
+    let pwsh = script("powershell.ps1");
+    let checks = [
+        (
+            "bash.sh",
+            has_line(&bash, |l| l == format!("{paths} | {dirs})")),
+        ),
+        (
+            "zsh.zsh",
+            has_line(&zsh, |l| l.starts_with(&format!("{paths}) "))),
+        ),
+        (
+            "zsh.zsh",
+            has_line(&zsh, |l| l.starts_with(&format!("{dirs}) "))),
+        ),
+        (
+            "fish.fish",
+            has_line(&fish, |l| l == format!("case {paths}")),
+        ),
+        (
+            "fish.fish",
+            has_line(&fish, |l| l == format!("case {dirs}")),
+        ),
         (
             "powershell.ps1",
-            format!("-eq {paths} -or $reply.Code -eq {dirs}"),
+            has_line(&pwsh, |l| {
+                l.contains(&format!(
+                    "$reply.Code -eq {paths} -or $reply.Code -eq {dirs}"
+                ))
+            }),
         ),
     ];
-    for (file, expected) in cases {
+    for (file, ok) in checks {
         assert!(
-            script(file).contains(&expected),
-            "{file} does not handle exit code `{expected}`; dispatch.rs has COMPLETE_PATHS={paths}, \
+            ok,
+            "{file} does not handle the exit codes; dispatch.rs has COMPLETE_PATHS={paths}, \
              COMPLETE_DIRECTORIES={dirs}"
         );
     }

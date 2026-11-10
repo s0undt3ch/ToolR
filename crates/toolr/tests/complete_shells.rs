@@ -423,7 +423,7 @@ fn extra_bash_candidates() -> Vec<String> {
 }
 
 /// Every distinct bash 4.4+ on this machine. The script refuses older ones. With none, CI fails
-/// the tests; elsewhere they pass vacuously, so the warning says so.
+/// the tests; elsewhere they pass vacuously, which `a_bash_4_4_or_newer_was_found` turns red.
 fn bashes() -> Vec<String> {
     static FOUND: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     FOUND.get_or_init(find_bashes).clone()
@@ -465,12 +465,18 @@ fn find_bashes() -> Vec<String> {
         !v.is_empty() || std::env::var_os("CI").is_none(),
         "no bash 4.4 or newer found; CI must install one so the bash completion tests run"
     );
-    if v.is_empty() {
-        let msg = "no bash 4.4 or newer found: the bash completion tests ran against nothing. \
-                   Run `mise install` (pins conda:bash) or set TOOLR_TEST_BASH=/path/to/bash.";
-        eprintln!("WARNING: {msg}");
-    }
     v
+}
+
+#[test]
+fn a_bash_4_4_or_newer_was_found() {
+    assert!(
+        !bashes().is_empty()
+            || std::env::var_os("TOOLR_SKIP_BASH_COMPLETION_TESTS").is_some_and(|v| v == "1"),
+        "no bash 4.4+ found, so every bash completion test was a no-op. Install one \
+         (`mise install`, or `brew install bash`), point TOOLR_TEST_BASH at one, or set \
+         TOOLR_SKIP_BASH_COMPLETION_TESTS=1 to accept skipping them"
+    );
 }
 
 #[test]
