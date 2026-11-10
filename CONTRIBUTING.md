@@ -176,6 +176,28 @@ toolr release-notes check --base <parent>     # the CI gate, run locally
 CI fails a PR with a `feat`, `fix`, `revert` or breaking commit and no note. A `Release-Notes: skip`
 trailer on any commit exempts the PR. The full rules are in [`release-notes/README.md`](https://github.com/s0undt3ch/ToolR/blob/main/release-notes/README.md).
 
+## Recovering a half-published release
+
+`release.yml` is dispatched from `main` only; the first job fails on any other ref. The `publish-release`
+job runs these steps in order: Test PyPI dress rehearsal, push the release commit and tag, attest, create
+the GitHub release, publish to PyPI. Where it failed decides what to do.
+
+- **Before "Push the release commit and tag"** (build, tests, Test PyPI, or the push itself because `main`
+  moved): nothing is public. Fix the cause and dispatch the release again. Test PyPI uploads use
+  `skip-existing`, so files an earlier attempt uploaded don't fail the retry.
+- **After the push** (attest, GitHub release, or PyPI failed): the tag `vX.Y.Z` exists on the release
+  commit. Re-running the job fails at the push step by design, because the tag is already there. Don't
+  delete the tag. Check what exists (`gh release view vX.Y.Z`, the PyPI project page), then finish what is
+  missing from the failed run's `dist` and `toolr-archive-*` artifacts:
+    - No GitHub release: `gh release create vX.Y.Z --verify-tag --notes-file <notes> dist/* release-assets/*`,
+      with `--prerelease` instead of `--latest` for an `-rc` version.
+    - Files missing on PyPI: Trusted Publishing only works from the workflow, so a maintainer uploads the
+      remaining files from `dist/` with `twine upload --skip-existing` and a short-lived project API token.
+- **`publish-packslip`** runs after a failed `publish-release` too, and re-signs with `--clobber`, so
+  re-running it once the release exists is safe.
+- If a half-published version can't be completed (for example PyPI rejected a file), leave it, and cut the
+  next patch version instead of reusing the number: PyPI never accepts a deleted file name again.
+
 ## Pre-commit hooks
 
 `prek install --install-hooks` (above) wires the gate. Manually:

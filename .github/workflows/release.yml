@@ -50,6 +50,17 @@ jobs:
       mise-version: ${{ steps.mise-version.outputs.mise-version }}
     steps:
 
+      # The packslip identity and the Setup ToolR action pin
+      # `release.yml@refs/heads/main`; a release from another ref would tag
+      # and publish to PyPI before `publish-packslip` fails verification.
+      - name: Require the main branch
+        if: ${{ github.ref != 'refs/heads/main' }}
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          echo "::error::Releases are dispatched from refs/heads/main, not ${REF}" >&2
+          exit 1
+
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
