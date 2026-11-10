@@ -303,16 +303,19 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
-    let outcome = rebuild_manifest_full(&repo_root, &resolved.venv_dir)?;
-    for w in &outcome.warnings {
+    let built = rebuild_manifest_full(&repo_root, &resolved.venv_dir)?;
+    for w in built.all_warnings() {
         eprintln!("toolr: warning: {w}");
     }
     if !quiet {
         println!(
             "toolr: wrote {} groups / {} commands to {}",
-            outcome.group_count,
-            outcome.command_count,
-            outcome.manifest_path.display(),
+            built.manifest.groups.len(),
+            built.manifest.commands.len(),
+            repo_root
+                .join("tools")
+                .join(".toolr-manifest.json")
+                .display(),
         );
     }
     Ok(ExitCode::SUCCESS)

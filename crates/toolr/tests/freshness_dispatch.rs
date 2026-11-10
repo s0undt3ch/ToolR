@@ -32,9 +32,8 @@ version = "0.0.0"
 "#,
     )
     .unwrap();
-    // Seed an empty, intentionally-stale manifest so `ensure_manifest_present_or_bootstrap`
-    // doesn't try to bootstrap via Python — we want to exercise the
-    // freshness path, not the missing-manifest path.
+    // Seed an empty, intentionally-stale manifest: these tests exercise a
+    // stale manifest, not a missing one.
     fs::write(
         tools.join(".toolr-manifest.json"),
         r#"{
@@ -768,18 +767,16 @@ fn project_with_venv(with_venv: bool) -> common::Project {
 /// first build is fatal and writes nothing, venv or not.
 #[test]
 fn fresh_clone_build_error_is_fatal() {
-    for (with_venv, expected) in [
-        (false, format!("toolr: {PARSE_ERROR}\n")),
-        (
-            true,
-            format!("toolr: static build error: parsing <root>/tools/broken.py: {PARSE_ERROR}\n"),
-        ),
-    ] {
+    for with_venv in [false, true] {
         let p = project_with_venv(with_venv);
         p.write_tool("broken.py", BROKEN_PY);
         let (code, stderr) = run_in(p.toolr(&[]), &p.root, &["--help"]);
         assert_eq!(code, 2, "venv={with_venv}: {stderr}");
-        assert_eq!(stderr, expected, "venv={with_venv}");
+        assert_eq!(
+            stderr,
+            format!("toolr: {PARSE_ERROR}\n"),
+            "venv={with_venv}"
+        );
         assert!(!p.tools().join(".toolr-manifest.json").exists());
     }
 }
@@ -796,8 +793,8 @@ fn untrusted_fresh_clone_build_error_warns() {
     assert_eq!(
         stderr,
         format!(
-            "{FALLBACK_WARNING}toolr: warning: cause: static build error: parsing \
-             <root>/tools/broken.py\ntoolr: warning: no cached manifest available — `toolr \
+            "{FALLBACK_WARNING}toolr: warning: cause: parsing <root>/tools/broken.py\n\
+             toolr: warning: no cached manifest available — `toolr \
              <user-cmd>` will likely fail until you fix the build error\n{REBUILD_POINTER}"
         )
     );
@@ -817,8 +814,8 @@ fn stale_manifest_build_error_cause_line() {
         assert_eq!(
             stderr,
             format!(
-                "{FALLBACK_WARNING}toolr: warning: cause: static build error: parsing \
-                 <root>/tools/broken.py\n{REBUILD_POINTER}"
+                "{FALLBACK_WARNING}toolr: warning: cause: parsing <root>/tools/broken.py\n\
+                 {REBUILD_POINTER}"
             ),
             "venv={with_venv}"
         );
@@ -836,8 +833,7 @@ fn explicit_rebuild_build_error_message() {
         assert_eq!(
             stderr,
             format!(
-                "toolr: building static manifest (incl. third-party fragments): static build \
-                 error: parsing <root>/tools/broken.py: {PARSE_ERROR}\n"
+                "toolr: building static manifest (incl. third-party fragments): {PARSE_ERROR}\n"
             ),
             "venv={with_venv}"
         );

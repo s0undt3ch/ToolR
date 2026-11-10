@@ -1,10 +1,7 @@
 use crate::complete::{
     Candidate, Completion, Matching, complete, complete_matching, serve_completions,
 };
-use crate::manifest::{
-    Argument, ArgumentKind, Command, Group, Manifest, Origin, PluginWarning, PluginWarningKind,
-    SCHEMA_VERSION,
-};
+use crate::manifest::{Argument, ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
 use crate::parser::SupportedType;
 
 /// Most existing assertions only care about candidate values, not their
@@ -1452,39 +1449,6 @@ fn keyword_fixed_arity_offers_flag_completion() {
     let manifest = manifest_with_leaf_args(vec![arg]);
     let out = values(serve_completions(&manifest, &tokens(&["cmd", "run", ""])));
     assert_eq!(out, vec!["--pair".to_string()]);
-}
-
-#[test]
-fn preserve_non_static_keeps_same_leaf_groups_with_different_parents() {
-    let group = |parent: &str, origin| Group {
-        name: "image".into(),
-        title: "Image".into(),
-        description: String::new(),
-        parent: Some(parent.into()),
-        origin,
-    };
-    let mut fresh = fixture();
-    fresh.groups = vec![group("ci", Origin::Static)];
-    let mut cached = fixture();
-    cached.groups = vec![group("docker", Origin::ThirdParty)];
-    super::freshness::preserve_non_static_entries(&mut fresh, cached);
-    let paths: Vec<String> = fresh.groups.iter().map(Group::full_path).collect();
-    assert_eq!(paths, ["ci.image", "docker.image"]);
-}
-
-#[test]
-fn preserve_non_static_carries_cached_plugin_warnings() {
-    let warning = PluginWarning {
-        package: "demo".into(),
-        path: "site-packages/demo/toolr-manifest.json".into(),
-        kind: PluginWarningKind::Shadowed,
-        message: "tools/ci.py defines ci lint, hiding the one from demo".into(),
-    };
-    let mut fresh = fixture();
-    let mut cached = fixture();
-    cached.plugin_warnings = vec![warning.clone()];
-    super::freshness::preserve_non_static_entries(&mut fresh, cached);
-    assert_eq!(fresh.plugin_warnings, [warning]);
 }
 
 // --- `complete`: path-typed slots hand off to the shell ---

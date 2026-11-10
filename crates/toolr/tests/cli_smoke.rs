@@ -269,7 +269,7 @@ fn preflight_fixture(present_in_venv: &[&str]) -> tempfile::TempDir {
     fs::create_dir_all(&toolr_pkg).unwrap();
     fs::write(toolr_pkg.join("__init__.py"), "").unwrap();
 
-    // Stamp real hashes so ensure_manifest_fresh treats the manifest as
+    // Stamp real hashes so ensure_manifest treats the manifest as
     // Fresh and doesn't rebuild it.
     let static_hash = toolr_core::hash::compute_static_hash(&tools).unwrap();
     let venv_dir = tools.join(".venv");
