@@ -62,6 +62,7 @@ from typing import Any
 from typing import NewType
 
 if TYPE_CHECKING:
+    # At runtime `Version` resolves lazily through `__getattr__` below.
     from packaging.version import Version
 
 DateTime = _dt.datetime
@@ -111,7 +112,7 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    # `packaging` is imported on first use, not on `import toolr.types`.
+    # Deferred: `packaging` slows runner start-up and most commands never use `Version`.
     if name == "Version":
         import packaging.version  # noqa: PLC0415
 

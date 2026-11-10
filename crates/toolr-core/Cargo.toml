@@ -29,7 +29,6 @@ full = [
     "dep:toml",
     "dep:dirs",
     "dep:glob",
-    "dep:humansize",
     "dep:reqwest",
     "dep:flate2",
     "dep:tar",
@@ -57,7 +56,6 @@ signal-hook-registry = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 dirs = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
-humansize = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }
 tar = { workspace = true, optional = true }

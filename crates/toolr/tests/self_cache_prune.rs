@@ -187,6 +187,7 @@ fn passive_hint_appears_when_orphan_count_is_high() {
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env_remove("TOOLR_NO_CACHE_HINT")
+        // Not `--version`: the hint skips it.
         .args(["project", "venv", "sync"])
         .output()
         .unwrap();

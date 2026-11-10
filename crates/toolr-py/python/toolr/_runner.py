@@ -396,6 +396,7 @@ def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
             return ipaddress.IPv4Address(obj)
         if target_type is ipaddress.IPv6Address:
             return ipaddress.IPv6Address(obj)
+        # Match by name so the runner need not import `packaging` at start-up.
         if (
             getattr(target_type, "__module__", None) == "packaging.version"
             and target_type.__name__ == "Version"

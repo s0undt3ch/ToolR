@@ -124,7 +124,7 @@ class Context(Struct, frozen=True):
         """
         This is the actual implementation of the prompt method with two additional arguments to simplify testing.
         """
-        # Deferred: `rich.prompt` is only needed once a command prompts.
+        # Deferred: `rich.prompt` slows runner start-up and most commands never prompt.
         from rich.prompt import Confirm  # noqa: PLC0415
         from rich.prompt import FloatPrompt  # noqa: PLC0415
         from rich.prompt import IntPrompt  # noqa: PLC0415
@@ -163,7 +163,7 @@ class Context(Struct, frozen=True):
             if stream is not None:
                 # A caller-supplied stream (`make_context(prompt_input=...)`) keeps raising.
                 raise
-            self._console_stderr.print()
+            self._console_stderr.print()  # end the unanswered prompt's line
             self.exit(
                 1,
                 escape(

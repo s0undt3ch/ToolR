@@ -17,7 +17,8 @@ pub struct CachedVenv {
     /// Parsed sidecar.
     pub meta: Meta,
     /// Disk usage of the entire `cache_dir` subtree (`venv/` plus
-    /// `meta.json` plus anything else inside).
+    /// `meta.json` plus anything else inside). Always 0 from
+    /// `enumerate_caches_unsized`; do not read it there.
     pub size_bytes: u64,
     /// True iff `meta.repo_path` does not exist as a directory anymore.
     /// Populated in classification; enumeration defaults to `false`.

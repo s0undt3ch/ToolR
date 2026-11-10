@@ -8,20 +8,8 @@ use chrono::{DateTime, Utc};
 use super::classify::classify_entries;
 use super::enumerate::enumerate_caches_unsized;
 
-/// Tunables for hint emission.
-#[derive(Debug, Clone, Copy)]
-pub struct HintConfig {
-    /// Orphan-entry count threshold. Default 10.
-    pub orphan_threshold: usize,
-}
-
-impl Default for HintConfig {
-    fn default() -> Self {
-        Self {
-            orphan_threshold: 10,
-        }
-    }
-}
+/// Orphan count above which the hint fires; a handful is normal churn.
+pub const HINT_ORPHAN_THRESHOLD: usize = 10;
 
 /// Return a single-line message when more than `orphan_threshold` cache
 /// entries point at repos that no longer exist, else `Ok(None)`. Runs on
@@ -29,15 +17,19 @@ impl Default for HintConfig {
 /// the venvs for sizes.
 pub fn compute_hint(
     cache_root: &Path,
-    config: &HintConfig,
+    orphan_threshold: usize,
     now: DateTime<Utc>,
 ) -> Result<Option<String>> {
     let entries = enumerate_caches_unsized(cache_root)?;
     if entries.is_empty() {
         return Ok(None);
     }
-    let orphans = classify_entries(entries, now, 30).orphan.len();
-    if orphans <= config.orphan_threshold {
+    // The stale-days argument is unused: only `.orphan` is read.
+    let unused_stale_days = 30;
+    let orphans = classify_entries(entries, now, unused_stale_days)
+        .orphan
+        .len();
+    if orphans <= orphan_threshold {
         return Ok(None);
     }
     Ok(Some(format!(

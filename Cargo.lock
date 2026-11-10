@@ -2631,7 +2631,6 @@ dependencies = [
  "email_address",
  "flate2",
  "glob",
- "humansize",
  "libc",
  "pep440_rs",
  "reqwest",

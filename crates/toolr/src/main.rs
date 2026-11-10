@@ -133,39 +133,33 @@ fn maybe_emit_cache_hint_from_argv() {
     let Ok(cache_root) = self_cache::resolve_cache_root() else {
         return;
     };
-    let cfg = toolr_core::cache::HintConfig::default();
-    if let Ok(Some(msg)) = toolr_core::cache::compute_hint(&cache_root, &cfg, chrono::Utc::now()) {
+    if let Ok(Some(msg)) = toolr_core::cache::compute_hint(
+        &cache_root,
+        toolr_core::cache::HINT_ORPHAN_THRESHOLD,
+        chrono::Utc::now(),
+    ) {
         eprintln!("{msg}");
     }
 }
 
-/// True when toolr's own `--version` / `--help` (or `-V` / `-h`) is asked
-/// for. Stops at `--` like [`argv_requests_quiet`].
-fn argv_requests_version_or_help(argv: &[String]) -> bool {
-    argv.iter()
-        .skip(1)
-        .take_while(|a| *a != "--")
-        .any(|a| matches!(a.as_str(), "--version" | "-V" | "--help" | "-h"))
+/// Best-effort scan of `argv` for toolr's own flags, used to gate the passive
+/// cache hint. Matches any of `exact`, or, when `cluster_char` is set, a short
+/// cluster containing it (`-q`, `-dq`, …). Stops at the `--` separator so a
+/// wrapped command's flags (`toolr project venv run -- <cmd> --quiet`) never count.
+fn argv_requests(argv: &[String], exact: &[&str], cluster_char: Option<char>) -> bool {
+    argv.iter().skip(1).take_while(|a| *a != "--").any(|a| {
+        exact.contains(&a.as_str())
+            || cluster_char
+                .is_some_and(|c| a.starts_with('-') && !a.starts_with("--") && a[1..].contains(c))
+    })
 }
 
-/// Best-effort scan of `argv` for a `--quiet` / `-q` request, used to
-/// gate the passive cache hint. Stops at the `--` separator so args
-/// belonging to a wrapped command (`toolr project venv run -- <cmd>
-/// --quiet`) are never mistaken for toolr's own quiet flag.
 fn argv_requests_quiet(argv: &[String]) -> bool {
-    for arg in argv.iter().skip(1) {
-        if arg == "--" {
-            break;
-        }
-        if arg == "--quiet" {
-            return true;
-        }
-        // Short-flag cluster (`-q`, `-dq`, …) but not a long flag.
-        if arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('q') {
-            return true;
-        }
-    }
-    false
+    argv_requests(argv, &["--quiet"], Some('q'))
+}
+
+fn argv_requests_version_or_help(argv: &[String]) -> bool {
+    argv_requests(argv, &["--version", "-V", "--help", "-h"], None)
 }
 
 /// Read the on-disk manifest; "no project" and "no manifest file" mean an

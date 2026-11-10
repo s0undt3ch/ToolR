@@ -95,9 +95,9 @@ toolr prints a one-line hint to stderr on the next invocation:
 toolr: cache has 12 orphan entries. Run `toolr self cache prune` to clean up.
 ```
 
-The hint reads each entry's `meta.json` only. It never walks the virtualenvs,
-so it adds no measurable time, and it does not mention sizes; `toolr self cache
-list` shows those. A large cache with few orphans prints nothing.
+The hint reads each entry's `meta.json` only, never the virtualenv contents, so
+it does not mention sizes; `toolr self cache list` shows those. A large cache
+with few orphans prints nothing.
 
 The hint is skipped for:
 

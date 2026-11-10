@@ -24,6 +24,7 @@ from toolr.utils._signature import ArgSection
 from toolr.utils._signature import arg
 from toolr.utils._signature import arg_section
 
+# Resolved lazily by `__getattr__` below.
 __version__: str
 
 __all__ = [
@@ -43,7 +44,7 @@ __all__ = [
 
 def __getattr__(name: str) -> str:
     # `importlib.metadata` is about a fifth of `import toolr`; only
-    # `toolr.__version__` readers should pay for it.
+    # Deferred: `importlib.metadata` is a large share of `import toolr`; few callers read the version.
     if name == "__version__":
         import importlib.metadata  # noqa: PLC0415
 

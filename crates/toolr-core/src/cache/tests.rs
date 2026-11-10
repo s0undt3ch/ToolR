@@ -387,7 +387,7 @@ fn classify_prefers_orphan_over_stale_when_both_apply() {
     assert!(result.stale.is_empty());
 }
 
-use super::hint::{HintConfig, compute_hint};
+use super::hint::{HINT_ORPHAN_THRESHOLD, compute_hint};
 
 #[test]
 fn hint_is_none_when_cache_is_small_and_clean() {
@@ -404,7 +404,7 @@ fn hint_is_none_when_cache_is_small_and_clean() {
         1024,
     );
 
-    let hint = compute_hint(&cache_root, &HintConfig::default(), now_fixture()).unwrap();
+    let hint = compute_hint(&cache_root, HINT_ORPHAN_THRESHOLD, now_fixture()).unwrap();
     assert!(hint.is_none(), "expected no hint, got {hint:?}");
 }
 
@@ -417,10 +417,7 @@ fn hint_fires_when_orphan_count_exceeds_threshold() {
         make_entry(&cache_root, key, "/missing", now_fixture(), 32);
     }
 
-    let cfg = HintConfig {
-        orphan_threshold: 2,
-    };
-    let hint = compute_hint(&cache_root, &cfg, now_fixture()).unwrap();
+    let hint = compute_hint(&cache_root, 2, now_fixture()).unwrap();
     assert!(hint.is_some());
     assert!(hint.as_ref().unwrap().contains("orphan"));
 }
@@ -441,11 +438,8 @@ fn hint_ignores_a_large_cache_when_orphans_are_few() {
     );
     make_entry(&cache_root, "a", "/missing", now_fixture(), 32);
 
-    let cfg = HintConfig {
-        orphan_threshold: 2,
-    };
     assert!(
-        compute_hint(&cache_root, &cfg, now_fixture())
+        compute_hint(&cache_root, 2, now_fixture())
             .unwrap()
             .is_none()
     );
@@ -468,13 +462,7 @@ fn hint_does_not_walk_the_venvs() {
     let unreadable = std::fs::read_dir(&locked).is_err();
 
     let sized = enumerate_caches(&cache_root);
-    let hint = compute_hint(
-        &cache_root,
-        &HintConfig {
-            orphan_threshold: 2,
-        },
-        now_fixture(),
-    );
+    let hint = compute_hint(&cache_root, 2, now_fixture());
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     if !unreadable {
@@ -505,7 +493,7 @@ fn hint_is_none_when_cache_root_is_missing() {
     let tmp = TempDir::new().unwrap();
     let hint = compute_hint(
         &tmp.path().join("no-such-dir"),
-        &HintConfig::default(),
+        HINT_ORPHAN_THRESHOLD,
         now_fixture(),
     )
     .unwrap();

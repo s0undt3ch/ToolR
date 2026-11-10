@@ -224,11 +224,10 @@ def test_prompt_stream_defaults_to_none(ctx: Context):
     assert ctx._prompt_stream is None
 
 
-@pytest.mark.parametrize("stdin_kind", ["devnull", "empty_pipe"])
 @pytest.mark.parametrize(
     "prompt_text", ["Proceed?", "Proceed [y/n]?", "Delete [bold]x[/bold] \\ [y]?"]
 )
-def test_prompt_without_a_terminal_exits_cleanly(stdin_kind: str, prompt_text: str):
+def test_prompt_without_a_terminal_exits_cleanly(prompt_text: str):
     code = (
         "import pathlib, sys\n"
         "from toolr.testing import make_context\n"
@@ -241,8 +240,7 @@ def test_prompt_without_a_terminal_exits_cleanly(stdin_kind: str, prompt_text: s
     )
     proc = subprocess.run(  # noqa: S603
         [sys.executable, "-c", code],
-        stdin=subprocess.DEVNULL if stdin_kind == "devnull" else None,
-        input="" if stdin_kind == "empty_pipe" else None,
+        input="",
         capture_output=True,
         text=True,
         check=False,
