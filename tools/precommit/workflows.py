@@ -5,6 +5,7 @@ Pre-commit hook commands that keep the GitHub workflows wired correctly.
 from __future__ import annotations
 
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 
 from toolr import Context
 
@@ -40,7 +41,7 @@ def _normalised(expression: object) -> str:
     return " ".join(str(expression).split())
 
 
-def _set_job_key(job: dict, key: str, value: object) -> None:
+def _set_job_key(job: CommentedMap, key: str, value: object) -> None:
     """Set a job mapping key, inserting missing keys before `steps`.
 
     ruamel appends new keys at the end of a mapping, which for a job means
@@ -102,7 +103,7 @@ def check_gate_needs(ctx: Context, *, check: bool = False) -> None:
         # Gates never need each other: two gates each needing "everything
         # but me" would form a dependency cycle GitHub rejects.
         expected = sorted(job_id for job_id in jobs if job_id not in gates)
-        problems = []
+        problems: list[str] = []
         for gate_id, gate in sorted(gates.items()):
             needs = gate.get("needs") or []
             needs = [needs] if isinstance(needs, str) else list(needs)
