@@ -15,12 +15,12 @@ fn script(name: &str) -> String {
     repo_file(&format!("crates/toolr-core/src/complete/scripts/{name}"))
 }
 
-/// The `u8` literal of `const <name>: u8 = N;` in `dispatch.rs`.
+/// The `u8` literal of `const <name>: u8 = N;` in `dispatch/complete.rs`.
 fn dispatch_const(source: &str, name: &str) -> String {
     let needle = format!("const {name}: u8 = ");
     let rest = source
         .split_once(&needle)
-        .unwrap_or_else(|| panic!("no `{needle}` in dispatch.rs"))
+        .unwrap_or_else(|| panic!("no `{needle}` in dispatch/complete.rs"))
         .1;
     rest.split_once(';').expect("terminating `;`").0.to_string()
 }
@@ -32,7 +32,7 @@ fn has_line(text: &str, pred: impl Fn(&str) -> bool) -> bool {
 
 #[test]
 fn scripts_handle_the_exit_codes_dispatch_emits() {
-    let dispatch = repo_file("crates/toolr/src/dispatch.rs");
+    let dispatch = repo_file("crates/toolr/src/dispatch/complete.rs");
     let paths = dispatch_const(&dispatch, "COMPLETE_PATHS");
     let dirs = dispatch_const(&dispatch, "COMPLETE_DIRECTORIES");
     let bash = script("bash.sh");
@@ -72,7 +72,7 @@ fn scripts_handle_the_exit_codes_dispatch_emits() {
     for (file, ok) in checks {
         assert!(
             ok,
-            "{file} does not handle the exit codes dispatch.rs emits (COMPLETE_PATHS={paths}, \
+            "{file} does not handle the exit codes dispatch/complete.rs emits (COMPLETE_PATHS={paths}, \
              COMPLETE_DIRECTORIES={dirs}). The match is formatting-sensitive; expected lines: \
              bash `{paths} | {dirs})`, zsh `{paths}) ...` and `{dirs}) ...`, fish `case {paths}` \
              and `case {dirs}`, powershell `$reply.Code -eq {paths} -or $reply.Code -eq {dirs}`"
@@ -82,7 +82,7 @@ fn scripts_handle_the_exit_codes_dispatch_emits() {
 
 #[test]
 fn match_env_var_name_matches_the_scripts_that_set_it() {
-    let dispatch = repo_file("crates/toolr/src/dispatch.rs");
+    let dispatch = repo_file("crates/toolr/src/dispatch/complete.rs");
     let name = dispatch
         .split_once("const COMPLETE_MATCH_VAR: &str = \"")
         .expect("COMPLETE_MATCH_VAR")

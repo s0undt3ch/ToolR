@@ -282,7 +282,7 @@ pub(crate) fn misplaced_flag_error(
 
 /// The `-d` / `-q` / timing flags. Root-only: a copy on a command would let a Python
 /// parameter of the same name or short collide with toolr's own flag. A new one also needs a
-/// row in docs/cli.md and a read in `dispatch::output_options_from_matches`.
+/// row in docs/cli.md and a read in `execute_build::output_options_from_matches`.
 fn root_flag_args() -> Vec<Arg> {
     vec![
         Arg::new("debug")

@@ -26,7 +26,7 @@ const BUILTIN_ROOTS: &[&str] = &["project", "self"];
 
 /// Synthetic [`Group`] + [`Command`] entries derived from the built-in
 /// subcommand tree wired up in [`crate::cli::build_command`]. Callers
-/// (currently only [`crate::dispatch::run_complete`]) merge these into a
+/// (currently only `dispatch::complete::run_complete`) merge these into a
 /// loaded manifest before delegating to
 /// [`toolr_core::complete::serve_completions`].
 pub fn built_in_completion_entries() -> (Vec<Group>, Vec<Command>) {
