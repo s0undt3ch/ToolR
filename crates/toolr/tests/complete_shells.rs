@@ -393,14 +393,16 @@ fn version_key(dir: &std::path::Path) -> Vec<u32> {
 }
 
 /// `bin/bash` of the newest mise-installed `conda:bash`, which is where a contributor on a stock macOS
-/// checkout gets a bash 4.4+ from (`mise install`), plus the colon-separated `TOOLR_TEST_BASH`.
+/// checkout gets a bash 4.4+ from (`mise use -g conda:bash@5.3`), plus the PATH-style list in `TOOLR_TEST_BASH`.
 fn extra_bash_candidates() -> Vec<String> {
-    let mut found: Vec<String> = std::env::var("TOOLR_TEST_BASH")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|p| !p.is_empty())
-        .map(str::to_string)
-        .collect();
+    let mut found: Vec<String> = std::env::var_os("TOOLR_TEST_BASH")
+        .map(|v| {
+            std::env::split_paths(&v)
+                .filter(|p| !p.as_os_str().is_empty())
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
     let data = std::env::var_os("MISE_DATA_DIR")
         .map(std::path::PathBuf::from)
         .or_else(|| {
@@ -409,7 +411,7 @@ fn extra_bash_candidates() -> Vec<String> {
     if let Some(dir) = data.map(|d| d.join("installs/conda-bash"))
         && let Ok(entries) = std::fs::read_dir(dir)
     {
-        // Newest only: the suite is run against the bash `mise install` gives, not every old one.
+        // Newest only: the suite is run against the newest mise bash, not every old one.
         let mut versions: Vec<_> = entries
             .flatten()
             .map(|e| e.path())
@@ -477,8 +479,9 @@ fn a_bash_4_4_or_newer_was_found() {
         !bashes().is_empty()
             || std::env::var_os("TOOLR_SKIP_BASH_COMPLETION_TESTS").is_some_and(|v| v == "1"),
         "no bash 4.4+ found, so every bash completion test was a no-op. Install one \
-         (`mise install`, or `brew install bash`), point TOOLR_TEST_BASH at one, or set \
-         TOOLR_SKIP_BASH_COMPLETION_TESTS=1 to accept skipping them"
+         (`mise use -g conda:bash@5.3`, or `brew install bash`), point TOOLR_TEST_BASH at one, or \
+         set TOOLR_SKIP_BASH_COMPLETION_TESTS=1 to accept skipping them (local runs only; CI \
+         always fails without a bash)"
     );
 }
 
