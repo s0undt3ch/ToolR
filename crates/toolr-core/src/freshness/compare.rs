@@ -53,10 +53,8 @@ pub enum FreshnessVerdict {
 /// that are older than its `snapshot_at_ns` are not reread; see
 /// [`snapshot_static_inputs`].
 ///
-/// On `StaticDrift`, call `build_static_manifest` and preserve the cached
-/// third-party entries and plugin warnings. On `ThirdPartyDrift`, call
-/// `build_static_manifest_with_venv`; third-party entries come from the
-/// fresh glob.
+/// [`crate::manifest_build::refresh`] acts on the verdict; rebuild through
+/// it rather than calling the builders directly.
 pub fn compare(
     cached: Option<&Manifest>,
     tools_dir: &Path,

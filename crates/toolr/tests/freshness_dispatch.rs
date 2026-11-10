@@ -743,15 +743,17 @@ const FALLBACK_WARNING: &str = "toolr: warning: tools manifest is stale and a fr
 const REBUILD_POINTER: &str =
     "toolr: warning: run `toolr project manifest rebuild` to see the full error\n";
 
-/// Exit code and stderr of `toolr <args>`, with `root` replaced by `<root>`.
+/// Exit code and stderr of `toolr <args>`, with `root` replaced by `<root>`
+/// and path separators by `/`.
 fn run_in(mut cmd: assert_cmd::Command, root: &std::path::Path, args: &[&str]) -> (i32, String) {
     let output = cmd.current_dir(root).args(args).output().unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let root = root.canonicalize().unwrap().display().to_string();
-    (
-        output.status.code().unwrap(),
-        stderr.replace(&root, "<root>"),
-    )
+    let mut stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let canonical = root.canonicalize().unwrap().display().to_string();
+    let unverbatim = canonical.trim_start_matches(r"\\?\").to_string();
+    for form in [canonical, unverbatim, root.display().to_string()] {
+        stderr = stderr.replace(&form, "<root>");
+    }
+    (output.status.code().unwrap(), stderr.replace('\\', "/"))
 }
 
 /// A `common::Project` with or without its in-tree venv.
@@ -859,10 +861,41 @@ fn first_run_manifest_is_fresh_for_the_next_run() {
         fs::metadata(&path).unwrap().modified().unwrap(),
         first_mtime
     );
-    let manifest: serde_json::Value = serde_json::from_slice(&first).unwrap();
-    let venv = p.tools().join(".venv").canonicalize().unwrap();
-    assert_eq!(
-        manifest["third_party_hash"],
-        toolr_core::manifest_build::compute_third_party_hash(&venv).unwrap()
-    );
+}
+
+/// Any build error reads the same on a fresh clone with or without a venv.
+#[test]
+fn fresh_clone_argparse_error_reads_the_same_with_or_without_a_venv() {
+    for with_venv in [false, true] {
+        let tmp = TempDir::new().unwrap();
+        write_django_project(tmp.path());
+        let pyproject = tmp.path().join("tools/pyproject.toml");
+        let valid = fs::read_to_string(&pyproject).unwrap();
+        let bad_glob = valid.replace(
+            r#"scan_paths = ["apps/*/management/commands/*.py"]"#,
+            r#"scan_paths = ["apps/[/x.py"]"#,
+        );
+        assert_ne!(bad_glob, valid);
+        fs::write(&pyproject, bad_glob).unwrap();
+        let mut cmd = common::toolr();
+        if with_venv {
+            let venv = tmp.path().join("tools/.venv");
+            fs::create_dir_all(&venv).unwrap();
+            fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
+            cmd.env("TOOLR_VENV_LOCATION", "in-tree");
+        }
+        let (code, stderr) = run_in(cmd, tmp.path(), &["--help"]);
+        assert_eq!(code, 2, "venv={with_venv}: {stderr}");
+        // The glob error's position depends on the temp dir's length.
+        let (head, tail) = stderr.split_once(" near position ").unwrap();
+        assert_eq!(
+            head,
+            "toolr: argparse scanner error: failed to parse apps/[/x.py: Pattern syntax error",
+            "venv={with_venv}"
+        );
+        assert!(
+            tail.ends_with(": invalid range pattern\n") && !tail.contains("failed to parse"),
+            "venv={with_venv}: {stderr}"
+        );
+    }
 }

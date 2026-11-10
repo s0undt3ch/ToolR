@@ -703,14 +703,15 @@ pub enum BuildError {
 }
 
 impl BuildError {
-    /// Convert for `anyhow` callers: a local build error unwrapped, so it
-    /// reads the same with or without a venv, and a symlinked-modules
-    /// rejection kept typed so dispatch can tell it apart.
+    /// Convert for `anyhow` callers, so a build error reads the same with or
+    /// without a venv: a local build error unwrapped, a symlinked-modules
+    /// rejection kept typed so dispatch can tell it apart, and the rest
+    /// flattened, since their messages already include their sources.
     pub fn into_anyhow(self) -> anyhow::Error {
         match self {
             BuildError::Build(e) => e,
             BuildError::SymlinkedModules(links) => links.into(),
-            other => other.into(),
+            other => anyhow::anyhow!("{other}"),
         }
     }
 }
