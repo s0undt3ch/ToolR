@@ -138,6 +138,10 @@ def run(ctx: Context, *, verbose: Verbose = False) -> None:
         (Some("true"), &[], r#""verbose":true"#),
         (Some("false"), &[], r#""verbose":false"#),
         (Some("false"), &["--verbose"], r#""verbose":true"#),
+        (Some("1"), &[], r#""verbose":true"#),
+        (Some("YES"), &[], r#""verbose":true"#),
+        (Some("0"), &[], r#""verbose":false"#),
+        (Some("no"), &[], r#""verbose":false"#),
     ];
     for (env, extra, expected) in cases {
         let args: Vec<&str> = ["example", "run"]
@@ -154,11 +158,11 @@ def run(ctx: Context, *, verbose: Verbose = False) -> None:
         );
     }
 
-    let output = run_with_env(tmp.path(), Some("1"), &["example", "run"]);
+    let output = run_with_env(tmp.path(), Some("maybe"), &["example", "run"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
     assert!(
-        stderr.contains("[possible values: true, false]"),
+        stderr.contains("expected one of 1, true, yes, 0, false, no"),
         "stderr:\n{stderr}"
     );
 }
