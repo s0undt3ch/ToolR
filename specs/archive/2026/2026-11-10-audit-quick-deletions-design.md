@@ -26,9 +26,9 @@ can be rejected alone.
   from the pipeline-gate job.
 - **R-14.** Narrow ten `pub fn`s with no external caller to `pub(crate)`, or delete if unused.
 - **R-12.** Replace the five `cargo_bin` aliases with `common::toolr`, and lock the unguarded
-  `set_var` in `execute_build.rs`. The six `fixture()` helpers are left unless trivially shared.
+  `set_var` in `execute_build.rs`. The six `fixture()` helpers are left as they are.
 - **U-15.** List `-V, --version` in `--help`.
-- **X-11.** Add a Renovate hint for the git-pinned ruff parser crates.
+- **X-11.** Dropped: Renovate already tracks and groups the ruff crates (PRs #573, #638, #717).
 - **X-10 (profile).** `lto = "fat"` and `codegen-units = 1` in `[profile.release]`. Not
   `panic = "abort"`: the profile is workspace-wide and would abort the Python process on a
   `toolr-py` panic.
