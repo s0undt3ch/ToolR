@@ -13,7 +13,6 @@ class CommandTimeoutNoOutputError(CommandError):
 
 def run_command_impl(
     args: Sequence[str],
-    cwd: str | None = ...,
     env: dict[str, str] = ...,
     input: bytes | None = ...,
     stdout_fd: int | None = ...,
@@ -22,6 +21,7 @@ def run_command_impl(
     sys_stderr_fd: int | None = ...,
     timeout_secs: float | None = ...,
     no_output_timeout_secs: float | None = ...,
+    cwd: str | None = ...,
     interactive: bool = ...,
 ) -> int: ...
 

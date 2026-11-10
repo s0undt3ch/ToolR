@@ -55,6 +55,7 @@ dev = [
     "pytest-skip-markers>=1.5.2",
     "pytest-subtests>=0.15.0",
     "pyyaml",
+    "ruamel.yaml>=0.18",
     "packaging>=26.3",
     "mkdocs>=1.6.1",  # for the llms.txt gate tests; the docs group has the rest of the stack
 ]
@@ -80,6 +81,7 @@ pre-commit = [
     "pytest>=9.1.1",
     "rich>=15.0.0",
     "rich-argparse>=1.8.0",
+    "ruamel.yaml>=0.18",
 ]
 
 [tool.ruff]

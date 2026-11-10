@@ -29,3 +29,6 @@ skills/*/examples/**/*.py text eol=lf
 # xtask normalises CRLF on read either way.
 docs/writing-commands/files/* text eol=lf
 skills/*/examples/pyproject.toml text eol=lf
+
+# The embedded completion scripts run under a shell that rejects CR line endings.
+crates/toolr-core/src/complete/scripts/* text eol=lf

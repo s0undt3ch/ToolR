@@ -9,6 +9,7 @@ action's tests.
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import shutil
@@ -41,6 +42,16 @@ pytestmark = [
 ]
 
 RunVerify = Callable[..., subprocess.CompletedProcess[str]]
+
+
+def _real_tool(name: str) -> str | None:
+    """`shutil.which` that skips mise shims, which parse the host's mise config when run."""
+    path = os.pathsep.join(
+        entry
+        for entry in os.environ.get("PATH", "").split(os.pathsep)
+        if Path(entry).parts[-2:] != ("mise", "shims")
+    )
+    return shutil.which(name, path=path)
 
 
 def _verify_function_source() -> str:
@@ -94,7 +105,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
                 (tools / name).write_text(f"#!{sh}\n{body}\n")
                 (tools / name).chmod(0o755)
                 continue
-            found = shutil.which(tool)
+            found = _real_tool(tool)
             if found is not None:
                 (tools / tool).symlink_to(found)
         if gh:

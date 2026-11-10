@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 from types import ModuleType
 from types import SimpleNamespace
@@ -10,7 +11,14 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 import pytest
-from mkdocs.exceptions import PluginError
+
+try:
+    from mkdocs.exceptions import PluginError
+except ModuleNotFoundError:
+    # The `dev` group carries mkdocs, so on CI a missing one is a broken install, not a skip.
+    if os.environ.get("CI"):
+        raise
+    pytest.skip("mkdocs is not installed", allow_module_level=True)
 
 if TYPE_CHECKING:
     from collections.abc import Callable

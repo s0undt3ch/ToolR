@@ -320,6 +320,9 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
             .args(&comp_words)
             .args(&self.quote)
             .current_dir(fx.tmp.path())
+            // `current_dir` leaves the parent's `PWD`. A stale one makes bash call `getcwd`, which
+            // fails on a conda bash 5.1 for macOS and leaves `$PWD` empty.
+            .env("PWD", fx.tmp.path())
             .env("WORDBREAKS", WORDBREAKS)
             .env("PATH", path_with_toolr())
             // `~/` completes inside the fixture.
@@ -378,9 +381,65 @@ fn bash_version(bash: &str) -> Option<u32> {
     String::from_utf8_lossy(&out.stdout).trim().parse().ok()
 }
 
-/// Every distinct bash 4.4+ on this machine. The script refuses older ones, so on
-/// CI having none fails the tests instead of skipping them.
+fn version_key(dir: &std::path::Path) -> Vec<u32> {
+    dir.file_name()
+        .map(|n| {
+            n.to_string_lossy()
+                .split('.')
+                .filter_map(|c| c.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+const TEST_BASH_VAR: &str = "TOOLR_TEST_BASH";
+const SKIP_BASH_VAR: &str = "TOOLR_SKIP_BASH_COMPLETION_TESTS";
+
+/// `bin/bash` of the newest mise-installed `conda:bash`, which is where a contributor on a stock macOS
+/// checkout gets a bash 4.4+ from (`mise use -g conda:bash@5.3`), plus the PATH-style list in `TOOLR_TEST_BASH`.
+fn extra_bash_candidates() -> Vec<String> {
+    let mut found: Vec<String> = std::env::var_os(TEST_BASH_VAR)
+        .map(|v| {
+            std::env::split_paths(&v)
+                .filter(|p| !p.as_os_str().is_empty())
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    let data = std::env::var_os("MISE_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share/mise"))
+        });
+    if let Some(dir) = data.map(|d| d.join("installs/conda-bash"))
+        && let Ok(entries) = std::fs::read_dir(dir)
+    {
+        // Newest only: every test loops over `bashes()`, so each extra install multiplies the
+        // suite's run time. `TOOLR_TEST_BASH` targets a specific older one.
+        let mut versions: Vec<_> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.join("bin/bash").is_file())
+            .collect();
+        versions.sort_by_key(|p| version_key(p));
+        found.extend(
+            versions
+                .last()
+                .map(|p| p.join("bin/bash").to_string_lossy().into_owned()),
+        );
+    }
+    found
+}
+
+/// Every distinct bash 4.4+ on this machine. The script refuses older ones. With none, CI fails
+/// the tests; elsewhere they pass vacuously, which `a_bash_4_4_or_newer_was_found` turns red.
 fn bashes() -> Vec<String> {
+    // Probe once: ~70 tests call this and each probe spawns bash.
+    static FOUND: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    FOUND.get_or_init(find_bashes).clone()
+}
+
+fn find_bashes() -> Vec<String> {
     let mut candidates: Vec<String> = Vec::new();
     if let Ok(out) = StdCommand::new("sh")
         .args(["-c", "command -v bash"])
@@ -397,6 +456,7 @@ fn bashes() -> Vec<String> {
     ] {
         candidates.push(p.to_string());
     }
+    candidates.extend(extra_bash_candidates());
     let mut seen = Vec::new();
     let mut v = Vec::new();
     for p in candidates {
@@ -415,10 +475,18 @@ fn bashes() -> Vec<String> {
         !v.is_empty() || std::env::var_os("CI").is_none(),
         "no bash 4.4 or newer found; CI must install one so the bash completion tests run"
     );
-    if v.is_empty() {
-        eprintln!("skipping: no bash 4.4 or newer found");
-    }
     v
+}
+
+#[test]
+fn a_bash_4_4_or_newer_was_found() {
+    assert!(
+        !bashes().is_empty() || std::env::var_os(SKIP_BASH_VAR).is_some_and(|v| v == "1"),
+        "no bash 4.4+ found, so every bash completion test was a no-op. Install one \
+         (`mise use -g conda:bash@5.3`, or `brew install bash`), point TOOLR_TEST_BASH at one, or \
+         set TOOLR_SKIP_BASH_COMPLETION_TESTS=1 to accept skipping them (local runs only; CI \
+         always fails without a bash)"
+    );
 }
 
 #[test]
@@ -2091,6 +2159,8 @@ fn assert_bash_keys_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, w
         .arg(rcfile)
         .arg("-i")
         .current_dir(fx.tmp.path())
+        // As in `Drive::run`: a stale inherited `PWD` makes a conda bash 5.1 call `getcwd`.
+        .env("PWD", fx.tmp.path())
         .env("PATH", path_with_toolr())
         .env("HOME", fx.tmp.path())
         .env("XDG_CACHE_HOME", common::test_cache_home())
