@@ -39,7 +39,10 @@ const ARGPARSE_KWARGS: &[&str] = &[
 /// Parse `source_text` (Python) and return a `ScannedCommand`.
 /// `command_name` is what the caller wants to label this file's discovered
 /// command as (typically the filename stem).
-pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedCommand, ScanError> {
+pub(crate) fn scan_source(
+    command_name: &str,
+    source_text: &str,
+) -> Result<ScannedCommand, ScanError> {
     let parsed = parser::parse_module(source_text).map_err(|e| ScanError::Parse {
         path: command_name.to_string(),
         message: e.to_string(),

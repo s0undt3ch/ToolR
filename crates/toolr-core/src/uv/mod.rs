@@ -196,7 +196,7 @@ impl UvError {
 /// Where toolr keeps its private state (binaries, etc).
 /// Defaults to `$XDG_DATA_HOME/toolr`, falling back to
 /// `~/.local/share/toolr` if `XDG_DATA_HOME` is unset, empty or relative.
-pub fn toolr_data_dir() -> Option<PathBuf> {
+pub(crate) fn toolr_data_dir() -> Option<PathBuf> {
     crate::env::xdg_dir_env("XDG_DATA_HOME")
         .map(|v| v.join("toolr"))
         .or_else(|| dirs::data_dir().map(|d| d.join("toolr")))

@@ -140,7 +140,7 @@ pub enum LinuxLibc {
 /// extension, plus the extension itself.
 ///
 /// Reference: <https://github.com/astral-sh/uv/releases>
-pub fn host_asset() -> Option<(&'static str, &'static str)> {
+pub(crate) fn host_asset() -> Option<(&'static str, &'static str)> {
     host_asset_for(
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -193,7 +193,7 @@ pub(crate) fn host_asset_for(
 /// Non-Linux targets always report [`LinuxLibc::Gnu`]; the value is
 /// unused there because [`host_asset_for`]'s `"linux"` arms never fire
 /// on non-Linux builds.
-pub fn detect_linux_libc() -> LinuxLibc {
+pub(crate) fn detect_linux_libc() -> LinuxLibc {
     detect_linux_libc_from(
         std::env::var_os("TOOLR_UV_LIBC")
             .and_then(|v| v.into_string().ok())

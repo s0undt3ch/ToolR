@@ -51,7 +51,7 @@ impl EnsureOpts {
         self.trust = mode;
         self
     }
-    pub fn with_trusted(mut self, proof: Trusted) -> Self {
+    pub(crate) fn with_trusted(mut self, proof: Trusted) -> Self {
         self.trusted = Some(proof);
         self
     }
@@ -114,7 +114,7 @@ enum SyncChoice {
 
 /// The sync prompt. It stands in for the uv install prompt, so a `y` is
 /// consent to download uv and a Python too. EOF and bare Enter decline.
-pub fn confirm_sync(input: &mut dyn BufRead, out: &mut dyn Write) -> bool {
+pub(crate) fn confirm_sync(input: &mut dyn BufRead, out: &mut dyn Write) -> bool {
     let _ = write!(
         out,
         "The tools venv needs a sync before toolr can run this repository's commands.\n\
@@ -136,7 +136,8 @@ pub fn confirm_sync(input: &mut dyn BufRead, out: &mut dyn Write) -> bool {
 /// Sync a trusted repository's venv if it needs it, asking first. The sync
 /// prompt follows the uv install prompt it replaces: `TOOLR_AUTO_INSTALL_UV=1`
 /// answers it, and `never_prompt` or no `prompt_io` (no terminal) declines it.
-pub fn sync_after_trust(
+#[cfg(test)]
+fn sync_after_trust(
     trusted: &Trusted,
     quiet: bool,
     never_prompt: bool,
