@@ -226,9 +226,6 @@ pub fn dispatch(
     if let Some(("self", self_matches)) = matches.subcommand() {
         return run_self(self_matches, matches.get_flag("quiet"));
     }
-    if let Some(("__build-static-manifest", _)) = matches.subcommand() {
-        return run_build_static_manifest(matches.get_flag("quiet"));
-    }
     if let Some(("__install-uv-now", _)) = matches.subcommand() {
         return run_install_uv_now();
     }
@@ -820,34 +817,6 @@ fn empty_manifest_for_completion() -> Manifest {
         plugin_warnings: Vec::new(),
         input_records: Default::default(),
     }
-}
-
-fn run_build_static_manifest(quiet: bool) -> anyhow::Result<ExitCode> {
-    let cwd = std::env::current_dir()?;
-    let root = toolr_core::discovery::discover_project_root(&cwd)?;
-    let tools = root.join("tools");
-    let path = tools.join(".toolr-manifest.json");
-    let _lock = toolr_core::manifest::acquire_rebuild_lock(&path);
-    let built = toolr_core::hash::build_to_persist(&tools, || {
-        toolr_core::parser::build_static_manifest(&tools)
-    })?;
-    let manifest = built.manifest;
-    toolr_core::manifest::write_manifest(&path, &manifest)?;
-    for warning in &built.warnings {
-        eprintln!(
-            "toolr: warning: {}",
-            toolr_core::text::strip_control_chars(warning)
-        );
-    }
-    if !quiet {
-        println!(
-            "toolr: wrote {} groups / {} commands to {}",
-            manifest.groups.len(),
-            manifest.commands.len(),
-            path.display()
-        );
-    }
-    Ok(ExitCode::SUCCESS)
 }
 
 fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {

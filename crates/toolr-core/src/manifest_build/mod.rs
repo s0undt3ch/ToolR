@@ -6,4 +6,4 @@ pub mod hash;
 pub mod rebuild;
 
 pub use hash::{compute_third_party_hash, empty_third_party_hash};
-pub use rebuild::{RebuildOutcome, rebuild_manifest_full};
+pub use rebuild::{Persist, Refresh, Refreshed, rebuild_manifest_full, refresh};

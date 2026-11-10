@@ -2,6 +2,7 @@
 //! Only writers lock; readers never do.
 
 use std::fs::{File, OpenOptions};
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 
 use crate::uv::toolr_cache_dir;
@@ -37,10 +38,7 @@ pub fn rebuild_lock_path(manifest_path: &Path) -> Option<PathBuf> {
 /// Lock file guarding rebuilds of `repo_root`'s manifest, under `cache_root`
 /// (the toolr cache dir holding `locks/`). Shares one canonicalisation with rebuilds.
 pub fn lock_path_for_repo(cache_root: &Path, repo_root: &Path) -> PathBuf {
-    lock_path_in(
-        cache_root,
-        &repo_root.join("tools").join(".toolr-manifest.json"),
-    )
+    lock_path_in(cache_root, &super::manifest_path(repo_root))
 }
 
 /// `<cache_root>/locks/<blake3 of the canonical manifest path>.lock`. Prune may
@@ -86,34 +84,35 @@ fn lock_at(lock_path: Option<&Path>) -> ManifestRebuildLock {
     ManifestRebuildLock { _file: file }
 }
 
-/// Rebuild only if `check` still reports the manifest stale.
+/// Generic check, lock, re-check: rebuild only if `check` still reports the
+/// manifest stale once the rebuild lock is held.
 ///
-/// `check` returns `Some(state)` when stale and `None` when fresh. It runs
-/// once unlocked, so the common fresh path never touches the lock, and once
-/// more under the lock, because another process may have rebuilt while this
-/// one waited. `rebuild` gets the state from the locked check. Returns
-/// `None` when no rebuild was needed.
+/// `check` returns `Continue(state)` when stale and `Break(fresh)` when
+/// fresh. It runs once unlocked, so the common fresh path never touches the
+/// lock, and once more under the lock, because another process may have
+/// rebuilt while this one waited. `rebuild` gets the state from the locked
+/// check. Returns the fresh value or the rebuild's.
 pub fn rebuild_if_stale<S, T, E>(
     manifest_path: &Path,
-    check: impl FnMut() -> Result<Option<S>, E>,
+    check: impl FnMut() -> Result<ControlFlow<T, S>, E>,
     rebuild: impl FnOnce(S) -> Result<T, E>,
-) -> Result<Option<T>, E> {
+) -> Result<T, E> {
     rebuild_if_stale_with(|| acquire_rebuild_lock(manifest_path), check, rebuild)
 }
 
 fn rebuild_if_stale_with<S, T, E>(
     lock: impl FnOnce() -> ManifestRebuildLock,
-    mut check: impl FnMut() -> Result<Option<S>, E>,
+    mut check: impl FnMut() -> Result<ControlFlow<T, S>, E>,
     rebuild: impl FnOnce(S) -> Result<T, E>,
-) -> Result<Option<T>, E> {
-    if check()?.is_none() {
-        return Ok(None);
+) -> Result<T, E> {
+    if let ControlFlow::Break(fresh) = check()? {
+        return Ok(fresh);
     }
     let _lock = lock();
-    let Some(state) = check()? else {
-        return Ok(None);
-    };
-    rebuild(state).map(Some)
+    match check()? {
+        ControlFlow::Break(fresh) => Ok(fresh),
+        ControlFlow::Continue(state) => rebuild(state),
+    }
 }
 
 #[cfg(test)]
@@ -149,12 +148,16 @@ mod tests {
                 let barrier = Arc::clone(barrier);
                 thread::spawn(move || {
                     let mut first_check = true;
-                    let check = || -> Result<Option<()>, ()> {
+                    let check = || -> Result<ControlFlow<(), ()>, ()> {
                         if std::mem::take(&mut first_check) {
                             barrier.wait();
-                            return Ok(Some(()));
+                            return Ok(ControlFlow::Continue(()));
                         }
-                        Ok((!fresh.load(Ordering::SeqCst)).then_some(()))
+                        Ok(if fresh.load(Ordering::SeqCst) {
+                            ControlFlow::Break(())
+                        } else {
+                            ControlFlow::Continue(())
+                        })
                     };
                     let lock = || lock_at(Some(&lock_path));
                     rebuild_if_stale_with(lock, check, |()| {
@@ -217,14 +220,14 @@ mod tests {
         let mut rebuilds = 0;
         let out = rebuild_if_stale_with(
             || lock_at(Some(&lock_path)),
-            || Ok::<_, ()>(Some(())),
+            || Ok::<_, ()>(ControlFlow::Continue(())),
             |()| {
                 rebuilds += 1;
-                Ok(())
+                Ok("rebuilt")
             },
         )
         .unwrap();
-        assert_eq!(out, Some(()));
+        assert_eq!(out, "rebuilt");
         assert_eq!(rebuilds, 1);
     }
 
@@ -233,9 +236,9 @@ mod tests {
         // One-line closures: they must never run, and a multi-line body would
         // show up as uncovered.
         let lock = || -> ManifestRebuildLock { unreachable!("must not lock") };
-        let rebuild = |()| -> Result<(), ()> { unreachable!("must not rebuild") };
-        let out = rebuild_if_stale_with(lock, || Ok(None), rebuild).unwrap();
-        assert_eq!(out, None);
+        let rebuild = |()| -> Result<&str, ()> { unreachable!("must not rebuild") };
+        let out = rebuild_if_stale_with(lock, || Ok(ControlFlow::Break("fresh")), rebuild).unwrap();
+        assert_eq!(out, "fresh");
     }
 
     #[test]

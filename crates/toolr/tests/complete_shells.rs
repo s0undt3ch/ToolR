@@ -122,11 +122,7 @@ def pos(ctx, target: Literal["alpha", "beta"], flavour: str = "plain"):
     );
     std::fs::write(fx.tmp.path().join("tools/ci.py"), src).unwrap();
 
-    common::toolr()
-        .current_dir(fx.tmp.path())
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    common::build_manifest(fx.tmp.path());
     fx
 }
 

@@ -57,10 +57,9 @@ fn help_works_with_no_venv_and_shows_first_party_commands() {
         .stdout(predicates::str::contains("greet"));
 }
 
-/// Bootstrap with a missing manifest but an existing in-tree venv takes the
-/// static-build-WITH-venv arm (`build_static_manifest_with_venv`), still
-/// executing no Python. Covers the venv-present branch of
-/// `ensure_manifest_present_or_bootstrap`.
+/// Bootstrap with a missing manifest but an existing in-tree venv globs the
+/// venv's plugin fragments (`build_static_manifest_with_venv`), still
+/// executing no Python.
 #[test]
 fn help_builds_statically_with_an_existing_in_tree_venv() {
     let tmp = TempDir::new().unwrap();

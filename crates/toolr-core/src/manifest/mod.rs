@@ -16,5 +16,10 @@ pub use model::{
     PluginWarning, PluginWarningKind, SCHEMA_VERSION,
 };
 
+/// Where `project_root`'s manifest lives.
+pub fn manifest_path(project_root: &std::path::Path) -> std::path::PathBuf {
+    project_root.join("tools").join(".toolr-manifest.json")
+}
+
 #[cfg(test)]
 mod tests;

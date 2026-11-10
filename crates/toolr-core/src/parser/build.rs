@@ -29,19 +29,34 @@ pub struct BuiltManifest {
     pub warnings: Vec<String>,
 }
 
+impl BuiltManifest {
+    /// The build's warnings, then the manifest's plugin warnings, with
+    /// control characters stripped for the terminal.
+    pub fn all_warnings(&self) -> impl Iterator<Item = String> + '_ {
+        self.warnings
+            .iter()
+            .chain(self.manifest.plugin_warnings.iter().map(|w| &w.message))
+            .map(|w| crate::text::strip_control_chars(w))
+    }
+}
+
+/// A manifest read from disk, whose build's warnings were printed then.
+impl From<Manifest> for BuiltManifest {
+    fn from(manifest: Manifest) -> Self {
+        Self {
+            manifest,
+            warnings: Vec::new(),
+        }
+    }
+}
+
 /// Build the static portion of a manifest from a tools directory.
 ///
 /// Surfaces every unsupported-type rejection in a single batch via
 /// [`BuildError::UnsupportedTypes`] so users see all the offending
 /// annotations at once rather than one-at-a-time on each rebuild.
 pub fn build_static_manifest(tools_dir: &Path) -> Result<BuiltManifest> {
-    match build_static_manifest_inner(tools_dir) {
-        Ok(m) => Ok(m),
-        Err(BuildError::Build(e)) => Err(e),
-        // Kept typed so dispatch can tell it apart from other build errors.
-        Err(BuildError::SymlinkedModules(e)) => Err(e.into()),
-        Err(other) => Err(anyhow::anyhow!("{other}")),
-    }
+    build_static_manifest_inner(tools_dir).map_err(BuildError::into_anyhow)
 }
 
 fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<BuiltManifest, BuildError> {
@@ -688,12 +703,15 @@ pub enum BuildError {
 }
 
 impl BuildError {
-    /// Convert for `anyhow` callers, surfacing a symlinked-modules rejection
-    /// as a bare [`SymlinkedModules`] the way [`build_static_manifest`] does.
+    /// Convert for `anyhow` callers, so a build error reads the same with or
+    /// without a venv: a local build error unwrapped, a symlinked-modules
+    /// rejection kept typed so dispatch can tell it apart, and the rest
+    /// flattened, since their messages already include their sources.
     pub fn into_anyhow(self) -> anyhow::Error {
         match self {
+            BuildError::Build(e) => e,
             BuildError::SymlinkedModules(links) => links.into(),
-            other => other.into(),
+            other => anyhow::anyhow!("{other}"),
         }
     }
 }

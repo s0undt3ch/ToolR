@@ -468,12 +468,6 @@ it for their call. The bash script doesn't, and filters the reply by the
 typed prefix itself whatever the engine returns, since readline doesn't
 filter it. Any other value, or none, means prefix filtering.
 
-### `toolr __build-static-manifest` {#__build-static-manifest}
-
-Regenerate only the static layer of the manifest (no Python
-introspection). Faster than `toolr project manifest rebuild` but
-won't pick up dynamically-registered commands.
-
 ### `toolr __install-uv-now` {#__install-uv-now}
 
 Make sure uv is available without the consent prompt. Uses a usable

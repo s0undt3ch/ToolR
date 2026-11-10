@@ -39,33 +39,24 @@ fn run() -> anyhow::Result<ExitCode> {
     let argv: Vec<String> = std::env::args().collect();
     // Emit the passive cache hint before clap touches argv.
     maybe_emit_cache_hint_from_argv();
-    let persist = bootstrap::persist_manifest(&cwd, &argv);
-    let bootstrap_warnings = bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv, persist)?;
-    let (mut manifest, fresh_warnings) =
-        match bootstrap::ensure_manifest_fresh(&cwd, &argv, persist)? {
-            Some(built) => (built.manifest, built.warnings),
-            // `__complete` resolves the manifest itself; loading it here too
-            // would parse it twice per TAB and warn about a corrupt one.
-            None if bootstrap::is_tab_completion(&argv) => (empty_manifest(), Vec::new()),
-            None => (load_or_empty(&cwd, &argv)?, Vec::new()),
-        };
+    let mut built = match bootstrap::ensure_manifest(&cwd, &argv)? {
+        Some(built) => built,
+        // `__complete` resolves the manifest itself; loading it here too
+        // would parse it twice per TAB and warn about a corrupt one.
+        None if bootstrap::is_tab_completion(&argv) => empty_manifest().into(),
+        None => load_or_empty(&cwd, &argv)?.into(),
+    };
     // Covers fragments and a hand-edited committed manifest alike. Tab
     // completion drops the same entries in `resolve_manifest_at_tab`.
-    manifest.drop_unsafe_names();
+    built.manifest.drop_unsafe_names();
     if !bootstrap::should_skip_auto_rebuild(&argv) {
         // Printed under `-q` too (the rule is on the `-q` arg in `cli::build_command`).
-        // Build warnings come only from a manifest built on this run. When the
-        // bootstrap built it, the freshness step's rebuild of the same tree
-        // repeats them, so only the bootstrap's print.
-        let built = bootstrap_warnings.as_ref().unwrap_or(&fresh_warnings);
-        let plugin = manifest.plugin_warnings.iter().map(|w| &w.message);
-        for message in built.iter().chain(plugin) {
-            eprintln!(
-                "toolr: warning: {}",
-                toolr_core::text::strip_control_chars(message)
-            );
+        // Build warnings come only from a manifest built on this run.
+        for message in built.all_warnings() {
+            eprintln!("toolr: warning: {message}");
         }
     }
+    let manifest = built.manifest;
     let mut command = cli::build_command(&manifest);
     // Use try_get_matches_from so that `subcommand_required` validation errors
     // (e.g. `toolr self --help`) don't exit before dispatch can intercept
@@ -202,7 +193,7 @@ fn load_or_empty(cwd: &std::path::Path, argv: &[String]) -> anyhow::Result<Manif
             return Ok(empty_manifest());
         }
     };
-    let manifest_path = root.join("tools").join(".toolr-manifest.json");
+    let manifest_path = toolr_core::manifest::manifest_path(&root);
     match load_manifest(&manifest_path) {
         Ok(m) => Ok(m),
         Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {

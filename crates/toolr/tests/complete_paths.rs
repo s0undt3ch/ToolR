@@ -40,11 +40,7 @@ def hello(
 "#,
     )
     .unwrap();
-    common::toolr()
-        .current_dir(tmp.path())
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    common::build_manifest(tmp.path());
     tmp
 }
 

@@ -58,7 +58,7 @@ fn minimal_plugin(tmp: &Path, name: &str) -> PathBuf {
     pkg
 }
 
-fn build_manifest(pkg: &Path, root_flag: Option<&str>, extra: &[&str]) -> Output {
+fn self_build_manifest(pkg: &Path, root_flag: Option<&str>, extra: &[&str]) -> Output {
     common::toolr()
         .args(root_flag)
         .args(["self", "build-manifest", "--source-dir"])
@@ -73,7 +73,7 @@ fn build_manifest(pkg: &Path, root_flag: Option<&str>, extra: &[&str]) -> Output
 fn build_manifest_prints_its_wrote_line_without_the_flag() {
     let tmp = TempDir::new().unwrap();
     let pkg = minimal_plugin(tmp.path(), "mypkg");
-    let out = build_manifest(&pkg, None, &[]);
+    let out = self_build_manifest(&pkg, None, &[]);
     assert!(stderr(&out).contains("wrote 1 group(s) / 1 command(s)"));
 }
 
@@ -82,7 +82,7 @@ fn build_manifest_is_silent_under_root_quiet() {
     for flag in ["--quiet", "-q"] {
         let tmp = TempDir::new().unwrap();
         let pkg = minimal_plugin(tmp.path(), "mypkg");
-        assert_silent_success(&build_manifest(&pkg, Some(flag), &[]));
+        assert_silent_success(&self_build_manifest(&pkg, Some(flag), &[]));
         assert!(pkg.join("toolr-manifest.json").is_file());
     }
 }
@@ -95,13 +95,13 @@ fn build_manifest_quiet_still_prints_warnings_and_stale_check() {
         &pkg.join("other.py"),
         "from toolr import command_group\n\ncommand_group(\"g\", \"Other\")\n",
     );
-    let out = build_manifest(&pkg, Some("--quiet"), &[]);
+    let out = self_build_manifest(&pkg, Some("--quiet"), &[]);
     assert!(out.status.success(), "{out:?}");
     assert!(stderr(&out).contains("toolr: warning: group `g` is declared more than once"));
     assert!(!stderr(&out).contains("wrote"));
 
     fs::write(pkg.join("toolr-manifest.json"), "{}").unwrap();
-    let out = build_manifest(&pkg, Some("--quiet"), &["--check"]);
+    let out = self_build_manifest(&pkg, Some("--quiet"), &["--check"]);
     assert_eq!(out.status.code(), Some(2), "{out:?}");
     assert!(stderr(&out).contains("is out of date"));
 }
@@ -183,15 +183,11 @@ fn manifest_rebuild_prints_its_wrote_line_without_the_flag() {
 }
 
 #[test]
-fn manifest_rebuild_and_static_build_are_silent_under_root_quiet() {
-    for args in [
-        &["-q", "project", "manifest", "rebuild"][..],
-        &["--quiet", "__build-static-manifest"][..],
-    ] {
-        let p = Project::new();
-        assert_silent_success(&p.toolr(args).output().unwrap());
-        assert!(p.tools().join(".toolr-manifest.json").is_file(), "{args:?}");
-    }
+fn manifest_rebuild_is_silent_under_root_quiet() {
+    let p = Project::new();
+    let args = ["-q", "project", "manifest", "rebuild"];
+    assert_silent_success(&p.toolr(&args).output().unwrap());
+    assert!(p.tools().join(".toolr-manifest.json").is_file());
 }
 
 #[test]
