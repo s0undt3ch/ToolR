@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._signature import ArgSection
 from toolr.utils._signature import ArgumentAnnotation
 from toolr.utils._signature import arg
@@ -13,55 +12,26 @@ from toolr.utils._signature import arg_section
 
 def test_argument_annotation_creation():
     """Test creating an ArgumentAnnotation."""
-    annotation = ArgumentAnnotation(
-        aliases=["--test", "-t"],
-        required=True,
-        metavar="TEST",
-        action="store_true",
-        choices=["a", "b", "c"],
-        nargs="*",
-        group="test_group",
-    )
+    annotation = ArgumentAnnotation(aliases=["--test", "-t"], metavar="TEST")
     assert annotation.aliases == ["--test", "-t"]
-    assert annotation.required is True
     assert annotation.metavar == "TEST"
-    assert annotation.action == "store_true"
-    assert annotation.choices == ["a", "b", "c"]
-    assert annotation.nargs == "*"
-    assert annotation.group == "test_group"
 
 
 def test_argument_annotation_defaults():
     """Test ArgumentAnnotation with default values."""
     annotation = ArgumentAnnotation()
     assert annotation.aliases is None
-    assert annotation.required is None
     assert annotation.metavar is None
-    assert annotation.action is None
-    assert annotation.choices is None
-    assert annotation.nargs is None
-    assert annotation.group is None
+    assert annotation.env is None
+    assert annotation.hide is False
 
 
 def test_arg_function():
     """Test the arg function creates correct ArgumentAnnotation."""
-    annotation = arg(
-        aliases=["--test", "-t"],
-        required=True,
-        metavar="TEST",
-        action="store_true",
-        choices=["a", "b", "c"],
-        nargs="*",
-        group="test_group",
-    )
+    annotation = arg(aliases=["--test", "-t"], metavar="TEST")
     assert isinstance(annotation, ArgumentAnnotation)
     assert annotation.aliases == ["--test", "-t"]
-    assert annotation.required is True
     assert annotation.metavar == "TEST"
-    assert annotation.action == "store_true"
-    assert annotation.choices == ["a", "b", "c"]
-    assert annotation.nargs == "*"
-    assert annotation.group == "test_group"
 
 
 def test_arg_function_defaults():
@@ -69,37 +39,7 @@ def test_arg_function_defaults():
     annotation = arg()
     assert isinstance(annotation, ArgumentAnnotation)
     assert annotation.aliases is None
-    assert annotation.required is None
     assert annotation.metavar is None
-    assert annotation.action is None
-    assert annotation.choices is None
-    assert annotation.nargs is None
-    assert annotation.group is None
-
-
-def test_argument_annotation_mutually_exclusive_group_only():
-    """Test ArgumentAnnotation with only group specified."""
-    annotation = ArgumentAnnotation(group="group1")
-    assert annotation.group == "group1"
-    assert annotation.aliases is None
-    assert annotation.required is None
-    assert annotation.metavar is None
-    assert annotation.action is None
-    assert annotation.choices is None
-    assert annotation.nargs is None
-
-
-def test_arg_function_mutually_exclusive_group_only():
-    """Test arg function with only group specified."""
-    annotation = arg(group="group1")
-    assert isinstance(annotation, ArgumentAnnotation)
-    assert annotation.group == "group1"
-    assert annotation.aliases is None
-    assert annotation.required is None
-    assert annotation.metavar is None
-    assert annotation.action is None
-    assert annotation.choices is None
-    assert annotation.nargs is None
 
 
 def test_arg_section_carries_title_and_description():
@@ -135,19 +75,11 @@ def test_arg_accepts_help_section_and_other_new_kwargs():
     assert annotation.help_section is section
 
 
-@pytest.mark.parametrize(
-    "kwargs",
-    [
-        {"required": True},
-        {"choices": ["a", "b"]},
-        {"nargs": "*"},
-        {"action": "store_true"},
-        {"group": "verbosity"},
-    ],
-)
-def test_legacy_kwargs_emit_deprecation_warning(kwargs):
-    with pytest.warns(ToolrDeprecationWarning):
-        arg(**kwargs)
+@pytest.mark.parametrize("kwarg", ["required", "choices", "nargs", "action", "group"])
+def test_removed_argparse_style_kwargs_are_rejected(kwarg):
+    """These deprecated keywords are gone; the annotation's type carries what they set."""
+    with pytest.raises(TypeError, match=kwarg):
+        arg(**{kwarg: None})
 
 
 @pytest.mark.parametrize("kwarg", ["must_exist", "must_be_file", "must_be_dir"])

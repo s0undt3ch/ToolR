@@ -3725,9 +3725,12 @@ def read(ctx: Context, name: Annotated[str, arg("x")]) -> None:
     }
 
     #[test]
-    fn deprecated_arg_keyword_is_still_accepted() {
-        assert_builds(
-            r#"from typing import Annotated
+    fn removed_arg_keywords_fail_the_build_with_a_replacement() {
+        for keyword in ["required", "action", "choices", "nargs", "group"] {
+            let errs = type_errors_for(&[(
+                "tools/kw.py",
+                &format!(
+                    r#"from typing import Annotated
 
 from toolr import Context, arg, command_group
 
@@ -3735,18 +3738,24 @@ group = command_group("kw", "Kwarg test", description="Kwarg test.")
 
 
 @group.command
-def read(ctx: Context, *, name: Annotated[str, arg(required=True)] = "x") -> None:
+def read(ctx: Context, *, name: Annotated[str, arg({keyword}=None)] = "x") -> None:
     """Read."""
-"#,
-        );
+"#
+                ),
+            )]);
+            assert_eq!(errs.len(), 1, "{keyword}: {errs:?}");
+            let message = errs[0].to_string();
+            assert!(
+                message.contains(&format!("unknown `arg()` keyword `{keyword}`; use "))
+                    || message.contains("the action comes from the type"),
+                "{keyword}: {message}"
+            );
+        }
     }
 
     #[test]
     fn every_accepted_arg_keyword_builds() {
-        for keyword in crate::parser::types::ACTIVE_ARG_KEYWORDS
-            .iter()
-            .chain(crate::parser::types::DEPRECATED_ARG_KEYWORDS)
-        {
+        for keyword in crate::parser::types::ACTIVE_ARG_KEYWORDS {
             assert_builds(&format!(
                 r#"from typing import Annotated
 

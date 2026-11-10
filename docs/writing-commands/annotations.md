@@ -131,9 +131,10 @@ description, a bare string is accepted:
 verbose: Annotated[bool, arg(help_section="Logging Options")] = False
 ```
 
-## Deprecated kwargs (removed in 1.0)
+## Removed kwargs
 
-These still parse but emit a `ToolrDeprecationWarning`:
+`required=`, `choices=`, `nargs=`, `action=` and `group=` are gone. The manifest build fails with a
+hint naming the replacement:
 
 - `required=` — use `T | None` or `*args: T`.
 - `choices=` — use `Literal["a","b"]` or an `Enum`.

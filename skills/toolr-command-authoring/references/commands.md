@@ -454,9 +454,8 @@ Installed toolr-py package version, resolved at import time via `importlib.metad
 **Kind:** function &nbsp;·&nbsp; **Source:** `toolr.utils._signature`
 
 ```python
-def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose; each is intentionally distinct.
+def arg(
     *,
-    # Active kwargs (plumbed through to clap).
     aliases: _StrSequence | None = None,
     metavar: str | None = None,
     env: str | None = None,
@@ -465,13 +464,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
     display_order: int | None = None,
     conflicts_with: _StrCollection | None = None,
     requires: _StrCollection | None = None,
-    # Deprecated legacy kwargs. Each emits a `ToolrDeprecationWarning`
-    # and (when applicable) maps onto the new field internally.
-    required: bool | None = None,
-    action: str | None = None,
-    choices: list[Any] | None = None,
-    nargs: NargsType | None = None,
-    group: str | None = None,
 ) -> ArgumentAnnotation:
 ```
 
@@ -500,18 +492,6 @@ Args:
         together with this one.
     requires: Names of other parameters that must also be set when
         this one is.
-    required: **Deprecated.** Removed in 1.0. Use ``T | None`` or
-        ``*args: T`` to express optional / zero-or-more.
-    action: **Deprecated.** Removed in 1.0. ``bool`` defaults imply
-        flag actions; ``list[T]`` implies append; ``Count`` implies
-        counting.
-    choices: **Deprecated.** Removed in 1.0. Use ``Literal["a","b"]``
-        or an :class:`enum.Enum` subclass instead.
-    nargs: **Deprecated.** Removed in 1.0. ``T | None``,
-        ``*args: T``, and ``tuple[T1, T2]`` cover the cases.
-    group: **Deprecated.** Removed in 1.0. Use
-        ``conflicts_with=[...]`` for mutex relationships and
-        ``help_section=`` for display grouping.
 
 ```
 

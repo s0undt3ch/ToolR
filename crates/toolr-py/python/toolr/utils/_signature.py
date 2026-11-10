@@ -5,21 +5,17 @@ Utilities to parse function signatures.
 from __future__ import annotations
 
 import inspect
-import warnings
 from collections.abc import Callable
 from typing import Any
-from typing import Literal
 from typing import TypeAlias
 from typing import TypeVar
 
 from msgspec import Struct
 
-from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._annotations import resolve_hints
 from toolr.utils._annotations import signature
 
 F = TypeVar("F", bound=Callable[..., Any])
-NargsType: TypeAlias = Literal["*", "+", "?"] | int
 
 
 class ArgSection(Struct, frozen=True):
@@ -91,22 +87,6 @@ class ArgumentAnnotation(Struct, frozen=True):
     display_order: int | None = None
     conflicts_with: list[str] | None = None
     requires: list[str] | None = None
-    # Deprecated kwargs — kept on the struct so existing call sites
-    # don't TypeError, but every one of them emits a
-    # `ToolrDeprecationWarning` from `arg()`.
-    required: bool | None = None
-    action: str | None = None
-    choices: list[Any] | None = None
-    nargs: NargsType | None = None
-    group: str | None = None
-
-
-def _deprecated(name: str, *, replacement: str) -> None:
-    warnings.warn(
-        f"arg({name}=...) is deprecated and will be removed in toolr 1.0. {replacement}",
-        ToolrDeprecationWarning,
-        stacklevel=3,
-    )
 
 
 # Order-preserving string collection: ``list`` and ``tuple``. Used
@@ -187,9 +167,8 @@ def _coerce_str_collection_kwarg(name: str, value: _StrCollection | None) -> lis
     return items
 
 
-def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose; each is intentionally distinct.
+def arg(
     *,
-    # Active kwargs (plumbed through to clap).
     aliases: _StrSequence | None = None,
     metavar: str | None = None,
     env: str | None = None,
@@ -198,13 +177,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
     display_order: int | None = None,
     conflicts_with: _StrCollection | None = None,
     requires: _StrCollection | None = None,
-    # Deprecated legacy kwargs. Each emits a `ToolrDeprecationWarning`
-    # and (when applicable) maps onto the new field internally.
-    required: bool | None = None,
-    action: str | None = None,
-    choices: list[Any] | None = None,
-    nargs: NargsType | None = None,
-    group: str | None = None,
 ) -> ArgumentAnnotation:
     """Create an :class:`ArgumentAnnotation` for use with ``typing.Annotated``.
 
@@ -230,61 +202,10 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
             together with this one.
         requires: Names of other parameters that must also be set when
             this one is.
-        required: **Deprecated.** Removed in 1.0. Use ``T | None`` or
-            ``*args: T`` to express optional / zero-or-more.
-        action: **Deprecated.** Removed in 1.0. ``bool`` defaults imply
-            flag actions; ``list[T]`` implies append; ``Count`` implies
-            counting.
-        choices: **Deprecated.** Removed in 1.0. Use ``Literal["a","b"]``
-            or an :class:`enum.Enum` subclass instead.
-        nargs: **Deprecated.** Removed in 1.0. ``T | None``,
-            ``*args: T``, and ``tuple[T1, T2]`` cover the cases.
-        group: **Deprecated.** Removed in 1.0. Use
-            ``conflicts_with=[...]`` for mutex relationships and
-            ``help_section=`` for display grouping.
     """
     aliases = _coerce_str_sequence_kwarg("aliases", aliases)
     conflicts_with = _coerce_str_collection_kwarg("conflicts_with", conflicts_with)
     requires = _coerce_str_collection_kwarg("requires", requires)
-    if required is not None:
-        _deprecated(
-            "required",
-            replacement=(
-                "Use `T | None` (with a default of None) for optional args, or `*args: T` for zero-or-more positionals."
-            ),
-        )
-    if action is not None:
-        _deprecated(
-            "action",
-            replacement=(
-                "Action is inferred from the parameter type: `bool` → flag, "
-                "`list[T]` → append, `toolr.types.Count` → count."
-            ),
-        )
-    if choices is not None:
-        _deprecated(
-            "choices",
-            replacement=(
-                "Use `Literal['a', 'b']` or an `enum.Enum` subclass instead — "
-                "the choices come from the type annotation."
-            ),
-        )
-    if nargs is not None:
-        _deprecated(
-            "nargs",
-            replacement=(
-                "Use `T | None` (zero-or-one), `*args: T` (zero-or-more), "
-                "or `tuple[T1, T2, ...]` (fixed arity) — all driven by the type."
-            ),
-        )
-    if group is not None:
-        _deprecated(
-            "group",
-            replacement=(
-                "Use `conflicts_with=[...]` for mutually-exclusive arguments "
-                "or `help_section=` (via `arg_section(...)`) for display grouping."
-            ),
-        )
     return ArgumentAnnotation(
         aliases=aliases,
         metavar=metavar,
@@ -294,11 +215,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
         display_order=display_order,
         conflicts_with=conflicts_with,
         requires=requires,
-        required=required,
-        action=action,
-        choices=choices,
-        nargs=nargs,
-        group=group,
     )
 
 

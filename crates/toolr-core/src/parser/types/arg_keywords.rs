@@ -9,11 +9,9 @@ use super::supported::UnsupportedType;
 use crate::parser::build::edit_distance;
 use crate::parser::symbols::{ImportTable, TypeAliasTable};
 
-/// `toolr.arg()`'s current keywords; the only ones typo hints suggest.
-///
-/// Together with [`DEPRECATED_ARG_KEYWORDS`] this must match the keyword-only
-/// parameters of `arg` in `crates/toolr-py/python/toolr/utils/_signature.py`;
-/// the `arg_keywords_match_python_signature` test enforces it.
+/// `toolr.arg()`'s keywords. This must match the keyword-only parameters of `arg` in
+/// `crates/toolr-py/python/toolr/utils/_signature.py`; the `arg_keywords_match_python_signature`
+/// test enforces it.
 pub const ACTIVE_ARG_KEYWORDS: &[&str] = &[
     "aliases",
     "metavar",
@@ -25,11 +23,8 @@ pub const ACTIVE_ARG_KEYWORDS: &[&str] = &[
     "requires",
 ];
 
-/// Deprecated `toolr.arg()` keywords: still accepted, never suggested.
-pub const DEPRECATED_ARG_KEYWORDS: &[&str] = &["required", "action", "choices", "nargs", "group"];
-
 fn is_arg_keyword(name: &str) -> bool {
-    ACTIVE_ARG_KEYWORDS.contains(&name) || DEPRECATED_ARG_KEYWORDS.contains(&name)
+    ACTIVE_ARG_KEYWORDS.contains(&name)
 }
 
 /// One [`UnsupportedType`] per unknown keyword, plus one per `arg()` call
@@ -192,7 +187,7 @@ fn calls_toolr_arg(call: &ExprCall, table: &ImportTable) -> bool {
     }
 }
 
-/// The nearest active keyword within the same `(len / 3).max(2)` edit distance the
+/// The nearest keyword within the same `(len / 3).max(2)` edit distance the
 /// unknown-group hint uses.
 pub(super) fn suggest_arg_keyword(keyword: &str) -> Option<String> {
     let max = (keyword.len() / 3).max(2);
@@ -220,6 +215,19 @@ pub(super) fn keyword_hint(keyword: &str) -> Option<&'static str> {
         "help" => Some("help text comes from the docstring's `Args:` section"),
         "type" => Some("the type comes from the annotation"),
         "default" => Some("the default comes from the parameter's default value"),
+        "required" => Some(
+            "use `T | None` for an optional argument, or `*args: T` for zero or more positionals",
+        ),
+        "action" => Some(
+            "the action comes from the type: `bool` is a flag, `list[T]` appends, \
+             `toolr.types.Count` counts",
+        ),
+        "choices" => Some("use `Literal[...]` or an `enum.Enum` subclass for the choices"),
+        "nargs" => Some("use `T | None`, `*args: T` or `tuple[T1, T2, ...]`"),
+        "group" => Some(
+            "use `conflicts_with=[...]` for mutually exclusive arguments, or `help_section=` \
+             for display grouping",
+        ),
         _ => None,
     }
 }
@@ -270,15 +278,11 @@ mod tests {
             .iter()
             .map(|p| p.parameter.name.as_str())
             .collect();
-        let rust_list: Vec<&str> = ACTIVE_ARG_KEYWORDS
-            .iter()
-            .chain(DEPRECATED_ARG_KEYWORDS)
-            .copied()
-            .collect();
+        let rust_list: Vec<&str> = ACTIVE_ARG_KEYWORDS.to_vec();
         let rust: BTreeSet<&str> = rust_list.iter().copied().collect();
         assert_eq!(
             python, rust,
-            "`arg()` keyword drift: update ACTIVE_ARG_KEYWORDS / DEPRECATED_ARG_KEYWORDS in \
+            "`arg()` keyword drift: update ACTIVE_ARG_KEYWORDS in \
              crates/toolr-core/src/parser/types/arg_keywords.rs and the `arg` signature in \
              {shown} together",
         );
@@ -334,10 +338,15 @@ mod tests {
     }
 
     #[test]
-    fn suggestion_never_points_at_a_deprecated_keyword() {
+    fn removed_argparse_style_keywords_get_a_hint() {
+        for keyword in ["required", "action", "choices", "nargs", "group"] {
+            assert!(keyword_hint(keyword).is_some(), "{keyword}");
+            assert!(!is_arg_keyword(keyword), "{keyword}");
+        }
         assert_eq!(suggest_arg_keyword("choice"), None);
         assert_eq!(suggest_arg_keyword("groups"), None);
         assert_eq!(suggest_arg_keyword("path_required"), None);
+        assert_eq!(keyword_hint("path_required"), None);
     }
 
     #[test]
