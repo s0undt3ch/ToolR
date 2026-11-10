@@ -55,9 +55,14 @@ on and `codecov-notify` still waits for every test job. `after_n_builds: 2` (one
 is still met. The Rust report's flags change from `<os>,<python>` to `<os>,rust`, which only affects
 the PR comment's flags table.
 
+## Accepted trade-offs
+
+- The `~/.rustup` cache is shared and may be saved by a non-Rust job that lacks llvm-tools, so the Rust job re-adds the component (seconds, not a failure).
+- The Rust integration suite now runs against one Python per OS, and on macOS and Windows that is a different one on PRs than on `main` (the narrow lists differ); the drift gates run only on Linux.
+
 ## Non-goals
 
 - Moving the drift gates into the `docs` job (it would compile `xtask` inside a 10-minute job).
 - The `_prepare-release.yml` skill-refs checks and the prek hook: they guard other paths.
 - The `pre-commit` job's `needs` and the `cargo-check` hook (another PR).
-- Changing the matrix, the PowerShell pass (still keyed on `powershell-python`) or timeouts.
+- Changing the matrix, the PowerShell pass (now a per-OS `run-powershell-tests` switch, run in the `rust-python` job) or timeouts.

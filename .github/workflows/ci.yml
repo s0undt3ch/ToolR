@@ -471,7 +471,7 @@ jobs:
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       rust-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons)[0] }}
       pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
-      powershell-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons)[0] }}
+      run-powershell-tests: true
     permissions:
       contents: read
       id-token: write
@@ -492,7 +492,7 @@ jobs:
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       rust-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons-narrow)[0] }}
       pythons: ${{ needs.prepare-ci.outputs.test-pythons-narrow }}
-      powershell-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons-narrow)[0] }}
+      run-powershell-tests: true
     permissions:
       contents: read
       id-token: write

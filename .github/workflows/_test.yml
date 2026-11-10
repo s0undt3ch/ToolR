@@ -19,15 +19,15 @@ on:
         required: true
         type: string
         description: 'Version of mise to install (forwarded to the setup-virtualenv composite). Pass the caller workflow''s MISE_VERSION env var.'
-      powershell-python:
+      run-powershell-tests:
         required: false
-        type: string
-        default: ''
-        description: "Matrix Python version whose job also runs the `#[ignore]`d PowerShell completion tests, with the runner image's pwsh. Empty skips them. They don't depend on Python, so one job per OS is enough."
+        type: boolean
+        default: false
+        description: "Run the `#[ignore]`d PowerShell completion tests, with the runner image's pwsh, in the `rust-python` job. False skips them."
       rust-python:
         required: true
         type: string
-        description: "Matrix Python version whose job also runs the Rust suite with coverage and, on Linux, the example-plugin and skill-refs drift gates. None of these depend on the matrix Python, so one job per OS is enough."
+        description: "Matrix Python version whose job also runs the Rust suite with coverage (and the PowerShell completion tests when `run-powershell-tests` is set) and, on Linux, the example-plugin and skill-refs drift gates. None of these depend on the matrix Python, so one job per OS is enough."
       pythons:
         required: true
         type: string
@@ -214,14 +214,6 @@ jobs:
             ~/.cargo/git
           key: ${{ inputs.cache-seed }}|${{ runner.os }}|cargo|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
-      - name: Cache Rust `target/coverage`
-        if: matrix.python-version == inputs.rust-python
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            target/coverage
-          key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|coverage|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
-
       - name: Verify example-plugin manifest is in sync
         # OS-independent: one Linux job covers it.
         if: runner.os == 'Linux' && matrix.python-version == inputs.rust-python
@@ -328,8 +320,8 @@ jobs:
       # excluding it from the Rust coverage run is the right call.
       - name: Run Rust Tests with Coverage
         if: matrix.python-version == inputs.rust-python
-        # The `#[ignore]`d PowerShell completion tests run in a second pass, in one job per OS that
-        # sets `powershell-python`. `--no-report` runs accumulate profiles; `report` merges them.
+        # The `#[ignore]`d PowerShell completion tests run in a second pass, in the same job when
+        # `run-powershell-tests` is set. `--no-report` runs accumulate profiles; `report` merges them.
         # -- --test-threads=1 keeps the subprocess-heavy integration suite serialised.
         # Single-line invocations so the same step works under both bash
         # (Linux/macOS) and PowerShell (Windows runners use `pwsh` by
@@ -337,7 +329,7 @@ jobs:
         # and the line gets parsed as a separate command).
         shell: bash
         env:
-          RUN_POWERSHELL_TESTS: ${{ matrix.python-version == inputs.powershell-python }}
+          RUN_POWERSHELL_TESTS: ${{ inputs.run-powershell-tests }}
         run: |
           mkdir -p target/coverage
           cargo llvm-cov --no-report --workspace --exclude toolr-py --tests -- --test-threads=1
