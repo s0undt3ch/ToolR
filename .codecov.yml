@@ -10,7 +10,7 @@ codecov:
   notify:
     # Hold every status and comment until ci.yml's `codecov-notify` job,
     # which runs after all test jobs, says the uploads are in. The upload
-    # count depends on the test matrix (9 on a PR, 15 on `main`), so
+    # count depends on the test matrix and differs between PRs and `main`, so
     # `after_n_builds` can't express it; without this, statuses were
     # computed from the first Python-only uploads and could stay stale.
     manual_trigger: true

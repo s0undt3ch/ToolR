@@ -212,7 +212,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ inputs.cache-seed }}|${{ runner.os }}|cargo|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          key: ${{ inputs.cache-seed }}|${{ runner.os }}|cargo|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Cache Rust `target/coverage`
         if: matrix.python-version == inputs.rust-python
@@ -220,7 +220,7 @@ jobs:
         with:
           path: |
             target/coverage
-          key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|coverage|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|coverage|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Verify example-plugin manifest is in sync
         # OS-independent: one Linux job covers it.
@@ -306,7 +306,7 @@ jobs:
 
       - name: Add the llvm-tools component
         if: matrix.python-version == inputs.rust-python
-        # `cargo-llvm-cov` itself comes from `mise.toml`. Replaces cargo-tarpaulin. tarpaulin's ptrace engine segfaulted
+        # `cargo-llvm-cov` comes from `mise.toml`; it replaced cargo-tarpaulin, whose ptrace engine segfaulted
         # non-deterministically on nested subprocess trees (toolr → sh →
         # python) used by cli_smoke and cache_fixtures (~50% repro on
         # Linux GHA; tarpaulin issues #461 / #790 / #317). cargo-llvm-cov
