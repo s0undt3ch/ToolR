@@ -258,6 +258,7 @@ fn shell_signal_killed_shell_exits_128_plus_signal() {
         .env("PATH", &fx.bin_dir)
         .env("XDG_CACHE_HOME", fx.root.join("cache"))
         .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .env_remove("TOOLR_AUTO_SYNC")
         .env_remove("TOOLR_VENV_LOCATION")
         .env("SHELL", &shell)
         .args(["project", "venv", "shell"])

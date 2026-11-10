@@ -4,7 +4,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
 from typing import Literal
 from typing import NoReturn
 from typing import TextIO
@@ -211,7 +210,11 @@ class Context(Struct, frozen=True):
         timeout_secs: float | None = None,
         no_output_timeout_secs: float | None = None,
         interactive: bool = False,
-        **kwargs: Any,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
+        input: str | bytes | None = None,  # noqa: A002
+        text: bool | None = None,
+        encoding: str | None = None,
     ) -> CommandResult[str] | CommandResult[bytes]: ...
     @contextmanager
     def chdir(self, path: str | Path) -> Iterator[Path]: ...

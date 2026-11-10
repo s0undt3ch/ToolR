@@ -20,7 +20,6 @@ EXPECTED_PRESENT = [
     "toolr/utils/__init__.py",
     "toolr/utils/_console.py",
     "toolr/utils/_docstrings.py",
-    "toolr/utils/_imports.py",
     "toolr/utils/_logs.py",
     "toolr/utils/_signature.py",
     "toolr/utils/_rust_utils.pyi",

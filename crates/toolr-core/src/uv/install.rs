@@ -5,6 +5,7 @@ use std::io::{BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use super::{UvBinary, UvError, UvSource, managed_uv_path, probe};
+use crate::env::env_truthy;
 use crate::path_search::find_on_path_in;
 
 /// What the discovery + consent flow tells the caller to do.
@@ -24,10 +25,10 @@ pub enum InstallDecision {
 pub struct ConsentMode {
     /// `--yes` was passed.
     pub yes_flag: bool,
-    /// `TOOLR_AUTO_INSTALL_UV=1` is set in the environment.
-    pub auto_install_env: bool,
+    /// `TOOLR_AUTO_SYNC` (or its older alias `TOOLR_AUTO_INSTALL_UV`) is true in the environment.
+    pub auto_sync_env: bool,
     /// Caller must never prompt (`--quiet`, scripts, shell-enter hooks). If uv
-    /// isn't available and `yes_flag`/`auto_install_env` haven't pre-authorised
+    /// isn't available and `yes_flag`/`auto_sync_env` haven't pre-authorised
     /// an install, return `Refuse`; the caller decides what to print.
     pub never_prompt: bool,
 }
@@ -38,9 +39,20 @@ impl ConsentMode {
     pub fn from_env(never_prompt: bool) -> Self {
         Self {
             yes_flag: false,
-            auto_install_env: std::env::var_os("TOOLR_AUTO_INSTALL_UV").is_some_and(|v| v == "1"),
+            auto_sync_env: auto_sync_from_env(),
             never_prompt,
         }
+    }
+}
+
+/// `TOOLR_AUTO_SYNC` decides whenever it is set (an unparsable or empty value is off), so
+/// `TOOLR_AUTO_SYNC=0` beats a leftover `TOOLR_AUTO_INSTALL_UV=1`. The older
+/// `TOOLR_AUTO_INSTALL_UV` counts only while `TOOLR_AUTO_SYNC` is unset.
+fn auto_sync_from_env() -> bool {
+    if std::env::var_os("TOOLR_AUTO_SYNC").is_some() {
+        env_truthy("TOOLR_AUTO_SYNC")
+    } else {
+        env_truthy("TOOLR_AUTO_INSTALL_UV")
     }
 }
 
@@ -57,7 +69,7 @@ pub fn decide_install(
     if path_found || managed_found {
         return InstallDecision::AlreadyAvailable;
     }
-    if consent.yes_flag || consent.auto_install_env {
+    if consent.yes_flag || consent.auto_sync_env {
         return InstallDecision::Install;
     }
     if consent.never_prompt {
@@ -630,9 +642,9 @@ mod tests {
     }
 
     #[test]
-    fn auto_install_env_forces_install_even_without_tty() {
+    fn auto_sync_env_forces_install_even_without_tty() {
         let consent = ConsentMode {
-            auto_install_env: true,
+            auto_sync_env: true,
             ..Default::default()
         };
         assert_eq!(
@@ -707,21 +719,34 @@ mod tests {
     }
 
     #[test]
-    fn consent_mode_from_env_reads_toolr_auto_install_uv() {
+    fn consent_mode_from_env_reads_toolr_auto_sync_and_its_alias() {
         let mut env = EnvGuard::write();
-        env.set("TOOLR_AUTO_INSTALL_UV", "1");
-        let on = ConsentMode::from_env(false);
-        assert!(on.auto_install_env);
-        assert!(!on.yes_flag);
-
+        env.remove("TOOLR_AUTO_SYNC");
         env.remove("TOOLR_AUTO_INSTALL_UV");
-        let off = ConsentMode::from_env(false);
-        assert!(!off.auto_install_env);
+        assert!(!ConsentMode::from_env(false).auto_sync_env);
 
-        // Non-"1" value also counts as "not set" for our purposes.
-        env.set("TOOLR_AUTO_INSTALL_UV", "true");
-        let other = ConsentMode::from_env(false);
-        assert!(!other.auto_install_env);
+        env.set("TOOLR_AUTO_SYNC", "1");
+        let on = ConsentMode::from_env(false);
+        assert!(on.auto_sync_env);
+        assert!(!on.yes_flag);
+        env.remove("TOOLR_AUTO_SYNC");
+
+        env.set("TOOLR_AUTO_INSTALL_UV", "yes");
+        assert!(ConsentMode::from_env(false).auto_sync_env);
+
+        // A false spelling is off, and so is anything that isn't a spelling at all.
+        env.set("TOOLR_AUTO_INSTALL_UV", "0");
+        env.set("TOOLR_AUTO_SYNC", "maybe");
+        assert!(!ConsentMode::from_env(false).auto_sync_env);
+
+        // Once set, the new name decides alone, even empty or unparsable.
+        env.set("TOOLR_AUTO_INSTALL_UV", "1");
+        for value in ["0", "", "maybe"] {
+            env.set("TOOLR_AUTO_SYNC", value);
+            assert!(!ConsentMode::from_env(false).auto_sync_env, "{value:?}");
+        }
+        env.remove("TOOLR_AUTO_SYNC");
+        assert!(ConsentMode::from_env(false).auto_sync_env);
     }
 
     #[test]

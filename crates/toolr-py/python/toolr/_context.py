@@ -252,7 +252,11 @@ class Context(Struct, frozen=True):
         timeout_secs: float | None = None,
         no_output_timeout_secs: float | None = None,
         interactive: bool = False,
-        **kwargs: Any,
+        cwd: str | pathlib.Path | None = None,
+        env: dict[str, str] | None = None,
+        input: str | bytes | None = None,  # noqa: A002
+        text: bool | None = None,
+        encoding: str | None = None,
     ) -> CommandResult[str] | CommandResult[bytes]:
         """Run a command with the given arguments.
 
@@ -271,7 +275,11 @@ class Context(Struct, frozen=True):
                 child sees a TTY on all three streams (needed for `$EDITOR`, `sops`, prompts,
                 etc). Incompatible with `capture_output`, `stream_output`,
                 `no_output_timeout_secs`, and `input` — all of those require piping.
-            kwargs: Additional keyword arguments passed to the internal runner.
+            cwd: Directory to run the command in. Defaults to the current directory.
+            env: Environment variables to pass to the command.
+            input: Data to write to the command's stdin.
+            text: Whether to return output as text (the default) or bytes.
+            encoding: Encoding for text output. The runner defaults to `"utf-8"`.
 
         Returns:
             CommandResult instance.
@@ -290,6 +298,18 @@ class Context(Struct, frozen=True):
             no_output_timeout_secs = self.default_no_output_timeout_secs
         if stream_output is None:
             stream_output = not interactive
+        # Only what the caller set reaches the runner, whose own defaults apply to the rest.
+        runner_kwargs: dict[str, Any] = {
+            name: value
+            for name, value in (
+                ("cwd", cwd),
+                ("env", env),
+                ("input", input),
+                ("text", text),
+                ("encoding", encoding),
+            )
+            if value is not None
+        }
         return self._run_impl(
             cmdline,
             stream_output=stream_output,
@@ -297,7 +317,7 @@ class Context(Struct, frozen=True):
             timeout_secs=timeout_secs,
             no_output_timeout_secs=no_output_timeout_secs,
             interactive=interactive,
-            **kwargs,
+            **runner_kwargs,
         )
 
     @contextmanager

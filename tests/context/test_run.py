@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 from unittest.mock import Mock
 
+import pytest
 from rich.console import Console
 
 from toolr._context import Context
@@ -243,3 +244,41 @@ def test_run_interactive_ignores_default_no_output_timeout_secs(parser, repo_roo
         no_output_timeout_secs=None,
         interactive=True,
     )
+
+
+def test_run_forwards_only_what_the_caller_set(ctx, tmp_path):
+    """`cwd`, `env`, `input`, `text` and a non-default `encoding` reach the runner; nothing else is added."""
+    seen = []
+
+    def run_impl(cmdline, **kwargs):
+        seen.append(kwargs)
+        return CommandResult(args=cmdline, stdout="", stderr="", returncode=0)
+
+    ctx = ctx.replace(_run_impl=run_impl)
+    ctx.run("echo")
+    ctx.run(
+        "cat",
+        cwd=tmp_path,
+        env={"A": "1"},
+        input="hi",
+        text=False,
+        encoding="latin-1",
+    )
+
+    assert set(seen[0]) == {
+        "stream_output",
+        "capture_output",
+        "timeout_secs",
+        "no_output_timeout_secs",
+        "interactive",
+    }
+    assert seen[1]["cwd"] == tmp_path
+    assert seen[1]["env"] == {"A": "1"}
+    assert seen[1]["input"] == "hi"
+    assert seen[1]["text"] is False
+    assert seen[1]["encoding"] == "latin-1"
+
+
+def test_run_rejects_a_keyword_the_runner_does_not_know(ctx):
+    with pytest.raises(TypeError, match="check"):
+        ctx.run("true", check=True)

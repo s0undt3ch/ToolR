@@ -5,14 +5,15 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use blake3::Hasher;
 
-/// Toolr's own major version, baked in at build time.
-/// `CARGO_PKG_VERSION_MAJOR` is always set by cargo.
-pub const TOOLR_MAJOR: &str = env!("CARGO_PKG_VERSION_MAJOR");
+/// The last hash input. Frozen at the value toolr's major version had while the key still
+/// carried it, so every existing cache key stays valid across the 1.0 bump. Pinned by
+/// `key_is_a_golden_literal`, which is unix-only: the key for a Windows path is not pinned.
+const KEY_EPOCH: &str = "0";
 
 /// Compute the stable repo-key. Inputs:
 /// - canonical repo path (symlinks resolved)
 /// - python version (e.g. "3.13"); empty string allowed when unknown
-/// - toolr major version
+/// - the frozen [`KEY_EPOCH`]
 pub fn compute_repo_key(repo_root: &Path, python_version: &str) -> Result<String> {
     let canonical = repo_root
         .canonicalize()
@@ -22,7 +23,7 @@ pub fn compute_repo_key(repo_root: &Path, python_version: &str) -> Result<String
     hasher.update(b"\0");
     hasher.update(python_version.as_bytes());
     hasher.update(b"\0");
-    hasher.update(TOOLR_MAJOR.as_bytes());
+    hasher.update(KEY_EPOCH.as_bytes());
     // Truncate to 16 hex chars — enough to avoid collisions, short enough
     // for nice on-disk paths.
     let hex = hasher.finalize().to_hex().to_string();
@@ -33,6 +34,17 @@ pub fn compute_repo_key(repo_root: &Path, python_version: &str) -> Result<String
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    /// A literal, so a change to the key's inputs fails here instead of silently orphaning every
+    /// existing venv: the 1.0 bump must keep producing this key.
+    #[cfg(unix)]
+    #[test]
+    fn key_is_a_golden_literal() {
+        assert_eq!(
+            compute_repo_key(Path::new("/"), "3.13").unwrap(),
+            "43c4783000b0ac2b"
+        );
+    }
 
     #[test]
     fn deterministic_for_same_inputs() {

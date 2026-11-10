@@ -12,8 +12,9 @@ VERSION=""
 TRIPLE=""
 PREFIX=""
 DRY_RUN=0
-NO_VERIFY=0
-VERIFY_ATTESTATION="require"
+VERIFY="full"
+LEGACY_NO_CHECKSUM=0
+CHECK_SHA256=1
 
 print_help() {
   cat <<EOF
@@ -24,12 +25,21 @@ Options:
   --triple TRIPLE           Override host target triple (auto-detected)
   --prefix PREFIX           Install location (defaults to \$XDG_BIN_HOME or ~/.local/bin)
   --dry-run                 Print actions without making changes
-  --no-verify               Skip SHA-256 verification (not recommended)
-  --verify-attestation MODE Attestation verification mode: auto|require|skip
-                            (default: require - needs the 'gh' CLI; pass
-                            'skip' to bypass, accepting the supply-chain risk)
+  --verify MODE             How much to verify: full|auto|checksum|none
+                            full      SHA-256 and the SLSA attestation (default; needs the 'gh' CLI)
+                            auto      SHA-256, and the attestation when 'gh' is available
+                            checksum  SHA-256 only
+                            none      nothing (not recommended)
   -h, --help                Show this help
 EOF
+}
+
+legacy_verify() {
+  case "$1" in
+    require) printf 'full' ;;
+    skip) printf 'checksum' ;;
+    *) printf '%s' "$1" ;;
+  esac
 }
 
 while [ $# -gt 0 ]; do
@@ -41,9 +51,14 @@ while [ $# -gt 0 ]; do
     --prefix) PREFIX="$2"; shift 2 ;;
     --prefix=*) PREFIX="${1#*=}"; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
-    --no-verify) NO_VERIFY=1; shift ;;
-    --verify-attestation) VERIFY_ATTESTATION="$2"; shift 2 ;;
-    --verify-attestation=*) VERIFY_ATTESTATION="${1#*=}"; shift ;;
+    --verify) VERIFY="$2"; shift 2 ;;
+    --verify=*) VERIFY="${1#*=}"; shift ;;
+    # Old spellings, removed in 1.0. --no-verify skipped only the SHA-256 and left the
+    # attestation as it was, so it stays a separate switch; the attestation modes map
+    # require -> full, auto -> auto, skip -> checksum.
+    --no-verify) LEGACY_NO_CHECKSUM=1; shift ;;
+    --verify-attestation) VERIFY="$(legacy_verify "$2")"; shift 2 ;;
+    --verify-attestation=*) VERIFY="$(legacy_verify "${1#*=}")"; shift ;;
     -h|--help) print_help; exit 0 ;;
     *) printf "install.sh: unknown argument: %s\n" "$1" >&2; exit 2 ;;
   esac
@@ -52,6 +67,14 @@ done
 err() { printf "install.sh: %s\n" "$*" >&2; exit 1; }
 info() { printf "install.sh: %s\n" "$*" >&2; }
 warn() { printf "install.sh: WARNING: %s\n" "$*" >&2; }
+
+case "$VERIFY" in
+  full|auto|checksum|none) ;;
+  *) err "invalid --verify value: $VERIFY (use full|auto|checksum|none)" ;;
+esac
+if [ "$VERIFY" = "none" ] || [ "$LEGACY_NO_CHECKSUM" -eq 1 ]; then
+  CHECK_SHA256=0
+fi
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || err "missing required command: $1"
@@ -115,40 +138,40 @@ sha256_of() {
 
 verify_sha256() {
   file="$1"; expected="$2"
-  if [ "$NO_VERIFY" -eq 1 ]; then
-    info "skipping checksum verification (--no-verify)"
+  if [ "$CHECK_SHA256" -eq 0 ]; then
+    info "skipping checksum verification"
     return 0
   fi
-  actual=$(sha256_of "$file" --no-verify) || exit 1
+  actual=$(sha256_of "$file" --verify=none) || exit 1
   [ "$actual" = "$expected" ] || err "checksum mismatch: expected $expected got $actual"
 }
 
 # Verify the SLSA build-provenance attestation attached to a release
-# archive via the GitHub CLI. Modes:
-#   require - (default) fail hard if `gh` is missing or verification fails
-#   auto    - verify if `gh` is on PATH; skip with a warning otherwise
-#   skip    - never verify (e.g. when running offline)
-# `require` is the default so a missing verifier can't silently downgrade
+# archive via the GitHub CLI. Modes (`--verify`):
+#   full     - (default) fail hard if `gh` is missing or verification fails
+#   auto     - verify if `gh` is on PATH; skip with a warning otherwise
+#   checksum - never verify the attestation (e.g. when running offline)
+#   none     - verify nothing, not even the SHA-256
+# `full` is the default so a missing verifier can't silently downgrade
 # the install to checksum-only (the `.sha256` ships from the same release,
 # so it catches transport corruption, not a tampered release asset).
 verify_attestation() {
   file="$1"
-  case "$VERIFY_ATTESTATION" in
-    skip)
-      info "skipping attestation verification (--verify-attestation=skip)"
+  case "$VERIFY" in
+    checksum|none)
+      info "skipping attestation verification (--verify=$VERIFY)"
       return 0
       ;;
-    auto|require) ;;
-    *) err "invalid --verify-attestation value: $VERIFY_ATTESTATION (use auto|require|skip)" ;;
+    auto|full) ;;
   esac
   if ! command -v gh >/dev/null 2>&1; then
-    if [ "$VERIFY_ATTESTATION" = "require" ]; then
+    if [ "$VERIFY" = "full" ]; then
       printf '%s\n' \
         "install.sh: cannot verify the release's SLSA build provenance: the 'gh' CLI is not on PATH." \
         "  toolr archives are signed; verification needs GitHub CLI -> https://cli.github.com" \
         "  Choose one:" \
         "    * install 'gh' and re-run this installer (recommended), or" \
-        "    * re-run with --verify-attestation=skip to install WITHOUT supply-chain verification." \
+        "    * re-run with --verify=checksum to install WITHOUT supply-chain verification." \
         >&2
       exit 1
     fi
@@ -163,7 +186,7 @@ verify_attestation() {
   if [ -z "$gh_version" ] || [ "$gh_major" -lt 2 ] || { [ "$gh_major" -eq 2 ] && [ "$gh_minor" -lt 56 ]; }; then
     printf '%s\n' \
       "install.sh: gh >= 2.56 is required to verify attestations (found ${gh_version:-unknown})" \
-      "  upgrade 'gh', or re-run with --verify-attestation=skip to install WITHOUT supply-chain verification." \
+      "  upgrade 'gh', or re-run with --verify=checksum to install WITHOUT supply-chain verification." \
       >&2
     exit 1
   fi
@@ -172,7 +195,7 @@ verify_attestation() {
   SIGNER_WORKFLOW="https://github.com/${REPO}/.github/workflows/_build-binary-archive.yml@refs/heads/main"
   RELEASE_WORKFLOW="https://github.com/${REPO}/.github/workflows/release.yml@refs/heads/main"
   ARCHIVE_NAME="${file##*/}"
-  ARCHIVE_SHA256=$(sha256_of "$file" --verify-attestation=skip) || exit 1
+  ARCHIVE_SHA256=$(sha256_of "$file" --verify=checksum) || exit 1
   export ARCHIVE_NAME ARCHIVE_SHA256 RELEASE_WORKFLOW
   info "verifying SLSA build provenance via 'gh attestation verify'"
   if ! count=$(gh attestation verify "$file" \
@@ -189,7 +212,7 @@ verify_attestation() {
   if ! [ "$count" -ge 1 ] 2>/dev/null; then
     printf '%s\n' \
       "install.sh: ${ARCHIVE_NAME} has a valid ${REPO} attestation, but none from the ${REPO} release workflow on main for this exact archive" \
-      "  install a published release; --verify-attestation=skip turns off this check entirely." \
+      "  install a published release; --verify=checksum turns off this check entirely." \
       >&2
     exit 1
   fi
@@ -236,6 +259,7 @@ main() {
   info "triple:  ${TRIPLE}"
   info "prefix:  ${PREFIX}"
   info "url:     ${url}"
+  info "verify:  ${VERIFY}, sha256 $([ "$CHECK_SHA256" -eq 1 ] && printf checked || printf skipped)"
   if [ "$DRY_RUN" -eq 1 ]; then
     info "dry-run; exiting before download"
     return 0
@@ -245,7 +269,7 @@ main() {
   trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
   fetch "$url" "${tmpdir}/${filename}"
-  if [ "$NO_VERIFY" -eq 0 ]; then
+  if [ "$CHECK_SHA256" -eq 1 ]; then
     fetch "$sha_url" "${tmpdir}/${filename}.sha256"
     expected=$(awk '{print $1}' "${tmpdir}/${filename}.sha256")
     verify_sha256 "${tmpdir}/${filename}" "$expected"

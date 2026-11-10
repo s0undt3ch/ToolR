@@ -31,7 +31,7 @@ from .enums import Color
 OUTPUT = arg_section("Output", description="Where results go.")
 
 docker = command_group("docker", "Docker", "Docker tools.")
-image = docker.command_group("image", "Image", "Image tools.")
+image = command_group("docker.image", "Image", "Image tools.")
 spare = command_group("spare", "Spare", "No commands here.")
 
 

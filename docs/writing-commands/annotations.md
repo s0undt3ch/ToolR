@@ -27,7 +27,7 @@ def show(
 |---|---|
 | `aliases=["-n", "--also"]` | Extra short / long flag spellings. Single-char entries become clap shorts; longer entries become long aliases. |
 | `metavar="NAME"` | Custom placeholder shown in `--help` (`<NAME>` instead of `<sha>`). |
-| `env="VAR"` | Read the default from this env var when the flag isn't passed. On a `bool` flag the variable must be `true` or `false`; any other value, including `1` or an empty string, is an error. |
+| `env="VAR"` | Read the default from this env var when the flag isn't passed. On a `bool` flag the variable must be `1`, `true` or `yes`, or `0`, `false` or `no` (any case); any other value, including an empty string, is an error. |
 | `hide=True` | Omit from `--help` output. Still parseable on the CLI. |
 | `help_section=…` | Group related args under a named `--help` heading. See below. |
 | `display_order=N` | Lower values render first in `--help`. |
@@ -131,9 +131,10 @@ description, a bare string is accepted:
 verbose: Annotated[bool, arg(help_section="Logging Options")] = False
 ```
 
-## Deprecated kwargs (removed in 1.0)
+## Removed kwargs
 
-These still parse but emit a `ToolrDeprecationWarning`:
+`required=`, `choices=`, `nargs=`, `action=` and `group=` are gone. The manifest build fails with a
+hint naming the replacement:
 
 - `required=` — use `T | None` or `*args: T`.
 - `choices=` — use `Literal["a","b"]` or an `Enum`.

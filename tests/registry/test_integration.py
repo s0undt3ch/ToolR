@@ -678,10 +678,8 @@ def test_complete_workflow_example(commands_tester):
         return "Docker system info"
 
     # Create nested command groups
-    build_group = docker_group.command_group("build", "Build Tools", "Docker image building")
-    compose_group = docker_group.command_group(
-        "compose", "Compose Tools", "Docker Compose operations"
-    )
+    build_group = command_group("docker.build", "Build Tools", "Docker image building")
+    compose_group = command_group("docker.compose", "Compose Tools", "Docker Compose operations")
 
     # Add commands to build group
     @build_group.command("image")
@@ -706,8 +704,8 @@ def test_complete_workflow_example(commands_tester):
         return "Stopping services"
 
     # Create deeply nested group
-    advanced_group = build_group.command_group(
-        "advanced", "Advanced Build", "Advanced build features"
+    advanced_group = command_group(
+        "docker.build.advanced", "Advanced Build", "Advanced build features"
     )
 
     @advanced_group.command("multi-stage")
@@ -754,7 +752,7 @@ def test_real_world_tool_structure(commands_tester):
         """Clean development artifacts."""
 
     # Testing tools
-    test_group = dev_group.command_group("test", "Testing", "Test execution and management")
+    test_group = command_group("dev.test", "Testing", "Test execution and management")
 
     @test_group.command("unit")
     def test_unit(ctx: Context):
@@ -769,7 +767,7 @@ def test_real_world_tool_structure(commands_tester):
         """Run end-to-end tests."""
 
     # Coverage tools under testing
-    coverage_group = test_group.command_group("coverage", "Coverage", "Test coverage tools")
+    coverage_group = command_group("dev.test.coverage", "Coverage", "Test coverage tools")
 
     @coverage_group.command("report")
     def coverage_report(ctx: Context):
@@ -788,7 +786,7 @@ def test_real_world_tool_structure(commands_tester):
         return "Validating CI config"
 
     # Deployment under CI
-    deploy_group = ci_group.command_group("deploy", "Deploy", "Deployment operations")
+    deploy_group = command_group("ci.deploy", "Deploy", "Deployment operations")
 
     @deploy_group.command("staging")
     def deploy_staging(ctx: Context):
@@ -827,9 +825,9 @@ def test_command_group_hierarchy_storage(commands_tester):
     """Test that command groups are properly stored in hierarchical structure."""
     # Create a hierarchy (avoid naming conflict with 'tools' prefix)
     app = command_group("app", "Application", "Application tools")
-    docker = app.command_group("docker", "Docker", "Docker tools")
-    build = docker.command_group("build", "Build", "Build tools")
-    advanced = build.command_group("advanced", "Advanced", "Advanced build")
+    docker = command_group("app.docker", "Docker", "Docker tools")
+    build = command_group("app.docker.build", "Build", "Build tools")
+    advanced = command_group("app.docker.build.advanced", "Advanced", "Advanced build")
 
     # Test that groups are stored at correct paths
     command_groups = commands_tester.collected_command_groups()

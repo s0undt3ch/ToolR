@@ -395,9 +395,9 @@ fn decide(
     })
 }
 
-/// `TOOLR_TRUST_ALL=1`, exactly: the automation bypass.
+/// `TOOLR_TRUST_ALL` set to a true value: the automation bypass.
 pub fn trust_all_env() -> bool {
-    std::env::var_os("TOOLR_TRUST_ALL").is_some_and(|v| v == "1")
+    crate::env::env_truthy("TOOLR_TRUST_ALL")
 }
 
 /// Whether `root` is trusted right now, for callers that only decide whether
@@ -736,6 +736,11 @@ mod tests {
         env.set("XDG_STATE_HOME", f.root());
         env.set("TOOLR_TRUST_ALL", "1");
         assert!(is_trusted_now(&f.root()));
+
+        env.set("TOOLR_TRUST_ALL", "true");
+        assert!(is_trusted_now(&f.root()));
+        env.set("TOOLR_TRUST_ALL", "0");
+        assert!(!is_trusted_now(&f.root()));
 
         env.remove("TOOLR_TRUST_ALL");
         assert!(!is_trusted_now(&f.root()));

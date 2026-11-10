@@ -41,7 +41,7 @@ Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table 
   every release from 0.34.0 onward publishes a signed [packslip](https://packslip.dev/) manifest that mise verifies
   against the ToolR repository's signing identity, remembering the release workflow after the
   first install. The install scripts verify the attestation by default (requires the `gh` CLI, 2.56
-  or later); pass `--verify-attestation=skip` to bypass, accepting the supply-chain risk.
+  or later); pass `--verify=checksum` to bypass, accepting the supply-chain risk.
 
 ## Two wheels, two roles
 
@@ -97,7 +97,7 @@ curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/i
 ```
 
 Verifies the SLSA attestation by default (requires the `gh` CLI, 2.56 or later; pass
-`--verify-attestation=skip` to bypass). Pin a version with `sh -s -- --version X.Y.Z`.
+`--verify=checksum` to bypass). Pin a version with `sh -s -- --version X.Y.Z`.
 Custom prefix: `sh -s -- --prefix /opt/toolr/bin`.
 
 ### PowerShell (Windows)

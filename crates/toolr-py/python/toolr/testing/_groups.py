@@ -202,14 +202,10 @@ def _argument(call: ast.Call, param: _Param) -> ast.expr | None:
 
 
 def _parent_var(call: ast.Call) -> str | None:
-    """``parent`` in ``parent.command_group(...)``, else a ``parent=<name>`` argument.
+    """The name in a ``parent=<name>`` argument.
 
-    Mirrors ``parent_var_name`` then ``parent_kwarg_var`` in
-    ``crates/toolr-core/src/parser/groups.rs``.
+    Mirrors ``parent_kwarg_var`` in ``crates/toolr-core/src/parser/groups.rs``.
     """
-    func = call.func
-    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-        return func.value.id
     parent = _argument(call, _PARENT)
     return parent.id if isinstance(parent, ast.Name) else None
 
@@ -569,7 +565,8 @@ def _is_command_group(
     """Whether ``func`` is toolr's ``command_group``.
 
     A bare name counts when spelt ``command_group`` or resolved to it through
-    the ``tools/`` modules' imports; any ``<x>.command_group`` counts. Mirrors
+    the ``tools/`` modules' imports; ``<x>.command_group`` counts only when ``x``
+    is the ``toolr`` module. Mirrors
     ``crates/toolr-core/src/parser/groups.rs::is_command_group_call``: change
     both together.
     """
@@ -578,7 +575,12 @@ def _is_command_group(
             func.id == "command_group"
             or _binding(tables, module, func.id, 0, memo) is _Binding.TOOLR
         )
-    return isinstance(func, ast.Attribute) and func.attr == "command_group"
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "command_group"
+        and isinstance(func.value, ast.Name)
+        and _is_toolr_module(tables[module], func.value.id)
+    )
 
 
 def _supported_group_call(stmt: ast.stmt) -> tuple[str | None, ast.Call] | None:
@@ -659,12 +661,15 @@ def _parameter_names(args: ast.arguments) -> set[str]:
 
 def _unbound_group_calls(
     tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
-) -> list[ast.Call]:
+) -> list[tuple[ast.Call, bool]]:
     """Each toolr ``command_group(...)`` call the manifest build can't bind, in source order.
 
+    Each comes with whether it is the removed method form.
+
     That is any call that isn't the whole value of a bound statement (one
-    ``_group_calls`` reads), and a bound statement whose group name isn't a
-    string literal. ``command_group`` creates a group when none is registered,
+    ``_group_calls`` reads), a bound statement whose group name isn't a
+    string literal, and a statement calling ``<x>.command_group(...)`` on anything
+    but the ``toolr`` module (the removed method form). ``command_group`` creates a group when none is registered,
     so no call is exempt as a mere lookup. A bound statement is skipped whole,
     annotation included. A callee counts only when it resolves to toolr's
     ``command_group``: a name through the import tables (a parameter of the
@@ -674,7 +679,7 @@ def _unbound_group_calls(
     change both together.
     """
     table = tables[module]
-    found: list[ast.Call] = []
+    found: list[tuple[ast.Call, bool]] = []
 
     def is_toolr_group_call(call: ast.Call, shadowed: frozenset[str]) -> bool:
         """Whether ``call`` is toolr's ``command_group``.
@@ -702,7 +707,13 @@ def _unbound_group_calls(
     for stmt in tree.body:
         if bound := _bound_group_call(stmt, tables, module, memo):
             if _literal(_argument(bound.call, _NAME)) is None:
-                found.append(bound.call)
+                found.append((bound.call, False))
+        elif (
+            (supported := _supported_group_call(stmt))
+            and isinstance(supported[1].func, ast.Attribute)
+            and supported[1].func.attr == "command_group"
+        ):
+            found.append((supported[1], True))
         else:
             stack.append((stmt, frozenset()))
     while stack:
@@ -718,10 +729,10 @@ def _unbound_group_calls(
             stack.extend((child, inner) for child in body)
             continue
         if isinstance(node, ast.Call) and is_toolr_group_call(node, shadowed):
-            found.append(node)
+            found.append((node, False))
         stack.extend((child, shadowed) for child in ast.iter_child_nodes(node))
     # Source order, as the Rust walk gives, so the two messages match.
-    return sorted(found, key=lambda node: (node.lineno, node.col_offset))
+    return sorted(found, key=lambda found_call: (found_call[0].lineno, found_call[0].col_offset))
 
 
 def _import_tables(

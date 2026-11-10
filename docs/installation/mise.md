@@ -211,7 +211,7 @@ benign situations:
   non-toolr directories; this is normal, not an error.
 - toolr can't read where the tools venv lives, for example a bare `tools/`
   directory without a `pyproject.toml`.
-- `uv` isn't installed and `TOOLR_AUTO_INSTALL_UV=1` isn't set.
+- `uv` isn't installed and `TOOLR_AUTO_SYNC=1` isn't set.
   The hook can't reasonably prompt for consent on every shell
   enter, so it stays out of the way.
 

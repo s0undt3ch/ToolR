@@ -159,11 +159,10 @@ const PARENT: Param = Param {
 /// `module_docstring` is `None` when the module has no docstring, as
 /// `__doc__` is then `None` at runtime.
 ///
-/// Nested groups (`child = parent.command_group("name", ...)`) get their
-/// `parent` field set to the parent binding's `full_path()`, so the
-/// CLI builder can reconstruct the hierarchy. Source order matters:
-/// parents must be assigned before children (which Python already
-/// requires).
+/// Nested groups (`command_group("parent.child", ...)` or `parent=...`) get
+/// their `parent` field set to the parent's `full_path()`, so the CLI builder
+/// can reconstruct the hierarchy. Source order matters: a `parent=<var>` must
+/// be assigned before its children (which Python already requires).
 pub fn extract_groups(
     module: &ModModule,
     module_docstring: Option<&str>,
@@ -372,7 +371,9 @@ fn bound_group_call<'a>(
 /// - under `if`, `try`, `with`, a loop or `match`;
 /// - inside a function, lambda, comprehension or class;
 /// - nested in another expression, such as a decorator or call argument;
-/// - a supported statement whose name isn't a string literal.
+/// - a supported statement whose name isn't a string literal;
+/// - a supported statement calling `<x>.command_group(...)` on anything but the
+///   `toolr` module: the removed method form, reported as `MethodGroup`.
 ///
 /// Such a group, and every command on it, would otherwise vanish without a
 /// word. `command_group` creates a group when none is registered, so a
@@ -404,7 +405,13 @@ pub fn detect_unsupported_group_bindings(
                     finder.report(call);
                 }
             }
-            None => finder.visit_stmt(stmt),
+            None => match supported_group_call(stmt) {
+                // Mirrored in `toolr.testing._groups._unbound_group_calls`.
+                Some((_, call)) if matches!(call.func.as_ref(), Expr::Attribute(a) if a.attr.as_str() == "command_group") => {
+                    finder.report_as(call, UnsupportedCommandKind::MethodGroup)
+                }
+                _ => finder.visit_stmt(stmt),
+            },
         }
     }
     finder.out
@@ -442,8 +449,12 @@ impl UnboundGroupCalls<'_> {
         }
     }
 
-    /// Mirrored in `toolr.testing._shapes._group_call_label`; change both together.
     fn report(&mut self, call: &ExprCall) {
+        self.report_as(call, UnsupportedCommandKind::GroupBinding);
+    }
+
+    /// Mirrored in `toolr.testing._shapes._group_call_label`; change both together.
+    fn report_as(&mut self, call: &ExprCall, kind: UnsupportedCommandKind) {
         let function = match argument(call, NAME).and_then(literal_str) {
             Some(name) => format!("command_group(\"{name}\")"),
             None => "command_group".to_string(),
@@ -451,7 +462,7 @@ impl UnboundGroupCalls<'_> {
         self.out.push(UnsupportedCommand {
             module: self.module_path.to_string(),
             function,
-            kind: UnsupportedCommandKind::GroupBinding,
+            kind,
         });
     }
 
@@ -520,20 +531,16 @@ fn group_binding(
     module_path: &str,
 ) -> Option<GroupBinding> {
     let (var_name, call) = bound_group_call(stmt, names, module_path)?;
-    // Parent path can come from three source patterns:
-    //   1. Method-call style: `child = parent.command_group(...)` —
-    //      look up `parent` locally first, then in the global
-    //      cross-file binding map.
-    //   2. Keyword-arg with variable reference:
+    // Parent path can come from two source patterns:
+    //   1. Keyword-arg with variable reference:
     //      `child = command_group(..., parent=parent_var)`.
-    //   3. Keyword-arg with literal string:
+    //   2. Keyword-arg with literal string:
     //      `child = command_group(..., parent="ci")`.
     //
     // Plus the dotted-name shape — `command_group("ci.helm-diff-pr-comment", ...)`
     // — splits the leaf off inside `parse_group_call` and overrides
     // whatever parent_path we resolve here.
-    let parent_path = parent_var_name(call)
-        .or_else(|| parent_kwarg_var(call))
+    let parent_path = parent_kwarg_var(call)
         .and_then(|pv| resolve_var(&pv, local, global_vars))
         .or_else(|| parent_kwarg_literal(call));
     let chosen_var = var_name.clone().unwrap_or_default();
@@ -563,19 +570,6 @@ fn resolve_var(
         .or_else(|| global_vars.get(var).cloned())
 }
 
-/// If the call is a method invocation like `docker.command_group(...)`,
-/// return the head variable name (`"docker"`). For free-function
-/// `command_group(...)` returns `None`.
-fn parent_var_name(call: &ExprCall) -> Option<String> {
-    let Expr::Attribute(attr) = call.func.as_ref() else {
-        return None;
-    };
-    match attr.value.as_ref() {
-        Expr::Name(n) => Some(n.id.as_str().to_string()),
-        _ => None,
-    }
-}
-
 /// If the call passes `parent="..."` (literal string), by keyword or
 /// position, return that string.
 fn parent_kwarg_literal(call: &ExprCall) -> Option<String> {
@@ -603,7 +597,7 @@ fn single_name_target(targets: &[Expr]) -> Option<String> {
 }
 
 /// Whether `call` is toolr's `command_group`: spelt so, an alias the import
-/// tables resolve to it, or any `<x>.command_group(...)`.
+/// tables resolve to it, or `command_group` on the `toolr` module.
 ///
 /// `toolr.testing._groups._is_command_group` mirrors this in Python, resolving
 /// aliases from source with `_binding`; change both together.
@@ -613,7 +607,9 @@ fn is_command_group_call(call: &ExprCall, names: &ToolrNames, module: &str) -> b
             n.id.as_str() == "command_group"
                 || names.command_group(module, n.id.as_str()) == Binding::Toolr
         }
-        Expr::Attribute(a) => a.attr.as_str() == "command_group",
+        Expr::Attribute(a) if a.attr.as_str() == "command_group" => {
+            matches!(a.value.as_ref(), Expr::Name(n) if names.is_toolr_module(module, n.id.as_str()))
+        }
         _ => false,
     }
 }
@@ -807,7 +803,7 @@ mod tests {
     #[test]
     fn aliased_import_binds_a_group() {
         let groups = groups_in(
-            "from toolr import command_group as cg\ng = cg(\"alias\", \"Alias\", \"Aliased.\")\nkid = g.command_group(\"kid\", \"Kid\", \"Kid.\")\n",
+            "from toolr import command_group as cg\ng = cg(\"alias\", \"Alias\", \"Aliased.\")\nkid = cg(\"alias.kid\", \"Kid\", \"Kid.\")\n",
             &[],
         );
         assert_eq!(
@@ -847,7 +843,7 @@ mod tests {
     #[test]
     fn annotated_binding_binds_a_group() {
         let groups = groups_in(
-            "h: CommandGroup = command_group(\"ann\", \"Ann\", \"Ann.\")\nkid = h.command_group(\"kid\", \"Kid\", \"Kid.\")\n",
+            "h: CommandGroup = command_group(\"ann\", \"Ann\", \"Ann.\")\nkid = command_group(\"ann.kid\", \"Kid\", \"Kid.\")\n",
             &[],
         );
         assert_eq!(paths(&groups), [pair("h", "ann"), pair("kid", "ann.kid")]);
@@ -1083,7 +1079,7 @@ mod tests {
     #[test]
     fn nested_group_records_parent_full_path() {
         let src = r#"docker = command_group("docker", "Docker")
-image = docker.command_group("image", "Image")
+image = command_group("docker.image", "Image")
 "#;
         let m = parse_src(src);
         let groups = groups_in_module(&m, None);
@@ -1116,8 +1112,8 @@ helm_diff = command_group("helm-diff-pr-comment", "Helm diff", parent="ci")
     #[test]
     fn two_level_nesting_concatenates_full_path() {
         let src = r#"a = command_group("a", "A")
-b = a.command_group("b", "B")
-c = b.command_group("c", "C")
+b = command_group("a.b", "B")
+c = command_group("a.b.c", "C")
 "#;
         let m = parse_src(src);
         let groups = groups_in_module(&m, None);
@@ -1156,8 +1152,37 @@ c = b.command_group("c", "C")
 
     #[test]
     fn plain_top_level_bindings_are_not_reported() {
-        let src = "a = command_group(\"a\", \"A\", \"A.\")\nb: T = command_group(\"b\", \"B\", \"B.\")\ncommand_group(\"c\", \"C\", \"C.\")\nk = a.command_group(\"k\", \"K\", \"K.\")\nh: Annotated[object, command_group(\"h\", \"H\", \"H.\")] = command_group(\"h\", \"H\", \"H.\")\n";
+        let src = "a = command_group(\"a\", \"A\", \"A.\")\nb: T = command_group(\"b\", \"B\", \"B.\")\ncommand_group(\"c\", \"C\", \"C.\")\nh: Annotated[object, command_group(\"h\", \"H\", \"H.\")] = command_group(\"h\", \"H\", \"H.\")\n";
         assert_eq!(unbound(src), Vec::<String>::new());
+    }
+
+    #[test]
+    fn method_form_is_reported_with_its_own_kind() {
+        for call in [
+            "a.command_group(\"k\", \"K\", \"K.\")",
+            "make().command_group(\"k\", \"K\", \"K.\", parent=\"ci\")",
+            "nope.command_group(\"k\", \"K\", \"K.\")",
+        ] {
+            let src = format!("{IMPORT}a = command_group(\"a\", \"A\", \"A.\")\nk = {call}\n");
+            let m = parse_src(&src);
+            let all = imports(&[("tools.m", &src)]);
+            let found = detect_unsupported_group_bindings(&m, "tools.m", &ToolrNames::new(&all));
+            assert_eq!(found.len(), 1, "{call}");
+            assert_eq!(found[0].kind, UnsupportedCommandKind::MethodGroup);
+            assert_eq!(found[0].function, "command_group(\"k\")");
+            assert!(
+                found[0]
+                    .kind
+                    .to_string()
+                    .contains("command_group(\"parent.child\", ...)")
+            );
+            // The statement binds no group either.
+            assert_eq!(
+                groups_in(&format!("{IMPORT}k = {call}\n"), &[]).len(),
+                0,
+                "{call}"
+            );
+        }
     }
 
     #[test]

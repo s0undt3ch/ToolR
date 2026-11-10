@@ -109,6 +109,26 @@ fn a_wrapped_commands_quiet_flag_does_not_suppress_the_hint() {
     assert!(stderr.contains("cache has"), "{stderr}");
 }
 
+/// `TOOLR_NO_CACHE_HINT` follows the shared boolean rule: a true spelling mutes the hint, `0`
+/// and the empty string leave it on.
+#[test]
+fn no_cache_hint_follows_the_boolean_rule() {
+    let cache = dirty_cache();
+    let work = TempDir::new().unwrap();
+    for (value, muted) in [("1", true), ("yes", true), ("0", false), ("", false)] {
+        let out = common::toolr()
+            .current_dir(work.path())
+            .env("XDG_CACHE_HOME", cache.path())
+            .env_remove("HOME")
+            .env("TOOLR_NO_CACHE_HINT", value)
+            .args(["project", "venv", "sync"])
+            .output()
+            .unwrap();
+        let shown = String::from_utf8_lossy(&out.stderr).contains("cache has");
+        assert_eq!(shown, !muted, "TOOLR_NO_CACHE_HINT={value:?}");
+    }
+}
+
 /// `self cache` commands are how the user acts on the hint, so they never show it.
 #[test]
 fn self_cache_commands_never_show_the_hint() {

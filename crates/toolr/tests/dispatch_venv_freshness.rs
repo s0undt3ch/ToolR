@@ -29,6 +29,7 @@ impl Project {
             .env("PATH", path)
             .env("XDG_CACHE_HOME", &self.cache)
             .env_remove("TOOLR_AUTO_INSTALL_UV")
+            .env_remove("TOOLR_AUTO_SYNC")
             .env_remove("TOOLR_VENV_LOCATION");
         cmd
     }

@@ -163,8 +163,8 @@ Pure AST traversal — never imports user code, so it's safe to run
 without a working venv. Captures:
 
 - `command_group(...)` declarations, bound (`var = command_group(...)`)
-  or not, plus the deprecated nested `parent.command_group("child", ...)`
-  method form.
+  or not. The removed `parent.command_group("child", ...)` method form
+  fails the build with a pointer to the dotted name.
 - `@<binding>.command` decorations (the canonical single-file form) and
   standalone `@command(group="…")` decorations (for commands in a
   different file from their group).

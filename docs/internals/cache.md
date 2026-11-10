@@ -58,6 +58,9 @@ Written when toolr creates a venv; updated on every invocation.
 - **`last_used_at`** — touched on every toolr invocation that hits
   this venv. Used to detect stale entries.
 
+`<repo-key>` doesn't include toolr's version, so upgrading toolr, even
+across a major release, keeps every existing entry.
+
 ## Orphan detection
 
 A cache entry is **orphan** when `meta.repo_path` no longer exists on
@@ -106,6 +109,7 @@ The hint is skipped for:
 - `-q` / `--quiet`
 - tab completion
 - `toolr self cache ...` commands
-- any run with `TOOLR_NO_CACHE_HINT` set, for example `TOOLR_NO_CACHE_HINT=1`
+- any run with `TOOLR_NO_CACHE_HINT` on (see the
+  [environment variables](../project-config.md#environment-variables); `0` leaves the hint on)
 
 Arguments after a `--` separator are never read as toolr's own flags.

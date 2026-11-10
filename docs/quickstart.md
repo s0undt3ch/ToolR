@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/i
 ```
 
 Verifies the SLSA attestation by default (requires the `gh` CLI, 2.56 or
-later; pass `--verify-attestation=skip` to bypass). Pin a version with
+later; pass `--verify=checksum` to bypass). Pin a version with
 `sh -s -- --version X.Y.Z`. Custom prefix: `sh -s -- --prefix /opt/toolr/bin`.
 
 ### PowerShell (Windows)

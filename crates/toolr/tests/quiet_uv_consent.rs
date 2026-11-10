@@ -32,6 +32,7 @@ fn run_with_tty_stdin_env(cwd: &Path, args: &[&str], env: &[(&str, &Path)]) -> O
         .env("PATH", empty.path())
         .env("XDG_DATA_HOME", empty.path())
         .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .env_remove("TOOLR_AUTO_SYNC")
         .envs(env.iter().copied());
     // A prompt that does fire reads "n" and declines. A bare Enter would mean
     // "install" and download uv.
@@ -45,7 +46,7 @@ fn assert_refused_without_prompt(out: &Output) {
         "prompted despite --quiet:\n{stderr}"
     );
     assert!(
-        stderr.contains("TOOLR_AUTO_INSTALL_UV=1"),
+        stderr.contains("TOOLR_AUTO_SYNC=1"),
         "missing the uv install hint:\n{stderr}"
     );
     assert!(!out.status.success(), "expected failure:\n{stderr}");

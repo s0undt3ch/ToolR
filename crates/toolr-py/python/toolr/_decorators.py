@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 import sys
-import warnings
 from collections.abc import Callable
 from types import FunctionType
 from typing import TYPE_CHECKING
@@ -26,7 +25,6 @@ from msgspec import Struct
 from msgspec import field
 from msgspec.structs import force_setattr
 
-from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._docstrings import Docstring
 
 if TYPE_CHECKING:
@@ -64,22 +62,6 @@ def _require_docstring(func: Callable[..., Any]) -> None:
         "Its first line is the command's `--help` summary."
     )
     raise ValueError(err_msg)
-
-
-def _emit_legacy_command_group_method_warning(parent_full_name: str, child: str) -> None:
-    """Surface a deprecation warning for ``parent.command_group(...)`` usage."""
-    parent_leaf = parent_full_name.removeprefix("tools.")
-    dotted = f"{parent_leaf}.{child}"
-    warnings.warn(
-        "CommandGroup.command_group(...) is deprecated and will be removed in toolr 1.0. "
-        f"Migrate to `command_group({dotted!r}, ...)`:\n"
-        "  from toolr import command_group\n"
-        f"  command_group({dotted!r}, ...)\n"
-        "Or pass `parent=...` explicitly. "
-        "See https://toolr.readthedocs.io/latest/migration/ for the full guide.",
-        ToolrDeprecationWarning,
-        stacklevel=3,
-    )
 
 
 MANIFEST_SCHEMA_VERSION: int = 2
@@ -171,34 +153,6 @@ class CommandGroup(Struct, frozen=True):
             return func
 
         return register
-
-    def command_group(
-        self,
-        name: str,
-        title: str = "",
-        description: str | None = None,
-        long_description: str | None = None,
-        docstring: str | None = None,
-    ) -> CommandGroup:
-        """Create a nested command group within this group (deprecated method form).
-
-        .. deprecated:: 0.x
-            Use the top-level :func:`toolr.command_group` with a dotted
-            path (``command_group("parent.child", ...)``) or the
-            ``parent="parent"`` keyword instead. Removed in toolr 1.0.
-
-        Returns:
-            A CommandGroup instance
-        """
-        _emit_legacy_command_group_method_warning(self.full_name, name)
-        return command_group(
-            name,
-            title,
-            description=description,
-            parent=self.full_name,
-            long_description=long_description,
-            docstring=docstring,
-        )
 
     def get_commands(self) -> dict[str, Callable[..., Any]]:
         """Get the commands in this group."""

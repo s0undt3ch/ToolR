@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/i
 ```
 
 Verifies the SLSA attestation by default (requires the `gh` CLI, 2.56
-or later; pass `--verify-attestation=skip` to bypass). See
+or later; pass `--verify=checksum` to bypass). See
 [Supply-chain verification](#supply-chain-verification-slsa-attestations).
 Pin a version
 with `sh -s -- --version X.Y.Z`. Custom prefix:
@@ -72,9 +72,9 @@ with `sh -s -- --version X.Y.Z`. Custom prefix:
 `$XDG_BIN_HOME` (or `~/.local/bin`).
 
 Other flags: `--triple TRIPLE` overrides the auto-detected target triple,
-`--dry-run` prints what would happen without installing, and `--no-verify`
-skips the SHA-256 check of the archive (not recommended; the attestation
-check is controlled separately by `--verify-attestation`).
+`--dry-run` prints what would happen without installing, and `--verify=MODE`
+chooses how much to verify (see
+[Supply-chain verification](#supply-chain-verification-slsa-attestations)).
 
 ### PowerShell (Windows)
 
@@ -83,7 +83,7 @@ irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.
 ```
 
 Verifies the SLSA attestation the same way as `install.sh` (requires
-`gh` 2.56 or later; pass `-VerifyAttestation skip` to bypass).
+`gh` 2.56 or later; pass `-Verify checksum` to bypass).
 
 ### GitHub release archives
 
@@ -151,7 +151,8 @@ silently so shell-enter hooks don't break. In CI,
 in pipes and in other non-interactive runs toolr also fails, unless you
 approve the install in advance:
 
-- Set `TOOLR_AUTO_INSTALL_UV=1` to install without asking. It also
+- Set `TOOLR_AUTO_SYNC=1` to install without asking (see the
+  [environment variables](../project-config.md#environment-variables)). It also
   answers the sync prompt after
   [repository trust](../concepts.md#repository-trust).
 - Run [`toolr __install-uv-now`](../cli.md#__install-uv-now), for
@@ -239,12 +240,12 @@ your tools venv when it executes commands.
 Every release archive is signed with a SLSA build-provenance
 attestation produced by the GitHub-hosted release workflow. The
 `install.sh` and `install.ps1` scripts verify the attestation **by
-default** (`--verify-attestation=require`), which needs the `gh` CLI,
+default** (`--verify=full`), which needs the `gh` CLI,
 2.56 or later (older `gh` can't load GitHub's current Sigstore trusted
 root). If `gh` is missing the install **fails** rather than silently
 downgrading to a checksum-only install (the `.sha256` ships from the same
 release, so it catches transport corruption, not a tampered release
-asset). With `--verify-attestation=auto` (`-VerifyAttestation auto`), a
+asset). With `--verify=auto` (`-Verify auto`), a
 missing `gh` skips the check with a warning; an outdated one still fails.
 
 The check accepts an archive only when all of these hold:
@@ -265,13 +266,25 @@ The Setup ToolR GitHub Action applies the same rules.
 trust anchor to another repository: the downloads, and the workflows the
 attestation must come from. Only set them for a fork you trust.
 
+`--verify` takes one of:
+
+| Value | SHA-256 | Attestation |
+| --- | --- | --- |
+| `full` (default) | checked | required; fails without `gh` |
+| `auto` | checked | checked when `gh` is available |
+| `checksum` | checked | skipped |
+| `none` | skipped | skipped |
+
 To install without supply-chain verification (accepting the risk — e.g.
 on a host where you can't install `gh`):
 
 ```sh
-sh installation/install.sh --verify-attestation=skip   # POSIX
-./installation/install.ps1 -VerifyAttestation skip     # Windows
+sh installation/install.sh --verify=checksum   # POSIX
+./installation/install.ps1 -Verify checksum    # Windows
 ```
+
+The action takes `verify: full` (the default) or `verify: checksum`, with the same meaning as above, and rejects anything
+else. It has no `none` or `auto`: it always checks the SHA-256.
 
 Or verify a downloaded archive manually, from the directory you
 downloaded it to:

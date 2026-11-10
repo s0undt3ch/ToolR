@@ -173,7 +173,7 @@ rename it once (`colour = not no_colour`). For more than two states, use
 - **Wrapping existing argparse tools.** Don't rewrite a pile of
   argparse scripts or Django management commands as toolr commands.
   Write one dispatcher command that takes a keyword-only
-  `DispatchCommand` parameter. Then add a `[tool.toolr.argparse.<block>]`
+  `DispatchCommand` parameter (`from toolr.sources import DispatchCommand`). Then add a `[tool.toolr.argparse.<block>]`
   table in `tools/pyproject.toml` that scans the files and attaches them
   under it. Each file becomes one command, named after its stem. See
   [`references/external-sources.md`](references/external-sources.md).

@@ -7,10 +7,8 @@ decorator) never fire from them. This file pokes the helpers directly
 so the coverage counter moves and so any regression in the decorator
 surface (which is part of toolr's public API) is caught early.
 
-The bound `@group.command` form is no longer deprecated — it is the
-canonical single-file form. The bound *subgroup* form
-(`parent.command_group("child", ...)`) is still on track for removal
-in toolr 1.0 and continues to emit `ToolrDeprecationWarning`.
+The bound `@group.command` form is the canonical single-file form. The
+bound *subgroup* form (`parent.command_group("child", ...)`) was removed.
 """
 
 from __future__ import annotations
@@ -51,9 +49,7 @@ def test_command_group_full_name_for_nested_returns_dotted_path():
 #
 # This is the canonical single-file form. The decorator was previously
 # deprecated; the deprecation was rolled back so each test here asserts
-# that NO `ToolrDeprecationWarning` fires. The still-deprecated
-# bound-subgroup form (`parent.command_group("child", ...)`) is covered
-# separately below.
+# that NO `ToolrDeprecationWarning` fires.
 # --------------------------------------------------------------------
 
 
@@ -135,16 +131,12 @@ def test_group_command_rejects_positional_and_name_keyword():
         g.command("positional", name="keyword")
 
 
-def test_parent_command_group_method_still_emits_deprecation():
-    """The bound-subgroup form (`parent.command_group("child", ...)`) is
-    still on track for removal in toolr 1.0 — guard the warning stays."""
-    parent = command_group("legacy_parent", "Parent", description="Parent group")
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", ToolrDeprecationWarning)
-        parent.command_group("child", "Child", description="Child group")
-    assert any(issubclass(w.category, ToolrDeprecationWarning) for w in caught), (
-        "expected ToolrDeprecationWarning from parent.command_group(...)"
-    )
+def test_the_command_group_method_form_is_gone():
+    """`parent.command_group("child", ...)` was removed; the dotted name is the replacement."""
+    parent = command_group("method_parent", "Parent", description="Parent group")
+    assert not hasattr(parent, "command_group")
+    child = command_group("method_parent.child", "Child", description="Child group")
+    assert child.full_name == "tools.method_parent.child"
 
 
 # --------------------------------------------------------------------

@@ -9,6 +9,7 @@ action's tests.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shlex
@@ -33,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_SH = REPO_ROOT / "installation" / "install.sh"
 
 REJECTED = "none from the s0undt3ch/ToolR release workflow on main for this exact archive"
-SKIP_HINT = "--verify-attestation=skip"
+CHECKSUM_HINT = "--verify=checksum"
 GH_FLOOR = "install.sh: gh >= 2.56 is required to verify attestations"
 
 pytestmark = [
@@ -72,7 +73,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
     """Return a callable that runs install.sh's `verify_attestation`.
 
     `gh=False` leaves `gh` off `PATH`; any other keyword argument goes to
-    `write_gh_stub`. `mode` and `repo` set `VERIFY_ATTESTATION` and
+    `write_gh_stub`. `mode` and `repo` set `VERIFY` and
     `REPO`. `hashers` are the SHA-256 tools on `PATH`: a name links the
     host's tool, a `(name, script)` pair installs a stub. Every `gh`
     argument list but `--version` is appended to `tmp_path / "gh_calls"`.
@@ -91,7 +92,8 @@ def verify_runner(tmp_path: Path) -> RunVerify:
     def run(
         *,
         gh: bool = True,
-        mode: str = "require",
+        mode: str = "full",
+        check_sha256: bool = True,
         repo: str = "s0undt3ch/ToolR",
         hashers: tuple[str | tuple[str, str], ...] = ("sha256sum", "shasum"),
         **stub: Any,
@@ -115,7 +117,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
         wrapped = (
             "set -eu\n"
             f"REPO={shlex.quote(repo)}\n"
-            f"VERIFY_ATTESTATION={shlex.quote(mode)}\n"
+            f"VERIFY={shlex.quote(mode)}\n"
             f"{script}\n"
             f"verify_attestation {shlex.quote(archive.as_posix())}\n"
             "echo VERIFIED >&2\n"
@@ -138,7 +140,7 @@ def test_rejects_ci_built_archive(verify_runner: RunVerify) -> None:
     result = verify_runner(build_configs=[CI_BUILD])
     assert result.returncode != 0
     assert REJECTED in result.stderr
-    assert SKIP_HINT in result.stderr
+    assert CHECKSUM_HINT in result.stderr
     assert "VERIFIED" not in result.stderr
 
 
@@ -208,7 +210,7 @@ def test_rejects_signer_off_main(verify_runner: RunVerify, signer: str) -> None:
     assert "no matching CertificateIdentity" in result.stderr
 
 
-@pytest.mark.parametrize("mode", ["require", "auto"])
+@pytest.mark.parametrize("mode", ["full", "auto"])
 @pytest.mark.parametrize("gh_version", ["2.55.0", "2.51.0", "1.99.0", "garbage"])
 def test_rejects_gh_older_than_2_56(
     verify_runner: RunVerify, tmp_path: Path, gh_version: str, mode: str
@@ -217,7 +219,7 @@ def test_rejects_gh_older_than_2_56(
     result = verify_runner(build_configs=[RELEASE_BUILD], gh_version=gh_version, mode=mode)
     assert result.returncode != 0
     assert GH_FLOOR in result.stderr
-    assert SKIP_HINT in result.stderr
+    assert CHECKSUM_HINT in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
@@ -250,30 +252,24 @@ def test_non_numeric_count_fails_closed(verify_runner: RunVerify, stdout: str) -
     assert REJECTED in result.stderr
 
 
-def test_skip_never_calls_gh(verify_runner: RunVerify, tmp_path: Path) -> None:
-    result = verify_runner(build_configs=[CI_BUILD], mode="skip")
+def test_checksum_never_calls_gh(verify_runner: RunVerify, tmp_path: Path) -> None:
+    result = verify_runner(build_configs=[CI_BUILD], mode="checksum")
     assert result.returncode == 0, result.stderr
     assert "skipping attestation verification" in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
-def test_require_without_gh_fails_closed(verify_runner: RunVerify) -> None:
-    result = verify_runner(gh=False, mode="require")
+def test_full_without_gh_fails_closed(verify_runner: RunVerify) -> None:
+    result = verify_runner(gh=False, mode="full")
     assert result.returncode != 0
     assert "the 'gh' CLI is not on PATH" in result.stderr
-    assert SKIP_HINT in result.stderr
+    assert CHECKSUM_HINT in result.stderr
 
 
 def test_auto_without_gh_warns_and_continues(verify_runner: RunVerify) -> None:
     result = verify_runner(gh=False, mode="auto")
     assert result.returncode == 0, result.stderr
     assert "NOT supply-chain verified" in result.stderr
-
-
-def test_invalid_mode_fails(verify_runner: RunVerify) -> None:
-    result = verify_runner(build_configs=[RELEASE_BUILD], mode="maybe")
-    assert result.returncode != 0
-    assert "invalid --verify-attestation value" in result.stderr
 
 
 def test_repo_override_drives_the_identities(verify_runner: RunVerify, tmp_path: Path) -> None:
@@ -328,7 +324,7 @@ def test_unusable_digest_fails_closed(
     result = verify_runner(build_configs=[RELEASE_BUILD], hashers=(hasher,))
     assert result.returncode != 0
     assert "install.sh: could not compute the SHA-256 of " in result.stderr
-    assert SKIP_HINT in result.stderr
+    assert CHECKSUM_HINT in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
@@ -350,3 +346,110 @@ def test_rejects_name_and_digest_on_different_subjects(verify_runner: RunVerify)
     )
     assert result.returncode != 0
     assert REJECTED in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        ([], "verify:  full, sha256 checked"),
+        (["--verify=auto"], "verify:  auto, sha256 checked"),
+        (["--verify", "none"], "verify:  none, sha256 skipped"),
+        (["--verify-attestation=require"], "verify:  full, sha256 checked"),
+        (["--verify-attestation=skip"], "verify:  checksum, sha256 checked"),
+        (["--verify-attestation", "auto"], "verify:  auto, sha256 checked"),
+        # `--no-verify` skips only the SHA-256; the attestation mode stays `full`.
+        (["--no-verify"], "verify:  full, sha256 skipped"),
+    ],
+)
+def test_verify_flag_and_its_old_spellings(args: list[str], expected: str) -> None:
+    """`--verify` is the one spelling; the old flags map onto it."""
+    sh = shutil.which("sh")
+    assert sh is not None
+    result = subprocess.run(  # noqa: S603  # sh + script path are test-controlled
+        [
+            sh,
+            str(INSTALL_SH),
+            "--dry-run",
+            "--version",
+            "0.0.0",
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert expected in result.stderr
+
+
+def _run_verify_sha256(
+    tmp_path: Path, *, check_sha256: bool, expected: str
+) -> subprocess.CompletedProcess[str]:
+    """Run install.sh's `verify_sha256` on a file whose digest is `sha256(b"archive")`."""
+    sh = shutil.which("sh")
+    assert sh is not None
+    text = INSTALL_SH.read_text()
+    helpers = re.findall(r"^(?:err|info|warn)\(\) \{.*\}$", text, flags=re.MULTILINE)
+    functions = [
+        re.search(rf"^{name}\(\) \{{\n.*?^\}}$", text, flags=re.MULTILINE | re.DOTALL).group(0)  # type: ignore[union-attr]
+        for name in ("sha256_of", "verify_sha256")
+    ]
+    archive = tmp_path / "archive.tar.gz"
+    archive.write_bytes(b"archive")
+    script = tmp_path / "sha.sh"
+    script.write_text(
+        "set -eu\n"
+        f"CHECK_SHA256={int(check_sha256)}\nDRY_RUN=0\n"
+        + "\n".join([*helpers, *functions])
+        + f"\nverify_sha256 {shlex.quote(archive.as_posix())} {shlex.quote(expected)}\necho CHECKED >&2\n",
+        newline="\n",
+    )
+    return subprocess.run(  # noqa: S603  # sh + script path are test-controlled
+        [sh, str(script)], capture_output=True, text=True, check=False
+    )
+
+
+@pytest.mark.parametrize("check_sha256", [True, False])
+def test_checksum_mismatch_is_enforced_only_when_the_sha256_is_checked(
+    tmp_path: Path, check_sha256: bool
+) -> None:
+    result = _run_verify_sha256(tmp_path, check_sha256=check_sha256, expected="0" * 64)
+    if check_sha256:
+        assert result.returncode != 0
+        assert "checksum mismatch" in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        assert "CHECKED" in result.stderr
+
+
+def test_matching_checksum_passes(tmp_path: Path) -> None:
+    right = hashlib.sha256(b"archive").hexdigest()
+    result = _run_verify_sha256(tmp_path, check_sha256=True, expected=right)
+    assert result.returncode == 0, result.stderr
+
+
+def test_verify_values_match_install_ps1() -> None:
+    """install.sh and install.ps1 accept the same `--verify` / `-Verify` values."""
+    sh_values = re.search(
+        r"^case \"\$VERIFY\" in\n\s+([a-z|]+\)) ;;", INSTALL_SH.read_text(), re.MULTILINE
+    )
+    assert sh_values is not None
+    ps1 = (INSTALL_SH.parent / "install.ps1").read_text()
+    ps_values = re.search(r"\[ValidateSet\(([^)]*)\)\]\s*\[string\]\$Verify\b", ps1)
+    assert ps_values is not None
+    assert set(sh_values.group(1).rstrip(")").split("|")) == set(
+        re.findall(r'"(\w+)"', ps_values.group(1))
+    )
+
+
+def test_bogus_verify_value_fails_fast_even_on_a_dry_run() -> None:
+    sh = shutil.which("sh")
+    assert sh is not None
+    result = subprocess.run(  # noqa: S603  # sh + script path are test-controlled
+        [sh, str(INSTALL_SH), "--verify=bogus", "--dry-run", "--version", "0.0.0"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "invalid --verify value: bogus" in result.stderr

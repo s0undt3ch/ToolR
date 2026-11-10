@@ -21,12 +21,20 @@ inputs:
       release format started with that version.
     default: "0.35.1"
 
+  verify:
+    description: |
+      `full` (the default) cryptographically verifies the SLSA build
+      provenance the release workflow attaches to every archive with
+      `gh attestation verify`. `checksum` checks only the SHA-256 and
+      skips the attestation. These mean the same as the installers'
+      `--verify` values; the action has no `none` or `auto`, because it
+      always checks the SHA-256. Any other value fails the step.
+    default: "full"
+
   skip-attestation:
     description: |
-      Set to `true` to skip `gh attestation verify` on the
-      downloaded archive. Defaults to `false`; the action
-      cryptographically verifies the SLSA build provenance the
-      release workflow attaches to every archive.
+      Deprecated, removed in 1.0: use `verify: checksum`. `true` skips `gh attestation verify`.
+    deprecationMessage: "Removed in 1.0: use `verify: checksum` instead of `skip-attestation: true`."
     default: "false"
 
   github-token:
@@ -91,6 +99,24 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Validate inputs
+      id: validate-inputs
+      shell: bash
+      env:
+        INPUT_VERIFY: ${{ inputs.verify }}
+      run: |
+        case "$INPUT_VERIFY" in
+          full|checksum) ;;
+          none|auto)
+            echo "setup-toolr: verify: '$INPUT_VERIFY' is an installer mode; the action always checks the SHA-256. Use 'checksum' to skip the attestation" >&2
+            exit 1
+            ;;
+          *)
+            echo "setup-toolr: invalid verify: '$INPUT_VERIFY' (use 'full' or 'checksum')" >&2
+            exit 1
+            ;;
+        esac
+
     - name: Resolve toolr version
       id: resolve-version
       shell: bash
@@ -279,8 +305,8 @@ runs:
       # No cache-hit guard: attestation is verified on every run against
       # GitHub's attestation store, so a poisoned cached archive is
       # rejected before it reaches PATH (SEC-09). Only fork PRs / an
-      # explicit `skip-attestation: true` bypass it.
-      if: inputs.skip-attestation != 'true'
+      # explicit `verify: checksum` bypass it.
+      if: inputs.verify != 'checksum' && inputs.skip-attestation != 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -296,7 +322,7 @@ runs:
         set -euo pipefail
         if ! command -v gh >/dev/null 2>&1; then
           echo "setup-toolr: attestation verification requires the 'gh' CLI" >&2
-          echo "setup-toolr: install gh or pass 'skip-attestation: true' to bypass" >&2
+          echo "setup-toolr: install gh or pass 'verify: checksum' to bypass" >&2
           exit 1
         fi
         # gh before 2.56 can't load GitHub's current Sigstore trusted root.
@@ -332,7 +358,7 @@ runs:
                 | length')
         if ! [ "$count" -ge 1 ] 2>/dev/null; then
           echo "setup-toolr: ${ARCHIVE_NAME} has a valid ToolR attestation but was not built by the ToolR release workflow on main" >&2
-          echo "setup-toolr: install a published release; 'skip-attestation: true' turns off this check entirely" >&2
+          echo "setup-toolr: install a published release; 'verify: checksum' turns off this check entirely" >&2
           exit 1
         fi
 

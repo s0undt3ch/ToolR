@@ -236,6 +236,51 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
     );
 }
 
+/// A plugin that still passes a removed `arg()` keyword or calls `parent.command_group(...)` fails
+/// the build with the replacement named, instead of shipping a manifest that breaks at run time.
+#[test]
+fn removed_group_and_arg_forms_fail_plugin_build_with_a_replacement() {
+    for (body, expected) in [
+        (
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, name: Annotated[str, arg(nargs="*")] = "x") -> None:
+    """Read."""
+"#,
+            "unknown `arg()` keyword `nargs`; use `T | None`",
+        ),
+        (
+            r#"from toolr import command_group
+
+ci = command_group("ci", "CI", "CI group.")
+image = ci.command_group("image", "Image", "Image group.")
+"#,
+            "mypkg.kw::command_group(\"image\"): `x.command_group(...)` isn't supported",
+        ),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("mypkg");
+        write(&pkg, "__init__.py", "");
+        write(&pkg, "kw.py", body);
+        let output = common::toolr()
+            .args(["self", "build-manifest", "--source-dir"])
+            .arg(&pkg)
+            .args(["--package", "mypkg"])
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "build succeeded: {stderr}");
+        assert!(stderr.contains(expected), "stderr: {stderr}");
+        assert!(!pkg.join("toolr-manifest.json").exists());
+    }
+}
+
 /// Issue #501, plugin side: a command without a docstring must not reach a
 /// shipped `toolr-manifest.json`.
 #[test]

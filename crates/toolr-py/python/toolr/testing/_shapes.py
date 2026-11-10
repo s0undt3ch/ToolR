@@ -32,6 +32,8 @@ GROUP_BINDING = (
     "which toolr reads without running it."
 )
 
+METHOD_GROUP = '`x.command_group(...)` isn\'t supported; use `command_group("parent.child", ...)`.'
+
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 # (module, function, problem)
@@ -119,9 +121,13 @@ def _unsupported_group_bindings(tools_dir: Path) -> list[Unsupported]:
     trees, modules, tables = _import_tables(tools_dir)
     memo: _Memo = {}
     return [
-        (modules[file], _group_call_label(call), GROUP_BINDING)
+        (
+            modules[file],
+            _group_call_label(call),
+            METHOD_GROUP if is_method_form else GROUP_BINDING,
+        )
         for file, tree in trees.items()
-        for call in _unbound_group_calls(tree, tables, modules[file], memo)
+        for call, is_method_form in _unbound_group_calls(tree, tables, modules[file], memo)
     ]
 
 

@@ -97,7 +97,7 @@ def test_rejects_ci_built_archive(
     result = verify_runner(build_configs=[CI_BUILD])
     assert result.returncode != 0
     assert REJECTED in result.stderr
-    assert "skip-attestation" in result.stderr
+    assert "verify: checksum" in result.stderr
 
 
 def test_accepts_release_built_archive(
@@ -282,3 +282,49 @@ def test_rejects_name_and_digest_on_different_subjects(
     )
     assert result.returncode != 0
     assert REJECTED in result.stderr
+
+
+def test_verify_checksum_and_the_deprecated_input_both_skip_the_step() -> None:
+    """`verify: checksum` is the one spelling; `skip-attestation: true` still works but is deprecated."""
+    data = yaml.safe_load(ACTION_YML.read_text())
+    assert data["inputs"]["verify"]["default"] == "full"
+    assert "deprecationMessage" in data["inputs"]["skip-attestation"]
+    condition = _step("verify-attestation")["if"]
+    assert "inputs.verify != 'checksum'" in condition
+    assert "inputs.skip-attestation != 'true'" in condition
+
+
+def _validate_inputs(tmp_path: Path, value: str) -> subprocess.CompletedProcess[str]:
+    script = tmp_path / "validate.sh"
+    script.write_text(
+        "#!/bin/bash\nset -euo pipefail\n" + _step("validate-inputs")["run"], newline="\n"
+    )
+    bash = shutil.which("bash")
+    assert bash is not None
+    return subprocess.run(  # noqa: S603  # bash + script path are test-controlled
+        [bash, str(script)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "INPUT_VERIFY": value},
+    )
+
+
+@pytest.mark.parametrize("value", ["full", "checksum"])
+def test_verify_accepts_the_action_modes(tmp_path: Path, value: str) -> None:
+    assert _validate_inputs(tmp_path, value).returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ("auto", "always checks the SHA-256"),
+        ("none", "always checks the SHA-256"),
+        ("bogus", "invalid verify: 'bogus'"),
+        ("", "invalid verify: ''"),
+    ],
+)
+def test_verify_rejects_everything_else(tmp_path: Path, value: str, message: str) -> None:
+    result = _validate_inputs(tmp_path, value)
+    assert result.returncode != 0
+    assert message in result.stderr

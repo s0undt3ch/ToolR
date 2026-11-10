@@ -145,8 +145,9 @@ pub(crate) fn confirm_sync(input: &mut dyn BufRead, out: &mut dyn Write) -> bool
 }
 
 /// Sync a trusted repository's venv if it needs it, asking first. The sync
-/// prompt follows the uv install prompt it replaces: `TOOLR_AUTO_INSTALL_UV=1`
-/// answers it, and `never_prompt` or no `prompt_io` (no terminal) declines it.
+/// prompt follows the uv install prompt it replaces: `TOOLR_AUTO_SYNC=1`
+/// (or the older `TOOLR_AUTO_INSTALL_UV=1`) answers it, and `never_prompt` or no
+/// `prompt_io` (no terminal) declines it.
 /// Test-only: exists so tests can inject the prompt IO that the tty variant reads from stdin.
 #[cfg(test)]
 fn sync_after_trust(
@@ -183,7 +184,7 @@ fn choose_sync(
 ) -> Result<SyncChoice> {
     let repo_root = trusted.root();
     let env = ConsentMode::from_env(never_prompt);
-    let can_answer = env.auto_install_env || (!never_prompt && prompt_io.is_some());
+    let can_answer = env.auto_sync_env || (!never_prompt && prompt_io.is_some());
     let resolved = match resolve_venv_path(repo_root) {
         Ok(resolved) => resolved,
         // Nothing would be synced, so leave a config error for `venv sync` to report.
@@ -193,7 +194,7 @@ fn choose_sync(
     if check_freshness(&resolved, &repo_root.join("tools")) == crate::venv::Freshness::Fresh {
         return Ok(SyncChoice::Skip(SyncAfterTrust::NotNeeded));
     }
-    let agreed = env.auto_install_env
+    let agreed = env.auto_sync_env
         || match prompt_io {
             Some((input, out)) if !never_prompt => confirm_sync(input, out),
             _ => false,
@@ -539,6 +540,7 @@ mod tests {
     fn sync_after_trust_declines_without_asking_when_it_cannot_prompt() {
         let mut env = EnvGuard::write();
         env.remove("TOOLR_AUTO_INSTALL_UV");
+        env.remove("TOOLR_AUTO_SYNC");
         env.remove("TOOLR_VENV_LOCATION");
         let repo = unsynced_repo();
         let (r, out) = after_trust(repo.path(), false, None);
@@ -553,6 +555,7 @@ mod tests {
     fn sync_after_trust_leaves_a_bad_config_to_venv_sync_unless_asked() {
         let mut env = EnvGuard::write();
         env.remove("TOOLR_AUTO_INSTALL_UV");
+        env.remove("TOOLR_AUTO_SYNC");
         env.remove("TOOLR_VENV_LOCATION");
         let repo = unsynced_repo();
         std::fs::write(
@@ -596,6 +599,7 @@ mod tests {
     fn sync_after_trust_declined_at_the_prompt() {
         let mut env = EnvGuard::write();
         env.remove("TOOLR_AUTO_INSTALL_UV");
+        env.remove("TOOLR_AUTO_SYNC");
         env.remove("TOOLR_VENV_LOCATION");
         let repo = unsynced_repo();
         let (r, out) = after_trust(repo.path(), false, Some("n\n"));

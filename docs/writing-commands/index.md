@@ -23,13 +23,11 @@ Every example on these pages is a real file under
 that toolr can actually execute against the documentation fixture.
 
 !!! warning "Still using `parent.command_group("child", ...)`?"
-    The bound *subgroup-method* form is deprecated and will be
-    removed in toolr 1.0. Every call emits a runtime warning at
-    import time pointing at the offending line. See the
-    [migration guide](../migration.md) for the dotted-string
-    replacement (`command_group("parent.child", ...)`).
+    The bound *subgroup-method* form was removed. The manifest build
+    fails on it. See the [migration guide](../migration.md) for the
+    dotted-string replacement (`command_group("parent.child", ...)`).
 
     The bound `@group.command` decorator on a captured
-    `CommandGroup` is **not** deprecated — see
+    `CommandGroup` is unaffected — see
     [Groups & commands](groups.md) for canonical single-file
     usage.
