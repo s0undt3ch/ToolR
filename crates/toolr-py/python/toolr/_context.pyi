@@ -214,7 +214,7 @@ class Context(Struct, frozen=True):
         env: dict[str, str] | None = None,
         input: str | bytes | None = None,  # noqa: A002
         text: bool | None = None,
-        encoding: str | None = "utf-8",
+        encoding: str | None = None,
     ) -> CommandResult[str] | CommandResult[bytes]: ...
     @contextmanager
     def chdir(self, path: str | Path) -> Iterator[Path]: ...

@@ -14,6 +14,7 @@ PREFIX=""
 DRY_RUN=0
 VERIFY="full"
 LEGACY_NO_CHECKSUM=0
+CHECK_SHA256=1
 
 print_help() {
   cat <<EOF
@@ -52,7 +53,7 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=1; shift ;;
     --verify) VERIFY="$2"; shift 2 ;;
     --verify=*) VERIFY="${1#*=}"; shift ;;
-    # Old spellings, kept for one release. --no-verify skipped only the SHA-256 and left the
+    # Old spellings, removed in 1.0. --no-verify skipped only the SHA-256 and left the
     # attestation as it was, so it stays a separate switch; the attestation modes map
     # require -> full, auto -> auto, skip -> checksum.
     --no-verify) LEGACY_NO_CHECKSUM=1; shift ;;
@@ -71,6 +72,9 @@ case "$VERIFY" in
   full|auto|checksum|none) ;;
   *) err "invalid --verify value: $VERIFY (use full|auto|checksum|none)" ;;
 esac
+if [ "$VERIFY" = "none" ] || [ "$LEGACY_NO_CHECKSUM" -eq 1 ]; then
+  CHECK_SHA256=0
+fi
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || err "missing required command: $1"
@@ -134,7 +138,7 @@ sha256_of() {
 
 verify_sha256() {
   file="$1"; expected="$2"
-  if [ "$VERIFY" = "none" ] || [ "$LEGACY_NO_CHECKSUM" -eq 1 ]; then
+  if [ "$CHECK_SHA256" -eq 0 ]; then
     info "skipping checksum verification"
     return 0
   fi
@@ -159,7 +163,6 @@ verify_attestation() {
       return 0
       ;;
     auto|full) ;;
-    *) err "invalid --verify value: $VERIFY (use full|auto|checksum|none)" ;;
   esac
   if ! command -v gh >/dev/null 2>&1; then
     if [ "$VERIFY" = "full" ]; then
@@ -256,7 +259,7 @@ main() {
   info "triple:  ${TRIPLE}"
   info "prefix:  ${PREFIX}"
   info "url:     ${url}"
-  info "verify:  ${VERIFY}$([ "$LEGACY_NO_CHECKSUM" -eq 1 ] && printf ' (no checksum)')"
+  info "verify:  ${VERIFY}, sha256 $([ "$CHECK_SHA256" -eq 1 ] && printf checked || printf skipped)"
   if [ "$DRY_RUN" -eq 1 ]; then
     info "dry-run; exiting before download"
     return 0
@@ -266,7 +269,7 @@ main() {
   trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
   fetch "$url" "${tmpdir}/${filename}"
-  if [ "$VERIFY" != "none" ] && [ "$LEGACY_NO_CHECKSUM" -eq 0 ]; then
+  if [ "$CHECK_SHA256" -eq 1 ]; then
     fetch "$sha_url" "${tmpdir}/${filename}.sha256"
     expected=$(awk '{print $1}' "${tmpdir}/${filename}.sha256")
     verify_sha256 "${tmpdir}/${filename}" "$expected"

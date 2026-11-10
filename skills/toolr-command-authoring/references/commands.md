@@ -266,7 +266,7 @@ def run(
     env: dict[str, str] | None = None,
     input: str | bytes | None = None,  # noqa: A002
     text: bool | None = None,
-    encoding: str | None = "utf-8",
+    encoding: str | None = None,
 ) -> CommandResult[str] | CommandResult[bytes]:
 ```
 
@@ -292,7 +292,7 @@ Args:
     env: Environment variables to pass to the command.
     input: Data to write to the command's stdin.
     text: Whether to return output as text (the default) or bytes.
-    encoding: Encoding for text output. Defaults to `"utf-8"`.
+    encoding: Encoding for text output. The runner defaults to `"utf-8"`.
 
 Returns:
     CommandResult instance.

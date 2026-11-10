@@ -114,6 +114,7 @@ The hint is skipped for:
 - `-q` / `--quiet`
 - tab completion
 - `toolr self cache ...` commands
-- any run with `TOOLR_NO_CACHE_HINT=1` (or `true`, `yes`)
+- any run with `TOOLR_NO_CACHE_HINT` on (see the
+  [environment variables](../project-config.md#environment-variables); `0` leaves the hint on)
 
 Arguments after a `--` separator are never read as toolr's own flags.

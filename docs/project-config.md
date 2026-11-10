@@ -110,6 +110,21 @@ python-version = "3.13"
 Use this when your tools need a newer Python than your application
 code, or vice versa.
 
+## Environment variables {#environment-variables}
+
+| Variable | Kind | Accepts | Default |
+| --- | --- | --- | --- |
+| `TOOLR_TRUST_ALL` | boolean | `1`, `true`, `yes` | off |
+| `TOOLR_AUTO_SYNC` | boolean | `1`, `true`, `yes` | off |
+| `TOOLR_AUTO_INSTALL_UV` | boolean, alias of `TOOLR_AUTO_SYNC` (removed in 1.0) | as `TOOLR_AUTO_SYNC` | off |
+| `TOOLR_NO_CACHE_HINT` | boolean | `1`, `true`, `yes` | off |
+| `TOOLR_VENV_LOCATION` | string | `in-tree`, `cache` | the TOML setting |
+
+Booleans read `1`, `true` or `yes` (any case, surrounding whitespace ignored) as on. Anything else, including
+`0` and an empty value, is off, so `TOOLR_NO_CACHE_HINT=0` leaves the hint on. `TOOLR_AUTO_SYNC` decides alone
+once it is set; `TOOLR_AUTO_INSTALL_UV` counts only while it is unset. An option bound with `arg(env=)` on a
+`bool` also accepts `0`, `false` and `no`.
+
 ## `tools/uv.lock`
 
 Created by the first `uv sync` invocation. Commit it to git — that's

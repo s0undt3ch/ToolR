@@ -256,7 +256,7 @@ class Context(Struct, frozen=True):
         env: dict[str, str] | None = None,
         input: str | bytes | None = None,  # noqa: A002
         text: bool | None = None,
-        encoding: str | None = "utf-8",
+        encoding: str | None = None,
     ) -> CommandResult[str] | CommandResult[bytes]:
         """Run a command with the given arguments.
 
@@ -279,7 +279,7 @@ class Context(Struct, frozen=True):
             env: Environment variables to pass to the command.
             input: Data to write to the command's stdin.
             text: Whether to return output as text (the default) or bytes.
-            encoding: Encoding for text output. Defaults to `"utf-8"`.
+            encoding: Encoding for text output. The runner defaults to `"utf-8"`.
 
         Returns:
             CommandResult instance.
@@ -301,11 +301,15 @@ class Context(Struct, frozen=True):
         # Only what the caller set reaches the runner, whose own defaults apply to the rest.
         runner_kwargs: dict[str, Any] = {
             name: value
-            for name, value in (("cwd", cwd), ("env", env), ("input", input), ("text", text))
+            for name, value in (
+                ("cwd", cwd),
+                ("env", env),
+                ("input", input),
+                ("text", text),
+                ("encoding", encoding),
+            )
             if value is not None
         }
-        if encoding != "utf-8":
-            runner_kwargs["encoding"] = encoding
         return self._run_impl(
             cmdline,
             stream_output=stream_output,

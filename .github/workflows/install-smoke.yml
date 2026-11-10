@@ -128,7 +128,7 @@ jobs:
             echo "::error::install.sh placed the binary despite failing verification" >&2
             exit 1
           }
-          echo "OK: install.sh failed closed (no gh, default=require)"
+          echo "OK: install.sh failed closed (no gh, default=full)"
 
   smoke-install-ps1:
     name: install.ps1 (windows)

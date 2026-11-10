@@ -184,7 +184,7 @@ fn choose_sync(
 ) -> Result<SyncChoice> {
     let repo_root = trusted.root();
     let env = ConsentMode::from_env(never_prompt);
-    let can_answer = env.auto_install_env || (!never_prompt && prompt_io.is_some());
+    let can_answer = env.auto_sync_env || (!never_prompt && prompt_io.is_some());
     let resolved = match resolve_venv_path(repo_root) {
         Ok(resolved) => resolved,
         // Nothing would be synced, so leave a config error for `venv sync` to report.
@@ -194,7 +194,7 @@ fn choose_sync(
     if check_freshness(&resolved, &repo_root.join("tools")) == crate::venv::Freshness::Fresh {
         return Ok(SyncChoice::Skip(SyncAfterTrust::NotNeeded));
     }
-    let agreed = env.auto_install_env
+    let agreed = env.auto_sync_env
         || match prompt_io {
             Some((input, out)) if !never_prompt => confirm_sync(input, out),
             _ => false,

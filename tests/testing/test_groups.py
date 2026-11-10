@@ -840,7 +840,7 @@ def test_a_very_long_expression_does_not_overflow_the_stack() -> None:
 
     calls = _unbound_group_calls(tree, tables, "m", {})
 
-    assert [call.lineno for call in calls] == [2]
+    assert [call.lineno for call, _ in calls] == [2]
 
 
 def test_group_bindings_come_before_commands(make_tools_dir: Callable[..., Path]) -> None:

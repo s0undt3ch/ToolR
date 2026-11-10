@@ -6,8 +6,8 @@ use anyhow::{Context, Result};
 use blake3::Hasher;
 
 /// The last hash input. Frozen at the value toolr's major version had while the key still
-/// carried it, so every existing cache key stays valid across the 1.0 bump. A venv layout change
-/// is handled by `Meta::layout_version`, not by changing the key.
+/// carried it, so every existing cache key stays valid across the 1.0 bump. Pinned by
+/// `key_is_a_golden_literal`, which is unix-only: the key for a Windows path is not pinned.
 const KEY_EPOCH: &str = "0";
 
 /// Compute the stable repo-key. Inputs:

@@ -406,7 +406,8 @@ pub fn detect_unsupported_group_bindings(
                 }
             }
             None => match supported_group_call(stmt) {
-                Some((_, call)) if is_method_group_call(call) => {
+                // Mirrored in `toolr.testing._groups._unbound_group_calls`.
+                Some((_, call)) if matches!(call.func.as_ref(), Expr::Attribute(a) if a.attr.as_str() == "command_group") => {
                     finder.report_as(call, UnsupportedCommandKind::MethodGroup)
                 }
                 _ => finder.visit_stmt(stmt),
@@ -593,14 +594,6 @@ fn single_name_target(targets: &[Expr]) -> Option<String> {
         Expr::Name(n) => Some(n.id.as_str().to_string()),
         _ => None,
     }
-}
-
-/// Whether `call` is `<x>.command_group(...)`, the removed method form when `x`
-/// isn't the `toolr` module. Only asked after [`is_command_group_call`] said no.
-///
-/// Mirrored in `toolr.testing._groups._is_method_group_call`; change both together.
-fn is_method_group_call(call: &ExprCall) -> bool {
-    matches!(call.func.as_ref(), Expr::Attribute(a) if a.attr.as_str() == "command_group")
 }
 
 /// Whether `call` is toolr's `command_group`: spelt so, an alias the import

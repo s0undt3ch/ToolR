@@ -17,8 +17,6 @@ from toolr._decorators import CommandGroup
 from toolr.testing._groups import _NAME
 from toolr.testing._groups import _argument
 from toolr.testing._groups import _import_tables
-from toolr.testing._groups import _ImportTable
-from toolr.testing._groups import _is_toolr_module
 from toolr.testing._groups import _literal
 from toolr.testing._groups import _Memo
 from toolr.testing._groups import _unbound_group_calls
@@ -34,10 +32,7 @@ GROUP_BINDING = (
     "which toolr reads without running it."
 )
 
-METHOD_GROUP = (
-    "`parent.command_group(...)` was removed (the error also fires for a `.command_group(...)` call on a "
-    'non-toolr object); declare the subgroup with `command_group("parent.child", ...)` instead.'
-)
+METHOD_GROUP = '`x.command_group(...)` isn\'t supported; use `command_group("parent.child", ...)`.'
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
@@ -129,19 +124,11 @@ def _unsupported_group_bindings(tools_dir: Path) -> list[Unsupported]:
         (
             modules[file],
             _group_call_label(call),
-            METHOD_GROUP if _is_method_form(call, tables[modules[file]]) else GROUP_BINDING,
+            METHOD_GROUP if is_method_form else GROUP_BINDING,
         )
         for file, tree in trees.items()
-        for call in _unbound_group_calls(tree, tables, modules[file], memo)
+        for call, is_method_form in _unbound_group_calls(tree, tables, modules[file], memo)
     ]
-
-
-def _is_method_form(call: ast.Call, table: _ImportTable) -> bool:
-    """Whether ``call`` is a ``<x>.command_group(...)`` on something other than ``toolr``."""
-    func = call.func
-    return isinstance(func, ast.Attribute) and not (
-        isinstance(func.value, ast.Name) and _is_toolr_module(table, func.value.id)
-    )
 
 
 def _unsupported_commands(tools_dir: Path) -> list[Unsupported]:

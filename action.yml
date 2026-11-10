@@ -33,8 +33,8 @@ inputs:
 
   skip-attestation:
     description: |
-      Deprecated: use `verify: checksum`. `true` skips `gh attestation verify`.
-    deprecationMessage: "Use `verify: checksum` instead of `skip-attestation: true`."
+      Deprecated, removed in 1.0: use `verify: checksum`. `true` skips `gh attestation verify`.
+    deprecationMessage: "Removed in 1.0: use `verify: checksum` instead of `skip-attestation: true`."
     default: "false"
 
   github-token:

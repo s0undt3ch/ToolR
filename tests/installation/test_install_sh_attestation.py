@@ -34,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_SH = REPO_ROOT / "installation" / "install.sh"
 
 REJECTED = "none from the s0undt3ch/ToolR release workflow on main for this exact archive"
-SKIP_HINT = "--verify=checksum"
+CHECKSUM_HINT = "--verify=checksum"
 GH_FLOOR = "install.sh: gh >= 2.56 is required to verify attestations"
 
 pytestmark = [
@@ -93,7 +93,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
         *,
         gh: bool = True,
         mode: str = "full",
-        legacy_no_checksum: bool = False,
+        check_sha256: bool = True,
         repo: str = "s0undt3ch/ToolR",
         hashers: tuple[str | tuple[str, str], ...] = ("sha256sum", "shasum"),
         **stub: Any,
@@ -118,7 +118,6 @@ def verify_runner(tmp_path: Path) -> RunVerify:
             "set -eu\n"
             f"REPO={shlex.quote(repo)}\n"
             f"VERIFY={shlex.quote(mode)}\n"
-            f"LEGACY_NO_CHECKSUM={int(legacy_no_checksum)}\n"
             f"{script}\n"
             f"verify_attestation {shlex.quote(archive.as_posix())}\n"
             "echo VERIFIED >&2\n"
@@ -141,7 +140,7 @@ def test_rejects_ci_built_archive(verify_runner: RunVerify) -> None:
     result = verify_runner(build_configs=[CI_BUILD])
     assert result.returncode != 0
     assert REJECTED in result.stderr
-    assert SKIP_HINT in result.stderr
+    assert CHECKSUM_HINT in result.stderr
     assert "VERIFIED" not in result.stderr
 
 
@@ -220,7 +219,7 @@ def test_rejects_gh_older_than_2_56(
     result = verify_runner(build_configs=[RELEASE_BUILD], gh_version=gh_version, mode=mode)
     assert result.returncode != 0
     assert GH_FLOOR in result.stderr
-    assert SKIP_HINT in result.stderr
+    assert CHECKSUM_HINT in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
@@ -253,30 +252,24 @@ def test_non_numeric_count_fails_closed(verify_runner: RunVerify, stdout: str) -
     assert REJECTED in result.stderr
 
 
-def test_skip_never_calls_gh(verify_runner: RunVerify, tmp_path: Path) -> None:
+def test_checksum_never_calls_gh(verify_runner: RunVerify, tmp_path: Path) -> None:
     result = verify_runner(build_configs=[CI_BUILD], mode="checksum")
     assert result.returncode == 0, result.stderr
     assert "skipping attestation verification" in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
-def test_require_without_gh_fails_closed(verify_runner: RunVerify) -> None:
+def test_full_without_gh_fails_closed(verify_runner: RunVerify) -> None:
     result = verify_runner(gh=False, mode="full")
     assert result.returncode != 0
     assert "the 'gh' CLI is not on PATH" in result.stderr
-    assert SKIP_HINT in result.stderr
+    assert CHECKSUM_HINT in result.stderr
 
 
 def test_auto_without_gh_warns_and_continues(verify_runner: RunVerify) -> None:
     result = verify_runner(gh=False, mode="auto")
     assert result.returncode == 0, result.stderr
     assert "NOT supply-chain verified" in result.stderr
-
-
-def test_invalid_mode_fails(verify_runner: RunVerify) -> None:
-    result = verify_runner(build_configs=[RELEASE_BUILD], mode="maybe")
-    assert result.returncode != 0
-    assert "invalid --verify value" in result.stderr
 
 
 def test_repo_override_drives_the_identities(verify_runner: RunVerify, tmp_path: Path) -> None:
@@ -331,7 +324,7 @@ def test_unusable_digest_fails_closed(
     result = verify_runner(build_configs=[RELEASE_BUILD], hashers=(hasher,))
     assert result.returncode != 0
     assert "install.sh: could not compute the SHA-256 of " in result.stderr
-    assert SKIP_HINT in result.stderr
+    assert CHECKSUM_HINT in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
@@ -358,13 +351,14 @@ def test_rejects_name_and_digest_on_different_subjects(verify_runner: RunVerify)
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
-        ([], "verify:  full"),
-        (["--verify=auto"], "verify:  auto"),
-        (["--verify", "none"], "verify:  none"),
-        (["--verify-attestation=require"], "verify:  full"),
-        (["--verify-attestation=skip"], "verify:  checksum"),
-        (["--verify-attestation", "auto"], "verify:  auto"),
-        (["--no-verify"], "verify:  full (no checksum)"),
+        ([], "verify:  full, sha256 checked"),
+        (["--verify=auto"], "verify:  auto, sha256 checked"),
+        (["--verify", "none"], "verify:  none, sha256 skipped"),
+        (["--verify-attestation=require"], "verify:  full, sha256 checked"),
+        (["--verify-attestation=skip"], "verify:  checksum, sha256 checked"),
+        (["--verify-attestation", "auto"], "verify:  auto, sha256 checked"),
+        # `--no-verify` skips only the SHA-256; the attestation mode stays `full`.
+        (["--no-verify"], "verify:  full, sha256 skipped"),
     ],
 )
 def test_verify_flag_and_its_old_spellings(args: list[str], expected: str) -> None:
@@ -388,15 +382,8 @@ def test_verify_flag_and_its_old_spellings(args: list[str], expected: str) -> No
     assert expected in result.stderr
 
 
-def test_no_verify_does_not_disable_the_attestation(verify_runner: RunVerify) -> None:
-    """`--no-verify` skipped only the SHA-256: without `gh` the attestation still fails closed."""
-    result = verify_runner(gh=False, mode="full", legacy_no_checksum=True)
-    assert result.returncode != 0
-    assert SKIP_HINT in result.stderr
-
-
 def _run_verify_sha256(
-    tmp_path: Path, *, mode: str, legacy_no_checksum: bool, expected: str
+    tmp_path: Path, *, check_sha256: bool, expected: str
 ) -> subprocess.CompletedProcess[str]:
     """Run install.sh's `verify_sha256` on a file whose digest is `sha256(b"archive")`."""
     sh = shutil.which("sh")
@@ -412,7 +399,7 @@ def _run_verify_sha256(
     script = tmp_path / "sha.sh"
     script.write_text(
         "set -eu\n"
-        f"VERIFY={shlex.quote(mode)}\nLEGACY_NO_CHECKSUM={int(legacy_no_checksum)}\nDRY_RUN=0\n"
+        f"CHECK_SHA256={int(check_sha256)}\nDRY_RUN=0\n"
         + "\n".join([*helpers, *functions])
         + f"\nverify_sha256 {shlex.quote(archive.as_posix())} {shlex.quote(expected)}\necho CHECKED >&2\n",
         newline="\n",
@@ -422,24 +409,12 @@ def _run_verify_sha256(
     )
 
 
-@pytest.mark.parametrize(
-    ("mode", "legacy_no_checksum", "enforced"),
-    [
-        ("full", False, True),
-        ("auto", False, True),
-        ("checksum", False, True),
-        ("none", False, False),
-        ("full", True, False),
-    ],
-)
-def test_checksum_mismatch_is_enforced_except_for_none_and_no_verify(
-    tmp_path: Path, mode: str, legacy_no_checksum: bool, enforced: bool
+@pytest.mark.parametrize("check_sha256", [True, False])
+def test_checksum_mismatch_is_enforced_only_when_the_sha256_is_checked(
+    tmp_path: Path, check_sha256: bool
 ) -> None:
-    wrong = "0" * 64
-    result = _run_verify_sha256(
-        tmp_path, mode=mode, legacy_no_checksum=legacy_no_checksum, expected=wrong
-    )
-    if enforced:
+    result = _run_verify_sha256(tmp_path, check_sha256=check_sha256, expected="0" * 64)
+    if check_sha256:
         assert result.returncode != 0
         assert "checksum mismatch" in result.stderr
     else:
@@ -447,11 +422,24 @@ def test_checksum_mismatch_is_enforced_except_for_none_and_no_verify(
         assert "CHECKED" in result.stderr
 
 
-@pytest.mark.parametrize("mode", ["full", "auto", "checksum", "none"])
-def test_matching_checksum_passes_in_every_mode(tmp_path: Path, mode: str) -> None:
+def test_matching_checksum_passes(tmp_path: Path) -> None:
     right = hashlib.sha256(b"archive").hexdigest()
-    result = _run_verify_sha256(tmp_path, mode=mode, legacy_no_checksum=False, expected=right)
+    result = _run_verify_sha256(tmp_path, check_sha256=True, expected=right)
     assert result.returncode == 0, result.stderr
+
+
+def test_verify_values_match_install_ps1() -> None:
+    """install.sh and install.ps1 accept the same `--verify` / `-Verify` values."""
+    sh_values = re.search(
+        r"^case \"\$VERIFY\" in\n\s+([a-z|]+\)) ;;", INSTALL_SH.read_text(), re.MULTILINE
+    )
+    assert sh_values is not None
+    ps1 = (INSTALL_SH.parent / "install.ps1").read_text()
+    ps_values = re.search(r"\[ValidateSet\(([^)]*)\)\]\s*\[string\]\$Verify\b", ps1)
+    assert ps_values is not None
+    assert set(sh_values.group(1).rstrip(")").split("|")) == set(
+        re.findall(r'"(\w+)"', ps_values.group(1))
+    )
 
 
 def test_bogus_verify_value_fails_fast_even_on_a_dry_run() -> None:

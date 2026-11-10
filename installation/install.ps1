@@ -14,7 +14,7 @@ param(
   [switch]$DryRun,
   [ValidateSet("full", "auto", "checksum", "none")]
   [string]$Verify = "full",
-  # Old spellings, kept for one release: -NoVerify skipped only the SHA-256, and
+  # Old spellings, removed in 1.0: -NoVerify skipped only the SHA-256, and
   # -VerifyAttestation maps require -> full, auto -> auto, skip -> checksum.
   [switch]$NoVerify,
   [ValidateSet("auto", "require", "skip")]
@@ -26,6 +26,7 @@ $ErrorActionPreference = "Stop"
 if ($VerifyAttestation) {
   $Verify = @{ require = "full"; auto = "auto"; skip = "checksum" }[$VerifyAttestation]
 }
+$CheckSha256 = ($Verify -ne "none") -and -not $NoVerify
 
 function Resolve-LatestVersion {
   # The /releases/latest endpoint returns a 302 redirect to the
@@ -142,7 +143,7 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
   $zipPath = Join-Path $tmp $filename
   Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zipPath
-  if ($Verify -ne "none" -and -not $NoVerify) {
+  if ($CheckSha256) {
     $shaFile = Join-Path $tmp "$filename.sha256"
     Invoke-WebRequest -UseBasicParsing -Uri $shaUrl -OutFile $shaFile
     $expected = (Get-Content $shaFile -Raw).Split(" ")[0].Trim().ToLower()

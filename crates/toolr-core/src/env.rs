@@ -1,6 +1,12 @@
-//! Path env reads that must treat an empty value as unset. Use [`xdg_dir_env`] for `XDG_*_HOME`
-//! and [`non_empty_env_path`] for other path variables (`HOME`, prefixes), which no spec requires
-//! to be absolute. Every `TOOLR_*` boolean goes through [`env_truthy`], so they share one rule.
+//! Environment reads, in two halves.
+//!
+//! Paths treat an empty value as unset. Use [`xdg_dir_env`] for `XDG_*_HOME` and
+//! [`non_empty_env_path`] for other path variables (`HOME`, prefixes), which no spec requires to
+//! be absolute.
+//!
+//! Booleans share one rule: `1`, `true` or `yes` is on, `0`, `false` or `no` is off, ignoring case
+//! and surrounding whitespace. Every `TOOLR_*` boolean goes through [`env_truthy`], and bool
+//! option values parse with [`parse_bool`].
 
 use std::path::PathBuf;
 

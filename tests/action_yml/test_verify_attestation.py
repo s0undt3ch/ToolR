@@ -284,7 +284,7 @@ def test_rejects_name_and_digest_on_different_subjects(
     assert REJECTED in result.stderr
 
 
-def test_verify_none_and_the_deprecated_input_both_skip_the_step() -> None:
+def test_verify_checksum_and_the_deprecated_input_both_skip_the_step() -> None:
     """`verify: checksum` is the one spelling; `skip-attestation: true` still works but is deprecated."""
     data = yaml.safe_load(ACTION_YML.read_text())
     assert data["inputs"]["verify"]["default"] == "full"

@@ -10,12 +10,15 @@ its own release note and the replacement spelled out. It builds on the startup-l
 - `toolr_core::env::env_truthy(name)`: `1`, `true` or `yes`, case-insensitive, surrounding whitespace
   ignored; anything else, including unset, empty and `0`, is false.
 - Used by `TOOLR_TRUST_ALL`, `TOOLR_AUTO_INSTALL_UV` and `TOOLR_NO_CACHE_HINT`. The last one used to be
-  "set to anything", so `TOOLR_NO_CACHE_HINT=0` disabled the hint; it now enables it. Noted separately.
-- `arg(env=)` on a `bool` flag accepts `1/true/yes` and `0/false/no` instead of only `true/false`.
-  Anything else is still an error.
+  "set to anything", so `TOOLR_NO_CACHE_HINT=0` disabled the hint; it now leaves it on. Noted separately.
+- Every `bool` value parsed from text (positional, list or tuple element, `--opt=VALUE`, `arg(env=)`) accepts
+  `1/true/yes` and `0/false/no` through `parse_bool`, instead of only `true/false`. Anything else is still an
+  error, and `--help` no longer lists `[possible values: true, false]`. Noted in its own release note.
 - `TOOLR_AUTO_SYNC=1` is the documented name for "answer the sync/uv-install prompts with yes".
-  `TOOLR_AUTO_INSTALL_UV` stays as an alias until 1.0 and is documented as deprecated. Both feed the same
+  `TOOLR_AUTO_INSTALL_UV` stays as an alias, removed in 1.0. Once `TOOLR_AUTO_SYNC` is set at all it decides
+  alone (empty or unparsable is off); the alias counts only while it is unset. Both feed the same
   `ConsentMode` field. The user-facing messages name the new variable.
+- One table of the `TOOLR_*` variables lives in `docs/project-config.md`; other pages link to it.
 
 ## U-10: one `--verify=` spelling
 
@@ -28,15 +31,17 @@ its own release note and the replacement spelled out. It builds on the startup-l
 | `checksum` | yes | skipped | `--verify-attestation=skip` |
 | `none` | skipped | skipped | `--no-verify` plus `skip` |
 
-The action has no checksum-only mode of its own (it always checks the SHA-256), so it accepts `full`
-(default) and `none` (the old `skip-attestation: true`). The old spellings keep working, hidden from help
-and docs, for one release; `--no-verify` stays a separate legacy switch because it skipped only the SHA-256.
-In the action, `skip-attestation` gains a `deprecationMessage`.
+The values mean the same everywhere. The action always checks the SHA-256, so it offers only `full`
+(default) and `checksum`; a `validate-inputs` step rejects `none`, `auto` and anything else with a message.
+The old `skip-attestation: true` maps to `checksum` and gains a `deprecationMessage`. The old spellings keep
+working, undocumented, until 1.0; `--no-verify` stays a separate legacy switch because it skipped only the
+SHA-256. `install.sh` validates `--verify=` right after parsing and resolves "check the SHA-256?" once into
+`CHECK_SHA256`; `install.ps1` does the same with `$CheckSha256`.
 
 ## U-06: remove the deprecated surface
 
-- `arg()` loses `required`, `action`, `choices`, `nargs`, `group`; `ArgumentAnnotation`, `NargsType` and
-  `_deprecated` go with them. The static parser stops accepting them; each gets a build-time hint naming
+- `arg()` loses `required`, `action`, `choices`, `nargs`, `group`; `ArgumentAnnotation` stays and only those
+  fields go, along with `NargsType` and `_deprecated`. The static parser stops accepting them; each gets a build-time hint naming
   the replacement (as `must_exist` already does) rather than a bare unknown-keyword error. The argparse
   scanner's own `nargs`/`choices`/`action` are unrelated and stay.
 - `CommandGroup.command_group()` (method form) goes. The static parser binds `command_group` only when
@@ -46,17 +51,18 @@ In the action, `skip-attestation` gains a `deprecationMessage`.
   `AttributeError`. `toolr.testing` mirrors the rule. Pattern 1 of the parent resolution is deleted.
 - `ToolrDeprecationWarning` and the runner's filter stay: the class is still importable by users who
   filter on it, and costs nothing.
-- `docs/migration.md` stays one more release, reworded as "removed in 0.36". The `project deps` shim is
-  not part of this package.
+- `docs/migration.md` stays, reworded as "removed", and lists only the method form: `parent=` still works.
+  The `project deps` shim is not part of this package.
 
 ## U-05: trim `toolr.__all__`
 
 - Dropped from `toolr.__all__` and from the top-level imports: `report_on_import_errors` (no scaffold,
-  doc or in-repo `tools/` uses it), `MANIFEST_SCHEMA_VERSION` (a constant, still in
+  doc or in-repo `tools/` uses it, so the module is deleted), `MANIFEST_SCHEMA_VERSION` (a constant, still in
   `toolr._decorators` for the lock-step test) and `DispatchCommand` (every doc imports it from
   `toolr.sources`). `ArgSection` stays.
 - `Context.run` takes the named arguments `command.run` accepts: `cwd`, `env`, `input`, `text`,
-  `encoding`, besides the existing ones. `**kwargs` goes, so a typo is a `TypeError`.
+  `encoding`, besides the existing ones, all `None` when unset and forwarded only when set. `**kwargs`
+  goes, so a typo is a `TypeError`.
 - `which` and `warn` get documented in `docs/` and the reference index.
 - Skill references are regenerated; skill prose is searched for removed names.
 

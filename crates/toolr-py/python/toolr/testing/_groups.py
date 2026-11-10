@@ -583,15 +583,6 @@ def _is_command_group(
     )
 
 
-def _is_method_group_call(call: ast.Call) -> bool:
-    """Whether ``call`` is ``<x>.command_group(...)``, the removed method form when ``x`` isn't ``toolr``.
-
-    Only asked after ``_is_command_group`` said no. Mirrors ``is_method_group_call`` in
-    ``crates/toolr-core/src/parser/groups.rs``: change both together.
-    """
-    return isinstance(call.func, ast.Attribute) and call.func.attr == "command_group"
-
-
 def _supported_group_call(stmt: ast.stmt) -> tuple[str | None, ast.Call] | None:
     """The call a module-level statement binds, and the name it binds it to.
 
@@ -670,8 +661,10 @@ def _parameter_names(args: ast.arguments) -> set[str]:
 
 def _unbound_group_calls(
     tree: ast.Module, tables: dict[str, _ImportTable], module: str, memo: _Memo
-) -> list[ast.Call]:
+) -> list[tuple[ast.Call, bool]]:
     """Each toolr ``command_group(...)`` call the manifest build can't bind, in source order.
+
+    Each comes with whether it is the removed method form.
 
     That is any call that isn't the whole value of a bound statement (one
     ``_group_calls`` reads), a bound statement whose group name isn't a
@@ -686,7 +679,7 @@ def _unbound_group_calls(
     change both together.
     """
     table = tables[module]
-    found: list[ast.Call] = []
+    found: list[tuple[ast.Call, bool]] = []
 
     def is_toolr_group_call(call: ast.Call, shadowed: frozenset[str]) -> bool:
         """Whether ``call`` is toolr's ``command_group``.
@@ -714,9 +707,13 @@ def _unbound_group_calls(
     for stmt in tree.body:
         if bound := _bound_group_call(stmt, tables, module, memo):
             if _literal(_argument(bound.call, _NAME)) is None:
-                found.append(bound.call)
-        elif (supported := _supported_group_call(stmt)) and _is_method_group_call(supported[1]):
-            found.append(supported[1])
+                found.append((bound.call, False))
+        elif (
+            (supported := _supported_group_call(stmt))
+            and isinstance(supported[1].func, ast.Attribute)
+            and supported[1].func.attr == "command_group"
+        ):
+            found.append((supported[1], True))
         else:
             stack.append((stmt, frozenset()))
     while stack:
@@ -732,10 +729,10 @@ def _unbound_group_calls(
             stack.extend((child, inner) for child in body)
             continue
         if isinstance(node, ast.Call) and is_toolr_group_call(node, shadowed):
-            found.append(node)
+            found.append((node, False))
         stack.extend((child, shadowed) for child in ast.iter_child_nodes(node))
     # Source order, as the Rust walk gives, so the two messages match.
-    return sorted(found, key=lambda node: (node.lineno, node.col_offset))
+    return sorted(found, key=lambda found_call: (found_call[0].lineno, found_call[0].col_offset))
 
 
 def _import_tables(

@@ -142,8 +142,8 @@ and a command run stops with an error. Run `toolr project venv sync`
 when you're ready. This prompt replaces the uv install prompt, so it follows
 the same rules. With `toolr --quiet` or no terminal
 toolr doesn't ask and doesn't sync. `TOOLR_AUTO_SYNC=1` answers `y` without asking,
-including with `toolr --quiet` or no terminal, so the sync runs. `TOOLR_AUTO_INSTALL_UV` is the
-older name for the same switch and still works until 1.0, but only while `TOOLR_AUTO_SYNC` is unset.
+including with `toolr --quiet` or no terminal, so the sync runs. See the
+[environment variables](project-config.md#environment-variables) table.
 `toolr project trust --no-sync` only records the trust. If a sync you
 agreed to fails, the trust is kept and toolr exits non-zero.
 
@@ -176,8 +176,8 @@ repository on its own. There, `--help`, bare `toolr`, tab completion and
 refused commands build the manifest in memory. Only an explicit
 `toolr project manifest rebuild` or `toolr self build-manifest` writes it.
 
-For automation, set `TOOLR_TRUST_ALL=1`. Every toolr boolean variable reads `1`, `true` or `yes`
-(any case) as on; anything else, including `0` and an empty value, is off.
+For automation, set `TOOLR_TRUST_ALL=1` (see the
+[environment variables](project-config.md#environment-variables) table for what counts as on).
 The `s0undt3ch/ToolR` GitHub Action sets it for you; see
 [Project configuration](project-config.md#venv-location). toolr doesn't infer it
 from `CI=true`.
