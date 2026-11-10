@@ -30,8 +30,9 @@ group = command_group("sig", "Signals", description="Signal tests")
 @group.command
 def cleanup(ctx: Context) -> None:
     """Sleep, then clean up slowly."""
-    print("ready", flush=True)
     try:
+        # Inside the `try`, so a ^C sent the moment `ready` is read cannot land before it.
+        print("ready", flush=True)
         time.sleep(10)
     except KeyboardInterrupt:
         print("interrupted", flush=True)

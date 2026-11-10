@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import subprocess
 import sys
 
 import pytest
+
+import toolr
 
 
 def _run(code: str) -> subprocess.CompletedProcess[str]:
@@ -48,3 +51,19 @@ def test_types_unknown_attribute_still_raises():
     result = _run("import toolr.types; toolr.types.Nope")
     assert result.returncode != 0
     assert "has no attribute 'Nope'" in result.stderr
+
+
+def test_version_getattr_in_process(monkeypatch: pytest.MonkeyPatch):
+    # Registered so teardown drops the stand-in value the lookup caches on the module.
+    monkeypatch.setitem(vars(toolr), "__version__", "placeholder")
+    monkeypatch.delattr(toolr, "__version__")
+
+    def not_installed(_name: str) -> str:
+        raise importlib.metadata.PackageNotFoundError
+
+    monkeypatch.setattr(importlib.metadata, "version", not_installed)
+    assert toolr.__version__ == "0.0.0.not-installed"
+    assert vars(toolr)["__version__"] == "0.0.0.not-installed"
+
+    with pytest.raises(AttributeError, match="has no attribute 'nope'"):
+        toolr.nope  # noqa: B018
