@@ -24,6 +24,10 @@ on:
         type: string
         default: ''
         description: "Matrix Python version whose job also runs the `#[ignore]`d PowerShell completion tests, with the runner image's pwsh. Empty skips them. They don't depend on Python, so one job per OS is enough."
+      rust-python:
+        required: true
+        type: string
+        description: "Matrix Python version whose job also runs the Rust suite with coverage and, on Linux, the example-plugin and skill-refs drift gates. None of these depend on the matrix Python, so one job per OS is enough."
       pythons:
         required: true
         type: string
@@ -202,6 +206,7 @@ jobs:
         run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache `~/.cargo`
+        if: matrix.python-version == inputs.rust-python
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -210,6 +215,7 @@ jobs:
           key: ${{ inputs.cache-seed }}|${{ runner.os }}|cargo|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Cache Rust `target/coverage`
+        if: matrix.python-version == inputs.rust-python
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -217,6 +223,8 @@ jobs:
           key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|coverage|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Verify example-plugin manifest is in sync
+        # OS-independent: one Linux job covers it.
+        if: runner.os == 'Linux' && matrix.python-version == inputs.rust-python
         # Build-time invariant: the canonical example plugin's shipped
         # `toolr-manifest.json` must match what `toolr self build-manifest`
         # would regenerate from its current Python source. Drift here means
@@ -245,6 +253,7 @@ jobs:
           fi
 
       - name: Verify skill references and generated docs snippets are in sync
+        if: runner.os == 'Linux' && matrix.python-version == inputs.rust-python
         # Drift gate for the three in-tree agent skills
         # (`toolr-command-authoring`, `toolr-command-packaging`,
         # `toolr-ci-setup`) and the generated
@@ -295,8 +304,9 @@ jobs:
           uv run --no-sync coverage xml
           uv run --no-sync coverage report
 
-      - name: Install cargo-llvm-cov
-        # Replaces cargo-tarpaulin. tarpaulin's ptrace engine segfaulted
+      - name: Add the llvm-tools component
+        if: matrix.python-version == inputs.rust-python
+        # `cargo-llvm-cov` itself comes from `mise.toml`. Replaces cargo-tarpaulin. tarpaulin's ptrace engine segfaulted
         # non-deterministically on nested subprocess trees (toolr → sh →
         # python) used by cli_smoke and cache_fixtures (~50% repro on
         # Linux GHA; tarpaulin issues #461 / #790 / #317). cargo-llvm-cov
@@ -308,9 +318,7 @@ jobs:
         # / llvm-cov binaries. cargo-llvm-cov can install it on demand but
         # we add it explicitly so any failure surfaces here, not mid-run.
         shell: bash
-        run: |
-          rustup component add llvm-tools-preview
-          cargo install cargo-llvm-cov --locked
+        run: rustup component add llvm-tools-preview
 
       # toolr-py is a pyo3 cdylib that imports Python symbols at runtime
       # via the loaded CPython host. `cargo test` builds a standalone test
@@ -319,6 +327,7 @@ jobs:
       # pyo3 wrapper is exercised by Python-side tests via the cdylib;
       # excluding it from the Rust coverage run is the right call.
       - name: Run Rust Tests with Coverage
+        if: matrix.python-version == inputs.rust-python
         # The `#[ignore]`d PowerShell completion tests run in a second pass, in one job per OS that
         # sets `powershell-python`. `--no-report` runs accumulate profiles; `report` merges them.
         # -- --test-threads=1 keeps the subprocess-heavy integration suite serialised.
@@ -360,16 +369,25 @@ jobs:
           $r = TabExpansion2 -inputScript 'toolr se' -cursorColumn 8
           if (-not ($r.CompletionMatches.CompletionText -contains 'self')) { throw "no completion" }
 
-      - name: Upload coverage reports to Codecov
+      - name: Upload Python coverage to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           # Use OpenID Connect for secure authentication (no token needed)
           use_oidc: true
-          # Without these the CLI's search also uploads `.d` files, cargo
+          # Without an explicit file the CLI's search also uploads `.d` files, cargo
           # fingerprints and any source file with "coverage" in its name.
-          files: target/coverage/cobertura.xml,coverage.xml
+          files: coverage.xml
           disable_search: true
           flags: ${{ inputs.os }},${{ matrix.python-version }}
+
+      - name: Upload Rust coverage to Codecov
+        if: matrix.python-version == inputs.rust-python
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: target/coverage/cobertura.xml
+          disable_search: true
+          flags: ${{ inputs.os }},rust
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
