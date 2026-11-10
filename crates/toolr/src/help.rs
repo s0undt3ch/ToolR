@@ -5,7 +5,7 @@
 //!
 //! Clap's built-in help machinery is bypassed; this module is the
 //! renderer. See `cli.rs` (which disables clap's auto `--help`) and
-//! `dispatch/mod.rs` (which intercepts `--help`/`-h` and calls `print`).
+//! `dispatch` (which intercepts `--help`/`-h` and calls `print`).
 
 use std::io::IsTerminal;
 

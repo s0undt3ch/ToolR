@@ -174,8 +174,8 @@ fn about_text(cmd: &ClapCommand) -> String {
 struct RootFlagSpec {
     id: String,
     long: String,
-    short: Option<char>,
-    aliases: Vec<String>,
+    /// Every spelling: `--long`, `--alias`, `-s`.
+    spellings: Vec<String>,
     help: String,
     /// Offered as a completion: not hidden, and neither `--help` (the engine offers it) nor `--version`.
     offered: bool,
@@ -242,13 +242,7 @@ fn root_flag_specs() -> Vec<RootFlagSpec> {
             Some(RootFlagSpec {
                 id: a.get_id().to_string(),
                 long: a.get_long()?.to_string(),
-                short: a.get_short(),
-                aliases: a
-                    .get_all_aliases()
-                    .into_iter()
-                    .flatten()
-                    .map(str::to_string)
-                    .collect(),
+                spellings: crate::cli::spellings(a),
                 help: a.get_help().map(ToString::to_string).unwrap_or_default(),
                 offered: !a.is_hide_set()
                     && a.get_id() != "help"
@@ -345,7 +339,7 @@ fn scan_long<'a>(
     };
     let Some(spec) = specs
         .iter()
-        .find(|s| s.long == name || s.aliases.iter().any(|a| a == name))
+        .find(|s| s.spellings.contains(&format!("--{name}")))
     else {
         return Step::Stop;
     };
@@ -365,7 +359,12 @@ fn scan_long<'a>(
 fn scan_cluster<'a>(specs: &'a [RootFlagSpec], seen: &mut Seen<'a>, cluster: &str) -> Step {
     let flags: Option<Vec<&RootFlagSpec>> = cluster
         .chars()
-        .map(|c| specs.iter().find(|s| s.short == Some(c) && !s.takes_value))
+        .map(|c| {
+            let short = format!("-{c}");
+            specs
+                .iter()
+                .find(|s| !s.takes_value && s.spellings.contains(&short))
+        })
         .collect();
     match flags {
         Some(flags) => verdict(flags.into_iter().all(|f| seen.take(f)), 1),

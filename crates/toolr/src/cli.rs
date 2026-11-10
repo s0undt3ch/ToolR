@@ -20,18 +20,23 @@ fn help_styles() -> Styles {
 use toolr_core::manifest::{ArgumentKind, Group, Manifest};
 use toolr_core::text::strip_control_chars_per_line;
 
-/// A user group may not take the name of any built-in command, hidden ones included: clap
-/// panics on a duplicated subcommand name.
-fn user_group_collides(name: &str) -> bool {
-    builtin_names().iter().any(|b| b == name)
-}
-
-/// Drop every user group (and its commands) rooted at a name [`user_group_collides`] rejects, so
-/// completion offers what a run would accept. Silent: the warning is [`build_command`]'s.
-pub(crate) fn drop_reserved_user_groups(manifest: &mut Manifest) {
-    let reserved = |path: &str| user_group_collides(path.split('.').next().unwrap_or(path));
+/// Drop every user group (and its commands) rooted at the name of a built-in command, hidden ones
+/// included (clap panics on a duplicated subcommand name). Returns the dropped top-level group
+/// names so [`build_command`] can warn; completion calls it silently, so it offers what a run accepts.
+pub(crate) fn drop_reserved_user_groups(manifest: &mut Manifest) -> Vec<String> {
+    let reserved = |path: &str| {
+        let top = path.split('.').next().unwrap_or(path);
+        builtin_names().iter().any(|b| b == top)
+    };
+    let dropped = manifest
+        .groups
+        .iter()
+        .filter(|g| g.parent.is_none() && reserved(&g.name))
+        .map(|g| g.name.clone())
+        .collect();
     manifest.groups.retain(|g| !reserved(&g.full_path()));
     manifest.commands.retain(|c| !reserved(&c.group));
+    dropped
 }
 
 /// Index the manifest's groups by their parent's `full_path()`. Top-level
@@ -197,17 +202,21 @@ pub(crate) fn root_command() -> &'static Command {
 /// the heading is never hinted.
 fn root_flag(spelling: &str) -> Option<&'static Arg> {
     root_command().get_arguments().find(|a| {
-        a.get_help_heading() == Some(ROOT_HEADING)
-            && match spelling.strip_prefix("--") {
-                Some(long) => {
-                    a.get_long() == Some(long)
-                        || a.get_all_aliases().is_some_and(|al| al.contains(&long))
-                }
-                None => spelling
-                    .strip_prefix('-')
-                    .is_some_and(|c| c.chars().count() == 1 && a.get_short() == c.chars().next()),
-            }
+        a.get_help_heading() == Some(ROOT_HEADING) && spellings(a).iter().any(|s| s == spelling)
     })
+}
+
+/// Every spelling of `arg`: `--long`, `--alias` and `-s`. The one enumeration the root-flag
+/// scanners share.
+pub(crate) fn spellings(arg: &Arg) -> Vec<String> {
+    let longs = arg
+        .get_long()
+        .into_iter()
+        .chain(arg.get_all_aliases().unwrap_or_default());
+    longs
+        .map(|l| format!("--{l}"))
+        .chain(arg.get_short().map(|c| format!("-{c}")))
+        .collect()
 }
 
 /// The root flag a command-line token names, as a spelling: `--timeout-secs=5` names
@@ -758,16 +767,16 @@ fn build_hidden_subcommands() -> [Command; 2] {
 pub fn build_command(manifest: &Manifest) -> Command {
     let mut root = build_root_command();
 
+    let mut manifest = manifest.clone();
+    for name in drop_reserved_user_groups(&mut manifest) {
+        eprintln!(
+            "toolr: warning: ignoring user-defined group `{name}` — \
+             this name is reserved by toolr itself."
+        );
+    }
+    let manifest = &manifest;
     let children = children_by_parent(manifest);
     for group in children.get(&None).cloned().unwrap_or_default() {
-        if user_group_collides(&group.name) {
-            eprintln!(
-                "toolr: warning: ignoring user-defined group `{}` — \
-                 this name is reserved by toolr itself.",
-                group.name
-            );
-            continue;
-        }
         root = root.subcommand(build_group_subtree(group, manifest, &children));
     }
 

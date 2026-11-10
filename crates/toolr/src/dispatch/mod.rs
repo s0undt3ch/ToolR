@@ -41,21 +41,19 @@ fn resolve_help_target(
 /// Help for a request clap rejected first: `subcommand_required` commands (`self`, `project`,
 /// `self cache`) fail validation before the global help flag is seen. The target is the
 /// deepest command argv names.
-pub fn print_help_from_argv(argv: &RootArgv, root: &clap::Command, mode: HelpMode) {
+pub(crate) fn print_help_from_argv(argv: &RootArgv, root: &clap::Command, mode: HelpMode) {
     let (cmd, names) = argv.command_path(root);
     let path: Vec<&str> = std::iter::once(root.get_name()).chain(names).collect();
     help::print(cmd, &path.join(" "), mode);
 }
 
-pub fn dispatch(
+pub(crate) fn dispatch(
     matches: &ArgMatches,
     manifest: &Manifest,
     root: &mut clap::Command,
     run: Invocation,
 ) -> anyhow::Result<ExitCode> {
-    // Intercept --help / -h before any other routing. Tab-completion
-    // invocations (`__complete`) never set help flags, so they pass through
-    // immediately.
+    // `__complete` never sets help flags, so it must skip the interception.
     let mode = run.argv.help_mode().unwrap_or(HelpMode::Long);
     if !matches!(matches.subcommand(), Some(("__complete", _)))
         && let Some((resolved_cmd, bin_path, mode)) = resolve_help_target(root, matches, mode)
@@ -77,8 +75,7 @@ pub fn dispatch(
         return crate::project::dispatch_project(project_m, matches.get_flag("quiet"));
     }
     let Some((first_name, first_matches)) = matches.subcommand() else {
-        // No subcommand and no --help flag: show root help as a courtesy,
-        // using the same styled renderer so we never mix renderers.
+        // Same renderer as `--help`, so the styles never mix.
         help::print(root, "toolr", HelpMode::Long);
         return Ok(ExitCode::SUCCESS);
     };

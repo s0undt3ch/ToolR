@@ -63,7 +63,7 @@ other built-ins do.
   whole tree on each Tab.
 - **Root resolved once (X-12).** `Invocation { argv, cwd, root }` holds the lookup in a `OnceCell`, done
   on first use, so Tab and `--version` stay walk-free. `root()` lends the `Result` (`load_or_empty`
-  needs `MissingPyproject`, `no_project_hint` needs `NotFound`); `into_root()` hands the owned error to
+  needs `MissingPyproject`, `no_project_hint` needs `NotFound`); `into_cwd_and_root` hands the owned error to
   the user-command path, so its `?` message and source chain are unchanged. Out of scope: `project`
   handlers (they take `--path`, and core's `ensure_venv_ready` starts from the cwd), and the
   canonicalisation inside core trust / venv-key code.

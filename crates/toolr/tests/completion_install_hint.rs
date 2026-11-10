@@ -67,7 +67,7 @@ fn succeeded(args: &[&str], out: &Output) -> (String, String) {
 
 /// Quoted the way the binary quotes it: temp dirs can hold spaces (a
 /// `TMPDIR` with one) or backslashes (Windows). The full sentence is
-/// checked by the unit tests in `dispatch/self_cmd.rs`.
+/// checked by the `self_cmd` unit tests.
 fn source_line(path: &Path) -> String {
     format!("`source {}`", shell_quote(&path.display().to_string()))
 }
@@ -366,7 +366,7 @@ fn hint_names_no_path_when_home_is_not_utf8() {
 }
 
 /// An empty `HOME` no longer fails the install: the platform home stands in (unit-tested in
-/// `dispatch/self_cmd.rs`). `XDG_DATA_HOME` keeps this run out of the real home.
+/// the `self_cmd` module). `XDG_DATA_HOME` keeps this run out of the real home.
 #[test]
 fn empty_home_still_installs_under_xdg_data_home() {
     let host = Host::new();

@@ -42,11 +42,8 @@ fn run() -> anyhow::Result<ExitCode> {
     let run = Invocation::new(RootArgv::new(std::env::args().collect()), cwd);
     let mut built = match bootstrap::ensure_manifest(&run)? {
         Some(built) => built,
-        // `__complete` resolves the manifest itself; loading it here too
-        // would parse it twice per TAB and warn about a corrupt one.
-        // `--version` is answered by clap before the manifest is read, and neither should walk
-        // the tree.
-        None if run.argv.is_tab_completion() || run.argv.wants_version() => {
+        // Tab and `--version` need no manifest and must not walk the tree.
+        None if run.argv.is_tab_completion() || run.argv.skips_manifest_build() => {
             Manifest::empty().into()
         }
         None => load_or_empty(&run)?.into(),
@@ -55,7 +52,7 @@ fn run() -> anyhow::Result<ExitCode> {
     // completion drops the same entries in `resolve_manifest_at_tab`.
     built.manifest.drop_unsafe_names();
     if !run.argv.skips_manifest_build() {
-        // Printed under `-q` too (the rule is on the `-q` arg in `cli::root_flag_args`).
+        // Warnings print under `-q`: they report a manifest problem, not chatter.
         // Build warnings come only from a manifest built on this run.
         for message in built.all_warnings() {
             eprintln!("toolr: warning: {message}");
@@ -123,7 +120,7 @@ fn misplaced_root_flag_hint(
     let path = argv.command_path(root).1.join(" ");
     let found = words.get(at..).unwrap_or_default();
     let found: &[&str] = if found.is_empty() { &[spelling] } else { found };
-    cli::misplaced_flag_error(found, &path, argv.typed_before()).map(|m| m.hint)
+    cli::misplaced_flag_error(found, &path, argv.has_leading_root_flags()).map(|m| m.hint)
 }
 
 /// The line to follow clap's "unrecognized subcommand" when `cwd` is not in a

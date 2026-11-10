@@ -370,9 +370,8 @@ pub fn output_options_from_matches(matches: &ArgMatches) -> OutputOptions {
         opts.verbosity = Verbosity::Verbose;
         opts.log_level = "DEBUG".into();
     }
-    // `--no-timestamps` wins over `--timestamps`; clap enforces the
-    // mutex via `conflicts_with`, so at most one is set here.
-    if matches.get_flag("timestamps") && !matches.get_flag("no-timestamps") {
+    // clap's `conflicts_with` makes `--timestamps` and `--no-timestamps` mutually exclusive.
+    if matches.get_flag("timestamps") {
         opts.timestamps = true;
     }
     if let Some(secs) = matches.get_one::<f64>("timeout-secs").copied() {
@@ -2074,12 +2073,7 @@ mod output_options_tests {
     }
 
     #[test]
-    fn output_options_no_timestamps_wins_over_timestamps() {
-        // The cli defines `--no-timestamps` as the override; setting both
-        // (which clap rejects via `conflicts_with`) isn't reachable.
-        // The code path explicitly checks `!no-timestamps`, so the
-        // default-no-flag case + an explicit `--no-timestamps` both
-        // result in `timestamps = false`.
+    fn output_options_no_timestamps_gives_false() {
         let m = parse(&["--no-timestamps"]);
         let opts = output_options_from_matches(&m);
         assert!(!opts.timestamps);

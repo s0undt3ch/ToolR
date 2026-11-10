@@ -1,4 +1,4 @@
-//! Integration coverage for the `dispatch/` branches that aren't yet
+//! Integration coverage for the `dispatch` branches that aren't yet
 //! exercised by `cli_smoke.rs`, `complete_smoke.rs`, or the project
 //! subcommand test files.
 //!
@@ -101,7 +101,7 @@ fn group_without_leaf_command_prints_help_and_exits_nonzero() {
 // Note: bash-shaped `self completion print` is already covered by
 // `complete_smoke.rs::self_completion_print_emits_bash_script`. The tests
 // in this file focus on shells that file doesn't exercise (zsh/fish via
-// the inline unit tests in `dispatch/self_cmd.rs`) and on the
+// the `self_cmd` unit tests) and on the
 // `install` / error subcommands.
 
 #[test]

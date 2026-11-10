@@ -4,9 +4,10 @@
 use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 
-use clap::{Arg, ArgAction};
+use clap::ArgAction;
 use toolr_core::discovery::{DiscoveryError, discover_project_root};
 
+use crate::cli::spellings;
 use crate::help::HelpMode;
 
 /// The process argv and where its leading run of root flags ends. Root flags are not global,
@@ -14,19 +15,7 @@ use crate::help::HelpMode;
 pub(crate) struct RootArgv {
     words: Vec<String>,
     /// Index of the first word that is neither a root flag nor a root option's value.
-    first: usize,
-}
-
-/// Every spelling of `arg`: `--long`, `--alias` and `-s`.
-fn spellings(arg: &Arg) -> Vec<String> {
-    let longs = arg
-        .get_long()
-        .into_iter()
-        .chain(arg.get_all_aliases().unwrap_or_default());
-    longs
-        .map(|l| format!("--{l}"))
-        .chain(arg.get_short().map(|c| format!("-{c}")))
-        .collect()
+    command_at: usize,
 }
 
 impl RootArgv {
@@ -47,8 +36,8 @@ impl RootArgv {
         {
             first += if takes_value(word) { 2 } else { 1 };
         }
-        let first = first.min(words.len());
-        Self { words, first }
+        let command_at = first.min(words.len());
+        Self { words, command_at }
     }
 
     /// The whole argv, `toolr` included, as clap gets it.
@@ -57,7 +46,7 @@ impl RootArgv {
     }
 
     fn first_word(&self) -> Option<&str> {
-        self.words.get(self.first).map(String::as_str)
+        self.words.get(self.command_at).map(String::as_str)
     }
 
     fn is_builtin(&self) -> bool {
@@ -65,9 +54,9 @@ impl RootArgv {
             .is_some_and(|w| crate::cli::builtin_names().iter().any(|b| b == w))
     }
 
-    /// Whether root flags come before the first command word.
-    pub(crate) fn typed_before(&self) -> bool {
-        self.first > 1
+    /// Whether any root flag comes before the first command word.
+    pub(crate) fn has_leading_root_flags(&self) -> bool {
+        self.command_at > 1
     }
 
     /// `--version` or `-V` (alone or in a short cluster) among the root flags: clap prints the
@@ -78,7 +67,7 @@ impl RootArgv {
             .find(|a| matches!(a.get_action(), ArgAction::Version))
             .expect("the root declares --version");
         let short = version.get_short();
-        self.words[1.min(self.first)..self.first].iter().any(|w| {
+        self.words[1..self.command_at].iter().any(|w| {
             spellings(version).contains(w)
                 || w.strip_prefix('-')
                     .filter(|c| !c.starts_with('-'))
@@ -122,7 +111,7 @@ impl RootArgv {
     /// The user's words after `__complete <cwd>`, read from argv because clap drops a bare `--`
     /// that the shell passes through as the word being completed.
     pub(crate) fn complete_tokens(&self) -> &[String] {
-        self.words.get(self.first + 2..).unwrap_or_default()
+        self.words.get(self.command_at + 2..).unwrap_or_default()
     }
 
     /// The subcommands clap matches from the first command word, and the deepest one's command.
@@ -132,7 +121,7 @@ impl RootArgv {
     ) -> (&'c clap::Command, Vec<&str>) {
         let mut cmd = root;
         let mut names = Vec::new();
-        for word in self.words.get(self.first..).unwrap_or_default() {
+        for word in self.words.get(self.command_at..).unwrap_or_default() {
             let Some(sub) = cmd.find_subcommand(word) else {
                 break;
             };
@@ -147,7 +136,7 @@ impl RootArgv {
 pub(crate) struct Invocation {
     pub(crate) argv: RootArgv,
     pub(crate) cwd: PathBuf,
-    /// Looked up on first use, so Tab completion and `--version` never walk the tree (`main::run` skips both).
+    /// Looked up on first use, so Tab completion and `--version` never walk the tree.
     root: OnceCell<Result<PathBuf, DiscoveryError>>,
 }
 
@@ -169,8 +158,7 @@ impl Invocation {
         self.resolved().as_ref().map(PathBuf::as_path)
     }
 
-    /// The working directory and the owned lookup result, so a caller's `?` keeps the error's
-    /// source chain.
+    /// The working directory and the owned lookup result: `?` on the owned error keeps its source chain.
     pub(crate) fn into_cwd_and_root(self) -> (PathBuf, Result<PathBuf, DiscoveryError>) {
         self.resolved();
         let root = self.root.into_inner().expect("resolved above");
@@ -196,8 +184,9 @@ mod tests {
         for arg in crate::cli::root_command().get_arguments() {
             assert!(
                 !(arg.get_action().takes_values() && arg.get_short().is_some()),
-                "`{}` takes a value and has a short flag; RootArgv::new matches whole words and \
-                 must learn short clusters (`-qt 5`) and attached values (`-t5`) first",
+                "`{}` takes a value and has a short flag; RootArgv::new, `cli::root_flag_spelling` and \
+                 the completion scan read whole words and must learn short clusters (`-qt 5`) and \
+                 attached values (`-t5`) first",
                 arg.get_id()
             );
         }
@@ -223,10 +212,13 @@ mod tests {
         ] {
             let a = argv(args);
             assert_eq!(a.first_word(), Some("self"), "{args:?}");
-            assert!(a.skips_manifest_build() && a.typed_before(), "{args:?}");
+            assert!(
+                a.skips_manifest_build() && a.has_leading_root_flags(),
+                "{args:?}"
+            );
         }
         assert_eq!(argv(&["--timeout-secs"]).first_word(), None);
-        assert!(!argv(&["self"]).typed_before());
+        assert!(!argv(&["self"]).has_leading_root_flags());
     }
 
     #[test]
