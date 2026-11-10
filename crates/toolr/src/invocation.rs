@@ -66,12 +66,10 @@ impl RootArgv {
     /// `--version` or `-V` (alone or in a short cluster) among the root flags: clap prints the
     /// version and exits.
     fn wants_version(&self) -> bool {
-        let Some(version) = crate::cli::root_command()
+        let version = crate::cli::root_command()
             .get_arguments()
             .find(|a| matches!(a.get_action(), ArgAction::Version))
-        else {
-            return false;
-        };
+            .expect("the root declares --version");
         let short = version.get_short();
         self.words[1.min(self.first)..self.first].iter().any(|w| {
             spellings(version).contains(w)

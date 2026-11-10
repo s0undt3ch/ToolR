@@ -93,12 +93,9 @@ fn resolve_output_path(matches: &clap::ArgMatches, source_dir: &std::path::Path)
 
 fn write_atomically(path: &std::path::Path, contents: &str) -> anyhow::Result<()> {
     use std::io::Write;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut tmp = tempfile::NamedTempFile::new_in(
-        path.parent().unwrap_or_else(|| std::path::Path::new(".")),
-    )?;
+    let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
     tmp.write_all(contents.as_bytes())?;
     tmp.persist(path)
         .map_err(|e| anyhow::anyhow!("persist: {e}"))?;
@@ -303,6 +300,37 @@ pub(super) fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `run_self` given matches clap would never produce for `self` (it requires a subcommand).
+    fn self_error(cmd: clap::Command, args: &[&str]) -> String {
+        let matches = cmd.no_binary_name(true).try_get_matches_from(args).unwrap();
+        run_self(&matches, false).unwrap_err().to_string()
+    }
+
+    #[test]
+    fn run_self_rejects_a_missing_or_unknown_subcommand() {
+        let completion =
+            || clap::Command::new("completion").subcommand(clap::Command::new("other"));
+        let root = || clap::Command::new("self").subcommand(completion());
+        assert_eq!(self_error(root(), &[]), "expected a `self` subcommand");
+        assert_eq!(
+            self_error(root(), &["completion"]),
+            "expected a `self completion` subcommand"
+        );
+        assert_eq!(
+            self_error(root(), &["completion", "other"]),
+            "unsupported self completion subcommand: other"
+        );
+    }
+
+    #[test]
+    fn check_against_disk_reports_a_missing_file_as_out_of_date() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let path = tmp.path().join("toolr-manifest.json");
+        assert_eq!(check_against_disk(&path, "{}").unwrap(), ExitCode::from(2));
+        write_atomically(&path, "{}").unwrap();
+        assert_eq!(check_against_disk(&path, "{}").unwrap(), ExitCode::SUCCESS);
+    }
 
     #[test]
     fn bash_source_hint_names_the_path_and_bashrc() {
