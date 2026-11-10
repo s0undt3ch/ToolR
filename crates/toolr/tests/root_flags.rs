@@ -166,10 +166,17 @@ fn only_the_root_help_lists_the_toolr_options() {
     let root = stdout(&run(&tmp, &["--help"]));
     assert_eq!(root.matches("ToolR Options:").count(), 1, "{root}");
     // The placement rule sits under the heading, ahead of the first flag, in both help modes.
+    // Whitespace is collapsed because the note wraps on a narrow terminal.
     for help in [root.clone(), stdout(&run(&tmp, &["-h"]))] {
-        let section = &help[help.find("ToolR Options:").expect("heading")..];
-        let note = section.find("toolr --debug <command> ...").expect("note");
-        assert!(note < section.find("--debug").expect("flag"), "{help}");
+        let flat = help.split_whitespace().collect::<Vec<_>>().join(" ");
+        let section = &flat[flat.find("ToolR Options:").expect("heading")..];
+        let note = section
+            .find("toolr's options go before the command: toolr --debug <command> ...")
+            .expect("note");
+        assert!(
+            note < section.find("-d, --debug").expect("flag row"),
+            "{help}"
+        );
     }
     for flag in [
         "--debug",
