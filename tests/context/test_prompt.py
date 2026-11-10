@@ -225,13 +225,16 @@ def test_prompt_stream_defaults_to_none(ctx: Context):
 
 
 @pytest.mark.parametrize("stdin_kind", ["devnull", "empty_pipe"])
-def test_prompt_without_a_terminal_exits_cleanly(stdin_kind: str):
+@pytest.mark.parametrize(
+    "prompt_text", ["Proceed?", "Proceed [y/n]?", "Delete [bold]x[/bold] \\ [y]?"]
+)
+def test_prompt_without_a_terminal_exits_cleanly(stdin_kind: str, prompt_text: str):
     code = (
         "import pathlib, sys\n"
         "from toolr.testing import make_context\n"
         "ctx = make_context(pathlib.Path('.'))\n"
         "try:\n"
-        "    ctx.prompt('Proceed?', expected_type=bool)\n"
+        f"    ctx.prompt({prompt_text!r}, expected_type=bool)\n"
         "except SystemExit:\n"
         "    sys.stderr.write(ctx.stderr)\n"
         "    raise\n"
@@ -246,4 +249,4 @@ def test_prompt_without_a_terminal_exits_cleanly(stdin_kind: str):
     )
     assert proc.returncode == 1, proc.stderr
     assert "Traceback" not in proc.stderr
-    assert "Cannot prompt for 'Proceed?': no input available" in proc.stderr
+    assert f"Cannot prompt for '{prompt_text}': no input available" in proc.stderr

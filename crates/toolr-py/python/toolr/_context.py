@@ -166,8 +166,10 @@ class Context(Struct, frozen=True):
             self._console_stderr.print()
             self.exit(
                 1,
-                f"Cannot prompt for {escape(str(prompt))!r}: no input available "
-                "(standard input is closed or not a terminal).",
+                escape(
+                    f"Cannot prompt for '{prompt}': no input available "
+                    "(standard input is closed or not a terminal)."
+                ),
             )
 
     def print(self, *args: Any, **kwargs: Any) -> None:
