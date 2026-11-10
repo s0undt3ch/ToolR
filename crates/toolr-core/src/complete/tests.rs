@@ -1,7 +1,7 @@
 use crate::complete::{
     Candidate, Completion, Matching, complete, complete_matching, serve_completions,
 };
-use crate::manifest::{Argument, ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
+use crate::manifest::{Argument, ArgumentKind, Command, Group, Manifest, Origin};
 use crate::parser::SupportedType;
 
 /// Most existing assertions only care about candidate values, not their
@@ -12,10 +12,7 @@ fn values(candidates: Vec<Candidate>) -> Vec<String> {
 
 fn fixture() -> Manifest {
     Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
         groups: vec![
             Group {
                 name: "ci".into(),
@@ -100,8 +97,7 @@ fn fixture() -> Manifest {
                 is_dispatcher: false,
             },
         ],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
 }
 
@@ -248,10 +244,7 @@ fn flag_without_allowed_values_returns_empty() {
 
 fn nested_fixture() -> Manifest {
     Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
         groups: vec![
             Group {
                 name: "docker".into(),
@@ -301,8 +294,7 @@ fn nested_fixture() -> Manifest {
                 is_dispatcher: false,
             },
         ],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
 }
 
@@ -412,10 +404,7 @@ fn dispatcher_fixture() -> Manifest {
         arg
     };
     Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
         groups: vec![Group {
             name: "jenkins".into(),
             title: "Jenkins".into(),
@@ -484,8 +473,7 @@ fn dispatcher_fixture() -> Manifest {
                 is_dispatcher: false,
             },
         ],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
 }
 
@@ -687,10 +675,7 @@ fn flags_only_child_fixture() -> Manifest {
         allowed_values: vec![],
     };
     Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
         groups: vec![Group {
             name: "jenkins".into(),
             title: "Jenkins".into(),
@@ -728,8 +713,7 @@ fn flags_only_child_fixture() -> Manifest {
                 is_dispatcher: false,
             },
         ],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
 }
 
@@ -1372,10 +1356,7 @@ fn install_bash_without_xdg_falls_back_to_home_local_share() {
 
 fn manifest_with_leaf_args(arguments: Vec<Argument>) -> Manifest {
     Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
         groups: vec![Group {
             name: "cmd".into(),
             title: String::new(),
@@ -1395,8 +1376,7 @@ fn manifest_with_leaf_args(arguments: Vec<Argument>) -> Manifest {
             dispatched_from: None,
             is_dispatcher: false,
         }],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
 }
 
@@ -1479,10 +1459,7 @@ fn path_fixture() -> Manifest {
     use ArgumentKind::{Optional, Positional, VarPositional};
     let boxed = |t| Box::new(t);
     Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
         groups: vec![Group {
             name: "ci".into(),
             title: String::new(),
@@ -1528,8 +1505,7 @@ fn path_fixture() -> Manifest {
                 false,
             ),
         ],
-        plugin_warnings: vec![],
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
 }
 
@@ -1780,10 +1756,7 @@ fn attached_fixture() -> Manifest {
     );
     mode.metadata.aliases = vec!["--style".into()];
     Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
         groups: vec![Group {
             name: "ci".into(),
             title: String::new(),
@@ -1832,8 +1805,7 @@ fn attached_fixture() -> Manifest {
                 false,
             ),
         ],
-        plugin_warnings: vec![],
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
 }
 

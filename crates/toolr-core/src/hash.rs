@@ -1289,14 +1289,10 @@ parent = "django"
     /// Write a manifest carrying `input_records` to `project`'s `tools/`.
     fn manifest_of(project: &TempDir, input_records: InputRecords) -> crate::manifest::Manifest {
         let manifest = crate::manifest::Manifest {
-            schema_version: crate::manifest::SCHEMA_VERSION,
             static_hash: static_hash_of(&input_records.files),
-            third_party_hash: String::new(),
             toolr_version: env!("CARGO_PKG_VERSION").to_string(),
-            groups: vec![],
-            commands: vec![],
-            plugin_warnings: Vec::new(),
             input_records,
+            ..crate::manifest::Manifest::empty()
         };
         let path = project.path().join("tools/.toolr-manifest.json");
         crate::manifest::write_manifest(&path, &manifest).unwrap();

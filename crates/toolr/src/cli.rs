@@ -20,10 +20,23 @@ fn help_styles() -> Styles {
 use toolr_core::manifest::{ArgumentKind, Group, Manifest};
 use toolr_core::text::strip_control_chars_per_line;
 
-const RESERVED_GROUPS: &[&str] = &["self", "project"];
-
-fn user_group_collides(name: &str) -> bool {
-    RESERVED_GROUPS.contains(&name)
+/// Drop every user group (and its commands) rooted at the name of a built-in command, hidden ones
+/// included (clap panics on a duplicated subcommand name). Returns the dropped top-level group
+/// names so [`build_command`] can warn; completion calls it silently, so it offers what a run accepts.
+pub(crate) fn drop_reserved_user_groups(manifest: &mut Manifest) -> Vec<String> {
+    let reserved = |path: &str| {
+        let top = path.split('.').next().unwrap_or(path);
+        builtin_names().iter().any(|b| b == top)
+    };
+    let dropped = manifest
+        .groups
+        .iter()
+        .filter(|g| g.parent.is_none() && reserved(&g.name))
+        .map(|g| g.name.clone())
+        .collect();
+    manifest.groups.retain(|g| !reserved(&g.full_path()));
+    manifest.commands.retain(|c| !reserved(&c.group));
+    dropped
 }
 
 /// Index the manifest's groups by their parent's `full_path()`. Top-level
@@ -178,8 +191,8 @@ fn build_root_command() -> Command {
         )
 }
 
-/// The root command, built once: `root_flag` looks every spelling up in it.
-fn root_command() -> &'static Command {
+/// The root command without subcommands, built once: `root_flag` and `RootArgv` read its args.
+pub(crate) fn root_command() -> &'static Command {
     static ROOT: std::sync::OnceLock<Command> = std::sync::OnceLock::new();
     ROOT.get_or_init(build_root_command)
 }
@@ -189,17 +202,21 @@ fn root_command() -> &'static Command {
 /// the heading is never hinted.
 fn root_flag(spelling: &str) -> Option<&'static Arg> {
     root_command().get_arguments().find(|a| {
-        a.get_help_heading() == Some(ROOT_HEADING)
-            && match spelling.strip_prefix("--") {
-                Some(long) => {
-                    a.get_long() == Some(long)
-                        || a.get_all_aliases().is_some_and(|al| al.contains(&long))
-                }
-                None => spelling
-                    .strip_prefix('-')
-                    .is_some_and(|c| c.chars().count() == 1 && a.get_short() == c.chars().next()),
-            }
+        a.get_help_heading() == Some(ROOT_HEADING) && spellings(a).iter().any(|s| s == spelling)
     })
+}
+
+/// Every spelling of `arg`: `--long`, `--alias` and `-s`. The one enumeration the root-flag
+/// scanners share.
+pub(crate) fn spellings(arg: &Arg) -> Vec<String> {
+    let longs = arg
+        .get_long()
+        .into_iter()
+        .chain(arg.get_all_aliases().unwrap_or_default());
+    longs
+        .map(|l| format!("--{l}"))
+        .chain(arg.get_short().map(|c| format!("-{c}")))
+        .collect()
 }
 
 /// The root flag a command-line token names, as a spelling: `--timeout-secs=5` names
@@ -280,36 +297,9 @@ pub(crate) fn misplaced_flag_error(
     Some(Misplaced { spelling, hint })
 }
 
-/// The subcommand names clap matches at the start of `argv`, joined by spaces
-/// (`project venv sync`), and whether root flags were typed before the first. The names are
-/// plain identifiers, so safe to echo.
-pub(crate) fn command_path(root: &Command, argv: &[String]) -> (String, bool) {
-    let mut cmd = root;
-    let mut path: Vec<&str> = Vec::new();
-    let mut typed_before = false;
-    let mut words = argv.iter().skip(1);
-    while let Some(w) = words.next() {
-        if let Some(sub) = cmd.find_subcommand(w) {
-            cmd = sub;
-            path.push(w);
-        } else if path.is_empty() && w.starts_with('-') {
-            typed_before = true;
-            let takes_value = root_flag_spelling(w).is_some_and(|sp| {
-                &sp == w && root_flag(&sp).is_some_and(|f| f.get_action().takes_values())
-            });
-            if takes_value {
-                words.next();
-            }
-        } else {
-            break;
-        }
-    }
-    (path.join(" "), typed_before)
-}
-
 /// The `-d` / `-q` / timing flags. Root-only: a copy on a command would let a Python
 /// parameter of the same name or short collide with toolr's own flag. A new one also needs a
-/// row in docs/cli.md and a read in `dispatch::output_options_from_matches`.
+/// row in docs/cli.md and a read in `execute_build::output_options_from_matches`.
 fn root_flag_args() -> Vec<Arg> {
     vec![
         Arg::new("debug")
@@ -777,22 +767,38 @@ fn build_hidden_subcommands() -> [Command; 2] {
 pub fn build_command(manifest: &Manifest) -> Command {
     let mut root = build_root_command();
 
+    let mut manifest = manifest.clone();
+    for name in drop_reserved_user_groups(&mut manifest) {
+        eprintln!(
+            "toolr: warning: ignoring user-defined group `{name}` — \
+             this name is reserved by toolr itself."
+        );
+    }
+    let manifest = &manifest;
     let children = children_by_parent(manifest);
     for group in children.get(&None).cloned().unwrap_or_default() {
-        if user_group_collides(&group.name) {
-            eprintln!(
-                "toolr: warning: ignoring user-defined group `{}` — \
-                 this name is reserved by toolr itself.",
-                group.name
-            );
-            continue;
-        }
         root = root.subcommand(build_group_subtree(group, manifest, &children));
     }
 
-    root.subcommand(build_project_subcommand())
-        .subcommand(build_self_subcommand())
-        .subcommands(build_hidden_subcommands())
+    root.subcommands(builtin_subcommands())
+}
+
+/// toolr's own top-level commands, hidden ones included, in the order they join the root.
+fn builtin_subcommands() -> Vec<Command> {
+    let mut builtins = vec![build_project_subcommand(), build_self_subcommand()];
+    builtins.extend(build_hidden_subcommands());
+    builtins
+}
+
+/// The names of [`builtin_subcommands`]: a first word that is none of these names a user command.
+pub(crate) fn builtin_names() -> &'static [String] {
+    static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        builtin_subcommands()
+            .iter()
+            .map(|c| c.get_name().to_owned())
+            .collect()
+    })
 }
 
 /// The literal default clap gets for `arg`, if any. Only an `Optional`
@@ -1090,14 +1096,9 @@ mod cli_tree_tests {
         let runserver = child("runserver", "jenkins.job", "tools.job", "job");
 
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, runserver],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let jenkins = build_for(manifest);
@@ -1119,14 +1120,9 @@ mod cli_tree_tests {
         let image_child = child("push", "docker.image", "tools.image", "image");
 
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("docker")],
             commands: vec![build_cmd, image_cmd, build_child, image_child],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let docker = build_for(manifest);
@@ -1146,14 +1142,9 @@ mod cli_tree_tests {
         let status = normal_leaf("status", "jenkins");
 
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, status],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let jenkins = build_for(manifest);
@@ -1463,14 +1454,9 @@ mod cli_tree_tests {
         let migrate = child("migrate", "django", "tools.dispatcher", "django");
 
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("django")],
             commands: vec![dispatcher_cmd, migrate],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let django = build_for(manifest);
@@ -1481,18 +1467,13 @@ mod cli_tree_tests {
     #[test]
     fn user_groups_precede_built_ins_and_reserved_names_are_skipped() {
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("ci"), group("self"), group("project")],
             commands: vec![
                 normal_leaf("hello", "ci"),
                 normal_leaf("hijack", "self"),
                 normal_leaf("hijack", "project"),
             ],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
 
         let root = build_command(&manifest);
@@ -1515,14 +1496,9 @@ mod cli_tree_tests {
             empty_arg("debug", ArgumentKind::Flag),
         ];
         let manifest = Manifest {
-            schema_version: 1,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups: vec![group("ci")],
             commands: vec![run],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         };
         build_command(&manifest)
             .try_get_matches_from(std::iter::once("toolr").chain(args.iter().copied()))

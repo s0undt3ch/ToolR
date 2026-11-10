@@ -429,19 +429,6 @@ fn third_party_error_io_renders_path_and_reason() {
 
 use super::merge::merge_into_manifest;
 
-fn empty_base() -> Manifest {
-    Manifest {
-        schema_version: SCHEMA_VERSION,
-        static_hash: String::new(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
-        groups: vec![],
-        commands: vec![],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
-    }
-}
-
 /// Pairs each fragment with the file it would have been read from.
 fn from_files(fragments: Vec<ManifestFragment>) -> Vec<(ManifestFragment, PathBuf)> {
     fragments
@@ -525,7 +512,7 @@ fn command_names(manifest: &Manifest) -> Vec<(&str, &str)> {
 #[test]
 fn merge_adds_groups_and_commands_from_fragments() {
     let merged = merge_into_manifest(
-        empty_base(),
+        Manifest::empty(),
         from_files(vec![sample_fragment("pkg_a", "deploy", "rollout")]),
     );
     assert_eq!(merged.groups.len(), 1);
@@ -540,7 +527,7 @@ fn merge_adds_groups_and_commands_from_fragments() {
 /// silently.
 #[test]
 fn merge_keeps_the_local_group_over_a_disagreeing_plugin_one_silently() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(Group {
         name: "deploy".into(),
         title: "Deploy".into(),
@@ -566,7 +553,7 @@ fn merge_keeps_the_local_group_over_a_disagreeing_plugin_one_silently() {
 
 #[test]
 fn merge_skips_third_party_command_when_local_already_defines_it() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(Group {
         name: "deploy".into(),
         title: "Deploy".into(),
@@ -599,7 +586,7 @@ fn merge_skips_third_party_command_when_local_already_defines_it() {
 #[test]
 fn merge_disables_a_command_two_plugins_define() {
     let merged = merge_into_manifest(
-        empty_base(),
+        Manifest::empty(),
         from_files(vec![
             two_command_fragment("pkg_a", "deploy", "rollout", "status"),
             sample_fragment("pkg_b", "deploy", "rollout"),
@@ -626,7 +613,7 @@ fn merge_disables_a_command_two_plugins_define() {
 #[test]
 fn a_conflict_names_every_plugin_in_discovery_order() {
     let merged = merge_into_manifest(
-        empty_base(),
+        Manifest::empty(),
         from_files(vec![
             sample_fragment("pkg_a", "deploy", "rollout"),
             sample_fragment("pkg_b", "deploy", "rollout"),
@@ -655,7 +642,7 @@ fn conflict_message_spells_nested_and_top_level_paths() {
     let mut top_b = sample_fragment("pkg_b", "", "hello");
     top_b.groups.clear();
     let merged = merge_into_manifest(
-        empty_base(),
+        Manifest::empty(),
         from_files(vec![
             sample_fragment("pkg_a", "docker.image", "build"),
             top_a,
@@ -673,7 +660,7 @@ fn conflict_message_spells_nested_and_top_level_paths() {
 
 #[test]
 fn local_command_beats_two_clashing_plugins() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(static_group("ci", None));
     base.commands.push(local_command("ci", "lint", "tools.ci"));
     let merged = merge_into_manifest(
@@ -695,7 +682,7 @@ fn local_command_beats_two_clashing_plugins() {
 #[test]
 fn a_fragment_listing_one_command_twice_merges_it_once() {
     let merged = merge_into_manifest(
-        empty_base(),
+        Manifest::empty(),
         from_files(vec![two_command_fragment(
             "pkg_a", "deploy", "rollout", "rollout",
         )]),
@@ -711,7 +698,7 @@ fn a_fragment_listing_one_command_twice_merges_it_once() {
 #[test]
 fn a_group_emptied_by_a_conflict_is_kept() {
     let merged = merge_into_manifest(
-        empty_base(),
+        Manifest::empty(),
         from_files(vec![
             sample_fragment("pkg_a", "deploy", "rollout"),
             sample_fragment("pkg_b", "deploy", "rollout"),
@@ -724,7 +711,7 @@ fn a_group_emptied_by_a_conflict_is_kept() {
 
 #[test]
 fn warnings_run_skipped_then_shadowed_then_conflict() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(static_group("ci", None));
     base.commands.push(local_command("ci", "lint", "tools.ci"));
     let rollout = r#"[{"name": "rollout", "group": "deploy", "module": "m", "function": "f",
@@ -772,7 +759,7 @@ fn repeated_tuple_argument_round_trips_through_merge() {
 
     let json = serde_json::to_string(&frag).unwrap();
     let back: ManifestFragment = serde_json::from_str(&json).unwrap();
-    let merged = merge_into_manifest(empty_base(), from_files(vec![back]));
+    let merged = merge_into_manifest(Manifest::empty(), from_files(vec![back]));
     assert_eq!(merged.commands[0].arguments, [pair]);
 }
 
@@ -783,7 +770,7 @@ fn merge_forces_third_party_origin_and_clears_dispatch_flags() {
     frag.commands[0].origin = Origin::Static;
     frag.commands[0].dispatched_from = Some("argparse:django".into());
     frag.commands[0].is_dispatcher = true;
-    let merged = merge_into_manifest(empty_base(), from_files(vec![frag]));
+    let merged = merge_into_manifest(Manifest::empty(), from_files(vec![frag]));
     assert_eq!(merged.groups[0].origin, Origin::ThirdParty);
     let cmd = &merged.commands[0];
     assert_eq!(cmd.origin, Origin::ThirdParty);
@@ -797,7 +784,7 @@ fn argument_kind_propagates_through_merge() {
     frag.commands[0]
         .arguments
         .push(plain_argument("force", ArgumentKind::Flag));
-    let merged = merge_into_manifest(empty_base(), from_files(vec![frag]));
+    let merged = merge_into_manifest(Manifest::empty(), from_files(vec![frag]));
     assert_eq!(merged.commands[0].arguments.len(), 1);
     assert_eq!(merged.commands[0].arguments[0].kind, ArgumentKind::Flag);
 }
@@ -862,7 +849,7 @@ fn discover_and_merge_picks_up_all_valid_fragments() {
             }"#,
         ),
     ]);
-    let merged = discover_and_merge(tmp.path(), empty_base()).unwrap();
+    let merged = discover_and_merge(tmp.path(), Manifest::empty()).unwrap();
     let group_names: Vec<_> = merged.groups.iter().map(|g| g.name.clone()).collect();
     let command_names: Vec<_> = merged.commands.iter().map(|c| c.name.clone()).collect();
     assert!(group_names.contains(&"deploy".to_string()));
@@ -880,7 +867,7 @@ fn discover_and_merge_aborts_on_malformed_fragment() {
         ),
         ("pkg_bad", "not valid json at all"),
     ]);
-    let err = discover_and_merge(tmp.path(), empty_base()).expect_err("should abort");
+    let err = discover_and_merge(tmp.path(), Manifest::empty()).expect_err("should abort");
     assert!(matches!(err, ThirdPartyError::Json { .. }));
 }
 
@@ -895,7 +882,7 @@ fn discover_and_merge_no_op_when_venv_has_no_fragments() {
             .join("site-packages"),
     )
     .unwrap();
-    let merged = discover_and_merge(tmp.path(), empty_base()).unwrap();
+    let merged = discover_and_merge(tmp.path(), Manifest::empty()).unwrap();
     assert!(merged.groups.is_empty());
     assert!(merged.commands.is_empty());
 }
@@ -912,7 +899,7 @@ fn static_group(name: &str, parent: Option<&str>) -> Group {
 
 #[test]
 fn merge_keeps_same_leaf_groups_under_different_parents() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(static_group("image", Some("ci")));
     let merged = merge_into_manifest(
         base,
@@ -924,7 +911,7 @@ fn merge_keeps_same_leaf_groups_under_different_parents() {
 
 #[test]
 fn merge_dedups_fragment_group_against_nested_base_group_by_full_path() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(static_group("image", Some("docker")));
     let merged = merge_into_manifest(
         base,
@@ -935,7 +922,7 @@ fn merge_dedups_fragment_group_against_nested_base_group_by_full_path() {
 
 #[test]
 fn merge_keeps_the_host_title_when_a_fragment_group_collides() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     let mut host = static_group("image", Some("docker"));
     host.title = "Host title".into();
     base.groups.push(host);
@@ -969,7 +956,7 @@ fn bad_command_skips_the_whole_plugin() {
         ]"#,
     );
     let tmp = setup_fake_venv(&[("demo", &fragment)]);
-    let merged = discover_and_merge(tmp.path(), empty_base()).unwrap();
+    let merged = discover_and_merge(tmp.path(), Manifest::empty()).unwrap();
     assert!(merged.groups.is_empty(), "groups: {:?}", merged.groups);
     assert!(
         merged.commands.is_empty(),
@@ -1005,7 +992,7 @@ fn local_command(group: &str, name: &str, module: &str) -> Command {
 
 #[test]
 fn local_command_shadows_plugin_with_warning() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(static_group("ci", None));
     base.commands.push(local_command("ci", "lint", "tools.ci"));
     let fragment = v2_fragment_json(
@@ -1036,7 +1023,7 @@ fn local_command_shadows_plugin_with_warning() {
 
 #[test]
 fn shadow_message_spells_a_nested_group_with_spaces() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(static_group("docker", None));
     base.groups.push(static_group("image", Some("docker")));
     base.commands
@@ -1072,7 +1059,7 @@ fn good_plugin_loads_next_to_a_skipped_one() {
                       "function": "check", "arguments": []}]
     }"#;
     let tmp = setup_fake_venv(&[("pkg_good", &good), ("pkg_old", old)]);
-    let merged = discover_and_merge(tmp.path(), empty_base()).unwrap();
+    let merged = discover_and_merge(tmp.path(), Manifest::empty()).unwrap();
     let paths: Vec<String> = merged.groups.iter().map(Group::full_path).collect();
     assert_eq!(paths, ["deploy"]);
     let commands: Vec<_> = merged.commands.iter().map(|c| c.name.as_str()).collect();
@@ -1084,7 +1071,7 @@ fn good_plugin_loads_next_to_a_skipped_one() {
 
 #[test]
 fn skipped_warnings_come_before_shadowed_ones() {
-    let mut base = empty_base();
+    let mut base = Manifest::empty();
     base.groups.push(static_group("ci", None));
     base.commands.push(local_command("ci", "lint", "tools.ci"));
     // `a_shadow` sorts before `z_old`, so the order below is not just path order.
@@ -1106,7 +1093,7 @@ fn skipped_warnings_come_before_shadowed_ones() {
 
 #[test]
 fn plugin_warnings_round_trip_and_stay_off_an_empty_manifest() {
-    let mut manifest = empty_base();
+    let mut manifest = Manifest::empty();
     let bare = serde_json::to_string(&manifest).unwrap();
     assert!(!bare.contains("plugin_warnings"), "got: {bare}");
     manifest.plugin_warnings.push(PluginWarning {

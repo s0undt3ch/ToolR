@@ -48,7 +48,7 @@ pub fn build_spec(
         args,
         context: ContextSpec {
             repo_root: repo_root.to_string_lossy().into_owned(),
-            verbosity: output_opts.verbosity.clone(),
+            verbosity: output_opts.verbosity.as_str().to_owned(),
             timestamps: output_opts.timestamps,
             log_level: output_opts.log_level.clone(),
             default_timeout_secs: output_opts.default_timeout_secs,
@@ -156,7 +156,7 @@ pub fn build_dispatch_spec(
         args: parent_args,
         context: ContextSpec {
             repo_root: repo_root.to_string_lossy().into_owned(),
-            verbosity: output_opts.verbosity.clone(),
+            verbosity: output_opts.verbosity.as_str().to_owned(),
             timestamps: output_opts.timestamps,
             log_level: output_opts.log_level.clone(),
             default_timeout_secs: output_opts.default_timeout_secs,
@@ -314,13 +314,31 @@ fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
     }
 }
 
+/// How much toolr and the runner print; a string on the runner spec's wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Verbosity {
+    Quiet,
+    #[default]
+    Normal,
+    Verbose,
+}
+
+impl Verbosity {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Quiet => "quiet",
+            Self::Normal => "normal",
+            Self::Verbose => "verbose",
+        }
+    }
+}
+
 /// Plumbing struct bundling the "ToolR Options" flag
 /// values for `build_spec`. Adding a new flag is a one-field change
 /// instead of growing the `build_spec` argument list again.
 #[derive(Debug, Clone)]
 pub struct OutputOptions {
-    /// One of `"quiet"` / `"normal"` / `"verbose"`.
-    pub verbosity: String,
+    pub verbosity: Verbosity,
     pub timestamps: bool,
     /// Python `logging` level name.
     pub log_level: String,
@@ -331,13 +349,38 @@ pub struct OutputOptions {
 impl Default for OutputOptions {
     fn default() -> Self {
         Self {
-            verbosity: "normal".to_string(),
+            verbosity: Verbosity::Normal,
             timestamps: false,
             log_level: "INFO".to_string(),
             default_timeout_secs: None,
             default_no_output_timeout_secs: None,
         }
     }
+}
+
+/// Read the "ToolR Options" flags from the parsed matches
+/// into an `OutputOptions`. Centralised so every command path produces
+/// the same shape; missing flags fall back to `Default`.
+pub fn output_options_from_matches(matches: &ArgMatches) -> OutputOptions {
+    let mut opts = OutputOptions::default();
+    if matches.get_flag("quiet") {
+        opts.verbosity = Verbosity::Quiet;
+        opts.log_level = "INFO".into();
+    } else if matches.get_flag("debug") {
+        opts.verbosity = Verbosity::Verbose;
+        opts.log_level = "DEBUG".into();
+    }
+    // clap's `conflicts_with` makes `--timestamps` and `--no-timestamps` mutually exclusive.
+    if matches.get_flag("timestamps") {
+        opts.timestamps = true;
+    }
+    if let Some(secs) = matches.get_one::<f64>("timeout-secs").copied() {
+        opts.default_timeout_secs = Some(secs);
+    }
+    if let Some(secs) = matches.get_one::<f64>("no-output-timeout-secs").copied() {
+        opts.default_no_output_timeout_secs = Some(secs);
+    }
+    opts
 }
 
 fn extract_value(
@@ -1418,7 +1461,9 @@ mod tests {
         // strings here so a Rust-side rename gets caught by a unit
         // test instead of a CLI smoke run.
         let opts = OutputOptions::default();
-        assert_eq!(opts.verbosity, "normal");
+        assert_eq!(opts.verbosity.as_str(), "normal");
+        assert_eq!(Verbosity::Quiet.as_str(), "quiet");
+        assert_eq!(Verbosity::Verbose.as_str(), "verbose");
         assert!(!opts.timestamps);
         assert_eq!(opts.log_level, "INFO");
         assert!(opts.default_timeout_secs.is_none());
@@ -1977,5 +2022,74 @@ mod dispatched_pack_tests {
         let matches = clap_cmd.try_get_matches_from(vec!["migrate"]).unwrap();
         let packed = pack_child_args(&cmd, &matches, &bases("/repo")).unwrap();
         assert!(!packed.args.contains_key("label"));
+    }
+}
+
+#[cfg(test)]
+mod output_options_tests {
+    use super::*;
+    use toolr_core::manifest::Manifest;
+
+    fn parse(args: &[&str]) -> ArgMatches {
+        let manifest = Manifest::empty();
+        let root = crate::cli::build_command(&manifest);
+        let mut full: Vec<String> = vec!["toolr".into()];
+        full.extend(args.iter().map(|s| (*s).to_string()));
+        root.try_get_matches_from(full).unwrap()
+    }
+
+    #[test]
+    fn output_options_defaults_when_no_flags_set() {
+        let m = parse(&[]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.verbosity, OutputOptions::default().verbosity);
+        assert_eq!(opts.log_level, OutputOptions::default().log_level);
+        assert!(!opts.timestamps);
+        assert!(opts.default_timeout_secs.is_none());
+        assert!(opts.default_no_output_timeout_secs.is_none());
+    }
+
+    #[test]
+    fn output_options_quiet_overrides_verbosity_and_log_level() {
+        let m = parse(&["--quiet"]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.verbosity, Verbosity::Quiet);
+        assert_eq!(opts.log_level, "INFO");
+    }
+
+    #[test]
+    fn output_options_debug_overrides_verbosity_and_log_level() {
+        let m = parse(&["--debug"]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.verbosity, Verbosity::Verbose);
+        assert_eq!(opts.log_level, "DEBUG");
+    }
+
+    #[test]
+    fn output_options_timestamps_flag_is_propagated() {
+        let m = parse(&["--timestamps"]);
+        let opts = output_options_from_matches(&m);
+        assert!(opts.timestamps);
+    }
+
+    #[test]
+    fn output_options_no_timestamps_gives_false() {
+        let m = parse(&["--no-timestamps"]);
+        let opts = output_options_from_matches(&m);
+        assert!(!opts.timestamps);
+    }
+
+    #[test]
+    fn output_options_propagates_timeout_secs() {
+        let m = parse(&["--timeout-secs", "12.5"]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.default_timeout_secs, Some(12.5));
+    }
+
+    #[test]
+    fn output_options_propagates_no_output_timeout_secs() {
+        let m = parse(&["--no-output-timeout-secs", "3"]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.default_no_output_timeout_secs, Some(3.0));
     }
 }

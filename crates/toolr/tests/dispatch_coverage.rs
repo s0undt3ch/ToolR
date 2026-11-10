@@ -1,4 +1,4 @@
-//! Integration coverage for the dispatch.rs branches that aren't yet
+//! Integration coverage for the `dispatch` branches that aren't yet
 //! exercised by `cli_smoke.rs`, `complete_smoke.rs`, or the project
 //! subcommand test files.
 //!
@@ -9,15 +9,14 @@
 //! user / shell would see and prevents the coverage tests from drifting
 //! when the dispatch internals are refactored.
 //!
-//! Branches covered here, by `dispatch.rs` section:
+//! Branches covered here:
 //!
-//! - `dispatch()` no-subcommand path → prints root help (lines 39-42).
-//! - `dispatch()` group-without-leaf path → success + group help (56-59).
-//! - `run_self()` `completion print` per shell (273-280).
-//! - `run_self()` `completion install` outcomes (213-264).
-//! - `run_self_build_manifest()` argument plumbing (162-186).
-//! - `resolve_python_for_build()` explicit `--python` override + bail (188-211).
-//! - `output_options_from_matches()` flag propagation (366-390) — verified
+//! - `dispatch()` no-subcommand path → prints root help.
+//! - `dispatch()` group-without-leaf path → success + group help.
+//! - `run_self()` `completion print` per shell and `completion install` outcomes.
+//! - `run_self_build_manifest()` argument plumbing.
+//! - `resolve_python_for_build()` explicit `--python` override + bail.
+//! - `output_options_from_matches()` flag propagation — verified
 //!   indirectly by inspecting the spec the Python runner receives.
 
 mod common;
@@ -102,7 +101,7 @@ fn group_without_leaf_command_prints_help_and_exits_nonzero() {
 // Note: bash-shaped `self completion print` is already covered by
 // `complete_smoke.rs::self_completion_print_emits_bash_script`. The tests
 // in this file focus on shells that file doesn't exercise (zsh/fish via
-// the inline unit tests in `dispatch.rs`'s test module) and on the
+// the `self_cmd` unit tests) and on the
 // `install` / error subcommands.
 
 #[test]
@@ -169,7 +168,7 @@ fn self_completion_install_second_run_is_idempotent_or_force_required() {
         .output()
         .unwrap();
     // Either AlreadyInstalled (success) or SkippedNeedsForce (exit 1) —
-    // both branches in dispatch.rs:233-263 are covered by this combo.
+    // both branches in `self_cmd::run_completion_install` are covered by this combo.
     let stdout = String::from_utf8_lossy(&second.stdout);
     let stderr = String::from_utf8_lossy(&second.stderr);
     let combined = format!("{stdout}{stderr}");

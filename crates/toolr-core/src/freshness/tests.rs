@@ -38,14 +38,10 @@ fn manifest_for(tmp: &Path) -> Manifest {
     use crate::hash::compute_static_hash;
     use crate::manifest_build::compute_third_party_hash;
     Manifest {
-        schema_version: crate::manifest::SCHEMA_VERSION,
         static_hash: compute_static_hash(&tmp.join("tools")).unwrap(),
         third_party_hash: compute_third_party_hash(&tmp.join("venv")).unwrap(),
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
-        groups: vec![],
-        commands: vec![],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
 }
 
@@ -171,14 +167,10 @@ fn missing_venv_skips_third_party_axis() {
     // Cached manifest with an arbitrary non-empty third_party_hash —
     // under the new semantics this is ignored when venv_dir is None.
     let cached = Manifest {
-        schema_version: crate::manifest::SCHEMA_VERSION,
         static_hash: crate::hash::compute_static_hash(&tmp.path().join("tools")).unwrap(),
         third_party_hash: "arbitrary-non-empty-hash".to_string(),
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
-        groups: vec![],
-        commands: vec![],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     };
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::Fresh));
@@ -206,14 +198,10 @@ fn toolr_version_mismatch_without_venv_only_forces_static_drift() {
     let tmp = TempDir::new().unwrap();
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
     let cached = Manifest {
-        schema_version: crate::manifest::SCHEMA_VERSION,
         static_hash: crate::hash::compute_static_hash(&tmp.path().join("tools")).unwrap(),
         third_party_hash: "arbitrary-non-empty-hash".to_string(),
         toolr_version: "0.0.0-old".to_string(),
-        groups: vec![],
-        commands: vec![],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     };
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::StaticDrift));

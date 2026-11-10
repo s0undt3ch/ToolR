@@ -426,6 +426,21 @@ impl Argument {
 }
 
 impl Manifest {
+    /// A current-schema manifest with no commands and no hashes. Not `Default`, which would make
+    /// `schema_version` 0.
+    pub fn empty() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            static_hash: String::new(),
+            third_party_hash: String::new(),
+            toolr_version: String::new(),
+            groups: Vec::new(),
+            commands: Vec::new(),
+            plugin_warnings: Vec::new(),
+            input_records: InputRecords::default(),
+        }
+    }
+
     /// Drop every group whose path, and every command whose name, group or any
     /// argument identifier carries a control or invisible format character,
     /// with one warning each. Names reach clap and dispatch verbatim, so

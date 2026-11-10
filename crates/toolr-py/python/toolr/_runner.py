@@ -191,7 +191,7 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
     schema_version = _decode_spec(data, _SchemaVersionProbe, spec_path).schema_version
     if schema_version != SCHEMA_VERSION:
         # Upgrading toolr-py only helps when the binary is the newer side.
-        # Keep the remedies in step with dispatch.rs::warn_on_toolr_py_mismatch.
+        # Keep the remedies in step with dispatch/run.rs::warn_on_toolr_py_mismatch.
         if schema_version > SCHEMA_VERSION:
             remedy = (
                 "If tools/pyproject.toml caps the toolr-py version, loosen that pin, then run:\n"

@@ -18,37 +18,19 @@
 
 use clap::{Arg, ArgAction, Command as ClapCommand, ValueHint};
 use toolr_core::complete::Candidate;
-use toolr_core::manifest::{
-    ArgMetadata, Argument, ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION,
-};
+use toolr_core::manifest::{ArgMetadata, Argument, ArgumentKind, Command, Group, Manifest, Origin};
 use toolr_core::parser::SupportedType;
 
 /// The two top-level builtin subtrees, walked out of the clap command.
 const BUILTIN_ROOTS: &[&str] = &["project", "self"];
 
-/// A manifest with no user/third-party entries, so
-/// [`crate::cli::build_command`] yields *only* the hardcoded `self` /
-/// `project` builtin subtrees plus the root flags.
-fn empty_manifest() -> Manifest {
-    Manifest {
-        schema_version: SCHEMA_VERSION,
-        static_hash: String::new(),
-        third_party_hash: String::new(),
-        toolr_version: String::new(),
-        groups: Vec::new(),
-        commands: Vec::new(),
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
-    }
-}
-
 /// Synthetic [`Group`] + [`Command`] entries derived from the built-in
 /// subcommand tree wired up in [`crate::cli::build_command`]. Callers
-/// (currently only [`crate::dispatch::run_complete`]) merge these into a
+/// (currently only `dispatch::complete::run_complete`) merge these into a
 /// loaded manifest before delegating to
 /// [`toolr_core::complete::serve_completions`].
 pub fn built_in_completion_entries() -> (Vec<Group>, Vec<Command>) {
-    let root = crate::cli::build_command(&empty_manifest());
+    let root = crate::cli::build_command(&Manifest::empty());
     let mut groups = Vec::new();
     let mut commands = Vec::new();
 
@@ -192,8 +174,8 @@ fn about_text(cmd: &ClapCommand) -> String {
 struct RootFlagSpec {
     id: String,
     long: String,
-    short: Option<char>,
-    aliases: Vec<String>,
+    /// Every spelling: `--long`, `--alias`, `-s`.
+    spellings: Vec<String>,
     help: String,
     /// Offered as a completion: not hidden, and neither `--help` (the engine offers it) nor `--version`.
     offered: bool,
@@ -253,22 +235,14 @@ impl RootScan {
 }
 
 fn root_flag_specs() -> Vec<RootFlagSpec> {
-    let mut root = crate::cli::build_command(&empty_manifest());
-    // Unbuilt, clap has not added `--version` / `-V` yet, so build before reading the args.
-    root.build();
+    let root = crate::cli::root_command();
     let mut specs: Vec<RootFlagSpec> = root
         .get_arguments()
         .filter_map(|a| {
             Some(RootFlagSpec {
                 id: a.get_id().to_string(),
                 long: a.get_long()?.to_string(),
-                short: a.get_short(),
-                aliases: a
-                    .get_all_aliases()
-                    .into_iter()
-                    .flatten()
-                    .map(str::to_string)
-                    .collect(),
+                spellings: crate::cli::spellings(a),
                 help: a.get_help().map(ToString::to_string).unwrap_or_default(),
                 offered: !a.is_hide_set()
                     && a.get_id() != "help"
@@ -365,7 +339,7 @@ fn scan_long<'a>(
     };
     let Some(spec) = specs
         .iter()
-        .find(|s| s.long == name || s.aliases.iter().any(|a| a == name))
+        .find(|s| s.spellings.contains(&format!("--{name}")))
     else {
         return Step::Stop;
     };
@@ -385,7 +359,12 @@ fn scan_long<'a>(
 fn scan_cluster<'a>(specs: &'a [RootFlagSpec], seen: &mut Seen<'a>, cluster: &str) -> Step {
     let flags: Option<Vec<&RootFlagSpec>> = cluster
         .chars()
-        .map(|c| specs.iter().find(|s| s.short == Some(c) && !s.takes_value))
+        .map(|c| {
+            let short = format!("-{c}");
+            specs
+                .iter()
+                .find(|s| !s.takes_value && s.spellings.contains(&short))
+        })
         .collect();
     match flags {
         Some(flags) => verdict(flags.into_iter().all(|f| seen.take(f)), 1),
@@ -460,14 +439,9 @@ mod tests {
     fn merged_empty_manifest() -> Manifest {
         let (groups, commands) = built_in_completion_entries();
         Manifest {
-            schema_version: SCHEMA_VERSION,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
             groups,
             commands,
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
+            ..Manifest::empty()
         }
     }
 

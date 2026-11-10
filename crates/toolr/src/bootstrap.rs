@@ -10,82 +10,12 @@
 
 use std::path::Path;
 
-use toolr_core::discovery::discover_project_root;
 use toolr_core::manifest::manifest_path;
 use toolr_core::manifest_build::{Persist, Refresh, refresh};
 use toolr_core::parser::BuiltManifest;
 use toolr_core::venv::resolve_venv_path;
 
-/// Top-level subcommands toolr itself provides.
-const BUILTINS: &[&str] = &["__complete", "project", "self"];
-
-/// Decide whether the pre-clap bootstrap should skip building a missing
-/// manifest for this argv.
-///
-/// Building the manifest is an **execution-free** static parse (AST of
-/// `tools/*.py` + a third-party glob), so this skip is purely a latency
-/// optimisation — never a safety gate. Repository Python only runs when the
-/// user explicitly dispatches a command.
-///
-/// We still skip the built-ins that manage their own state
-/// (`__complete`, `project`, `self`) and `--version` (prints
-/// binary metadata only). `--help` and bare `toolr` take the static
-/// build so help renders the user's command tree.
-pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
-    const VERSION_FLAGS: &[&str] = &["--version", "-V"];
-
-    // `--version` prints binary metadata only — never needs the user
-    // manifest, so don't pay the build cost.
-    if argv
-        .iter()
-        .skip(1)
-        .any(|a| VERSION_FLAGS.contains(&a.as_str()))
-    {
-        return true;
-    }
-    // `--help` / bare `toolr` fall through to the static build so both
-    // surfaces render the user's command tree.
-    match first_positional(argv) {
-        None => false, // `toolr` alone (with or without `--help`) → static build so help shows user groups
-        Some(name) => BUILTINS.contains(&name),
-    }
-}
-
-/// Whether `argv` names a command that isn't one of toolr's built-ins, i.e.
-/// one that can only come from the project's manifest.
-pub(crate) fn names_user_command(argv: &[String]) -> bool {
-    first_positional(argv).is_some_and(|name| !BUILTINS.contains(&name))
-}
-
-/// Whether `argv` is a shell's TAB request (`toolr __complete …`).
-pub(crate) fn is_tab_completion(argv: &[String]) -> bool {
-    first_positional(argv) == Some("__complete")
-}
-
-/// Root options whose value is the next argument, with their aliases.
-/// `root_value_options_match_the_cli` fails when `cli::build_command` adds
-/// one this list lacks. A short value option (`-t 5`, `-t5`) would also
-/// need code in [`first_positional`], not just an entry here.
-const ROOT_VALUE_OPTIONS: &[&str] = &[
-    "--timeout-secs",
-    "--timeout",
-    "--no-output-timeout-secs",
-    "--nots",
-];
-
-/// First arg after `toolr` that isn't an option or a root option's value.
-fn first_positional(argv: &[String]) -> Option<&str> {
-    let mut args = argv.iter().skip(1).map(String::as_str);
-    while let Some(arg) = args.next() {
-        if !arg.starts_with('-') {
-            return Some(arg);
-        }
-        if ROOT_VALUE_OPTIONS.contains(&arg) {
-            args.next();
-        }
-    }
-    None
-}
+use crate::invocation::Invocation;
 
 /// Build the manifest when it's missing or stale: a pure-Rust parse of
 /// `tools/*.py` plus an execution-free glob of the venv's plugin fragments,
@@ -98,22 +28,19 @@ fn first_positional(argv: &[String]) -> Option<&str> {
 /// ran; a cached manifest has none. `Ok(None)` means the step didn't
 /// apply (no project, skip-list argv) or the rebuild failed with no
 /// usable cache; the caller then reads the file itself.
-pub(crate) fn ensure_manifest(
-    cwd: &Path,
-    argv: &[String],
-) -> anyhow::Result<Option<BuiltManifest>> {
-    if should_skip_auto_rebuild(argv) {
+pub(crate) fn ensure_manifest(run: &Invocation) -> anyhow::Result<Option<BuiltManifest>> {
+    if run.argv.skips_manifest_build() {
         return Ok(None);
     }
-    let Ok(root) = discover_project_root(cwd) else {
+    let Ok(root) = run.root() else {
         return Ok(None);
     };
-    let persist = if toolr_core::trust::is_trusted_now(&root) {
+    let persist = if toolr_core::trust::is_trusted_now(root) {
         Persist::Write
     } else {
         Persist::InMemory
     };
-    ensure_manifest_at(&root, persist)
+    ensure_manifest_at(root, persist)
 }
 
 /// [`ensure_manifest`] for a discovered `root`. A rebuild that fails warns
@@ -167,182 +94,10 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        Persist, ensure_manifest_at, is_tab_completion, manifest_path, names_user_command,
-        should_skip_auto_rebuild,
-    };
+    use super::{Persist, ensure_manifest_at, manifest_path};
     use toolr_core::freshness::{FreshnessVerdict, compare};
-    use toolr_core::manifest::{Group, Manifest, SCHEMA_VERSION, load_manifest};
+    use toolr_core::manifest::{Manifest, load_manifest};
     use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
-
-    fn manifest_with(groups: Vec<Group>) -> Manifest {
-        Manifest {
-            schema_version: SCHEMA_VERSION,
-            static_hash: String::new(),
-            third_party_hash: String::new(),
-            toolr_version: String::new(),
-            groups,
-            commands: vec![],
-            plugin_warnings: Vec::new(),
-            input_records: Default::default(),
-        }
-    }
-
-    /// A value-taking root option's value isn't the subcommand, so
-    /// `toolr --timeout-secs 5 self …` still skips the build.
-    #[test]
-    fn first_positional_skips_root_option_values() {
-        let argv = |args: &[&str]| -> Vec<String> {
-            std::iter::once("toolr")
-                .chain(args.iter().copied())
-                .map(String::from)
-                .collect()
-        };
-        for args in [
-            &["--timeout-secs", "5", "self", "--help"][..],
-            &["--timeout", "5", "--nots", "7", "self"][..],
-            &["--no-output-timeout-secs", "5", "-d", "self"][..],
-            &["--timeout-secs=5", "self"][..],
-        ] {
-            assert_eq!(
-                super::first_positional(&argv(args)),
-                Some("self"),
-                "{args:?}"
-            );
-            assert!(should_skip_auto_rebuild(&argv(args)), "{args:?}");
-        }
-        assert_eq!(super::first_positional(&argv(&["--timeout-secs"])), None);
-    }
-
-    /// Every `BUILTINS` name is a subcommand of the root command.
-    #[test]
-    fn builtins_are_root_subcommands() {
-        let command = crate::cli::build_command(&manifest_with(Vec::new()));
-        for name in super::BUILTINS {
-            assert!(
-                command.get_subcommands().any(|c| c.get_name() == *name),
-                "BUILTINS lists `{name}`, which isn't a root subcommand"
-            );
-        }
-    }
-
-    /// Every value-taking root option in the CLI, aliases included, is in
-    /// `ROOT_VALUE_OPTIONS`, and nothing else is.
-    #[test]
-    fn root_value_options_match_the_cli() {
-        let command = crate::cli::build_command(&manifest_with(Vec::new()));
-        let mut from_cli: Vec<String> = command
-            .get_arguments()
-            .filter(|a| !a.is_positional() && a.get_action().takes_values())
-            .flat_map(|a| {
-                let aliases = a.get_all_aliases().unwrap_or_default();
-                // A short value option would need handling too; listing it
-                // as `-x` makes the comparison below fail.
-                a.get_short()
-                    .map(|c| format!("-{c}"))
-                    .into_iter()
-                    .chain(
-                        a.get_long()
-                            .into_iter()
-                            .chain(aliases)
-                            .map(|l| format!("--{l}")),
-                    )
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        from_cli.sort();
-        let mut listed: Vec<String> = super::ROOT_VALUE_OPTIONS
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        listed.sort();
-        assert_eq!(from_cli, listed);
-    }
-
-    fn args(parts: &[&str]) -> Vec<String> {
-        std::iter::once("toolr")
-            .chain(parts.iter().copied())
-            .map(String::from)
-            .collect()
-    }
-
-    #[test]
-    fn fires_for_long_help_flag() {
-        // `toolr --help` must render the user's command tree; that needs
-        // the manifest. Falling through to the static build beats showing
-        // a partial help that hides every user command. The build is a
-        // pure-Rust AST parse — it executes no repository Python.
-        assert!(!should_skip_auto_rebuild(&args(&["--help"])));
-    }
-
-    #[test]
-    fn fires_for_short_help_flag() {
-        // Same as `--help`: take the execution-free static build.
-        assert!(!should_skip_auto_rebuild(&args(&["-h"])));
-    }
-
-    #[test]
-    fn skips_for_long_version_flag() {
-        // `--version` prints binary metadata — independent of the
-        // manifest, no reason to rebuild.
-        assert!(should_skip_auto_rebuild(&args(&["--version"])));
-    }
-
-    #[test]
-    fn skips_for_short_version_flag() {
-        assert!(should_skip_auto_rebuild(&args(&["-V"])));
-    }
-
-    #[test]
-    fn fires_for_bare_toolr() {
-        // Bare `toolr` falls through to clap's auto-generated help,
-        // which is the same surface as `--help`. The static build it
-        // triggers executes no repository Python.
-        assert!(!should_skip_auto_rebuild(&args(&[])));
-    }
-
-    #[test]
-    fn skips_for_tab_completion() {
-        assert!(should_skip_auto_rebuild(&args(&[
-            "__complete",
-            "/tmp",
-            "..."
-        ])));
-        assert!(is_tab_completion(&args(&["__complete", "/tmp", "..."])));
-        assert!(!is_tab_completion(&args(&["project", "__complete"])));
-    }
-
-    #[test]
-    fn skips_for_project_subcommands() {
-        assert!(should_skip_auto_rebuild(&args(&[
-            "project", "manifest", "rebuild"
-        ])));
-    }
-
-    #[test]
-    fn skips_for_self_subcommands() {
-        assert!(should_skip_auto_rebuild(&args(&["self", "cache", "list"])));
-    }
-
-    #[test]
-    fn fires_for_a_user_group_named_init() {
-        assert!(!should_skip_auto_rebuild(&args(&["init", "hello"])));
-        assert!(names_user_command(&args(&["init", "hello"])));
-    }
-
-    #[test]
-    fn fires_for_user_command() {
-        assert!(!should_skip_auto_rebuild(&args(&[
-            "jenkins", "job", "migrate"
-        ])));
-    }
-
-    #[test]
-    fn fires_with_leading_root_flag() {
-        assert!(!should_skip_auto_rebuild(&args(&[
-            "--debug", "django", "migrate"
-        ])));
-    }
 
     fn tools_repo() -> tempfile::TempDir {
         let tmp = tempfile::TempDir::new().unwrap();
@@ -431,7 +186,7 @@ mod tests {
         let tmp = tools_repo();
         let path = manifest_path(tmp.path());
         std::fs::write(tmp.path().join("tools/broken.py"), "def not closed(\n").unwrap();
-        let mut stale = manifest_with(Vec::new());
+        let mut stale = Manifest::empty();
         stale.toolr_version = "0.0.0-stale".into();
         toolr_core::manifest::write_manifest(&path, &stale).unwrap();
 

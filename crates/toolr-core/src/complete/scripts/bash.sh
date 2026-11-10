@@ -327,7 +327,7 @@ _toolr_complete() {
     if [[ $_toolr_raw_cur == --?*=* ]]; then
         _toolr_opt_prefix=${_toolr_raw_cur%%=*}=
     fi
-    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs (pinned by
+    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch/complete.rs (pinned by
     # crates/toolr/tests/complete_protocol_lockstep.rs; keep this line shape).
     case $_toolr_rc in
         0) ;;

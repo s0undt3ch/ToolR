@@ -48,7 +48,7 @@ _toolr() {
     # `--opt=value`: complete the part after the first `=`, keeping `--opt=` in the line.
     local attached=0
     [[ $cur == --?*=* ]] && attached=1
-    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs (pinned by
+    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch/complete.rs (pinned by
     # crates/toolr/tests/complete_protocol_lockstep.rs; keep this line shape).
     # `_files` reads the raw word: zsh's `_files` dequotes `PREFIX` itself.
     case $rc in

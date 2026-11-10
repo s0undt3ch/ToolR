@@ -2,9 +2,7 @@ use super::model::*;
 
 fn sample_manifest() -> Manifest {
     Manifest {
-        schema_version: SCHEMA_VERSION,
         static_hash: "abc123".into(),
-        third_party_hash: "".into(),
         toolr_version: "1.0.0".into(),
         groups: vec![Group {
             name: "ci".into(),
@@ -25,9 +23,17 @@ fn sample_manifest() -> Manifest {
             dispatched_from: None,
             is_dispatcher: false,
         }],
-        plugin_warnings: Vec::new(),
-        input_records: Default::default(),
+        ..Manifest::empty()
     }
+}
+
+#[test]
+fn empty_manifest_is_current_schema_and_round_trips() {
+    let empty = Manifest::empty();
+    assert_eq!(empty.schema_version, SCHEMA_VERSION);
+    assert!(empty.groups.is_empty() && empty.commands.is_empty());
+    let json = serde_json::to_string(&empty).unwrap();
+    assert_eq!(serde_json::from_str::<Manifest>(&json).unwrap(), empty);
 }
 
 #[test]
