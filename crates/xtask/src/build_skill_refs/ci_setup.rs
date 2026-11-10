@@ -138,9 +138,9 @@ inputs:
     description: |
       ToolR version to install.
     default: ""
-  skip-attestation:
-    description: "Skip gh attestation verify."
-    default: "false"
+  verify:
+    description: "Verify the attestation."
+    default: "full"
 
 outputs:
   version:
@@ -159,7 +159,7 @@ outputs:
             | Name | Default | Description |\n\
             | ---- | ------- | ----------- |\n\
             | `version` | _(empty)_ | ToolR version to install. |\n\
-            | `skip-attestation` | `false` | Skip gh attestation verify. |\n\n\
+            | `verify` | `full` | Verify the attestation. |\n\n\
             ## Outputs\n\n\
             | Name | Description |\n\
             | ---- | ----------- |\n\

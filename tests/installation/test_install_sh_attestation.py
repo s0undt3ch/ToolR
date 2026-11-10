@@ -33,7 +33,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_SH = REPO_ROOT / "installation" / "install.sh"
 
 REJECTED = "none from the s0undt3ch/ToolR release workflow on main for this exact archive"
-SKIP_HINT = "--verify-attestation=skip"
+SKIP_HINT = "--verify=checksum"
 GH_FLOOR = "install.sh: gh >= 2.56 is required to verify attestations"
 
 pytestmark = [
@@ -72,7 +72,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
     """Return a callable that runs install.sh's `verify_attestation`.
 
     `gh=False` leaves `gh` off `PATH`; any other keyword argument goes to
-    `write_gh_stub`. `mode` and `repo` set `VERIFY_ATTESTATION` and
+    `write_gh_stub`. `mode` and `repo` set `VERIFY` and
     `REPO`. `hashers` are the SHA-256 tools on `PATH`: a name links the
     host's tool, a `(name, script)` pair installs a stub. Every `gh`
     argument list but `--version` is appended to `tmp_path / "gh_calls"`.
@@ -91,7 +91,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
     def run(
         *,
         gh: bool = True,
-        mode: str = "require",
+        mode: str = "full",
         repo: str = "s0undt3ch/ToolR",
         hashers: tuple[str | tuple[str, str], ...] = ("sha256sum", "shasum"),
         **stub: Any,
@@ -115,7 +115,7 @@ def verify_runner(tmp_path: Path) -> RunVerify:
         wrapped = (
             "set -eu\n"
             f"REPO={shlex.quote(repo)}\n"
-            f"VERIFY_ATTESTATION={shlex.quote(mode)}\n"
+            f"VERIFY={shlex.quote(mode)}\n"
             f"{script}\n"
             f"verify_attestation {shlex.quote(archive.as_posix())}\n"
             "echo VERIFIED >&2\n"
@@ -208,7 +208,7 @@ def test_rejects_signer_off_main(verify_runner: RunVerify, signer: str) -> None:
     assert "no matching CertificateIdentity" in result.stderr
 
 
-@pytest.mark.parametrize("mode", ["require", "auto"])
+@pytest.mark.parametrize("mode", ["full", "auto"])
 @pytest.mark.parametrize("gh_version", ["2.55.0", "2.51.0", "1.99.0", "garbage"])
 def test_rejects_gh_older_than_2_56(
     verify_runner: RunVerify, tmp_path: Path, gh_version: str, mode: str
@@ -251,14 +251,14 @@ def test_non_numeric_count_fails_closed(verify_runner: RunVerify, stdout: str) -
 
 
 def test_skip_never_calls_gh(verify_runner: RunVerify, tmp_path: Path) -> None:
-    result = verify_runner(build_configs=[CI_BUILD], mode="skip")
+    result = verify_runner(build_configs=[CI_BUILD], mode="checksum")
     assert result.returncode == 0, result.stderr
     assert "skipping attestation verification" in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
 def test_require_without_gh_fails_closed(verify_runner: RunVerify) -> None:
-    result = verify_runner(gh=False, mode="require")
+    result = verify_runner(gh=False, mode="full")
     assert result.returncode != 0
     assert "the 'gh' CLI is not on PATH" in result.stderr
     assert SKIP_HINT in result.stderr
@@ -273,7 +273,7 @@ def test_auto_without_gh_warns_and_continues(verify_runner: RunVerify) -> None:
 def test_invalid_mode_fails(verify_runner: RunVerify) -> None:
     result = verify_runner(build_configs=[RELEASE_BUILD], mode="maybe")
     assert result.returncode != 0
-    assert "invalid --verify-attestation value" in result.stderr
+    assert "invalid --verify value" in result.stderr
 
 
 def test_repo_override_drives_the_identities(verify_runner: RunVerify, tmp_path: Path) -> None:
@@ -350,3 +350,36 @@ def test_rejects_name_and_digest_on_different_subjects(verify_runner: RunVerify)
     )
     assert result.returncode != 0
     assert REJECTED in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        ([], "verify:  full"),
+        (["--verify=auto"], "verify:  auto"),
+        (["--verify", "none"], "verify:  none"),
+        (["--verify-attestation=require"], "verify:  full"),
+        (["--verify-attestation=skip"], "verify:  checksum"),
+        (["--verify-attestation", "auto"], "verify:  auto"),
+        (["--no-verify"], "verify:  full (no checksum)"),
+    ],
+)
+def test_verify_flag_and_its_old_spellings(args: list[str], expected: str) -> None:
+    """`--verify` is the one spelling; the old flags map onto it."""
+    sh = shutil.which("sh")
+    assert sh is not None
+    result = subprocess.run(  # noqa: S603  # sh + script path are test-controlled
+        [
+            sh,
+            str(INSTALL_SH),
+            "--dry-run",
+            "--version",
+            "0.0.0",
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert expected in result.stderr

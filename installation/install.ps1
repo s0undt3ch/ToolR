@@ -12,12 +12,20 @@ param(
   [string]$Prefix,
   [string]$Repo = "s0undt3ch/ToolR",
   [switch]$DryRun,
+  [ValidateSet("full", "auto", "checksum", "none")]
+  [string]$Verify = "full",
+  # Old spellings, kept for one release: -NoVerify skipped only the SHA-256, and
+  # -VerifyAttestation maps require -> full, auto -> auto, skip -> checksum.
   [switch]$NoVerify,
   [ValidateSet("auto", "require", "skip")]
-  [string]$VerifyAttestation = "require"
+  [string]$VerifyAttestation
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($VerifyAttestation) {
+  $Verify = @{ require = "full"; auto = "auto"; skip = "checksum" }[$VerifyAttestation]
+}
 
 function Resolve-LatestVersion {
   # The /releases/latest endpoint returns a 302 redirect to the
@@ -42,19 +50,19 @@ function Resolve-LatestVersion {
 
 function Test-AttestationVerified {
   param([string]$Path)
-  if ($VerifyAttestation -eq "skip") {
-    Write-Host "skipping attestation verification (-VerifyAttestation skip)"
+  if ($Verify -eq "checksum" -or $Verify -eq "none") {
+    Write-Host "skipping attestation verification (-Verify $Verify)"
     return
   }
   $gh = Get-Command gh -ErrorAction SilentlyContinue
   if (-not $gh) {
-    if ($VerifyAttestation -eq "require") {
+    if ($Verify -eq "full") {
       throw @"
 cannot verify the release's SLSA build provenance: the 'gh' CLI is not on PATH.
   toolr archives are signed; verification needs GitHub CLI -> https://cli.github.com
   Choose one:
     * install 'gh' and re-run this installer (recommended), or
-    * re-run with -VerifyAttestation skip to install WITHOUT supply-chain verification.
+    * re-run with -Verify checksum to install WITHOUT supply-chain verification.
 "@
     }
     Write-Warning "skipping attestation verification ('gh' CLI not installed) -- the archive is NOT supply-chain verified"
@@ -66,7 +74,7 @@ cannot verify the release's SLSA build provenance: the 'gh' CLI is not on PATH.
   if (-not ($ghVersion -match '^gh version (\d+\.\d+)') -or [version]$matches[1] -lt [version]'2.56') {
     throw @"
 gh >= 2.56 is required to verify attestations (found: $ghVersion)
-  upgrade 'gh', or re-run with -VerifyAttestation skip to install WITHOUT supply-chain verification.
+  upgrade 'gh', or re-run with -Verify checksum to install WITHOUT supply-chain verification.
 "@
   }
   # Same rules as action.yml's verify-attestation step: ci.yml shares the signer, so only
@@ -107,7 +115,7 @@ gh >= 2.56 is required to verify attestations (found: $ghVersion)
   if (-not ([int]::TryParse((($count | Out-String).Trim()), [ref]$parsed)) -or $parsed -lt 1) {
     throw @"
 $archiveName has a valid $Repo attestation, but none from the $Repo release workflow on main for this exact archive
-  install a published release; -VerifyAttestation skip turns off this check entirely.
+  install a published release; -Verify checksum turns off this check entirely.
 "@
   }
 }
@@ -134,7 +142,7 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
   $zipPath = Join-Path $tmp $filename
   Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zipPath
-  if (-not $NoVerify) {
+  if ($Verify -ne "none" -and -not $NoVerify) {
     $shaFile = Join-Path $tmp "$filename.sha256"
     Invoke-WebRequest -UseBasicParsing -Uri $shaUrl -OutFile $shaFile
     $expected = (Get-Content $shaFile -Raw).Split(" ")[0].Trim().ToLower()

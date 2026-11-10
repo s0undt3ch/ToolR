@@ -21,12 +21,18 @@ inputs:
       release format started with that version.
     default: "0.35.1"
 
+  verify:
+    description: |
+      `full` (the default) cryptographically verifies the SLSA build
+      provenance the release workflow attaches to every archive with
+      `gh attestation verify`. `none` skips that check; the SHA-256 is
+      still checked. Same spellings as the installers' `--verify`.
+    default: "full"
+
   skip-attestation:
     description: |
-      Set to `true` to skip `gh attestation verify` on the
-      downloaded archive. Defaults to `false`; the action
-      cryptographically verifies the SLSA build provenance the
-      release workflow attaches to every archive.
+      Deprecated: use `verify: none`. `true` skips `gh attestation verify`.
+    deprecationMessage: "Use `verify: none` instead of `skip-attestation: true`."
     default: "false"
 
   github-token:
@@ -279,8 +285,8 @@ runs:
       # No cache-hit guard: attestation is verified on every run against
       # GitHub's attestation store, so a poisoned cached archive is
       # rejected before it reaches PATH (SEC-09). Only fork PRs / an
-      # explicit `skip-attestation: true` bypass it.
-      if: inputs.skip-attestation != 'true'
+      # explicit `verify: none` bypass it.
+      if: inputs.verify != 'none' && inputs.skip-attestation != 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -296,7 +302,7 @@ runs:
         set -euo pipefail
         if ! command -v gh >/dev/null 2>&1; then
           echo "setup-toolr: attestation verification requires the 'gh' CLI" >&2
-          echo "setup-toolr: install gh or pass 'skip-attestation: true' to bypass" >&2
+          echo "setup-toolr: install gh or pass 'verify: none' to bypass" >&2
           exit 1
         fi
         # gh before 2.56 can't load GitHub's current Sigstore trusted root.
@@ -332,7 +338,7 @@ runs:
                 | length')
         if ! [ "$count" -ge 1 ] 2>/dev/null; then
           echo "setup-toolr: ${ARCHIVE_NAME} has a valid ToolR attestation but was not built by the ToolR release workflow on main" >&2
-          echo "setup-toolr: install a published release; 'skip-attestation: true' turns off this check entirely" >&2
+          echo "setup-toolr: install a published release; 'verify: none' turns off this check entirely" >&2
           exit 1
         fi
 
