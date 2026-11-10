@@ -117,6 +117,8 @@ pub enum UnsupportedCommandKind {
     Stacked,
     /// A `command_group(...)` call that isn't a top-level assignment or bare statement.
     GroupBinding,
+    /// `parent.command_group(...)`, the removed method form.
+    MethodGroup,
 }
 
 impl std::fmt::Display for UnsupportedCommandKind {
@@ -130,6 +132,9 @@ impl std::fmt::Display for UnsupportedCommandKind {
             Self::Stacked => "a function can carry only one command decorator.",
             Self::GroupBinding => {
                 "`command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it."
+            }
+            Self::MethodGroup => {
+                "`parent.command_group(...)` was removed; declare the subgroup with `command_group(\"parent.child\", ...)` instead."
             }
         })
     }

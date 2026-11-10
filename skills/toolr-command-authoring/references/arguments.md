@@ -69,7 +69,7 @@ toolr version bump            # new_version is None
 toolr version bump 0.20.0     # new_version is "0.20.0"
 ```
 
-This is the type-driven replacement for the deprecated
+This is the type-driven replacement for the removed
 `arg(nargs="?")` kwarg.
 
 A few rules apply, all enforced at manifest-build time so you get a

@@ -8,12 +8,12 @@ docker = command_group("docker", "Docker", "Container utilities")
 docker_image = docker.command_group("image", "Image", "Image subcommands")
 ```
 
-That form is **deprecated** and will be removed in **toolr 1.0**.
-Every call emits a `ToolrDeprecationWarning` at runtime, so the
-offenders are easy to spot.
+That form was **removed**. The manifest build fails on
+it with a pointer to the dotted form, and `CommandGroup` no longer has
+a `command_group` method.
 
 The bound `@group.command` decorator on a captured `CommandGroup` is
-**not** deprecated and continues to be supported — see
+unaffected and continues to be supported — see
 [Groups & commands](writing-commands/groups.md) for the canonical
 single-file usage and
 [Scaling command groups across files](writing-commands/across-files.md)
@@ -21,13 +21,13 @@ for the string-keyed form you'd use across multiple files.
 
 ## What's changing
 
-| Legacy (deprecated)                              | Replacement                                  |
+| Removed                                          | Replacement                                  |
 |--------------------------------------------------|----------------------------------------------|
 | `parent.command_group("child", ...)`             | `command_group("parent.child", ...)`         |
 | `command_group("child", parent=parent_var)`      | `command_group("parent.child", ...)`         |
 
 `@group.command` and `@group.command("custom-name")` continue to
-work without warnings.
+work.
 
 ## Recipe
 
@@ -63,18 +63,18 @@ prefer to keep the child's leaf name unprefixed:
 command_group("image", parent="docker", description="…")
 ```
 
-## Why migrate
+## Why it was removed
 
-The legacy decorators won't ship in toolr 1.0 — migrating now means
-no last-minute scramble. The captured-binding form for *subgroups*
-also reads awkwardly once nesting gets deeper than one level
+The captured-binding form for *subgroups* reads awkwardly once nesting
+gets deeper than one level
 (`a.command_group("b").command_group("c", ...)`); dotted strings
-flatten that to `command_group("a.b.c", ...)` with no chain.
+flatten that to `command_group("a.b.c", ...)` with no chain, and the
+static parser reads them without following variables.
 
 The remaining rationale for the string-keyed `@command(group="…")`
 form lives in
 [Scaling command groups across files](writing-commands/across-files.md) —
-that decorator is a choice, not a deprecation step.
+that decorator is a choice, not a migration step.
 
 If you hit anything the recipe above doesn't cover — for instance,
 projects that subclass `CommandGroup` or wrap the decorators — open

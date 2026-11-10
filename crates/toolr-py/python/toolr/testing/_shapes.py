@@ -17,6 +17,8 @@ from toolr._decorators import CommandGroup
 from toolr.testing._groups import _NAME
 from toolr.testing._groups import _argument
 from toolr.testing._groups import _import_tables
+from toolr.testing._groups import _ImportTable
+from toolr.testing._groups import _is_toolr_module
 from toolr.testing._groups import _literal
 from toolr.testing._groups import _Memo
 from toolr.testing._groups import _unbound_group_calls
@@ -30,6 +32,11 @@ STACKED = "a function can carry only one command decorator."
 GROUP_BINDING = (
     "`command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, "
     "which toolr reads without running it."
+)
+
+METHOD_GROUP = (
+    '`parent.command_group(...)` was removed; declare the subgroup with `command_group("parent.child", ...)` '
+    "instead."
 )
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
@@ -119,10 +126,22 @@ def _unsupported_group_bindings(tools_dir: Path) -> list[Unsupported]:
     trees, modules, tables = _import_tables(tools_dir)
     memo: _Memo = {}
     return [
-        (modules[file], _group_call_label(call), GROUP_BINDING)
+        (
+            modules[file],
+            _group_call_label(call),
+            METHOD_GROUP if _is_method_form(call, tables[modules[file]]) else GROUP_BINDING,
+        )
         for file, tree in trees.items()
         for call in _unbound_group_calls(tree, tables, modules[file], memo)
     ]
+
+
+def _is_method_form(call: ast.Call, table: _ImportTable) -> bool:
+    """Whether ``call`` is a ``<x>.command_group(...)`` on something other than ``toolr``."""
+    func = call.func
+    return isinstance(func, ast.Attribute) and not (
+        isinstance(func.value, ast.Name) and _is_toolr_module(table, func.value.id)
+    )
 
 
 def _unsupported_commands(tools_dir: Path) -> list[Unsupported]:

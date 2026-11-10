@@ -2120,7 +2120,7 @@ def hello(ctx):
              c = command_group(\"c\", long_description=\"C.\", docstring=__doc__)\n\
              d = command_group(\"d\", \"D\", None, None, \"D.\")\n\
              e = command_group(\"e\", \"E\", description=None, docstring=__doc__)\n\
-             f = a.command_group(\"f\", \"F\", \"F.\", None, \"F.\")\n"
+             f = command_group(\"a.f\", \"F\", \"F.\", None, \"F.\")\n"
         );
         assert_eq!(
             build_error_for(&[("tools/m.py", &src)]),
@@ -2149,13 +2149,11 @@ def hello(ctx):
         let a = "ci = command_group(\"ci\", \"CI\", \"CI.\")\n\
                  command_group(\"bare\", \"Bare\", \"Bare.\")\n\
                  z = other(\"ignored\")\nz = 1\npass\n";
-        let b = "img = ci.command_group(\"image\", \"Image\", \"Image.\")\n\
+        let b = "img = command_group(\"ci.image\", \"Image\", \"Image.\")\n\
                  kw = command_group(\"kw\", \"Kw\", \"Kw.\", parent=img)\n\
                  lit = command_group(\"lit\", \"Lit\", \"Lit.\", parent=\"ci\")\n\
                  dotted = command_group(\"ci.dot\", \"Dot\", \"Dot.\", parent=\"ignored\")\n\
-                 nested = bare.command_group(\"kid\", \"Kid\", \"Kid.\")\n\
-                 unknown = nope.command_group(\"orphan\", \"Orphan\", \"Orphan.\")\n\
-                 call = make().command_group(\"deep\", \"Deep\", \"Deep.\", parent=\"ci\")\n";
+                 dotted2 = command_group(\"bare.kid\", \"Kid\", \"Kid.\")\n";
         let (groups, _) = redeclared(&[
             ("tools/a.py", a),
             ("tools/b.py", b),
@@ -2179,8 +2177,6 @@ def hello(ctx):
                 "ci.lit",
                 "ci.dot",
                 "bare.kid",
-                "orphan",
-                "ci.deep",
                 "pkg"
             ]
         );

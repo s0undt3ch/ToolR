@@ -27,10 +27,10 @@ def test_create_simple_command_group(commands_tester):
 def test_create_nested_command_group(commands_tester):
     """Test creating nested command groups."""
     # Create parent group (gets tools. prefix automatically)
-    parent_group = command_group("parent", "Parent Commands", "Parent description")
+    command_group("parent", "Parent Commands", "Parent description")
 
     # Create child group
-    child_group = parent_group.command_group("child", "Child Commands", "Child description")
+    child_group = command_group("parent.child", "Child Commands", "Child description")
 
     assert child_group.name == "child"
     assert child_group.parent == "tools.parent"
@@ -42,9 +42,9 @@ def test_create_nested_command_group(commands_tester):
 def test_deeply_nested_command_groups(commands_tester):
     """Test creating deeply nested command groups."""
     # Create hierarchy: tools.parent -> tools.parent.child -> tools.parent.child.grandchild
-    parent = command_group("parent", "Parent", "Parent desc")
-    child = parent.command_group("child", "Child", "Child desc")
-    grandchild = child.command_group("grandchild", "Grandchild", "Grandchild desc")
+    command_group("parent", "Parent", "Parent desc")
+    command_group("parent.child", "Child", "Child desc")
+    grandchild = command_group("parent.child.grandchild", "Grandchild", "Grandchild desc")
 
     assert grandchild.full_name == "tools.parent.child.grandchild"
     command_groups = commands_tester.collected_command_groups()
@@ -92,7 +92,7 @@ def test_multiple_commands_same_group(commands_tester):
 def test_commands_on_nested_groups(commands_tester):
     """Test registering commands on nested groups."""
     parent = command_group("parent", "Parent", "Parent desc")
-    child = parent.command_group("child", "Child", "Child desc")
+    child = command_group("parent.child", "Child", "Child desc")
 
     @parent.command("parent_cmd")
     def parent_cmd(ctx: Context):
@@ -118,7 +118,7 @@ def test_command_group_storage(commands_tester):
     """Test that command groups are properly stored in the registry."""
     group1 = command_group("test1", "Test 1", "Test 1 desc")
     group2 = command_group("test2", "Test 2", "Test 2 desc")
-    nested = group1.command_group("nested", "Nested", "Nested desc")
+    nested = command_group("test1.nested", "Nested", "Nested desc")
 
     # Verify groups are stored with correct paths
     command_groups = commands_tester.collected_command_groups()
@@ -135,11 +135,11 @@ def test_command_group_hierarchy(commands_tester):
     assert parent_group.parent == "tools"
 
     # Nested groups get their parent's full name as parent
-    child_group = parent_group.command_group("child", "Child", "Child desc")
+    child_group = command_group("parent.child", "Child", "Child desc")
     assert child_group.parent == "tools.parent"
 
     # Deeply nested groups continue the pattern
-    grandchild_group = child_group.command_group("grandchild", "Grandchild", "Grandchild desc")
+    grandchild_group = command_group("parent.child.grandchild", "Grandchild", "Grandchild desc")
     assert grandchild_group.parent == "tools.parent.child"
 
 
@@ -150,11 +150,11 @@ def test_command_group_full_name(commands_tester):
     assert group1.full_name == "tools.top"
 
     # Nested group
-    group2 = group1.command_group("sub", "Sub", "Sub desc")
+    group2 = command_group("top.sub", "Sub", "Sub desc")
     assert group2.full_name == "tools.top.sub"
 
     # Deep nesting
-    group3 = group2.command_group("deep", "Deep", "Deep desc")
+    group3 = command_group("top.sub.deep", "Deep", "Deep desc")
     assert group3.full_name == "tools.top.sub.deep"
 
 

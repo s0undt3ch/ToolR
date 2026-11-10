@@ -202,14 +202,10 @@ def _argument(call: ast.Call, param: _Param) -> ast.expr | None:
 
 
 def _parent_var(call: ast.Call) -> str | None:
-    """``parent`` in ``parent.command_group(...)``, else a ``parent=<name>`` argument.
+    """The name in a ``parent=<name>`` argument.
 
-    Mirrors ``parent_var_name`` then ``parent_kwarg_var`` in
-    ``crates/toolr-core/src/parser/groups.rs``.
+    Mirrors ``parent_kwarg_var`` in ``crates/toolr-core/src/parser/groups.rs``.
     """
-    func = call.func
-    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-        return func.value.id
     parent = _argument(call, _PARENT)
     return parent.id if isinstance(parent, ast.Name) else None
 
@@ -569,7 +565,8 @@ def _is_command_group(
     """Whether ``func`` is toolr's ``command_group``.
 
     A bare name counts when spelt ``command_group`` or resolved to it through
-    the ``tools/`` modules' imports; any ``<x>.command_group`` counts. Mirrors
+    the ``tools/`` modules' imports; ``<x>.command_group`` counts only when ``x``
+    is the ``toolr`` module. Mirrors
     ``crates/toolr-core/src/parser/groups.rs::is_command_group_call``: change
     both together.
     """
@@ -578,7 +575,21 @@ def _is_command_group(
             func.id == "command_group"
             or _binding(tables, module, func.id, 0, memo) is _Binding.TOOLR
         )
-    return isinstance(func, ast.Attribute) and func.attr == "command_group"
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "command_group"
+        and isinstance(func.value, ast.Name)
+        and _is_toolr_module(tables[module], func.value.id)
+    )
+
+
+def _is_method_group_call(call: ast.Call) -> bool:
+    """Whether ``call`` is ``<x>.command_group(...)``, the removed method form when ``x`` isn't ``toolr``.
+
+    Only asked after ``_is_command_group`` said no. Mirrors ``is_method_group_call`` in
+    ``crates/toolr-core/src/parser/groups.rs``: change both together.
+    """
+    return isinstance(call.func, ast.Attribute) and call.func.attr == "command_group"
 
 
 def _supported_group_call(stmt: ast.stmt) -> tuple[str | None, ast.Call] | None:
@@ -663,8 +674,9 @@ def _unbound_group_calls(
     """Each toolr ``command_group(...)`` call the manifest build can't bind, in source order.
 
     That is any call that isn't the whole value of a bound statement (one
-    ``_group_calls`` reads), and a bound statement whose group name isn't a
-    string literal. ``command_group`` creates a group when none is registered,
+    ``_group_calls`` reads), a bound statement whose group name isn't a
+    string literal, and a statement calling ``<x>.command_group(...)`` on anything
+    but the ``toolr`` module (the removed method form). ``command_group`` creates a group when none is registered,
     so no call is exempt as a mere lookup. A bound statement is skipped whole,
     annotation included. A callee counts only when it resolves to toolr's
     ``command_group``: a name through the import tables (a parameter of the
@@ -703,6 +715,8 @@ def _unbound_group_calls(
         if bound := _bound_group_call(stmt, tables, module, memo):
             if _literal(_argument(bound.call, _NAME)) is None:
                 found.append(bound.call)
+        elif (supported := _supported_group_call(stmt)) and _is_method_group_call(supported[1]):
+            found.append(supported[1])
         else:
             stack.append((stmt, frozenset()))
     while stack:

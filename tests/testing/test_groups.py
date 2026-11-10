@@ -21,6 +21,7 @@ from toolr.testing._groups import _Memo
 from toolr.testing._groups import _unbound_group_calls
 from toolr.testing._groups import _undescribed_groups
 from toolr.testing._shapes import GROUP_BINDING
+from toolr.testing._shapes import METHOD_GROUP
 from toolr.testing._shapes import _unsupported_group_bindings
 
 
@@ -50,13 +51,11 @@ def test_paths_follow_the_parsers_resolution(make_tools_dir: Callable[..., Path]
                 pass
             """,
             "b.py": """
-                img = ci.command_group("image", "Image", "Image.")
+                img = command_group("ci.image", "Image", "Image.")
                 kw = command_group("kw", "Kw", "Kw.", parent=img)
                 lit = command_group("lit", "Lit", "Lit.", parent="ci")
                 dotted = command_group("ci.dot", "Dot", "Dot.", parent="ignored")
-                nested = bare.command_group("kid", "Kid", "Kid.")
-                unknown = nope.command_group("orphan", "Orphan", "Orphan.")
-                call = make().command_group("deep", "Deep", "Deep.", parent="ci")
+                dotted2 = command_group("bare.kid", "Kid", "Kid.")
             """,
             "pkg/__init__.py": """
                 command_group("pkg", "Pkg", "Pkg.")
@@ -75,8 +74,6 @@ def test_paths_follow_the_parsers_resolution(make_tools_dir: Callable[..., Path]
         ("ci.lit", "tools.b"),
         ("ci.dot", "tools.b"),
         ("bare.kid", "tools.b"),
-        ("orphan", "tools.b"),
-        ("ci.deep", "tools.b"),
         ("pkg", "tools.pkg"),
     ]
 
@@ -665,11 +662,25 @@ def test_plain_bindings_are_not_unsupported(make_tools_dir: Callable[..., Path])
         a = command_group("a", "A", "A.")
         b: T = command_group("b", "B", "B.")
         command_group("c", "C", "C.")
-        k = a.command_group("k", "K", "K.")
         g = command_group("g", "G", "G.", parent=command_group("p", "P", "P."))
         h: Annotated[object, command_group("h", "H", "H.")] = command_group("h", "H", "H.")
     """
     assert _unsupported(make_tools_dir, source) == []
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        'a.command_group("k", "K", "K.")',
+        'make().command_group("k", "K", "K.", parent="ci")',
+        'nope.command_group("k", "K", "K.")',
+    ],
+)
+def test_the_method_form_is_an_unsupported_declaration(
+    call: str, make_tools_dir: Callable[..., Path]
+) -> None:
+    source = f'a = command_group("a", "A", "A.")\nk = {call}\n'
+    assert _unsupported(make_tools_dir, source) == [("tools.m", 'command_group("k")', METHOD_GROUP)]
 
 
 def test_tuple_target_is_an_unsupported_declaration(make_tools_dir: Callable[..., Path]) -> None:

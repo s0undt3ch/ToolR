@@ -7,7 +7,7 @@ use common::Project;
 
 const LOCAL_CI_LINT: &str = "\"\"\"CI.\"\"\"\nfrom toolr import command_group\nci = command_group(\"ci\", \"CI\", \"CI.\")\n@ci.command\ndef lint(ctx):\n    \"\"\"Local lint.\"\"\"\n";
 
-const LOCAL_CI_IMAGE: &str = "\"\"\"CI.\"\"\"\nfrom toolr import command_group\nci = command_group(\"ci\", \"CI\", \"CI.\")\nimage = ci.command_group(\"image\", \"Image\", \"Image.\")\n@image.command\ndef build(ctx):\n    \"\"\"Local build.\"\"\"\n";
+const LOCAL_CI_IMAGE: &str = "\"\"\"CI.\"\"\"\nfrom toolr import command_group\nci = command_group(\"ci\", \"CI\", \"CI.\")\nimage = command_group(\"ci.image\", \"Image\", \"Image.\")\n@image.command\ndef build(ctx):\n    \"\"\"Local build.\"\"\"\n";
 
 fn fragment(schema: u32, package: &str, group: &str, parent: Option<&str>, cmd: &str) -> String {
     let parent = parent

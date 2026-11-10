@@ -77,9 +77,8 @@ Either way the resulting CLI is `toolr ci helm-diff backend`.
     complete, run `toolr self completion install <shell> --force`
     to refresh it.
 
-!!! warning "Legacy method form deprecated"
+!!! warning "Legacy method form removed"
     `parent.command_group("child", ...)` — the method call on a
-    captured binding — still works but emits a
-    `ToolrDeprecationWarning` and will be removed in toolr 1.0.
+    captured binding — was removed. The manifest build fails on it.
     Replace each call with a dotted `command_group(...)` declaration.
     See the [migration guide](../migration.md).
