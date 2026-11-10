@@ -368,7 +368,7 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 mod tests {
     use super::{
         carry_forward_cached_entries, ensure_manifest_fresh, ensure_manifest_present_or_bootstrap,
-        is_tab_completion, should_skip_auto_rebuild,
+        is_tab_completion, names_user_command, should_skip_auto_rebuild,
     };
     use toolr_core::freshness::FreshnessVerdict;
     use toolr_core::manifest::{
@@ -570,6 +570,7 @@ mod tests {
     #[test]
     fn fires_for_a_user_group_named_init() {
         assert!(!should_skip_auto_rebuild(&args(&["init", "hello"])));
+        assert!(names_user_command(&args(&["init", "hello"])));
     }
 
     #[test]

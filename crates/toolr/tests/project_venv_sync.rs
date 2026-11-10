@@ -1,5 +1,4 @@
-//! Integration tests for `toolr project venv sync` — the renamed
-//! and behavior-flipped successor to `toolr project deps sync`.
+//! Integration tests for `toolr project venv sync`.
 //!
 //! Covers the flag surface and the unattended-mode (`--quiet`) guard
 //! table. Tests deliberately don't run real `uv`; they exercise the
