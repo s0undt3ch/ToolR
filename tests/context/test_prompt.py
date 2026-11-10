@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import subprocess
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -220,3 +222,28 @@ def test_prompt_uses_prompt_stream_override(ctx: ContextForTesting):
 def test_prompt_stream_defaults_to_none(ctx: Context):
     """Omitting `_prompt_stream` keeps today's real-stdin behavior."""
     assert ctx._prompt_stream is None
+
+
+@pytest.mark.parametrize("stdin_kind", ["devnull", "empty_pipe"])
+def test_prompt_without_a_terminal_exits_cleanly(stdin_kind: str):
+    code = (
+        "import pathlib, sys\n"
+        "from toolr.testing import make_context\n"
+        "ctx = make_context(pathlib.Path('.'))\n"
+        "try:\n"
+        "    ctx.prompt('Proceed?', expected_type=bool)\n"
+        "except SystemExit:\n"
+        "    sys.stderr.write(ctx.stderr)\n"
+        "    raise\n"
+    )
+    proc = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        stdin=subprocess.DEVNULL if stdin_kind == "devnull" else None,
+        input="" if stdin_kind == "empty_pipe" else None,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 1, proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert "Cannot prompt for 'Proceed?': no input available" in proc.stderr

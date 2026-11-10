@@ -19,6 +19,7 @@ from typing import NoReturn
 from typing import TextIO
 
 from msgspec import Struct
+from rich.markup import escape
 
 from toolr.utils import command
 
@@ -146,17 +147,28 @@ class Context(Struct, frozen=True):
             err_msg = "choices cannot be an empty list"
             raise ValueError(err_msg)
 
-        return klass.ask(
-            prompt,
-            console=console or self._console_stdout,
-            password=password,
-            choices=choices,
-            default=default,  # type: ignore[arg-type]
-            case_sensitive=case_sensitive,
-            show_default=show_default,
-            show_choices=show_choices,
-            stream=stream,
-        )
+        try:
+            return klass.ask(
+                prompt,
+                console=console or self._console_stdout,
+                password=password,
+                choices=choices,
+                default=default,  # type: ignore[arg-type]
+                case_sensitive=case_sensitive,
+                show_default=show_default,
+                show_choices=show_choices,
+                stream=stream,
+            )
+        except EOFError:
+            if stream is not None:
+                # A caller-supplied stream (`make_context(prompt_input=...)`) keeps raising.
+                raise
+            self._console_stderr.print()
+            self.exit(
+                1,
+                f"Cannot prompt for {escape(str(prompt))!r}: no input available "
+                "(standard input is closed or not a terminal).",
+            )
 
     def print(self, *args: Any, **kwargs: Any) -> None:
         """
