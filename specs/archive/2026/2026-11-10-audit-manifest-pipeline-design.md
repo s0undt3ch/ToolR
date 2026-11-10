@@ -56,7 +56,7 @@ In `toolr_core::manifest_build::rebuild`:
 - `pub fn rebuild_manifest_full(root, venv) -> Result<BuiltManifest>`, the explicit path. It
   always builds: lock, clock, `build(…, Some(venv), None)`, write. The `RebuildOutcome` struct
   goes away; the caller counts groups and commands itself.
-- `BuiltManifest::warnings()`: the build warnings followed by the plugin warnings, with control
+- `BuiltManifest::all_warnings()`: the build warnings followed by the plugin warnings, with control
   characters stripped. `main.rs` and `project manifest rebuild` print from it.
 
 Callers:
@@ -122,17 +122,18 @@ Edge cases that change:
 
 ## Line counts
 
-Measured against the base branch. Production code means the touched `src/` files up to their
-`#[cfg(test)]` module.
+Measured at the final PR head against its merge base with `main`. Production code means the
+touched `src/` files up to their `#[cfg(test)]` module.
 
 | | Before | After | Change |
 | --- | --- | --- | --- |
-| Production code in the touched `src/` files | 4987 | 4791 | -196 |
-| Inline `#[cfg(test)]` code in those files and `complete/tests.rs` | | | +69 |
-| Integration tests (`crates/toolr/tests`) | | | +136 |
+| Production code in the touched `src/` files | 5123 | 4930 | -193 |
+| Inline `#[cfg(test)]` code in those files and `complete/tests.rs` | | | +196 |
+| Integration tests (`crates/toolr/tests`) | | | +141 |
 | `docs/cli.md` | | | -6 |
 
-`bootstrap.rs` loses 272 lines and `complete/freshness.rs` 74. The core `rebuild.rs` grows by 287,
-most of it tests moved in from `bootstrap.rs` and `complete/tests.rs` plus new ones. The
-integration-test growth is the characterisation tests that pin the error text and first-run
+Production code shrinks: `bootstrap.rs` loses most of its pipeline and `complete/freshness.rs` 79
+lines. The tests grow more than that, so the whole diff adds about 140 lines. Most of the growth
+is in `rebuild.rs`'s tests (moved in from `bootstrap.rs` and `complete/tests.rs`, plus the lock,
+carry-forward and refresh tests) and the integration tests that pin the error text and first-run
 freshness.
