@@ -125,7 +125,7 @@ pub fn decide_install_auto(
     decide_install(path_found, managed_found, consent, prompt_io)
 }
 
-/// Linux libc variant. Picked at runtime via [`detect_linux_libc`] so
+/// Linux libc variant. Picked at runtime via `detect_linux_libc` so
 /// the auto-installer fetches a uv binary whose dynamic loader exists
 /// on the running host — a glibc binary on a musl box `execve`s as
 /// `ENOENT` (missing `/lib64/ld-linux-x86-64.so.2`), surfacing as the
