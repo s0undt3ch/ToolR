@@ -25,8 +25,9 @@ inputs:
     description: |
       `full` (the default) cryptographically verifies the SLSA build
       provenance the release workflow attaches to every archive with
-      `gh attestation verify`. `none` skips that check; the SHA-256 is
-      still checked. Same spellings as the installers' `--verify`.
+      `gh attestation verify`. `none` skips only that check: the action
+      always checks the SHA-256 (unlike the installers' `--verify=none`,
+      which skips both). Any other value fails the step.
     default: "full"
 
   skip-attestation:
@@ -97,6 +98,24 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Validate inputs
+      id: validate-inputs
+      shell: bash
+      env:
+        INPUT_VERIFY: ${{ inputs.verify }}
+      run: |
+        case "$INPUT_VERIFY" in
+          full|none) ;;
+          auto|checksum)
+            echo "setup-toolr: verify: '$INPUT_VERIFY' is an installer mode; the action always checks the SHA-256, so it has no checksum-only mode. Use 'full' or 'none'" >&2
+            exit 1
+            ;;
+          *)
+            echo "setup-toolr: invalid verify: '$INPUT_VERIFY' (use 'full' or 'none')" >&2
+            exit 1
+            ;;
+        esac
+
     - name: Resolve toolr version
       id: resolve-version
       shell: bash

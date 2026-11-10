@@ -134,7 +134,7 @@ impl std::fmt::Display for UnsupportedCommandKind {
                 "`command_group(...)` must be a top-level `name = command_group(...)` assignment or a bare statement, which toolr reads without running it."
             }
             Self::MethodGroup => {
-                "`parent.command_group(...)` was removed; declare the subgroup with `command_group(\"parent.child\", ...)` instead."
+                "`parent.command_group(...)` was removed (the error also fires for a `.command_group(...)` call on a non-toolr object); declare the subgroup with `command_group(\"parent.child\", ...)` instead."
             }
         })
     }

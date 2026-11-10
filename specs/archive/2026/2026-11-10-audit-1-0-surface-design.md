@@ -64,14 +64,13 @@ In the action, `skip-attestation` gains a `deprecationMessage`.
 
 `compute_repo_key` hashed `CARGO_PKG_VERSION_MAJOR`, so bumping to 1.0 would orphan every venv. The key
 now hashes the literal `"0"` in that slot. Today's major is 0, so every existing key is byte-identical:
-nothing is orphaned by this release, and nothing will be at 1.0. A test pins the digest.
+nothing is orphaned by this release, and nothing will be at 1.0. A test pins a golden key.
 
 The old key did double duty, letting a major release change the venv layout safely. `meta.json` takes
 that job: a new `layout_version` field (serde default 1, so every existing sidecar reads as the current
-layout; schema version unchanged; older toolr builds ignore the unknown field). `check_freshness` reports
-a new `OldLayout` state when the sidecar's layout is older than `VENV_LAYOUT_VERSION` (dispatch re-syncs,
-`venv run --no-sync` refuses), and a successful sync stamps the current value, so the venv is re-synced once.
-A missing sidecar counts as current (nothing to compare).
+layout; schema version unchanged; older toolr builds ignore the unknown field). It is written on every sync and
+not read yet: a freshness check for it was dropped, as it adds a file read per check and cannot fire until the
+constant is bumped. A future layout change adds the check with that bump.
 Bumping the constant is the lever for a future layout change; a change that needs a fresh venv rather than
 an in-place `uv sync` has to remove it in the sync path. That is out of scope until one exists.
 

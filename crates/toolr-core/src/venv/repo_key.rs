@@ -35,22 +35,14 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    /// The key is `blake3(path NUL python_version NUL "0")`, as it was while the major version was
-    /// hashed, so upgrading across 1.0 reuses every existing cache slot.
+    /// A literal, so a change to the key's inputs fails here instead of silently orphaning every
+    /// existing venv: the 1.0 bump must keep producing this key.
+    #[cfg(unix)]
     #[test]
-    fn key_matches_the_pre_1_0_derivation() {
-        let tmp = TempDir::new().unwrap();
-        let canonical = tmp.path().canonicalize().unwrap();
-        let mut hasher = Hasher::new();
-        hasher.update(canonical.to_string_lossy().as_bytes());
-        hasher.update(b"\0");
-        hasher.update(b"3.13");
-        hasher.update(b"\0");
-        hasher.update(b"0");
-        let expected = hasher.finalize().to_hex().to_string();
+    fn key_is_a_golden_literal() {
         assert_eq!(
-            compute_repo_key(tmp.path(), "3.13").unwrap(),
-            expected[..16]
+            compute_repo_key(Path::new("/"), "3.13").unwrap(),
+            "43c4783000b0ac2b"
         );
     }
 

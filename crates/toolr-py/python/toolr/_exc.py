@@ -32,6 +32,7 @@ class NoCurrentContextError(ToolrError):
     """Raised by `current_context()` when no `Context` is set for the running task/thread."""
 
 
+# Kept with no current emitter, for the next deprecation.
 class ToolrDeprecationWarning(DeprecationWarning):
     """Warning emitted for toolr APIs scheduled for removal.
 

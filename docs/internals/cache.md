@@ -59,12 +59,12 @@ Written when toolr creates a venv; updated on every invocation.
 - **`last_used_at`** — touched on every toolr invocation that hits
   this venv. Used to detect stale entries.
 - **`layout_version`** — the venv layout the entry was last synced
-  with. A toolr that builds a newer layout re-syncs the venv once and
-  stamps the new number. A sidecar without the field counts as layout 1.
+  with, written on every sync. Nothing reads it yet; it is there for a
+  future layout change. A sidecar without the field counts as layout 1.
 
 `<repo-key>` doesn't include toolr's version, so upgrading toolr, even
 across a major release, keeps every existing entry. A change to the venv
-layout is what `layout_version` is for.
+layout would be recorded in `layout_version`.
 
 ## Orphan detection
 

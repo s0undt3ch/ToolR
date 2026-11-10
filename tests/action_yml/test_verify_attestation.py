@@ -292,3 +292,39 @@ def test_verify_none_and_the_deprecated_input_both_skip_the_step() -> None:
     condition = _step("verify-attestation")["if"]
     assert "inputs.verify != 'none'" in condition
     assert "inputs.skip-attestation != 'true'" in condition
+
+
+def _validate_inputs(tmp_path: Path, value: str) -> subprocess.CompletedProcess[str]:
+    script = tmp_path / "validate.sh"
+    script.write_text(
+        "#!/bin/bash\nset -euo pipefail\n" + _step("validate-inputs")["run"], newline="\n"
+    )
+    bash = shutil.which("bash")
+    assert bash is not None
+    return subprocess.run(  # noqa: S603  # bash + script path are test-controlled
+        [bash, str(script)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "INPUT_VERIFY": value},
+    )
+
+
+@pytest.mark.parametrize("value", ["full", "none"])
+def test_verify_accepts_the_action_modes(tmp_path: Path, value: str) -> None:
+    assert _validate_inputs(tmp_path, value).returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ("auto", "no checksum-only mode"),
+        ("checksum", "no checksum-only mode"),
+        ("bogus", "invalid verify: 'bogus'"),
+        ("", "invalid verify: ''"),
+    ],
+)
+def test_verify_rejects_everything_else(tmp_path: Path, value: str, message: str) -> None:
+    result = _validate_inputs(tmp_path, value)
+    assert result.returncode != 0
+    assert message in result.stderr

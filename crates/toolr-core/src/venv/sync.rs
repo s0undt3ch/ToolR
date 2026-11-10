@@ -7,7 +7,6 @@ use std::time::SystemTime;
 
 use anyhow::{Context, Result};
 
-use crate::cache::meta::{Meta, VENV_LAYOUT_VERSION};
 use crate::uv::{UvBinary, UvError};
 
 use super::pyvenv_cfg::pyvenv_cfg_value;
@@ -36,9 +35,6 @@ pub enum Freshness {
     /// Synced once, but the interpreter no longer resolves — typically its
     /// base Python was uninstalled (e.g. `mise prune`). `uv sync` rebuilds it.
     Broken,
-    /// The sidecar says the venv was synced with an older [`VENV_LAYOUT_VERSION`] than this toolr
-    /// builds. A sync brings it up to date and stamps the current one.
-    OldLayout,
     /// Marker at least as new as every sync input, and the interpreter is still there.
     Fresh,
 }
@@ -77,7 +73,7 @@ impl UpgradeMode {
     }
 }
 
-/// Precedence is `Missing`, then `Broken`, then `OldLayout`, then `Stale` or `Fresh`. `uv.lock`
+/// Precedence is `Missing`, then `Broken`, then `Stale` or `Fresh`. `uv.lock`
 /// is required; an absent [`SYNC_INPUTS`] file is ignored. Besides the mtimes
 /// it stats the interpreter and reads `pyvenv.cfg`.
 pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
@@ -90,9 +86,6 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     if !resolved.python.is_file() || base_python_removed(&resolved.venv_dir) {
         return Freshness::Broken;
     }
-    if has_old_layout(resolved, tools_dir) {
-        return Freshness::OldLayout;
-    }
     let mtime = |meta: fs::Metadata| meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
     let newest_input = SYNC_INPUTS
         .iter()
@@ -104,16 +97,6 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     } else {
         Freshness::Stale
     }
-}
-
-/// Whether the venv's sidecar records an older layout than [`VENV_LAYOUT_VERSION`]. A sidecar that is
-/// missing or unreadable has nothing to compare, so it counts as current.
-fn has_old_layout(resolved: &ResolvedVenv, tools_dir: &Path) -> bool {
-    tools_dir
-        .parent()
-        .and_then(|repo_root| crate::project::meta_cache_dir(repo_root, resolved).ok())
-        .and_then(|dir| Meta::load(&dir).ok())
-        .is_some_and(|meta| meta.layout_version < VENV_LAYOUT_VERSION)
 }
 
 /// Whether `pyvenv.cfg`'s `home` is gone. Windows venvs hold a copied launcher,
@@ -296,31 +279,6 @@ mod tests {
         std::thread::sleep(Duration::from_millis(20));
         touch_marker(&venv).unwrap();
         let resolved = dummy_resolved(venv);
-        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
-    }
-
-    #[test]
-    fn a_sidecar_with_an_older_layout_reports_old_layout_until_restamped() {
-        let tmp = TempDir::new().unwrap();
-        let resolved = synced_venv(tmp.path(), &[]);
-        let slot = resolved.venv_dir.parent().unwrap();
-        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
-
-        let mut meta = Meta::new(tmp.path(), "0", "3.13");
-        meta.layout_version = VENV_LAYOUT_VERSION - 1;
-        meta.write(slot).unwrap();
-        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::OldLayout);
-
-        meta.layout_version = VENV_LAYOUT_VERSION;
-        meta.write(slot).unwrap();
-        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
-    }
-
-    #[test]
-    fn an_unreadable_sidecar_does_not_force_a_resync() {
-        let tmp = TempDir::new().unwrap();
-        let resolved = synced_venv(tmp.path(), &[]);
-        fs::write(resolved.venv_dir.parent().unwrap().join("meta.json"), b"{").unwrap();
         assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
     }
 

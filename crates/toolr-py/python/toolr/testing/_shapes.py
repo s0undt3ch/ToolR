@@ -35,8 +35,8 @@ GROUP_BINDING = (
 )
 
 METHOD_GROUP = (
-    '`parent.command_group(...)` was removed; declare the subgroup with `command_group("parent.child", ...)` '
-    "instead."
+    "`parent.command_group(...)` was removed (the error also fires for a `.command_group(...)` call on a "
+    'non-toolr object); declare the subgroup with `command_group("parent.child", ...)` instead.'
 )
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef

@@ -261,7 +261,7 @@ def read(ctx: Context, name: Annotated[str, arg(nargs="*")] = "x") -> None:
 ci = command_group("ci", "CI", "CI group.")
 image = ci.command_group("image", "Image", "Image group.")
 "#,
-            "mypkg.kw::command_group(\"image\"): `parent.command_group(...)` was removed; declare the subgroup with `command_group(\"parent.child\", ...)`",
+            "mypkg.kw::command_group(\"image\"): `parent.command_group(...)` was removed",
         ),
     ] {
         let tmp = TempDir::new().unwrap();

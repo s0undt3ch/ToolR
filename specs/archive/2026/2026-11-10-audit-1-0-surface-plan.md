@@ -10,7 +10,7 @@ One commit and one release note per finding, in this order.
    `toolr-ci-setup` skill, `build_skill_refs/ci_setup.rs`; tests in `tests/installation/`,
    `tests/action_yml/`.
 3. U-09. `venv/repo_key.rs`, `cache/meta.rs`, `venv/sync.rs`, `project.rs::finalize_sync`; tests for the
-   pinned digest, the serde default, stale-on-old-layout and the stamp after sync.
+   golden key, the serde default and the stamp after sync.
 4. U-06 `arg()`: `_signature.py`, `arg_keywords.rs` hints, parser tests, docs, skills, tests/.
 5. U-06 method form: `_decorators.py`, `parser/groups.rs`, `toolr.testing._groups/_shapes`, parity corpus
    case `err_group_method_form`, migrate in-repo users to dotted names, docs.

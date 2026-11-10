@@ -24,7 +24,6 @@ for the string-keyed form you'd use across multiple files.
 | Removed                                          | Replacement                                  |
 |--------------------------------------------------|----------------------------------------------|
 | `parent.command_group("child", ...)`             | `command_group("parent.child", ...)`         |
-| `command_group("child", parent=parent_var)`      | `command_group("parent.child", ...)`         |
 
 `@group.command` and `@group.command("custom-name")` continue to
 work.
