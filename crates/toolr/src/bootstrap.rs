@@ -83,7 +83,7 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
 }
 
 /// Top-level subcommands toolr itself provides.
-const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
+const BUILTINS: &[&str] = &["__complete", "project", "self"];
 
 /// Decide whether the pre-clap bootstrap should skip building a missing
 /// manifest for this argv.
@@ -95,7 +95,7 @@ const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
 /// happens when the user explicitly dispatches a command.
 ///
 /// We still skip the built-ins that manage their own state
-/// (`__complete`, `project`, `self`, `init`) and `--version` (prints
+/// (`__complete`, `project`, `self`) and `--version` (prints
 /// binary metadata only). `--help` and bare `toolr` take the static
 /// build so help renders the user's command tree.
 pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
@@ -568,8 +568,8 @@ mod tests {
     }
 
     #[test]
-    fn skips_for_init() {
-        assert!(should_skip_auto_rebuild(&args(&["init"])));
+    fn fires_for_a_user_group_named_init() {
+        assert!(!should_skip_auto_rebuild(&args(&["init", "hello"])));
     }
 
     #[test]
