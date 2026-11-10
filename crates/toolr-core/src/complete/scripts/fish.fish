@@ -46,7 +46,7 @@ function __toolr_complete
     # fish's path completers parse their argument as shell text, so they get the raw word.
     set -l raw_prefix (string match -r -- '^--[^=]+=' "$raw")
     set -l bare (string replace -r -- '^--[^=]+=' '' "$raw")
-    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs (pinned by
+    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch/complete.rs (pinned by
     # crates/toolr/tests/complete_protocol_lockstep.rs; keep this line shape).
     switch $rc
         case 0

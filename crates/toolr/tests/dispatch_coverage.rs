@@ -168,7 +168,7 @@ fn self_completion_install_second_run_is_idempotent_or_force_required() {
         .output()
         .unwrap();
     // Either AlreadyInstalled (success) or SkippedNeedsForce (exit 1) —
-    // both branches in dispatch.rs:233-263 are covered by this combo.
+    // both branches in `self_cmd::run_completion_install` are covered by this combo.
     let stdout = String::from_utf8_lossy(&second.stdout);
     let stderr = String::from_utf8_lossy(&second.stderr);
     let combined = format!("{stdout}{stderr}");
