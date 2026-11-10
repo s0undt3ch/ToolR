@@ -180,4 +180,10 @@ fn quiet_init_trusts_without_saying_so() {
         .unwrap();
     assert!(out.status.success());
     assert!(!String::from_utf8_lossy(&out.stderr).contains("trusted"));
+    let root = fs::canonicalize(repo.path()).unwrap().display().to_string();
+    env.toolr(repo.path())
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout(format!("{root}\n"));
 }
