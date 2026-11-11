@@ -282,11 +282,23 @@ fn resync_if_needed(
     if !quiet && freshness != Freshness::Foreign {
         eprintln!("toolr: {problem}; syncing it first");
     }
-    let (resolved, _uv) =
-        crate::project::ready_venv(repo_root, quiet, |o| o).with_context(|| {
-            format!("{problem} and could not be synced; run `toolr project venv sync`")
-        })?;
+    let (resolved, _uv) = crate::project::ready_venv(repo_root, quiet, |o| o).map_err(|e| {
+        if is_untrusted_venv(&e) {
+            // Already says why and how to approve.
+            return e;
+        }
+        e.context(format!(
+            "{problem} and could not be synced; run `toolr project venv sync`"
+        ))
+    })?;
     Ok(resolved)
+}
+
+fn is_untrusted_venv(e: &anyhow::Error) -> bool {
+    matches!(
+        e.downcast_ref::<toolr_core::uv::UvError>(),
+        Some(toolr_core::uv::UvError::UntrustedVenv(_))
+    )
 }
 
 /// The user has just trusted the repository at the prompt: a venv that needs

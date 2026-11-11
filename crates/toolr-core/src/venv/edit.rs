@@ -10,7 +10,26 @@ use anyhow::{Context, Result};
 use crate::uv::UvBinary;
 
 use super::resolve::ResolvedVenv;
-use super::sync::stamp_marker;
+use super::sync::{lock_in_tree, stamp_marker};
+
+/// Run `cmd` and stamp the marker under the venv's sync lock, so a concurrent check never
+/// sees the venv mid-edit as one toolr didn't build.
+fn run_locked(
+    mut cmd: Command,
+    uv: &UvBinary,
+    tools_dir: &Path,
+    resolved: &ResolvedVenv,
+    quiet: bool,
+) -> Result<ExitStatus> {
+    let _lock = lock_in_tree(resolved, quiet).ok().flatten();
+    let status = cmd
+        .status()
+        .with_context(|| format!("spawning uv at {}", uv.path.display()))?;
+    if status.success() {
+        stamp_marker(resolved, tools_dir)?;
+    }
+    Ok(status)
+}
 
 /// Run `uv add <specs...> --project <tools>` synchronously. uv mutates
 /// `tools/pyproject.toml`, refreshes `tools/uv.lock`, and re-syncs the
@@ -35,13 +54,7 @@ pub fn run_uv_add(
     if let Some(version) = resolved.config.python_version.as_ref() {
         cmd.arg("--python").arg(version);
     }
-    let status = cmd
-        .status()
-        .with_context(|| format!("spawning uv at {}", uv.path.display()))?;
-    if status.success() {
-        stamp_marker(resolved, tools_dir)?;
-    }
-    Ok(status)
+    run_locked(cmd, uv, tools_dir, resolved, quiet)
 }
 
 /// Run `uv remove <packages...> --project <tools>` synchronously. Same
@@ -67,13 +80,7 @@ pub fn run_uv_remove(
     if let Some(version) = resolved.config.python_version.as_ref() {
         cmd.arg("--python").arg(version);
     }
-    let status = cmd
-        .status()
-        .with_context(|| format!("spawning uv at {}", uv.path.display()))?;
-    if status.success() {
-        stamp_marker(resolved, tools_dir)?;
-    }
-    Ok(status)
+    run_locked(cmd, uv, tools_dir, resolved, quiet)
 }
 
 #[cfg(test)]

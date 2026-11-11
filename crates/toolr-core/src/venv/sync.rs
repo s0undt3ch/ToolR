@@ -1,6 +1,7 @@
 //! Drive `uv sync` to materialise the tools venv.
 
 use std::fs;
+use std::io::Write as _;
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 use std::time::SystemTime;
@@ -161,7 +162,13 @@ fn built_by_toolr(resolved: &ResolvedVenv, tools_dir: &Path, store: Option<&Trus
     if !store.is_trusted(root).unwrap_or(false) {
         return false;
     }
-    marker_token(store, &resolved.venv_dir).is_some()
+    marker_token(store, &resolved.venv_dir).is_some() || pending_build(store, &resolved.venv_dir)
+}
+
+/// toolr claimed the venv before uv ran and no marker was written since: a sync that failed
+/// or was killed part way. A marker that doesn't match still means someone else's venv.
+fn pending_build(store: &TrustStore, venv_dir: &Path) -> bool {
+    store.venv_pending(venv_dir) && fs::symlink_metadata(venv_dir.join(FRESHNESS_MARKER)).is_err()
 }
 
 /// The longest marker toolr writes: a 64-hex-digit token and a newline.
@@ -325,14 +332,7 @@ pub fn sync_if_needed(
     // -U / -P explicitly ask for movement; never short-circuit on freshness.
     let bypass_stamp = force || !matches!(upgrade, UpgradeMode::None);
     // Only an in-tree venv's token needs the store; without its lock toolr can't record one.
-    let lock = || -> Result<Option<crate::trust::VenvLock>> {
-        if !resolved.is_in_tree() || trust_all_env() {
-            return Ok(None);
-        }
-        TrustStore::open_default()?
-            .lock_venv(&resolved.venv_dir, quiet)
-            .map(Some)
-    };
+    let lock = || lock_in_tree(resolved, quiet);
     sync_locked(
         resolved,
         tools_dir,
@@ -341,6 +341,7 @@ pub fn sync_if_needed(
         lock,
         || approve_removal_on_tty(&resolved.venv_dir, quiet),
         || {
+            claim_before_build(resolved, tools_dir);
             // Not `Http`: its message tells the user to install uv, which they already have.
             let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
                 let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
@@ -398,50 +399,103 @@ fn approve_removal(
             return Ok(());
         }
     }
-    Err(UvError::Io(std::io::Error::other(format!(
+    Err(UvError::UntrustedVenv(format!(
         "{reason}. Nothing was removed. To replace it, run `toolr project venv sync` on a \
          terminal and answer y, set {REPLACE_VENV_ENV}=1, or remove {} yourself",
         shown(venv_dir)
-    ))))
+    )))
 }
 
-/// Check, lock, re-check, then, once `approve` agrees, remove a foreign venv and sync, all
-/// under the lock: another toolr may be building this venv, and until it stamps the marker
-/// the venv reads as foreign. Without the lock toolr never removes a venv it didn't build: it
-/// fails naming the store, which couldn't record a rebuilt venv's token either. Any other
-/// venv syncs unlocked.
+/// Which venv sits at `venv_dir`, so a removal approved before the lock is applied only to
+/// the venv the user was asked about.
+fn venv_identity(venv_dir: &Path) -> Option<(u64, u64)> {
+    let meta = fs::symlink_metadata(venv_dir).ok()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Some((meta.dev(), meta.ino()))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        Some((0, 0))
+    }
+}
+
+/// Check; for a venv toolr didn't build, ask `approve` before taking the lock, so no other
+/// toolr waits on the answer. Then lock, re-check, and remove such a venv only if it is still
+/// the one approved, asking again only for a different one; then sync. Another toolr may be
+/// building this venv, and until it stamps the marker the venv reads as one toolr didn't
+/// build. Without the lock toolr never removes such a venv: it fails naming the store, which
+/// couldn't record a rebuilt venv's token either. Any other venv syncs unlocked.
 fn sync_locked<L>(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
     bypass_stamp: bool,
     check: impl Fn() -> Freshness,
     lock: impl FnOnce() -> Result<L>,
-    approve: impl FnOnce() -> Result<(), UvError>,
+    mut approve: impl FnMut() -> Result<(), UvError>,
     sync: impl FnOnce() -> Result<(), UvError>,
 ) -> Result<(), UvError> {
-    if !bypass_stamp && check() == Freshness::Fresh {
+    let before = check();
+    if !bypass_stamp && before == Freshness::Fresh {
         return Ok(());
     }
+    let venv_dir = &resolved.venv_dir;
+    let approved = if before == Freshness::Foreign {
+        approve()?;
+        venv_identity(venv_dir)
+    } else {
+        None
+    };
     let lock = lock();
     let state = check();
     let _lock = match lock {
         Err(e) if state == Freshness::Foreign => {
-            return Err(UvError::Io(std::io::Error::other(format!("{e:#}"))));
+            return Err(UvError::UntrustedVenv(format!("{e:#}")));
         }
         held => held.ok(),
     };
     match state {
         // uv runs an existing venv's interpreter to inspect it, so a planted one goes first.
-        Freshness::Foreign => approve().and_then(|()| {
-            remove_foreign_venv(tools_dir, &resolved.venv_dir).map_err(|e| {
-                let msg = format!("couldn't remove {}: {e}", shown(&resolved.venv_dir));
-                UvError::Io(std::io::Error::other(msg))
-            })
-        })?,
+        Freshness::Foreign => {
+            if approved.is_none() || approved != venv_identity(venv_dir) {
+                approve()?;
+            }
+            remove_foreign_venv(tools_dir, venv_dir).map_err(|e| {
+                UvError::UntrustedVenv(format!("couldn't remove {}: {e}", shown(venv_dir)))
+            })?;
+        }
         Freshness::Fresh if !bypass_stamp => return Ok(()),
         _ => {}
     }
     sync()
+}
+
+/// The sync lock of an in-tree venv whose token toolr checks; `None` for any other venv.
+pub(super) fn lock_in_tree(
+    resolved: &ResolvedVenv,
+    quiet: bool,
+) -> Result<Option<crate::trust::VenvLock>> {
+    if !resolved.is_in_tree() || trust_all_env() {
+        return Ok(None);
+    }
+    TrustStore::open_default()?
+        .lock_venv(&resolved.venv_dir, quiet)
+        .map(Some)
+}
+
+/// Under the lock, just before uv runs: record that toolr is building this in-tree venv (see
+/// [`TrustStore::claim_venv`]). Best effort: without the claim a failed first sync leaves a
+/// venv toolr must ask about before replacing, as it did before claims existed.
+fn claim_before_build(resolved: &ResolvedVenv, tools_dir: &Path) {
+    if !resolved.is_in_tree() || trust_all_env() {
+        return;
+    }
+    let root = tools_dir.parent().unwrap_or(tools_dir);
+    if let Ok(store) = TrustStore::open_default() {
+        let _ = store.claim_venv(root, &resolved.venv_dir);
+    }
 }
 
 /// Write the marker after toolr built or changed the venv: for an in-tree
@@ -465,7 +519,12 @@ fn stamp_marker_with(
     let venv_dir = &resolved.venv_dir;
     let token = store.map(|s| {
         s.and_then(|s| match marker_token(&s, venv_dir) {
-            Some(token) => Ok(token),
+            Some(token) => {
+                if s.venv_pending(venv_dir) {
+                    s.settle_venv(root, venv_dir, &token)?;
+                }
+                Ok(token)
+            }
             None => s.record_venv(root, venv_dir),
         })
     });
@@ -479,11 +538,16 @@ fn stamp_marker_with(
             String::new()
         }
     };
-    fs::create_dir_all(&resolved.venv_dir)?;
-    let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
-    // Replace rather than write through a committed symlink.
-    let _ = fs::remove_file(&marker);
-    fs::write(marker, token)?;
+    fs::create_dir_all(venv_dir)?;
+    // Renamed over the old marker, so a concurrent check never sees the venv without one, and
+    // a committed symlink is replaced, not written through.
+    let mut tmp = tempfile::Builder::new()
+        .prefix(".toolr-sync-stamp.")
+        .suffix(".tmp")
+        .tempfile_in(venv_dir)?;
+    tmp.write_all(token.as_bytes())?;
+    tmp.persist(venv_dir.join(FRESHNESS_MARKER))
+        .map_err(|e| e.error)?;
     Ok(())
 }
 
@@ -1462,6 +1526,140 @@ mod tests {
         assert!(t.resolved.python.is_file(), "a refused venv must stay");
     }
 
+    /// The approval is asked before the lock is taken, so no other toolr waits on a human.
+    #[test]
+    fn sync_locked_asks_before_it_locks() {
+        let t = InTree::new();
+        let events = std::cell::RefCell::new(Vec::new());
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || {
+                events.borrow_mut().push("check");
+                t.check()
+            },
+            || {
+                events.borrow_mut().push("lock");
+                Ok(())
+            },
+            || {
+                events.borrow_mut().push("approve");
+                Ok(())
+            },
+            || {
+                events.borrow_mut().push("sync");
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            *events.borrow(),
+            ["check", "approve", "lock", "check", "sync"]
+        );
+    }
+
+    /// Another toolr built the venv while the user answered: the approval isn't used.
+    #[test]
+    fn sync_locked_respects_a_state_that_changed_after_approval() {
+        let t = InTree::new();
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || {
+                t.stamp();
+                Ok(())
+            },
+            approve,
+            sync_fails,
+        )
+        .unwrap();
+        assert!(t.resolved.python.is_file(), "the built venv must stay");
+    }
+
+    /// A different venv toolr didn't build replaced the approved one: ask again.
+    #[test]
+    fn sync_locked_asks_again_for_a_different_venv() {
+        let t = InTree::new();
+        let asked = std::cell::Cell::new(0);
+        let count = || {
+            asked.set(asked.get() + 1);
+            Ok(())
+        };
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || Ok(()),
+            count,
+            || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(asked.get(), 1, "the same venv is asked about once");
+
+        let t = InTree::new();
+        asked.set(0);
+        let swap = || {
+            let other = t.resolved.venv_dir.with_extension("other");
+            venv_with_interpreter(&other);
+            fs::remove_dir_all(&t.resolved.venv_dir).unwrap();
+            fs::rename(&other, &t.resolved.venv_dir).unwrap();
+            Ok(())
+        };
+        let refuse_second = || {
+            asked.set(asked.get() + 1);
+            if asked.get() == 1 {
+                Ok(())
+            } else {
+                approve_removal(&t.resolved.venv_dir, false, None)
+            }
+        };
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            swap,
+            refuse_second,
+            sync_fails,
+        )
+        .unwrap_err();
+        assert_eq!(asked.get(), 2);
+        assert!(t.resolved.python.is_file(), "the unapproved venv must stay");
+    }
+
+    /// A first build that failed after uv created the venv leaves toolr's own venv, not one to
+    /// ask about; a marker that doesn't match still isn't toolr's.
+    #[test]
+    fn a_claimed_venv_without_a_marker_is_toolrs_until_stamped() {
+        let t = InTree::new();
+        let root = t.tools.parent().unwrap();
+        assert_eq!(t.check(), Freshness::Foreign);
+        t.store.claim_venv(root, &t.resolved.venv_dir).unwrap();
+        assert!(t.store.venv_pending(&t.resolved.venv_dir));
+        assert_eq!(t.check(), Freshness::Missing, "toolr's half-built venv");
+        touch_marker(&t.resolved.venv_dir).unwrap();
+        assert_eq!(t.check(), Freshness::Foreign, "a marker that doesn't match");
+        fs::remove_file(t.marker()).unwrap();
+
+        t.stamp();
+        assert!(
+            !t.store.venv_pending(&t.resolved.venv_dir),
+            "the stamp settles it"
+        );
+        assert_eq!(t.check(), Freshness::Fresh);
+        let token = fs::read_to_string(t.marker()).unwrap();
+        // A rebuild keeps the token, and its stamp settles the claim again.
+        t.store.claim_venv(root, &t.resolved.venv_dir).unwrap();
+        assert_eq!(t.check(), Freshness::Fresh);
+        t.stamp();
+        assert_eq!(fs::read_to_string(t.marker()).unwrap(), token);
+        assert!(!t.store.venv_pending(&t.resolved.venv_dir));
+    }
+
     /// The user's `y` to removing a foreign venv.
     fn approve() -> Result<(), UvError> {
         Ok(())
@@ -1583,7 +1781,8 @@ mod tests {
         fs::set_permissions(&t.tools, fs::Permissions::from_mode(0o755)).unwrap();
         let err = result.expect_err("a venv that stays must not be synced");
         assert!(
-            matches!(&err, UvError::Io(_)) && err.to_string().contains("couldn't remove"),
+            matches!(&err, UvError::UntrustedVenv(_))
+                && err.to_string().contains("couldn't remove"),
             "{err:?}"
         );
         assert!(t.resolved.venv_dir.is_dir());

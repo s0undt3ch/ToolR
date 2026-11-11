@@ -63,6 +63,10 @@ struct VenvEntry {
     kind: KeyKind,
     venv_dir: PathBuf,
     token: String,
+    /// toolr is building the venv: until a sync stamps it, a venv here with no marker is
+    /// toolr's own half-built one, such as after a failed or interrupted first sync.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pending: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -456,6 +460,19 @@ impl TrustStore {
 
     /// The token toolr last recorded for the in-tree venv at `venv_dir`, if any.
     pub fn venv_token(&self, venv_dir: &Path) -> Result<Option<String>> {
+        Ok(self.venv_entry(venv_dir)?.map(|e| e.token))
+    }
+
+    /// Whether toolr began building the in-tree venv at `venv_dir` and no sync has stamped it
+    /// since (see [`Self::claim_venv`]).
+    pub fn venv_pending(&self, venv_dir: &Path) -> bool {
+        self.venv_entry(venv_dir)
+            .ok()
+            .flatten()
+            .is_some_and(|e| e.pending)
+    }
+
+    fn venv_entry(&self, venv_dir: &Path) -> Result<Option<VenvEntry>> {
         let venv_key = venv_entry_key(venv_dir);
         let bytes = match fs::read(self.venv_entry_path(&venv_key)) {
             Ok(b) => b,
@@ -463,27 +480,54 @@ impl TrustStore {
             Err(e) => return Err(e).context("reading venv entry"),
         };
         let entry: VenvEntry = serde_json::from_slice(&bytes).context("parsing venv entry")?;
-        Ok((entry.venv_dir == venv_key).then_some(entry.token))
+        Ok((entry.venv_dir == venv_key).then_some(entry))
     }
 
     /// Mint a token for the in-tree venv toolr just built at `venv_dir`, under
     /// `root`'s trust key, and return it for the venv's marker.
     pub fn record_venv(&self, root: &Path, venv_dir: &Path) -> Result<String> {
+        let token = new_token()?;
+        self.write_venv_entry(root, venv_dir, &token, false)?;
+        Ok(token)
+    }
+
+    /// Before uv builds or rebuilds the in-tree venv at `venv_dir`: mark it as being built by
+    /// toolr, keeping any token it has, so a sync that fails or is killed before the marker is
+    /// written leaves a venv toolr still counts as its own.
+    pub fn claim_venv(&self, root: &Path, venv_dir: &Path) -> Result<()> {
+        let token = match self.venv_token(venv_dir).ok().flatten() {
+            Some(token) => token,
+            None => new_token()?,
+        };
+        self.write_venv_entry(root, venv_dir, &token, true)
+    }
+
+    /// End a [`Self::claim_venv`]: the venv's marker now holds `token`.
+    pub fn settle_venv(&self, root: &Path, venv_dir: &Path, token: &str) -> Result<()> {
+        self.write_venv_entry(root, venv_dir, token, false)
+    }
+
+    fn write_venv_entry(
+        &self,
+        root: &Path,
+        venv_dir: &Path,
+        token: &str,
+        pending: bool,
+    ) -> Result<()> {
         let key = self.resolve_guarded(root)?;
         let venv_key = venv_entry_key(venv_dir);
         let entry = VenvEntry {
             key: key.key,
             kind: key.kind,
             venv_dir: venv_key.clone(),
-            token: new_token()?,
+            token: token.to_owned(),
+            pending,
         };
         let dir = self.dir.join(VENV_ENTRIES_DIR);
         create_private_dir(&self.dir)?;
         create_private_dir(&dir)?;
         let bytes = serde_json::to_vec_pretty(&entry)?;
-        write_private(&dir, &self.venv_entry_path(&venv_key), &bytes)
-            .context("writing venv entry")?;
-        Ok(entry.token)
+        write_private(&dir, &self.venv_entry_path(&venv_key), &bytes).context("writing venv entry")
     }
 
     /// Drop venv entries whose trust record is gone, whose venv no longer

@@ -102,7 +102,11 @@ pub fn ensure_venv_ready(
         opts.quiet,
         &opts.upgrade,
     )
-    .with_context(|| format!("uv sync against {}", tools.display()))?;
+    .map_err(|e| match e {
+        // Says itself what happened and what to do.
+        UvError::UntrustedVenv(_) => anyhow::Error::new(e),
+        e => anyhow::Error::new(e).context(format!("uv sync against {}", tools.display())),
+    })?;
     validate_venv(&resolved.venv_dir, &resolved.python).context("validating the synced venv")?;
     if let Err(e) = finalize_sync(&repo_root, &resolved) {
         eprintln!("toolr: warning: failed to finalize sync (meta/manifest): {e}");
