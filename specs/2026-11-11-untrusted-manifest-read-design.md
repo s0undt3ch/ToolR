@@ -63,7 +63,8 @@ unknown before the prompt is ever reached. So the gate moves before the manifest
   path value rejected, before the prompt. Acceptable.
 - **Speed.** Untrusted runs get faster: no parse at all. Trusted runs are unchanged apart from the
   trust check Tab now makes.
-- **Behaviour change visible to users**, so the release note is `**Breaking:**`.
+- **Not a separate breaking change.** Repository trust itself is unreleased (v0.35.1 has none), so
+  this lands as a correction to the queued trust release notes, not as a new note.
 
 ## An in-tree venv toolr didn't build is not trusted
 
@@ -78,9 +79,15 @@ Rule: **toolr uses an in-tree venv only if toolr built it after the repository w
 - Before trust, nothing touches `tools/.venv` (no fragment glob, no `self build-manifest <package>`
   lookup, no freshness check). This is covered by the gating above.
 - When toolr builds or syncs an in-tree venv, it writes a random token to the venv's marker and the
-  same token to the repository's record in the trust store, which sits outside the repository. An
-  in-tree venv is fresh only when the two match, on top of today's mtime and interpreter checks.
-  The repository can't forge a token it never sees.
+  same token to a venv entry in the trust store, which sits outside the repository. An in-tree venv
+  is fresh only when the two match, on top of today's mtime and interpreter checks. The repository
+  can't forge a token it never sees.
+- **One entry per venv, not one per repository.** A trust record covers the whole repository and all
+  its worktrees, but each worktree has its own `tools/.venv`. A single token on the record would make
+  two worktrees overwrite each other's token and rebuild each other's venv on every switch. So each
+  in-tree venv gets its own small entry beside the trust record, keyed by the venv's path and naming
+  the repository key it belongs to. Separate files also avoid a read-modify-write race on the record
+  when two worktrees sync at once.
 - A mismatch or missing token means toolr didn't build that venv. toolr treats it like a missing
   venv: one stderr line saying so, the venv directory removed (never run), then a fresh build
   through the normal sync path and its prompts. `--no-sync` paths refuse with a message that names
@@ -89,14 +96,18 @@ Rule: **toolr uses an in-tree venv only if toolr built it after the repository w
   `TOOLR_TRUST_ALL` the token check is skipped and the venv is trusted as today.
 - Cache-located venvs live under the user's cache dir, which the repository can't write to without
   running code. They aren't checked.
-- `toolr project untrust` drops the record, and the token with it. A later re-trust rebuilds an
-  in-tree venv once.
-- Upgrade cost: every existing in-tree venv has no token, so it gets rebuilt once after upgrading.
-  Say so in the release note.
+- `toolr project untrust` removes the repository's record and every venv entry naming its key. A
+  later re-trust rebuilds each in-tree venv once. `toolr self trusted --prune` removes venv entries
+  whose record is gone or whose venv no longer exists.
+- Removing the venv never follows a symlink: if `tools/.venv` is a symlink, toolr removes the link
+  only.
+- Upgrade cost: an in-tree venv built by 0.35.1 has no token, so it gets rebuilt once. Say so in the
+  release note.
 
-Token format, its file name, and how the record stores it are the builder's call. Keep the trust
-record format backwards compatible: an old record without a token reads as "no token". If this half
-makes the PR too large, it may ship as a second stacked PR, in the same release as the first.
+Trust is unreleased, so the store's on-disk format can change freely: no migration, no schema bump
+for compatibility's sake, no handling of records written by an earlier pre-release build. Token
+format and entry file naming are the builder's call. If this half makes the PR too large, it may
+ship as a second stacked PR, in the same release as the first.
 
 ## Where the repository is read before trust today
 
@@ -169,16 +180,19 @@ keep it passing, and extend it if the gate move changes which code prompts.
       only toolr's own commands until the repository is trusted. Drop `project manifest rebuild` and
       `self build-manifest <package>` from that list.
     - The paragraph starting "toolr doesn't write `tools/.toolr-manifest.json`": replace it with the
-      new rule (nothing read or written before trust).
-- Any other doc or skill page that shows `--help` output from an untrusted repository: check
-  `docs/` and `skills/` with a grep for "trust"; the regenerated snippets run trusted, so they shouldn't
-  change.
-- Release note: `**Breaking:**` In an untrusted repository, `--help`, bare `toolr` and Tab now show
-  only toolr's own commands, and toolr neither reads nor writes `tools/.toolr-manifest.json` there.
-  `toolr <command>`, `project manifest rebuild` and `self build-manifest <package>` ask for trust
-  first. Trust the repository with `toolr project trust` to see its commands. toolr now uses an
-  in-tree `tools/.venv` only if it built that venv itself after trust. Any other in-tree venv,
-  including every existing one on the first run after upgrading, is removed and rebuilt.
+      new rule (nothing read or written before trust), and add the in-tree venv rule.
+- Any other doc or skill page that says `--help` or Tab work before trust: grep `docs/` and `skills/`
+  for "trust". The regenerated snippets run trusted, so they shouldn't change.
+- Release notes: trust is unreleased, so edit the queued notes rather than adding one.
+    - `release-notes/2026-11-01.00-00-12.repository-trust.md`: replace "`--help`, tab completion and
+      manifest builds never need trust" with: `--help`, bare `toolr` and tab completion need no trust
+      but show only toolr's own commands until you trust the repository; `toolr <command>`,
+      `toolr project manifest rebuild` and `toolr self build-manifest <package>` ask for trust first.
+    - `release-notes/2026-11-01.00-00-17.untrusted-no-manifest-write.md`: rewrite it. In an untrusted
+      repository toolr neither reads nor writes `tools/.toolr-manifest.json`, parses nothing under
+      `tools/` and doesn't look inside `tools/.venv`. Once trusted, toolr uses an in-tree `tools/.venv`
+      only if it built that venv itself; any other in-tree venv, including one an older toolr built,
+      is removed and rebuilt on first use.
 
 ## Out of scope
 
