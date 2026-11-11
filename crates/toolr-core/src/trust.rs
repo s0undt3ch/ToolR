@@ -643,7 +643,7 @@ mod tests {
             store.untrust(&f.root()).unwrap_err(),
             store.is_trusted(&f.root()).unwrap_err(),
             store
-                .record_venv(&f.root(), &f.root().join("tools/.venv"))
+                .settle_venv(&f.root(), &f.root().join("tools/.venv"), None)
                 .unwrap_err(),
         ] {
             assert!(matches!(

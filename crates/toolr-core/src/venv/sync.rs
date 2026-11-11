@@ -540,11 +540,11 @@ fn stamp_marker_with(
         s.and_then(|s| match marker_token(&s, venv_dir) {
             Some(token) => {
                 if s.venv_pending(venv_dir) {
-                    s.settle_venv(root, venv_dir, &token)?;
+                    s.settle_venv(root, venv_dir, Some(&token))?;
                 }
                 Ok(token)
             }
-            None => s.record_venv(root, venv_dir),
+            None => s.settle_venv(root, venv_dir, None),
         })
     });
     let token = match token {

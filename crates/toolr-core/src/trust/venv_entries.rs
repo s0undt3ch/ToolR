@@ -211,14 +211,6 @@ impl TrustStore {
         Ok((entry.venv_dir == venv_key).then_some(entry))
     }
 
-    /// Mint a token for the in-tree venv toolr just built at `venv_dir`, under
-    /// `root`'s trust key, and return it for the venv's marker.
-    pub fn record_venv(&self, root: &Path, venv_dir: &Path) -> Result<String> {
-        let token = new_token()?;
-        self.write_venv_entry(root, venv_dir, &token, false)?;
-        Ok(token)
-    }
-
     /// Before uv builds or rebuilds the in-tree venv at `venv_dir`: mark it as being built by
     /// toolr, keeping any token it has, so a sync that fails or is killed before the marker is
     /// written leaves a venv toolr still counts as its own.
@@ -229,21 +221,22 @@ impl TrustStore {
             Some(token) => token,
             None => new_token()?,
         };
-        self.write_venv_entry(root, venv_dir, &token, true)
+        self.write_entry(root, venv_dir, &token, true)
     }
 
-    /// End a [`Self::claim_venv`]: the venv's marker now holds `token`.
-    pub fn settle_venv(&self, root: &Path, venv_dir: &Path, token: &str) -> Result<()> {
-        self.write_venv_entry(root, venv_dir, token, false)
+    /// Record the in-tree venv toolr just built at `venv_dir` under `root`'s trust key, clearing
+    /// any pending claim, and return the token for the venv's marker: `token` ends a
+    /// [`Self::claim_venv`] with the one the marker already holds, `None` mints a fresh one.
+    pub fn settle_venv(&self, root: &Path, venv_dir: &Path, token: Option<&str>) -> Result<String> {
+        let token = match token {
+            Some(token) => token.to_owned(),
+            None => new_token()?,
+        };
+        self.write_entry(root, venv_dir, &token, false)?;
+        Ok(token)
     }
 
-    fn write_venv_entry(
-        &self,
-        root: &Path,
-        venv_dir: &Path,
-        token: &str,
-        pending: bool,
-    ) -> Result<()> {
+    fn write_entry(&self, root: &Path, venv_dir: &Path, token: &str, pending: bool) -> Result<()> {
         let key = self.resolve_guarded(root)?;
         let venv_key = venv_entry_key(venv_dir);
         let entry = VenvEntry {
@@ -354,17 +347,17 @@ mod tests {
     }
 
     #[test]
-    fn record_venv_then_venv_token_round_trips() {
+    fn settle_venv_then_venv_token_round_trips() {
         let f = Fixture::new();
         let store = f.store();
         store.trust(&f.root()).unwrap();
         let venv = venv_in(&f.root(), "a");
         assert_eq!(store.venv_token(&venv).unwrap(), None);
-        let token = store.record_venv(&f.root(), &venv).unwrap();
+        let token = store.settle_venv(&f.root(), &venv, None).unwrap();
         assert_eq!(token.len(), 64);
         assert!(token.bytes().all(|b| b.is_ascii_hexdigit()));
         assert_eq!(store.venv_token(&venv).unwrap(), Some(token.clone()));
-        let again = store.record_venv(&f.root(), &venv).unwrap();
+        let again = store.settle_venv(&f.root(), &venv, None).unwrap();
         assert_ne!(again, token);
         assert_eq!(store.venv_token(&venv).unwrap(), Some(again));
         assert_eq!(store.venv_token(&venv_in(&f.root(), "b")).unwrap(), None);
@@ -378,7 +371,7 @@ mod tests {
         let target = venv_in(&f.root(), "target");
         let link = f.root().join("link");
         std::os::unix::fs::symlink(&target, &link).unwrap();
-        let token = store.record_venv(&f.root(), &link).unwrap();
+        let token = store.settle_venv(&f.root(), &link, None).unwrap();
         assert_eq!(store.venv_token(&link).unwrap(), Some(token));
         assert_eq!(store.venv_token(&target).unwrap(), None);
     }
@@ -400,7 +393,7 @@ mod tests {
         let f = Fixture::new();
         let store = f.store();
         let venv = venv_in(&f.root(), "a");
-        store.record_venv(&f.root(), &venv).unwrap();
+        store.settle_venv(&f.root(), &venv, None).unwrap();
         let entry = fs::read_dir(store.dir().join("venvs"))
             .unwrap()
             .next()
@@ -441,9 +434,9 @@ mod tests {
         let (a, b) = (venv_in(&f.root(), "a"), venv_in(&f.root(), "b"));
         let kept = venv_in(&other_root, "c");
         for venv in [&a, &b] {
-            store.record_venv(&f.root(), venv).unwrap();
+            store.settle_venv(&f.root(), venv, None).unwrap();
         }
-        let kept_token = store.record_venv(&other_root, &kept).unwrap();
+        let kept_token = store.settle_venv(&other_root, &kept, None).unwrap();
         store.untrust(&f.root()).unwrap();
         assert_eq!(store.venv_token(&a).unwrap(), None);
         assert_eq!(store.venv_token(&b).unwrap(), None);
@@ -462,9 +455,11 @@ mod tests {
         store.trust(&orphaned_root).unwrap();
         let (kept, gone) = (venv_in(&f.root(), "kept"), venv_in(&f.root(), "gone"));
         let unrecorded = venv_in(&orphaned_root, "c");
-        let kept_token = store.record_venv(&f.root(), &kept).unwrap();
-        store.record_venv(&f.root(), &gone).unwrap();
-        store.record_venv(&orphaned_root, &unrecorded).unwrap();
+        let kept_token = store.settle_venv(&f.root(), &kept, None).unwrap();
+        store.settle_venv(&f.root(), &gone, None).unwrap();
+        store
+            .settle_venv(&orphaned_root, &unrecorded, None)
+            .unwrap();
         fs::remove_dir_all(&gone).unwrap();
         fs::remove_file(store.record_path(&orphaned_root, KeyKind::PerPath)).unwrap();
         fs::write(store.dir().join("venvs/junk"), b"{not json").unwrap();
@@ -641,7 +636,7 @@ mod tests {
         store.trust(&f.root()).unwrap();
         let (free, held) = (venv_in(&f.root(), "free"), venv_in(&f.root(), "held"));
         for venv in [&free, &held] {
-            store.record_venv(&f.root(), venv).unwrap();
+            store.settle_venv(&f.root(), venv, None).unwrap();
         }
         let holding = store.lock_venv(&held, true).unwrap();
         // Never locked, so no test forking meanwhile can hold it.
@@ -664,7 +659,7 @@ mod tests {
             venv_in(&f.root(), "orphan"),
             venv_in(&f.root(), "held"),
         );
-        store.record_venv(&f.root(), &kept).unwrap();
+        store.settle_venv(&f.root(), &kept, None).unwrap();
         let holding = store.lock_venv(&held, true).unwrap();
         // Never locked, so no test forking meanwhile can hold them.
         for venv in [&kept, &orphan] {
@@ -735,7 +730,7 @@ mod tests {
         let store = f.store();
         store.trust(&f.root()).unwrap();
         store
-            .record_venv(&f.root(), &venv_in(&f.root(), "a"))
+            .settle_venv(&f.root(), &venv_in(&f.root(), "a"), None)
             .unwrap();
         assert_eq!(store.list().unwrap().len(), 1);
     }
@@ -747,7 +742,7 @@ mod tests {
         let f = Fixture::new();
         let store = f.store();
         store
-            .record_venv(&f.root(), &venv_in(&f.root(), "a"))
+            .settle_venv(&f.root(), &venv_in(&f.root(), "a"), None)
             .unwrap();
         let dir = store.dir().join("venvs");
         assert_eq!(
