@@ -160,16 +160,15 @@ pub(super) fn run_command(
     )
     .map_err(|e| render_path_value_error(e, root, &path))?;
     // Before anything of the repo's runs: the venv path may `uv sync`, and the
-    // host-Python path imports `tools/*.py` directly. An untrusted repository was
-    // already asked in `main`; a trusted one still needs the proof from here.
+    // host-Python path imports `tools/*.py` directly. `main` already asked, unless a
+    // `-h` among the command's trailing values read as help there.
     let trusted = match grant {
         Some(trusted) => trusted,
-        None => toolr_core::trust::require_trust(
-            &repo_root,
-            toolr_core::trust::TrustMode {
-                never_prompt: output_opts.verbosity == Verbosity::Quiet,
-            },
-        )?,
+        None => {
+            let never_prompt = output_opts.verbosity == Verbosity::Quiet;
+            let mode = toolr_core::trust::TrustMode { never_prompt };
+            toolr_core::trust::require_trust(&repo_root, mode)?
+        }
     };
 
     let tempfile = write_spec_to_tempfile(&spec)?;

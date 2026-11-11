@@ -598,3 +598,27 @@ fn venv_commands_refuse_before_reading_pyproject() {
             .stderr(contains(REFUSAL).and(contains("parsing").not()));
     }
 }
+
+/// A `-h` among a command's own trailing values reads as help to the gate in
+/// `main`, so dispatch asks for trust itself before anything runs.
+#[test]
+fn a_help_word_in_trailing_values_still_gets_the_trust_check() {
+    let h = Hostile::new();
+    let hello = h.repo.path().join("tools/hello.py");
+    let source = fs::read_to_string(&hello)
+        .unwrap()
+        .replace("def world(ctx):", "def world(ctx, *words):");
+    fs::write(&hello, source).unwrap();
+    h.toolr()
+        .args(["hello", "world", "x", "-h"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL).not());
+    assert!(!h.sentinel.exists(), "nothing runs untrusted");
+    h.toolr()
+        .env("TOOLR_TRUST_ALL", "1")
+        .args(["hello", "world", "x", "-h"])
+        .assert()
+        .stderr(contains(REFUSAL).not());
+    assert!(h.sentinel.exists(), "dispatch reached the command");
+}
