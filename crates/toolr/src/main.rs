@@ -60,26 +60,23 @@ fn run() -> anyhow::Result<ExitCode> {
     } else {
         None
     };
-    let mut built = match bootstrap::ensure_manifest(&run)? {
-        Some(built) => built,
-        // Tab and `--version` need no manifest and must not walk the tree.
-        None if run.argv.is_tab_completion() || run.argv.skips_manifest_build() => {
-            Manifest::empty().into()
-        }
-        None => load_or_empty(&run)?.into(),
-    };
-    // Covers fragments and a hand-edited committed manifest alike. Tab
-    // completion drops the same entries in `resolve_manifest_at_tab`.
-    built.manifest.drop_unsafe_names();
-    if !run.argv.skips_manifest_build() {
-        // Warnings print under `-q`: they report a manifest problem, not chatter.
-        // Build warnings come only from a manifest built on this run.
-        for message in built.all_warnings() {
-            eprintln!("toolr: warning: {message}");
-        }
-    }
-    let manifest = built.manifest;
+    let mut manifest = user_manifest(&run)?;
     let mut command = cli::build_command(&manifest);
+    let mut parsed = command.clone().try_get_matches_from(run.argv.words());
+    // The manifest leaves out a foreign venv's plugin commands, so an unknown command word may
+    // be one of them: rebuild the venv, then parse again. Dispatch reuses the rebuilt venv.
+    let mut rebuilt = None;
+    if let Err(e) = &parsed
+        && e.kind() == clap::error::ErrorKind::InvalidSubcommand
+        && let Some(proof) = &grant
+        && let Some(venv) =
+            dispatch::rebuild_foreign_venv(proof.root(), proof, run.argv.is_quiet())?
+    {
+        rebuilt = Some(venv);
+        manifest = user_manifest(&run)?;
+        command = cli::build_command(&manifest);
+        parsed = command.clone().try_get_matches_from(run.argv.words());
+    }
     // Only bare, root help and a user command word reach clap untrusted; a built-in's help
     // never lists repository commands, so it needs no hint.
     let hint_hidden = (run.argv.is_bare() || run.argv.names_user_command())
@@ -88,7 +85,7 @@ fn run() -> anyhow::Result<ExitCode> {
         && run.untrusted_root().is_some();
     // try_get_matches_from, so a `subcommand_required` error on a help request
     // (`toolr self --help`) still renders that command's help instead of the error.
-    let matches = match command.clone().try_get_matches_from(run.argv.words()) {
+    let matches = match parsed {
         Ok(m) => m,
         Err(e) => {
             use clap::error::ErrorKind;
@@ -130,7 +127,30 @@ fn run() -> anyhow::Result<ExitCode> {
         eprintln!("{HIDDEN_COMMANDS_HINT}");
     }
     maybe_emit_cache_hint(&matches);
-    dispatch::dispatch(&matches, &manifest, &mut command, run, grant)
+    dispatch::dispatch(&matches, &manifest, &mut command, run, grant, rebuilt)
+}
+
+/// The manifest clap parses against, validated or rebuilt first, with its warnings printed.
+fn user_manifest(run: &Invocation) -> anyhow::Result<Manifest> {
+    let mut built = match bootstrap::ensure_manifest(run)? {
+        Some(built) => built,
+        // Tab and `--version` need no manifest and must not walk the tree.
+        None if run.argv.is_tab_completion() || run.argv.skips_manifest_build() => {
+            Manifest::empty().into()
+        }
+        None => load_or_empty(run)?.into(),
+    };
+    // Covers fragments and a hand-edited committed manifest alike. Tab
+    // completion drops the same entries in `resolve_manifest_at_tab`.
+    built.manifest.drop_unsafe_names();
+    if !run.argv.skips_manifest_build() {
+        // Warnings print under `-q`: they report a manifest problem, not chatter.
+        // Build warnings come only from a manifest built on this run.
+        for message in built.all_warnings() {
+            eprintln!("toolr: warning: {message}");
+        }
+    }
+    Ok(built.manifest)
 }
 
 /// The line to follow clap's "unexpected argument" when the argument is one of toolr's root

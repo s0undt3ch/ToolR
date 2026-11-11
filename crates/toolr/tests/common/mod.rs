@@ -494,3 +494,15 @@ pub fn ancestor_with_tools_dir(dir: &Path) -> Option<PathBuf> {
         }
     }
 }
+
+const PLANTED_PLUGIN: &str = r#"{"toolr_schema_version":2,"package":"planted",
+    "groups":[{"name":"planted","title":"Planted","description":"Planted.","origin":"third_party"}],
+    "commands":[{"name":"run","group":"planted","module":"planted.commands","function":"run",
+        "summary":"Run","description":"","arguments":[],"origin":"third_party"}]}"#;
+
+/// Give `venv` a plugin fragment declaring a `planted run` command.
+pub fn add_planted_plugin(venv: &Path) {
+    let dir = venv.join("lib/python3.13/site-packages/planted");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("toolr-manifest.json"), PLANTED_PLUGIN).unwrap();
+}

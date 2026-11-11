@@ -600,7 +600,9 @@ fn venv_commands_refuse_before_reading_pyproject() {
 }
 
 /// A `-h` among a command's own trailing values reads as help to the gate in
-/// `main`, so dispatch asks for trust itself before anything runs.
+/// `main`, so it asks nothing. Untrusted, the manifest is empty and clap rejects
+/// the command; only a trusted or `TOOLR_TRUST_ALL` run reaches dispatch, whose
+/// own trust check is then a fallback.
 #[test]
 fn a_help_word_in_trailing_values_still_gets_the_trust_check() {
     let h = Hostile::new();
