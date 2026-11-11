@@ -228,7 +228,10 @@ toolr project venv run --help
 
 Regenerate the static + dynamic manifest in place. Equivalent to what
 toolr does automatically when it detects drift, but explicit and
-reportable.
+reportable. It asks for [repository trust](concepts.md#repository-trust)
+first, and refuses without asking under `--quiet` or without a terminal, as in
+a pre-commit hook: run `toolr project trust` once, or set `TOOLR_TRUST_ALL=1`
+in CI.
 
 ```sh
 toolr project manifest rebuild --help

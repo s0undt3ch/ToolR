@@ -185,9 +185,16 @@ an untrusted repository also asks for trust, because toolr can't tell it from
 a repository command. A bad value for a path option is reported after the
 prompt.
 
-Until you trust a repository, toolr reads and writes nothing under its
-`tools/` directory. It doesn't read `tools/.toolr-manifest.json`, parse the
-files in `tools/`, or look inside `tools/.venv`.
+Until you trust a repository, toolr reads only what it needs to find the
+repository and its trust record. It walks up from the current directory to the
+first `tools/pyproject.toml`, checking only that the file exists. To find the
+git repository the trust record is keyed on, it reads `.git` and, for a linked
+worktree, the `gitdir` file that links back to it, at most 64 KiB each. It
+writes nothing under `tools/`, and reads nothing else there: not
+`tools/pyproject.toml`, not `tools/.toolr-manifest.json`, none of the files in
+`tools/`, and nothing inside `tools/.venv`. `toolr project venv path` and the
+other `toolr project venv` commands ask for trust before they read
+`tools/pyproject.toml`.
 
 Once a repository is trusted, toolr believes a committed
 `tools/.toolr-manifest.json` as repository content, like `tools/*.py`. Review
@@ -207,9 +214,13 @@ anything when `tools/` is itself a symlink. Plugin manifests from such a venv
 aren't read. `toolr self build-manifest <package>` refuses against it, and
 `toolr project manifest rebuild` warns and builds without the plugins.
 
-Syncs of an in-tree venv take a lock held in the trust store. Worktrees keep
+Syncs of an in-tree venv take a lock held in the trust store, and say so on
+stderr while another toolr holds it. When toolr can't take that lock, for
+example because the trust store is read-only, the sync fails and names the
+store: it couldn't record the venv's token there either. Worktrees keep
 separate tokens, so each one builds its own venv. Venvs in the cache and runs
-under `TOOLR_TRUST_ALL=1` skip the token check. `toolr project untrust` drops
+under `TOOLR_TRUST_ALL=1` skip the token check, and a sync under
+`TOOLR_TRUST_ALL=1` keeps the token an in-tree venv already has. `toolr project untrust` drops
 the repository's venv records, and `toolr self trusted --prune` drops records
 whose venv is gone.
 

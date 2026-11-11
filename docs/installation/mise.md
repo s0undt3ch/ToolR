@@ -209,8 +209,8 @@ benign situations:
 - The current directory isn't a toolr-using repo (no
   `tools/pyproject.toml`). The hook fires on every `cd` even into
   non-toolr directories; this is normal, not an error.
-- toolr can't read where the tools venv lives, for example a bare `tools/`
-  directory without a `pyproject.toml`.
+- toolr can't read where the tools venv lives in a trusted repository,
+  for example from a `tools/pyproject.toml` that doesn't parse.
 - `uv` isn't installed and `TOOLR_AUTO_SYNC=1` isn't set.
   The hook can't reasonably prompt for consent on every shell
   enter, so it stays out of the way.
