@@ -90,11 +90,10 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     check_freshness_with(resolved, tools_dir, store.as_ref(), trust_all)
 }
 
-/// Only [`Freshness::Foreign`]'s test, for callers that read the venv's files
-/// without running it, such as the plugin-fragment glob.
-pub fn is_foreign(resolved: &ResolvedVenv, tools_dir: &Path) -> bool {
+/// For callers that read the venv's files without running it, such as the plugin-fragment glob.
+pub fn is_foreign(resolved: &ResolvedVenv, root: &Path) -> bool {
     let (store, trust_all) = default_store_for(resolved);
-    is_foreign_with(resolved, tools_dir, store.as_ref(), trust_all)
+    is_foreign_with(resolved, root, store.as_ref(), trust_all)
 }
 
 /// The store a token check needs, and whether `TOOLR_TRUST_ALL` skips it.
@@ -112,14 +111,14 @@ fn default_store_for(resolved: &ResolvedVenv) -> (Option<TrustStore>, bool) {
 
 fn is_foreign_with(
     resolved: &ResolvedVenv,
-    tools_dir: &Path,
+    root: &Path,
     store: Option<&TrustStore>,
     trust_all: bool,
 ) -> bool {
     resolved.is_in_tree()
         && !trust_all
         && fs::symlink_metadata(&resolved.venv_dir).is_ok()
-        && !built_by_toolr(resolved, tools_dir, store)
+        && !built_by_toolr(resolved, root, store)
 }
 
 pub(crate) fn check_freshness_with(
@@ -128,7 +127,7 @@ pub(crate) fn check_freshness_with(
     store: Option<&TrustStore>,
     trust_all: bool,
 ) -> Freshness {
-    if is_foreign_with(resolved, tools_dir, store, trust_all) {
+    if is_foreign_with(resolved, project_root(tools_dir), store, trust_all) {
         return Freshness::Foreign;
     }
     let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
@@ -155,8 +154,8 @@ pub(crate) fn check_freshness_with(
 
 /// The store vouches for a venv only while it trusts the repository, a check
 /// that also refuses a store inside it.
-fn built_by_toolr(resolved: &ResolvedVenv, tools_dir: &Path, store: Option<&TrustStore>) -> bool {
-    let (Some(store), Some(root)) = (store, tools_dir.parent()) else {
+fn built_by_toolr(resolved: &ResolvedVenv, root: &Path, store: Option<&TrustStore>) -> bool {
+    let Some(store) = store else {
         return false;
     };
     if !store.is_trusted(root).unwrap_or(false) {
@@ -171,8 +170,13 @@ fn pending_build(store: &TrustStore, venv_dir: &Path) -> bool {
     store.venv_pending(venv_dir) && fs::symlink_metadata(venv_dir.join(FRESHNESS_MARKER)).is_err()
 }
 
-/// The longest marker toolr writes: a 64-hex-digit token and a newline.
-const MAX_MARKER: u64 = 65;
+/// The project root above `tools_dir`.
+fn project_root(tools_dir: &Path) -> &Path {
+    tools_dir.parent().unwrap_or(tools_dir)
+}
+
+/// The longest marker toolr writes: a hex token and a newline.
+const MAX_MARKER: u64 = (crate::trust::TOKEN_BYTES * 2 + 1) as u64;
 
 /// The marker's text, when it is a regular file no longer than [`MAX_MARKER`]: a committed
 /// marker could be a symlink to `/dev/zero` or a FIFO.
@@ -359,8 +363,9 @@ pub fn sync_if_needed(
 /// runs with no terminal. Syncing consent (`TOOLR_AUTO_SYNC`) never does.
 pub const REPLACE_VENV_ENV: &str = "TOOLR_REPLACE_UNTRUSTED_VENV";
 
-/// Why toolr won't run an in-tree venv it didn't build, for the removal prompt and the refusal.
-fn untrusted_venv_reason(venv_dir: &Path) -> String {
+/// Why toolr won't run an in-tree venv it didn't build: the one wording for the removal prompt,
+/// the refusal and every command that would read or run the venv.
+pub fn untrusted_venv_reason(venv_dir: &Path) -> String {
     format!(
         "toolr didn't build {} since you trusted this repository, so toolr won't run it: \
          it may have come with the repository, and running it would run code you never approved",
@@ -407,19 +412,25 @@ fn approve_removal(
 }
 
 /// Which venv sits at `venv_dir`, so a removal approved before the lock is applied only to
-/// the venv the user was asked about.
+/// the venv the user was asked about. `None` where there is no stable identity (non-unix) or
+/// no venv, so an approval never carries over a lock there.
 fn venv_identity(venv_dir: &Path) -> Option<(u64, u64)> {
-    let meta = fs::symlink_metadata(venv_dir).ok()?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
+        let meta = fs::symlink_metadata(venv_dir).ok()?;
         Some((meta.dev(), meta.ino()))
     }
     #[cfg(not(unix))]
     {
-        let _ = meta;
-        Some((0, 0))
+        let _ = venv_dir;
+        None
     }
+}
+
+/// An approval holds only for the venv it was given for: an unknown identity never matches.
+fn still_approved(approved: Option<(u64, u64)>, now: Option<(u64, u64)>) -> bool {
+    approved.is_some() && approved == now
 }
 
 /// Check; for a venv toolr didn't build, ask `approve` before taking the lock, so no other
@@ -459,7 +470,7 @@ fn sync_locked<L>(
     match state {
         // uv runs an existing venv's interpreter to inspect it, so a planted one goes first.
         Freshness::Foreign => {
-            if approved.is_none() || approved != venv_identity(venv_dir) {
+            if !still_approved(approved, venv_identity(venv_dir)) {
                 approve()?;
             }
             remove_foreign_venv(tools_dir, venv_dir).map_err(|e| {
@@ -492,9 +503,10 @@ fn claim_before_build(resolved: &ResolvedVenv, tools_dir: &Path) {
     if !resolved.is_in_tree() || trust_all_env() {
         return;
     }
-    let root = tools_dir.parent().unwrap_or(tools_dir);
+    // Store or claim failures are ignored: the venv then reads as one toolr didn't build and
+    // the user is asked before it is replaced (fail-safe).
     if let Ok(store) = TrustStore::open_default() {
-        let _ = store.claim_venv(root, &resolved.venv_dir);
+        let _ = store.claim_venv(project_root(tools_dir), &resolved.venv_dir);
     }
 }
 
@@ -515,7 +527,7 @@ fn stamp_marker_with(
     tools_dir: &Path,
     store: Option<Result<TrustStore>>,
 ) -> Result<()> {
-    let root = tools_dir.parent().unwrap_or(tools_dir);
+    let root = project_root(tools_dir);
     let venv_dir = &resolved.venv_dir;
     let token = store.map(|s| {
         s.and_then(|s| match marker_token(&s, venv_dir) {
@@ -1709,24 +1721,36 @@ mod tests {
     }
 
     #[test]
+    fn an_approval_needs_a_known_identity_that_still_matches() {
+        let id = Some((1, 2));
+        assert!(still_approved(id, id));
+        assert!(!still_approved(id, Some((1, 3))));
+        assert!(!still_approved(id, None));
+        // No identity, as on a platform without one: nothing carries over the lock.
+        assert!(!still_approved(None, None));
+        let tmp = TempDir::new().unwrap();
+        assert_eq!(venv_identity(&tmp.path().join("missing")), None);
+    }
+
+    #[test]
     fn is_foreign_matches_the_freshness_check() {
         let t = InTree::new();
         assert!(is_foreign_with(
             &t.resolved,
-            &t.tools,
+            project_root(&t.tools),
             Some(&t.store),
             false
         ));
         assert!(!is_foreign_with(
             &t.resolved,
-            &t.tools,
+            project_root(&t.tools),
             Some(&t.store),
             true
         ));
         t.stamp();
         assert!(!is_foreign_with(
             &t.resolved,
-            &t.tools,
+            project_root(&t.tools),
             Some(&t.store),
             false
         ));

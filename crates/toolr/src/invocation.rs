@@ -187,9 +187,15 @@ impl Invocation {
         (!trusted).then_some(root)
     }
 
-    /// Record that this run already proved the root trusted, so no later step reads the store.
-    pub(crate) fn mark_trusted(&self) {
+    /// Prove the project root trusted, asking on a terminal unless `-q`, and remember it so no
+    /// later step reads the store. `None` when there is no project.
+    pub(crate) fn require_trust(&self) -> anyhow::Result<Option<toolr_core::trust::Trusted>> {
+        let Ok(root) = self.root() else {
+            return Ok(None);
+        };
+        let proof = toolr_core::trust::require_trust_quietly(root, self.argv.is_quiet())?;
         let _ = self.trusted.set(true);
+        Ok(Some(proof))
     }
 
     fn resolved(&self) -> &Result<PathBuf, DiscoveryError> {

@@ -49,14 +49,9 @@ pub fn resolve_source_and_package(
             let repo_root =
                 discover_project_root(&cwd).context("resolving repo root for tools-venv lookup")?;
             // The lookup reads the repository's tools venv.
-            toolr_core::trust::require_trust(
-                &repo_root,
-                toolr_core::trust::TrustMode {
-                    never_prompt: quiet,
-                },
-            )?;
+            toolr_core::trust::require_trust_quietly(&repo_root, quiet)?;
             let resolved = resolve_venv_path(&repo_root).context("resolving tools-venv path")?;
-            if toolr_core::venv::is_foreign(&resolved, &repo_root.join("tools")) {
+            if toolr_core::venv::is_foreign(&resolved, &repo_root) {
                 anyhow::bail!("{}", foreign_venv_hint(&resolved.venv_dir));
             }
             let dir = find_in_venv(&resolved.venv_dir, &pkg).with_context(|| {
@@ -79,8 +74,8 @@ pub fn resolve_source_and_package(
 /// Why toolr won't read or run an in-tree venv it didn't build, and the fix.
 pub(crate) fn foreign_venv_hint(venv_dir: &Path) -> String {
     format!(
-        "toolr didn't build the tools venv at {} — run `toolr project venv sync` to rebuild it",
-        toolr_core::trust::shown(venv_dir)
+        "{} — run `toolr project venv sync` to rebuild it",
+        toolr_core::venv::untrusted_venv_reason(venv_dir)
     )
 }
 

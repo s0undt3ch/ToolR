@@ -176,9 +176,15 @@ fn venv_entry_key(venv_dir: &Path) -> PathBuf {
     }
 }
 
+/// Random bytes in a venv token; the token is their hex, twice as many characters.
+pub(crate) const TOKEN_BYTES: usize = 32;
+
+/// What a sync-lock file's name ends in; it shares the rest of the name with its venv entry.
+const LOCK_SUFFIX: &str = ".lock";
+
 fn new_token() -> Result<String> {
     const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut bytes = [0u8; 32];
+    let mut bytes = [0u8; TOKEN_BYTES];
     getrandom::fill(&mut bytes).context("reading the OS random number generator")?;
     Ok(bytes
         .iter()
@@ -398,7 +404,7 @@ impl TrustStore {
         let digest = blake3::hash(venv_entry_key(venv_dir).as_os_str().as_encoded_bytes());
         self.dir
             .join(VENV_LOCKS_DIR)
-            .join(format!("{}.lock", digest.to_hex()))
+            .join(format!("{}{LOCK_SUFFIX}", digest.to_hex()))
     }
 
     /// Block until this process holds the sync lock for the in-tree venv at
@@ -466,6 +472,7 @@ impl TrustStore {
     /// Whether toolr began building the in-tree venv at `venv_dir` and no sync has stamped it
     /// since (see [`Self::claim_venv`]).
     pub fn venv_pending(&self, venv_dir: &Path) -> bool {
+        // An unreadable entry counts as no claim, so the venv is asked about, never trusted.
         self.venv_entry(venv_dir)
             .ok()
             .flatten()
@@ -495,6 +502,8 @@ impl TrustStore {
     /// toolr, keeping any token it has, so a sync that fails or is killed before the marker is
     /// written leaves a venv toolr still counts as its own.
     pub fn claim_venv(&self, root: &Path, venv_dir: &Path) -> Result<()> {
+        // An unreadable entry keeps no token: a new one is minted and the old marker stops
+        // matching, so the venv is asked about again (fail-safe).
         let token = match self.venv_token(venv_dir).ok().flatten() {
             Some(token) => token,
             None => new_token()?,
@@ -557,7 +566,7 @@ impl TrustStore {
             let Some(stem) = path
                 .file_name()
                 .and_then(|n| n.to_str())
-                .and_then(|n| n.strip_suffix(".lock"))
+                .and_then(|n| n.strip_suffix(LOCK_SUFFIX))
                 .filter(|stem| !stem.is_empty() && !stem.starts_with('.'))
             else {
                 continue;
@@ -593,7 +602,7 @@ impl TrustStore {
                     .map(|name| {
                         self.dir
                             .join(VENV_LOCKS_DIR)
-                            .join(format!("{}.lock", name.display()))
+                            .join(format!("{}{LOCK_SUFFIX}", name.display()))
                     })
                     .map_or(Ok(()), |lock| remove_free_lock(&lock))?;
                 match fs::remove_file(&path) {
@@ -741,6 +750,16 @@ pub fn is_trusted_now(root: &Path) -> bool {
 /// Record trust in `root` in the default store, and prove it.
 pub fn grant_trust(root: &Path) -> Result<(TrustRecord, Trusted)> {
     TrustStore::open_default()?.grant(root)
+}
+
+/// [`require_trust`] that asks on a terminal unless `quiet`, which never prompts.
+pub fn require_trust_quietly(root: &Path, quiet: bool) -> Result<Trusted> {
+    require_trust(
+        root,
+        TrustMode {
+            never_prompt: quiet,
+        },
+    )
 }
 
 pub fn require_trust(root: &Path, mode: TrustMode) -> Result<Trusted> {

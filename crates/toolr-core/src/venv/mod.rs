@@ -16,7 +16,7 @@ pub use repo_key::compute_repo_key;
 pub use resolve::{IN_TREE_SLOT_SUFFIX, ResolvedVenv, cache_slot_dir, resolve_venv_path};
 pub use sync::{
     Freshness, SYNC_INPUTS_DESCRIPTION, UpgradeMode, check_freshness, is_foreign, run_uv_lock,
-    run_uv_sync, sync_if_needed,
+    run_uv_sync, sync_if_needed, untrusted_venv_reason,
 };
 pub use validate::{
     ValidationError, compare_minor_versions, installed_toolr_py_version, locate_toolr_package,

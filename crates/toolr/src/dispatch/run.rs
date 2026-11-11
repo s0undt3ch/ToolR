@@ -168,9 +168,8 @@ pub(super) fn run_command(
     let trusted = match grant {
         Some(trusted) => trusted,
         None => {
-            let never_prompt = output_opts.verbosity == Verbosity::Quiet;
-            let mode = toolr_core::trust::TrustMode { never_prompt };
-            toolr_core::trust::require_trust(&repo_root, mode)?
+            let quiet = output_opts.verbosity == Verbosity::Quiet;
+            toolr_core::trust::require_trust_quietly(&repo_root, quiet)?
         }
     };
 
@@ -253,7 +252,7 @@ pub(crate) fn rebuild_foreign_venv(
     let Ok(resolved) = resolve_venv_path(repo_root) else {
         return Ok(None);
     };
-    if !toolr_core::venv::is_foreign(&resolved, &repo_root.join("tools")) {
+    if !toolr_core::venv::is_foreign(&resolved, repo_root) {
         return Ok(None);
     }
     ready_for_dispatch(repo_root, trusted, resolved, quiet).map(Some)
@@ -275,7 +274,7 @@ fn resync_if_needed(
             format!("the tools venv is out of date with {SYNC_INPUTS_DESCRIPTION}")
         }
         Freshness::Broken => "the tools venv's Python interpreter no longer exists".to_owned(),
-        Freshness::Foreign => "toolr didn't build the in-tree tools venv".to_owned(),
+        Freshness::Foreign => toolr_core::venv::untrusted_venv_reason(&resolved.venv_dir),
         Freshness::Missing | Freshness::Fresh => return Ok(resolved),
     };
     // The sync names a foreign venv itself as it removes it.

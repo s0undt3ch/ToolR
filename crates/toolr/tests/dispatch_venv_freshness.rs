@@ -641,8 +641,7 @@ fn foreign_venv_is_refused_without_uv() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "stderr:\n{stderr}");
     assert!(
-        stderr.contains("toolr didn't build the in-tree tools venv")
-            && stderr.contains("toolr project venv sync"),
+        stderr.contains("so toolr won't run it") && stderr.contains("toolr project venv sync"),
         "stderr:\n{stderr}"
     );
     assert!(!t.built.exists(), "the foreign interpreter must not run");
@@ -659,7 +658,7 @@ fn venv_run_no_sync_refuses_a_foreign_venv() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "stderr:\n{stderr}");
     assert!(
-        stderr.contains("toolr didn't build the tools venv at")
+        stderr.contains("so toolr won't run it")
             && stderr.contains("run `toolr project venv sync`"),
         "stderr:\n{stderr}"
     );
@@ -737,7 +736,7 @@ fn a_plugin_command_whose_venv_cant_be_rebuilt_gets_claps_error_then_the_fix() {
     assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
     assert!(
         stderr.starts_with("error: unrecognized subcommand 'planted'")
-            && stderr.contains("toolr didn't build the in-tree tools venv")
+            && stderr.contains("so toolr won't run it")
             && stderr.contains("run `toolr project venv sync`"),
         "stderr:\n{stderr}"
     );
@@ -751,7 +750,7 @@ fn a_plugin_command_whose_venv_cant_be_rebuilt_gets_claps_error_then_the_fix() {
 fn manifest_commands_never_read_a_foreign_venv() {
     let t = Trusted::new();
     add_planted_plugin(&t.fx.venv_dir);
-    let hint = "toolr didn't build the tools venv at";
+    let hint = "so toolr won't run it";
     let out = t
         .toolr()
         .args(["self", "build-manifest", "planted"])

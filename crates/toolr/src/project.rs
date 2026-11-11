@@ -11,7 +11,9 @@ use clap::ArgMatches;
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 use toolr_core::exit_status::process_exit_code;
-use toolr_core::trust::{TrustMode, TrustStore, Trusted, require_trust, shown, trust_all_env};
+use toolr_core::trust::{
+    TrustMode, TrustStore, Trusted, require_trust_quietly, shown, trust_all_env,
+};
 
 /// `quiet` is the root `-q`, the only place toolr takes it. A handler that may install uv must honour it and get a case in
 /// `tests/quiet_uv_consent.rs`. The `-q` output rule is stated on the arg in
@@ -75,12 +77,7 @@ impl ProjectCtx {
 
 /// Before anything reads `tools/pyproject.toml`: toolr reads nothing of an untrusted repository.
 fn trust_root(repo_root: &Path, quiet: bool) -> Result<Trusted> {
-    require_trust(
-        repo_root,
-        TrustMode {
-            never_prompt: quiet,
-        },
-    )
+    require_trust_quietly(repo_root, quiet)
 }
 
 /// Fail unless `tools/pyproject.toml` declares every one of `packages`; `fix` ends the message.
@@ -352,7 +349,7 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
     // The rebuild parses `tools/*.py` and globs the venv's plugin fragments.
     trust_root(&repo_root, quiet)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
-    let foreign = toolr_core::venv::is_foreign(&resolved, &repo_root.join("tools"));
+    let foreign = toolr_core::venv::is_foreign(&resolved, &repo_root);
     if foreign {
         eprintln!(
             "toolr: warning: leaving out its plugin commands: {}",

@@ -137,7 +137,7 @@ fn trust_then_dispatch_never_runs_the_planted_venv() {
         .assert()
         .failure()
         .stderr(contains(REFUSAL).not())
-        .stderr(contains("toolr didn't build the in-tree tools venv"));
+        .stderr(contains("so toolr won't run it"));
     assert!(!h.sentinel.exists(), "the planted interpreter ran");
 }
 
