@@ -31,6 +31,8 @@ prek = "0.5.9"
 "cargo:cargo-edit" = "0.13.14"
 # Rust coverage in CI (`_test.yml`); a prebuilt binary, so no from-source compile.
 "aqua:taiki-e/cargo-llvm-cov" = "0.9.1"
+# Benchmarks CLI latency budgets (Tab, `--help`) in specs and PRs.
+hyperfine = "2.0.0"
 # Dogfood: the released toolr binary drives repo automation (the prek
 # hooks backed by `toolr pre-commit <command>` in `tools/precommit/`).
 # CI jobs install it via the in-repo Setup ToolR action instead, which
