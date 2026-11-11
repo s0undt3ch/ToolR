@@ -25,9 +25,8 @@ fn run_locked(
     let status = cmd
         .status()
         .with_context(|| format!("spawning uv at {}", uv.path.display()))?;
-    if status.success() {
-        stamp_marker(resolved, tools_dir)?;
-    }
+    let stamped = status.success().then(|| stamp_marker(resolved, tools_dir));
+    stamped.transpose()?;
     Ok(status)
 }
 

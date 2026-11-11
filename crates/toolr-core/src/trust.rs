@@ -589,11 +589,13 @@ impl TrustStore {
                 .ok()
                 .and_then(|b| serde_json::from_slice::<VenvEntry>(&b).ok());
             if doomed(entry.as_ref()) {
-                if let Some(name) = path.file_name() {
-                    let mut lock = name.to_os_string();
-                    lock.push(".lock");
-                    remove_free_lock(&self.dir.join(VENV_LOCKS_DIR).join(lock))?;
-                }
+                path.file_name()
+                    .map(|name| {
+                        self.dir
+                            .join(VENV_LOCKS_DIR)
+                            .join(format!("{}.lock", name.display()))
+                    })
+                    .map_or(Ok(()), |lock| remove_free_lock(&lock))?;
                 match fs::remove_file(&path) {
                     Ok(()) => {}
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -1705,14 +1707,14 @@ mod tests {
         fs::write(&lock, b"").unwrap();
         fs::set_permissions(&lock, fs::Permissions::from_mode(0o000)).unwrap();
         // Root opens it regardless, and then removes it.
-        if fs::File::open(&lock).is_err() {
-            store.prune_venv_entries().unwrap();
-            assert!(
-                fs::symlink_metadata(&lock).is_ok(),
-                "an unreadable lock stays"
-            );
-        }
-        fs::remove_file(&lock).unwrap();
+        let readable = fs::File::open(&lock).is_ok();
+        store.prune_venv_entries().unwrap();
+        assert_eq!(
+            fs::symlink_metadata(&lock).is_ok(),
+            !readable,
+            "an unreadable lock stays"
+        );
+        let _ = fs::remove_file(&lock);
         fs::create_dir(&lock).unwrap();
         let err = store.prune_venv_entries().unwrap_err();
         assert!(format!("{err:#}").contains("removing venv lock"), "{err:#}");

@@ -457,6 +457,25 @@ fn a_typo_with_a_venv_toolr_didnt_build_gets_claps_error_then_the_hint() {
     );
 }
 
+/// With no venv path to resolve there is nothing to rebuild: clap's error stands alone.
+#[test]
+fn a_typo_with_an_unreadable_venv_setting_gets_only_claps_error() {
+    let t = Trusted::new();
+    let pyproject = t.fx.tools_dir.join("pyproject.toml");
+    let body = fs::read_to_string(&pyproject)
+        .unwrap()
+        .replace("venv-location = \"in-tree\"", "venv-location = \"nowhere\"");
+    fs::write(&pyproject, body).unwrap();
+    let out = t.unapproved().arg("typo").output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "stderr:\n{stderr}");
+    assert!(
+        stderr.starts_with("error: unrecognized subcommand 'typo'")
+            && !stderr.contains("toolr didn't build"),
+        "stderr:\n{stderr}"
+    );
+}
+
 /// uv creates the venv before it resolves, so a first sync that fails leaves a venv toolr
 /// started; the next sync finishes it without asking to replace it.
 #[test]

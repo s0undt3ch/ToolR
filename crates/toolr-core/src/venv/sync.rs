@@ -1518,7 +1518,7 @@ mod tests {
             &t.tools,
             false,
             || t.check(),
-            || Ok(()),
+            lock_must_not_run,
             refused,
             sync_fails,
         )
@@ -1660,6 +1660,11 @@ mod tests {
         assert!(!t.store.venv_pending(&t.resolved.venv_dir));
     }
 
+    /// A lock that must not be taken: a fresh venv, or a removal refused before locking.
+    fn lock_must_not_run() -> Result<()> {
+        unreachable!("no lock is taken here")
+    }
+
     /// The user's `y` to removing a foreign venv.
     fn approve() -> Result<(), UvError> {
         Ok(())
@@ -1696,7 +1701,7 @@ mod tests {
             &t.tools,
             false,
             || t.check(),
-            || -> Result<()> { unreachable!("a fresh venv takes no lock") },
+            lock_must_not_run,
             approve,
             sync_fails,
         )

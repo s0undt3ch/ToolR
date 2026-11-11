@@ -115,23 +115,24 @@ mod tests {
 
     const GUARDED_ENV: [&str; 3] = ["XDG_CACHE_HOME", "XDG_STATE_HOME", "TOOLR_TRUST_ALL"];
 
-    /// Restores [`GUARDED_ENV`] on drop, then releases the module lock.
-    struct CacheHomeGuard {
+    /// Restores [`GUARDED_ENV`] to what it was at capture, on drop. Only while
+    /// `CACHE_HOME_LOCK` is held.
+    struct EnvRestore {
         prev: Vec<Option<std::ffi::OsString>>,
-        _lock: std::sync::MutexGuard<'static, ()>,
     }
 
-    impl CacheHomeGuard {
-        fn trust_all(&self) {
-            // SAFETY: as in `Drop::drop`; the lock is held while `self` lives.
-            unsafe { std::env::set_var("TOOLR_TRUST_ALL", "1") };
+    impl EnvRestore {
+        fn capture() -> Self {
+            Self {
+                prev: GUARDED_ENV.iter().map(std::env::var_os).collect(),
+            }
         }
     }
 
-    impl Drop for CacheHomeGuard {
+    impl Drop for EnvRestore {
         fn drop(&mut self) {
             // SAFETY: CACHE_HOME_LOCK serialises every test in this module
-            // that touches env vars, and it is still held here.
+            // that touches env vars, and its holder outlives this value.
             unsafe {
                 for (name, prev) in GUARDED_ENV.iter().zip(&self.prev) {
                     match prev {
@@ -143,21 +144,53 @@ mod tests {
         }
     }
 
+    /// Restores [`GUARDED_ENV`] on drop, then releases the module lock: fields drop in order.
+    struct CacheHomeGuard {
+        _restore: EnvRestore,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl CacheHomeGuard {
+        fn trust_all(&self) {
+            // SAFETY: as in `EnvRestore::drop`; the lock is held while `self` lives.
+            unsafe { std::env::set_var("TOOLR_TRUST_ALL", "1") };
+        }
+    }
+
     /// Points `XDG_CACHE_HOME` and `XDG_STATE_HOME` at a fresh temp dir, so a
     /// persisting rebuild writes its lock there instead of the real cache and
     /// no trust store of the user's is read, and unsets `TOOLR_TRUST_ALL`.
     /// Bind as `(home, _guard)` so the env is restored before the dir is deleted.
     fn temp_cache_home() -> (tempfile::TempDir, CacheHomeGuard) {
         let lock = CACHE_HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = GUARDED_ENV.iter().map(std::env::var_os).collect();
+        let restore = EnvRestore::capture();
         let home = tempfile::TempDir::new().unwrap();
-        // SAFETY: as in `CacheHomeGuard::drop`.
+        // SAFETY: as in `EnvRestore::drop`.
         unsafe {
             std::env::set_var("XDG_CACHE_HOME", home.path());
             std::env::set_var("XDG_STATE_HOME", home.path().join("state"));
             std::env::remove_var("TOOLR_TRUST_ALL");
         }
-        (home, CacheHomeGuard { prev, _lock: lock })
+        (
+            home,
+            CacheHomeGuard {
+                _restore: restore,
+                _lock: lock,
+            },
+        )
+    }
+
+    #[test]
+    fn the_env_guard_puts_back_a_value_that_was_set() {
+        let (home, _guard) = temp_cache_home();
+        let restore = EnvRestore::capture();
+        // SAFETY: `_guard` holds CACHE_HOME_LOCK.
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+        drop(restore);
+        assert_eq!(
+            std::env::var_os("XDG_CACHE_HOME").as_deref(),
+            Some(home.path().as_os_str())
+        );
     }
 
     /// The rebuild lock landed in the temp cache home, proving the redirect, under
