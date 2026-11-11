@@ -363,6 +363,26 @@ mod tests {
         assert_eq!(store.venv_token(&venv_in(&f.root(), "b")).unwrap(), None);
     }
 
+    #[test]
+    fn settling_a_claimed_venv_keeps_the_given_token() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        let venv = venv_in(&f.root(), "a");
+        store.claim_venv(&f.root(), &venv).unwrap();
+        assert!(store.venv_pending(&venv));
+        let token = store
+            .venv_token(&venv)
+            .unwrap()
+            .expect("a claim records a token");
+        assert_eq!(
+            store.settle_venv(&f.root(), &venv, Some(&token)).unwrap(),
+            token
+        );
+        assert!(!store.venv_pending(&venv));
+        assert_eq!(store.venv_token(&venv).unwrap(), Some(token));
+    }
+
     #[cfg(unix)]
     #[test]
     fn venv_entry_keys_a_symlinked_venv_by_its_link() {
