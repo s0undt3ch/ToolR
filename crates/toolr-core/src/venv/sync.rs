@@ -1160,20 +1160,15 @@ mod tests {
     #[test]
     fn sync_locked_rechecks_after_waiting_for_the_lock() {
         let t = InTree::new();
-        let synced = std::cell::Cell::new(false);
         sync_locked(
             &t.resolved,
             &t.tools,
             false,
             || t.check(),
             || t.stamp(),
-            || {
-                synced.set(true);
-                Ok(())
-            },
+            sync_fails,
         )
         .unwrap();
-        assert!(!synced.get());
         assert!(t.resolved.python.is_file());
     }
 
@@ -1200,6 +1195,27 @@ mod tests {
         assert_eq!(*events.borrow(), ["check", "lock", "check", "sync"]);
     }
 
+    /// A sync that must not run: passing it to `sync_locked().unwrap()` fails the
+    /// test if it does.
+    fn sync_fails() -> Result<(), UvError> {
+        Err(UvError::Io(std::io::Error::other("sync must not run")))
+    }
+
+    #[test]
+    fn sync_locked_returns_the_sync_error() {
+        let t = InTree::new();
+        let err = sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || (),
+            sync_fails,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("sync must not run"), "{err}");
+    }
+
     #[test]
     fn sync_locked_skips_the_lock_when_fresh() {
         let t = InTree::new();
@@ -1211,7 +1227,7 @@ mod tests {
             false,
             || t.check(),
             || locked.set(true),
-            || unreachable!("a fresh venv must not sync"),
+            sync_fails,
         )
         .unwrap();
         assert!(!locked.get());

@@ -1226,6 +1226,18 @@ mod tests {
     }
 
     #[test]
+    fn pruning_reports_an_entry_it_cannot_remove() {
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        // A directory where the entry file belongs doesn't parse, so it is
+        // doomed, and `remove_file` refuses it.
+        fs::create_dir_all(store.venv_entry_path(&venv_entry_key(&venv))).unwrap();
+        let err = store.prune_venv_entries().unwrap_err();
+        assert!(err.to_string().contains("removing venv entry"), "{err}");
+    }
+
+    #[test]
     fn corrupt_venv_entry_is_an_error() {
         let f = Fixture::new();
         let store = f.store();
