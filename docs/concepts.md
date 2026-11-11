@@ -194,7 +194,10 @@ writes nothing under `tools/`, and reads nothing else there: not
 `tools/pyproject.toml`, not `tools/.toolr-manifest.json`, none of the files in
 `tools/`, and nothing inside `tools/.venv`. `toolr project venv path` and the
 other `toolr project venv` commands ask for trust before they read
-`tools/pyproject.toml`.
+`tools/pyproject.toml`. The one command that reads `tools/` first is
+`toolr project init`: you point it at the directory to write, and it compares
+each file it would write with one already there, byte for byte, before it
+trusts that directory.
 
 Once a repository is trusted, toolr believes a committed
 `tools/.toolr-manifest.json` as repository content, like `tools/*.py`. Review
@@ -216,8 +219,9 @@ aren't read. `toolr self build-manifest <package>` refuses against it, and
 
 Syncs of an in-tree venv take a lock held in the trust store, and say so on
 stderr while another toolr holds it. When toolr can't take that lock, for
-example because the trust store is read-only, the sync fails and names the
-store: it couldn't record the venv's token there either. Worktrees keep
+example because the trust store is read-only, it won't remove a venv it didn't
+build: the sync fails and names the store, which couldn't record a rebuilt
+venv's token either. Worktrees keep
 separate tokens, so each one builds its own venv. Venvs in the cache and runs
 under `TOOLR_TRUST_ALL=1` skip the token check, and a sync under
 `TOOLR_TRUST_ALL=1` keeps the token an in-tree venv already has. `toolr project untrust` drops

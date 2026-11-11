@@ -355,9 +355,9 @@ pub fn sync_if_needed(
 
 /// Check, lock, re-check, then remove a foreign venv and sync, all under the
 /// lock: another toolr may be building this venv, and until it stamps the
-/// marker the venv reads as foreign. A lock that can't be taken fails the
-/// sync: the store it lives in couldn't record the venv's token either, so a
-/// rebuilt venv would read as foreign on every run.
+/// marker the venv reads as foreign. Without the lock toolr never removes a
+/// venv it didn't build: it fails naming the store, which couldn't record a
+/// rebuilt venv's token either. Any other venv syncs unlocked.
 fn sync_locked<L>(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
@@ -369,8 +369,15 @@ fn sync_locked<L>(
     if !bypass_stamp && check() == Freshness::Fresh {
         return Ok(());
     }
-    let _lock = lock().map_err(|e| UvError::Io(std::io::Error::other(format!("{e:#}"))))?;
-    match check() {
+    let lock = lock();
+    let state = check();
+    let _lock = match lock {
+        Err(e) if state == Freshness::Foreign => {
+            return Err(UvError::Io(std::io::Error::other(format!("{e:#}"))));
+        }
+        held => held.ok(),
+    };
+    match state {
         // uv runs an existing venv's interpreter to inspect it, so a planted one goes first.
         Freshness::Foreign => remove_foreign_venv(tools_dir, &resolved.venv_dir).map_err(|e| {
             let msg = format!("couldn't remove {}: {e}", shown(&resolved.venv_dir));
@@ -1226,6 +1233,34 @@ mod tests {
         .unwrap_err();
         assert!(err.to_string().contains(&shown(t.store.dir())), "{err}");
         assert!(t.resolved.python.is_file(), "the venv must stay");
+    }
+
+    /// toolr's own stale venv keeps its token without writing to the store, so
+    /// a lock that fails doesn't stop its resync.
+    #[test]
+    fn sync_locked_resyncs_its_own_venv_when_the_store_cant_lock() {
+        let t = InTree::new();
+        t.stamp();
+        let token = fs::read_to_string(t.marker()).unwrap();
+        set_mtime(&t.marker(), SystemTime::now() - Duration::from_secs(3600));
+        assert_eq!(t.check(), Freshness::Stale);
+        let synced = std::cell::Cell::new(false);
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || -> Result<()> { Err(anyhow::anyhow!("read-only store")) },
+            || {
+                synced.set(true);
+                t.stamp();
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(synced.get());
+        assert_eq!(fs::read_to_string(t.marker()).unwrap(), token);
+        assert_eq!(t.check(), Freshness::Fresh);
     }
 
     #[test]
