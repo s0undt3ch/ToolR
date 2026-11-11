@@ -164,9 +164,39 @@ fn built_by_toolr(resolved: &ResolvedVenv, tools_dir: &Path, store: Option<&Trus
     marker_token(store, &resolved.venv_dir).is_some()
 }
 
+/// The longest marker toolr writes: a 64-hex-digit token and a newline.
+const MAX_MARKER: u64 = 65;
+
+/// The marker's text, when it is a regular file no longer than [`MAX_MARKER`]: a committed
+/// marker could be a symlink to `/dev/zero` or a FIFO.
+fn read_marker(venv_dir: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let path = venv_dir.join(FRESHNESS_MARKER);
+    if !fs::symlink_metadata(&path).ok()?.is_file() {
+        return None;
+    }
+    let file = options.open(&path).ok()?;
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut text = String::new();
+    file.take(MAX_MARKER + 1).read_to_string(&mut text).ok()?;
+    if text.len() as u64 > MAX_MARKER {
+        return None;
+    }
+    Some(text.strip_suffix('\n').unwrap_or(&text).to_owned())
+}
+
 /// The store's token for `venv_dir`, when the venv's marker holds it.
 fn marker_token(store: &TrustStore, venv_dir: &Path) -> Option<String> {
-    let marker = fs::read_to_string(venv_dir.join(FRESHNESS_MARKER)).ok()?;
+    let marker = read_marker(venv_dir)?;
     store
         .venv_token(venv_dir)
         .ok()
@@ -292,9 +322,14 @@ pub fn sync_if_needed(
 ) -> Result<(), UvError> {
     // -U / -P explicitly ask for movement; never short-circuit on freshness.
     let bypass_stamp = force || !matches!(upgrade, UpgradeMode::None);
-    let lock = || {
-        let (store, _) = default_store_for(resolved);
-        store.map(|s| s.lock_venv(&resolved.venv_dir))
+    // Only an in-tree venv's token needs the store; without its lock toolr can't record one.
+    let lock = || -> Result<Option<crate::trust::VenvLock>> {
+        if !resolved.is_in_tree() || trust_all_env() {
+            return Ok(None);
+        }
+        TrustStore::open_default()?
+            .lock_venv(&resolved.venv_dir)
+            .map(Some)
     };
     sync_locked(
         resolved,
@@ -318,19 +353,21 @@ pub fn sync_if_needed(
 
 /// Check, lock, re-check, then remove a foreign venv and sync, all under the
 /// lock: another toolr may be building this venv, and until it stamps the
-/// marker the venv reads as foreign.
+/// marker the venv reads as foreign. A lock that can't be taken fails the
+/// sync: the store it lives in couldn't record the venv's token either, so a
+/// rebuilt venv would read as foreign on every run.
 fn sync_locked<L>(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
     bypass_stamp: bool,
     check: impl Fn() -> Freshness,
-    lock: impl FnOnce() -> L,
+    lock: impl FnOnce() -> Result<L>,
     sync: impl FnOnce() -> Result<(), UvError>,
 ) -> Result<(), UvError> {
     if !bypass_stamp && check() == Freshness::Fresh {
         return Ok(());
     }
-    let _lock = lock();
+    let _lock = lock().map_err(|e| UvError::Io(std::io::Error::other(format!("{e:#}"))))?;
     match check() {
         // uv runs an existing venv's interpreter to inspect it, so a planted one goes first.
         Freshness::Foreign => remove_foreign_venv(tools_dir, &resolved.venv_dir).map_err(|e| {
@@ -350,10 +387,11 @@ pub(super) fn stamp_marker(resolved: &ResolvedVenv, tools_dir: &Path) -> Result<
     stamp_marker_with(resolved, tools_dir, store)
 }
 
-/// `store` is `None` when the venv needs no token. A marker that already holds
-/// the store's token keeps it, so a resync never makes toolr's own venv read
-/// as foreign. A store that fails leaves the marker empty, so the next run
-/// rebuilds the venv rather than the sync failing.
+/// `store` is `None` when the venv needs no token, and the marker then keeps
+/// what it holds, so a sync under `TOOLR_TRUST_ALL` leaves a valid token in
+/// place. A marker that already holds the store's token keeps it, so a resync
+/// never makes toolr's own venv read as foreign. A store that fails leaves the
+/// marker empty, so the venv reads as foreign rather than the sync failing.
 fn stamp_marker_with(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
@@ -368,17 +406,20 @@ fn stamp_marker_with(
         })
     });
     let token = match token {
-        None => String::new(),
+        None => read_marker(venv_dir).unwrap_or_default(),
         Some(Ok(token)) => token,
         Some(Err(e)) => {
             eprintln!(
-                "toolr: warning: couldn't record the tools venv in the trust store, so the next run rebuilds it: {e:#}"
+                "toolr: warning: couldn't record the tools venv in the trust store, so toolr treats it as one it didn't build: {e:#}"
             );
             String::new()
         }
     };
     fs::create_dir_all(&resolved.venv_dir)?;
-    fs::write(resolved.venv_dir.join(FRESHNESS_MARKER), token)?;
+    let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
+    // Replace rather than write through a committed symlink.
+    let _ = fs::remove_file(&marker);
+    fs::write(marker, token)?;
     Ok(())
 }
 
@@ -1168,6 +1209,70 @@ mod tests {
         assert_eq!(t.check(), Freshness::Fresh);
     }
 
+    #[test]
+    fn sync_locked_fails_without_touching_a_foreign_venv_when_the_store_cant_lock() {
+        let t = InTree::new();
+        fs::write(t.store.dir().join("locks"), b"not a directory").unwrap();
+        let err = sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || t.store.lock_venv(&t.resolved.venv_dir),
+            sync_fails,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains(&shown(t.store.dir())), "{err}");
+        assert!(t.resolved.python.is_file(), "the venv must stay");
+    }
+
+    #[test]
+    fn a_stamp_that_needs_no_store_keeps_the_token_and_refreshes_the_marker() {
+        let t = InTree::new();
+        t.stamp();
+        let token = fs::read_to_string(t.marker()).unwrap();
+        let old = SystemTime::now() - Duration::from_secs(3600);
+        set_mtime(&t.marker(), old);
+        stamp_marker_with(&t.resolved, &t.tools, None).unwrap();
+        assert_eq!(fs::read_to_string(t.marker()).unwrap(), token);
+        assert!(fs::metadata(t.marker()).unwrap().modified().unwrap() > old);
+        assert_eq!(t.check(), Freshness::Fresh);
+    }
+
+    #[test]
+    fn only_a_marker_of_token_size_is_read() {
+        let t = InTree::new();
+        t.stamp();
+        let token = fs::read_to_string(t.marker()).unwrap();
+        fs::write(t.marker(), format!("{token}\n")).unwrap();
+        assert_eq!(t.check(), Freshness::Fresh, "a trailing newline");
+        fs::write(t.marker(), format!("{token}\n\n")).unwrap();
+        assert_eq!(t.check(), Freshness::Foreign, "one byte over");
+        fs::write(t.marker(), token.repeat(1000)).unwrap();
+        assert_eq!(t.check(), Freshness::Foreign, "far over");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_marker_that_is_a_symlink_or_a_fifo_is_never_read() {
+        let t = InTree::new();
+        t.stamp();
+        let elsewhere = t._tmp.path().join("token");
+        fs::rename(t.marker(), &elsewhere).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, t.marker()).unwrap();
+        assert_eq!(t.check(), Freshness::Foreign, "a link to the right token");
+        fs::remove_file(t.marker()).unwrap();
+        let path =
+            std::ffi::CString::new(t.marker().into_os_string().into_encoded_bytes()).unwrap();
+        // SAFETY: `path` is a valid NUL-terminated string.
+        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+        assert_eq!(
+            t.check(),
+            Freshness::Foreign,
+            "a FIFO, read without hanging"
+        );
+    }
+
     /// Another toolr finishes building the venv while this one waits for the
     /// lock: the re-check sees it fresh, so nothing is removed or synced.
     #[test]
@@ -1178,7 +1283,10 @@ mod tests {
             &t.tools,
             false,
             || t.check(),
-            || t.stamp(),
+            || {
+                t.stamp();
+                Ok(())
+            },
             sync_fails,
         )
         .unwrap();
@@ -1197,7 +1305,10 @@ mod tests {
                 events.borrow_mut().push("check");
                 t.check()
             },
-            || events.borrow_mut().push("lock"),
+            || {
+                events.borrow_mut().push("lock");
+                Ok(())
+            },
             || {
                 assert!(!t.resolved.venv_dir.exists(), "removed before the sync");
                 events.borrow_mut().push("sync");
@@ -1222,7 +1333,7 @@ mod tests {
             &t.tools,
             false,
             || t.check(),
-            || (),
+            || Ok(()),
             sync_fails,
         )
         .unwrap_err();
@@ -1239,7 +1350,10 @@ mod tests {
             &t.tools,
             false,
             || t.check(),
-            || locked.set(true),
+            || {
+                locked.set(true);
+                Ok(())
+            },
             sync_fails,
         )
         .unwrap();

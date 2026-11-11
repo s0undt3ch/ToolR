@@ -23,11 +23,10 @@ const VENV_ENTRIES_DIR: &str = "venvs";
 const VENV_LOCKS_DIR: &str = "locks";
 
 /// Held while toolr checks, removes, syncs and stamps one in-tree venv;
-/// dropping it releases the lock. Holds nothing when the lock couldn't be
-/// taken, and the caller then goes on unlocked.
+/// dropping it releases the lock.
 #[derive(Debug)]
 pub struct VenvLock {
-    _file: Option<fs::File>,
+    _file: fs::File,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -350,23 +349,41 @@ impl TrustStore {
     }
 
     /// Block until this process holds the sync lock for the in-tree venv at
-    /// `venv_dir`, keyed like its entry.
-    pub fn lock_venv(&self, venv_dir: &Path) -> VenvLock {
-        let path = self.venv_lock_path(venv_dir);
-        let file = create_private_dir(&self.dir)
+    /// `venv_dir`, keyed like its entry, saying so on stderr while it waits.
+    pub fn lock_venv(&self, venv_dir: &Path) -> Result<VenvLock> {
+        self.lock_venv_with(venv_dir, &mut std::io::stderr())
+    }
+
+    fn lock_venv_with(&self, venv_dir: &Path, out: &mut dyn Write) -> Result<VenvLock> {
+        let failed = || {
+            format!(
+                "locking the tools venv in the trust store {}",
+                shown(&self.dir)
+            )
+        };
+        create_private_dir(&self.dir)
             .and_then(|()| create_private_dir(&self.dir.join(VENV_LOCKS_DIR)))
-            .ok()
-            .and_then(|()| {
-                fs::OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .truncate(false)
-                    .open(&path)
-                    .ok()
-            })
-            .and_then(|file| file.lock().ok().map(|()| file));
-        VenvLock { _file: file }
+            .with_context(failed)?;
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.venv_lock_path(venv_dir))
+            .with_context(failed)?;
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => {
+                let _ = writeln!(
+                    out,
+                    "toolr: waiting for another toolr to finish syncing {}…",
+                    shown(venv_dir)
+                );
+                file.lock().with_context(failed)?;
+            }
+            Err(fs::TryLockError::Error(e)) => return Err(e).with_context(failed),
+        }
+        Ok(VenvLock { _file: file })
     }
 
     /// The token toolr last recorded for the in-tree venv at `venv_dir`, if any.
@@ -1340,8 +1357,7 @@ mod tests {
         let f = Fixture::new();
         let store = f.store();
         let venv = venv_in(&f.root(), "a");
-        let held = store.lock_venv(&venv);
-        assert!(held._file.is_some());
+        let held = store.lock_venv(&venv).unwrap();
         let other = fs::File::open(store.venv_lock_path(&venv)).unwrap();
         assert!(matches!(
             other.try_lock(),
@@ -1355,15 +1371,65 @@ mod tests {
     }
 
     #[test]
-    fn lock_venv_without_a_usable_store_holds_nothing() {
+    fn lock_venv_without_a_usable_store_names_it() {
         let f = Fixture::new();
         fs::write(f.store().dir(), b"not a directory").unwrap();
+        let err = f.store().lock_venv(&venv_in(&f.root(), "a")).unwrap_err();
         assert!(
-            f.store()
-                .lock_venv(&venv_in(&f.root(), "a"))
-                ._file
-                .is_none()
+            format!("{err:#}").contains(&shown(f.store().dir())),
+            "{err:#}"
         );
+    }
+
+    /// Collects what a waiting lock writes, readable from another thread.
+    #[derive(Clone, Default)]
+    struct SharedOut(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl Write for SharedOut {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SharedOut {
+        fn text(&self) -> String {
+            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        }
+    }
+
+    #[test]
+    fn lock_venv_says_when_it_waits_for_another_holder() {
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        let mut free = SharedOut::default();
+        drop(store.lock_venv_with(&venv, &mut free).unwrap());
+        assert_eq!(free.text(), "", "an uncontended lock says nothing");
+
+        let held = store.lock_venv(&venv).unwrap();
+        let out = SharedOut::default();
+        let waiter = {
+            let (store, venv, mut out) = (store.clone(), venv.clone(), out.clone());
+            std::thread::spawn(move || store.lock_venv_with(&venv, &mut out).map(drop))
+        };
+        // The timeout only bounds a failing run; the line appearing is what passes.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !out.text().contains("waiting") && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(
+            out.text(),
+            format!(
+                "toolr: waiting for another toolr to finish syncing {}…\n",
+                shown(&venv)
+            )
+        );
+        drop(held);
+        waiter.join().unwrap().unwrap();
     }
 
     #[test]
