@@ -137,23 +137,27 @@ fn typed_missing_value_from_subdirectory_fails_before_running() {
     assert_one_clap_line(&stderr);
 }
 
+#[cfg(unix)]
 #[test]
-fn typed_missing_value_in_untrusted_repo_reports_the_typo_first() {
+fn typed_missing_value_in_untrusted_repo_is_reported_after_the_trust_prompt() {
     let project = Project::new("tools/pyproject.toml");
     let env = common::TrustEnv::new();
-    let output = env
-        .toolr(&project.subdir())
-        .args(["demo", "hello", "--cfg", "nope.toml"])
-        .timeout(Duration::from_secs(60))
-        .output()
-        .unwrap();
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
+    cmd.args(["demo", "hello", "--cfg", "nope.toml"])
+        .current_dir(project.subdir())
+        .env_remove("TOOLR_TRUST_ALL")
+        .env("XDG_STATE_HOME", env.state.path())
+        .env("XDG_CACHE_HOME", env.cache.path())
+        .env("XDG_DATA_HOME", env.data.path())
+        .env("TOOLR_NO_CACHE_HINT", "1");
+    let output = common::run_on_pty(cmd, "y\n");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
-    assert!(
-        stderr.contains("path does not exist: nope.toml"),
-        "stderr:\n{stderr}"
-    );
-    assert!(!stderr.contains("trust"), "stderr:\n{stderr}");
+    let prompt = stderr.find("Trust it?").expect(&stderr);
+    let typo = stderr
+        .find("path does not exist: nope.toml")
+        .expect(&stderr);
+    assert!(prompt < typo, "stderr:\n{stderr}");
 }
 
 #[cfg(unix)]

@@ -44,6 +44,19 @@ pub(crate) const HIDDEN_COMMANDS_HINT: &str = "toolr: this repository's commands
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let run = Invocation::new(RootArgv::new(std::env::args().collect()), cwd);
+    // Before anything reads `tools/`: an untrusted repository's own command can only be
+    // found by reading it, so the user is asked first. Help never prompts.
+    let grant = match bootstrap::untrusted_project_root(&run) {
+        Some(root) if run.argv.names_user_command() && run.argv.help_mode().is_none() => {
+            Some(toolr_core::trust::require_trust(
+                root,
+                toolr_core::trust::TrustMode {
+                    never_prompt: run.argv.is_quiet(),
+                },
+            )?)
+        }
+        _ => None,
+    };
     let mut built = match bootstrap::ensure_manifest(&run)? {
         Some(built) => built,
         // Tab and `--version` need no manifest and must not walk the tree.
@@ -64,7 +77,9 @@ fn run() -> anyhow::Result<ExitCode> {
     }
     let manifest = built.manifest;
     let mut command = cli::build_command(&manifest);
-    let hint_hidden = (run.argv.is_bare() || run.argv.help_mode().is_some())
+    // Only bare, root help and a user command word reach clap untrusted; a built-in's help
+    // never lists repository commands, so it needs no hint.
+    let hint_hidden = (run.argv.is_bare() || run.argv.names_user_command())
         && !run.argv.is_quiet()
         && bootstrap::untrusted_project_root(&run).is_some();
     // try_get_matches_from, so a `subcommand_required` error on a help request
@@ -100,14 +115,18 @@ fn run() -> anyhow::Result<ExitCode> {
                 eprintln!("{hint}");
                 return Ok(ExitCode::from(e.exit_code() as u8));
             }
-            e.exit()
+            let _ = e.print();
+            if hint_hidden {
+                eprintln!("{HIDDEN_COMMANDS_HINT}");
+            }
+            return Ok(ExitCode::from(e.exit_code() as u8));
         }
     };
     if hint_hidden {
         eprintln!("{HIDDEN_COMMANDS_HINT}");
     }
     maybe_emit_cache_hint(&matches);
-    dispatch::dispatch(&matches, &manifest, &mut command, run)
+    dispatch::dispatch(&matches, &manifest, &mut command, run, grant)
 }
 
 /// The line to follow clap's "unexpected argument" when the argument is one of toolr's root

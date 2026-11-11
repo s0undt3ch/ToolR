@@ -17,7 +17,10 @@ pub struct ResolvedSource {
     pub package_name: String,
 }
 
-pub fn resolve_source_and_package(matches: &clap::ArgMatches) -> Result<ResolvedSource> {
+pub fn resolve_source_and_package(
+    matches: &clap::ArgMatches,
+    quiet: bool,
+) -> Result<ResolvedSource> {
     let source_dir = matches.get_one::<String>("source-dir").map(PathBuf::from);
     let package_arg = matches.get_one::<String>("package").cloned();
     let positional_pkg = matches.get_one::<String>("package_positional").cloned();
@@ -45,6 +48,13 @@ pub fn resolve_source_and_package(matches: &clap::ArgMatches) -> Result<Resolved
             let cwd = std::env::current_dir().context("getting current directory")?;
             let repo_root =
                 discover_project_root(&cwd).context("resolving repo root for tools-venv lookup")?;
+            // The lookup reads the repository's tools venv.
+            toolr_core::trust::require_trust(
+                &repo_root,
+                toolr_core::trust::TrustMode {
+                    never_prompt: quiet,
+                },
+            )?;
             let resolved = resolve_venv_path(&repo_root).context("resolving tools-venv path")?;
             let dir = find_in_venv(&resolved.venv_dir, &pkg).with_context(|| {
                 format!(

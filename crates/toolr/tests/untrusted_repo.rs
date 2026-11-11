@@ -93,7 +93,8 @@ fn bare_toolr_hides_repository_commands_before_trust() {
         .stdout(
             predicates::str::contains("greet")
                 .not()
-                .and(predicates::str::contains("planted").not()),
+                .and(predicates::str::contains("planted").not())
+                .and(predicates::str::contains("project")),
         )
         .stderr(predicates::str::contains("toolr project trust"));
 }
@@ -146,8 +147,31 @@ fn nothing_is_written_before_trust() {
         .arg("")
         .assert()
         .success();
+    env.toolr(repo.path())
+        .args(["-q", "greet", "hi"])
+        .assert()
+        .failure();
 
     assert_eq!(snapshot(repo.path()), before);
+}
+
+#[test]
+fn a_builtin_command_help_gets_no_hint() {
+    let repo = planted_repo();
+    let env = common::TrustEnv::new();
+
+    for args in [["self", "--help"], ["project", "--help"]] {
+        env.toolr(repo.path())
+            .args(args)
+            .assert()
+            .success()
+            .stderr("");
+    }
+    env.toolr(repo.path())
+        .args(["project", "trust", "--help"])
+        .assert()
+        .success()
+        .stderr("");
 }
 
 #[test]

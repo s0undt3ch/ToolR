@@ -51,7 +51,7 @@ fn run_self_trusted(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<E
 }
 
 fn run_self_build_manifest(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
-    let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches)?;
+    let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches, quiet)?;
 
     let output_path = resolve_output_path(matches, &resolved.source_dir);
 

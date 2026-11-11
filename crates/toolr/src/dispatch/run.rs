@@ -122,6 +122,7 @@ pub(super) fn run_command(
     manifest: &Manifest,
     root: &mut clap::Command,
     run: Invocation,
+    grant: Option<toolr_core::trust::Trusted>,
 ) -> anyhow::Result<ExitCode> {
     // Walk down the subcommand chain so nested groups (`docker image
     // build`) reach their leaf command. `path` collects every
@@ -159,14 +160,17 @@ pub(super) fn run_command(
     )
     .map_err(|e| render_path_value_error(e, root, &path))?;
     // Before anything of the repo's runs: the venv path may `uv sync`, and the
-    // host-Python path imports `tools/*.py` directly. Building the spec above
-    // runs none of it, so a bad path value is reported before the trust prompt.
-    let trusted = toolr_core::trust::require_trust(
-        &repo_root,
-        toolr_core::trust::TrustMode {
-            never_prompt: output_opts.verbosity == Verbosity::Quiet,
-        },
-    )?;
+    // host-Python path imports `tools/*.py` directly. An untrusted repository was
+    // already asked in `main`; a trusted one still needs the proof from here.
+    let trusted = match grant {
+        Some(trusted) => trusted,
+        None => toolr_core::trust::require_trust(
+            &repo_root,
+            toolr_core::trust::TrustMode {
+                never_prompt: output_opts.verbosity == Verbosity::Quiet,
+            },
+        )?,
+    };
 
     let tempfile = write_spec_to_tempfile(&spec)?;
     let resolved = resolve_venv_path(&repo_root)?;

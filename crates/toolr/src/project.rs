@@ -325,6 +325,13 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
 
     let cwd = std::env::current_dir()?;
     let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+    // The rebuild parses `tools/*.py` and globs the venv's plugin fragments.
+    require_trust(
+        &repo_root,
+        TrustMode {
+            never_prompt: quiet,
+        },
+    )?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
     let built = rebuild_manifest_full(&repo_root, &resolved.venv_dir)?;
     for w in built.all_warnings() {
