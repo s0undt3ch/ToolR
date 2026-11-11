@@ -208,7 +208,11 @@ a change to it as you would a change to the code.
 After trust, toolr uses an in-tree `tools/.venv` only if it built that venv.
 When toolr builds one, it writes a random token into the venv's
 `.toolr-sync-stamp` file and records the same token in the trust store, under
-`venvs/`. The venv is used only while the two match.
+`venvs/`. The venv is used only while the two match. The token proves toolr
+created the venv, not what is in it now: a trusted repository's later commits
+can still change files inside it, which trusting the repository already allows.
+Just before uv builds the venv, toolr records that it is building it, so a sync
+that fails or is interrupted leaves a venv toolr still treats as its own.
 
 toolr never runs any other in-tree venv, including one an older toolr built or
 one made with `uv venv`: it may have come with the repository, and running it
@@ -218,9 +222,13 @@ venv and builds a fresh one, since anything installed in it by hand is lost.
 Only a `y` on a terminal, or `TOOLR_REPLACE_UNTRUSTED_VENV=1` in the
 environment, approves the removal; `TOOLR_AUTO_SYNC` doesn't. With `-q` or no
 terminal toolr leaves the venv in place, says why, and names the ways to
-approve. A symlinked venv is unlinked, not followed, and toolr refuses to remove
+approve. toolr asks before it takes the sync lock, so another toolr never waits
+on your answer. A symlinked venv is unlinked, not followed, and toolr refuses to remove
 anything when `tools/` is itself a symlink. Plugin manifests from such a venv
-aren't read, so `--help` leaves its plugin commands out until the rebuild.
+aren't read, so `--help` leaves its plugin commands out until the rebuild. When
+a command word is unknown and the venv isn't rebuilt, toolr can't tell a typo
+from one of those plugin commands, so it prints the usual unknown-command error
+followed by why the venv wasn't rebuilt.
 `toolr self build-manifest <package>` refuses against it, and
 `toolr project manifest rebuild` warns and builds without the plugins.
 
@@ -230,7 +238,8 @@ that lock, for example because the trust store is read-only, it won't remove a
 venv it didn't build: the sync fails and names the store, which couldn't record
 a rebuilt venv's token either. Worktrees keep separate tokens, so each one
 builds its own venv. Venvs in the cache and runs under `TOOLR_TRUST_ALL=1` skip
-the token check, and a sync under `TOOLR_TRUST_ALL=1` keeps the token an in-tree
+the token check, so `TOOLR_TRUST_ALL=1` also runs any in-tree venv it finds,
+such as one restored from a CI cache. A sync under `TOOLR_TRUST_ALL=1` keeps the token an in-tree
 venv already has. `toolr project untrust` drops the repository's venv records,
 and `toolr self trusted --prune` drops records whose venv is gone. On Unix,
 each sync also deletes its lock file when it ends, and those two commands delete
