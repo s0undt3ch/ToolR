@@ -345,20 +345,22 @@ pub fn sync_if_needed(
         resolved,
         tools_dir,
         bypass_stamp,
-        || check_freshness(resolved, tools_dir),
-        lock,
-        || approve_removal_on_tty(&resolved.venv_dir, quiet),
-        || {
-            claim_before_build(resolved, tools_dir);
-            // Not `Http`: its message tells the user to install uv, which they already have.
-            let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
-                let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
-                UvError::Io(std::io::Error::other(msg))
-            })?;
-            if !status.success() {
-                return Err(UvError::SyncFailed(status.code()));
-            }
-            Ok(())
+        SyncSteps {
+            check: || check_freshness(resolved, tools_dir),
+            lock,
+            approve: || approve_removal_on_tty(&resolved.venv_dir, quiet),
+            sync: || {
+                claim_before_build(resolved, tools_dir);
+                // Not `Http`: its message tells the user to install uv, which they already have.
+                let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
+                    let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
+                    UvError::Io(std::io::Error::other(msg))
+                })?;
+                if !status.success() {
+                    return Err(UvError::SyncFailed(status.code()));
+                }
+                Ok(())
+            },
         },
     )
 }
@@ -444,21 +446,41 @@ fn still_approved(approved: Option<(u64, u64)>, now: Option<(u64, u64)>) -> bool
     approved.is_some() && approved == now
 }
 
+/// The seams of [`sync_locked`], so tests drive it with closures.
+struct SyncSteps<C, L, A, S> {
+    /// The venv's freshness now.
+    check: C,
+    /// Take the sync lock; the guard it returns is held until the sync is done.
+    lock: L,
+    /// Approve removing a venv toolr didn't build.
+    approve: A,
+    /// Run uv.
+    sync: S,
+}
+
 /// Check; for a venv toolr didn't build, ask `approve` before taking the lock, so no other
 /// toolr waits on the answer. Then lock, re-check, and remove such a venv only if it is still
 /// the one approved, asking again only for a different one; then sync. Another toolr may be
 /// building this venv, and until it stamps the marker the venv reads as one toolr didn't
 /// build. Without the lock toolr never removes such a venv: it fails naming the store, which
 /// couldn't record a rebuilt venv's token either. Any other venv syncs unlocked.
-fn sync_locked<L>(
+fn sync_locked<G>(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
     bypass_stamp: bool,
-    check: impl Fn() -> Freshness,
-    lock: impl FnOnce() -> Result<L>,
-    mut approve: impl FnMut() -> Result<(), UvError>,
-    sync: impl FnOnce() -> Result<(), UvError>,
+    steps: SyncSteps<
+        impl Fn() -> Freshness,
+        impl FnOnce() -> Result<G>,
+        impl FnMut() -> Result<(), UvError>,
+        impl FnOnce() -> Result<(), UvError>,
+    >,
 ) -> Result<(), UvError> {
+    let SyncSteps {
+        check,
+        lock,
+        mut approve,
+        sync,
+    } = steps;
     let before = check();
     if !bypass_stamp && before == Freshness::Fresh {
         return Ok(());
@@ -1368,10 +1390,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || t.store.lock_venv(&t.resolved.venv_dir, false),
-            approve,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: || t.store.lock_venv(&t.resolved.venv_dir, false),
+                approve,
+                sync: sync_fails,
+            },
         )
         .unwrap_err();
         assert!(err.to_string().contains(&shown(t.store.dir())), "{err}");
@@ -1392,13 +1416,15 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || -> Result<()> { Err(anyhow::anyhow!("read-only store")) },
-            approve,
-            || {
-                synced.set(true);
-                t.stamp();
-                Ok(())
+            SyncSteps {
+                check: || t.check(),
+                lock: || -> Result<()> { Err(anyhow::anyhow!("read-only store")) },
+                approve,
+                sync: || {
+                    synced.set(true);
+                    t.stamp();
+                    Ok(())
+                },
             },
         )
         .unwrap();
@@ -1463,13 +1489,15 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || {
-                t.stamp();
-                Ok(())
+            SyncSteps {
+                check: || t.check(),
+                lock: || {
+                    t.stamp();
+                    Ok(())
+                },
+                approve,
+                sync: sync_fails,
             },
-            approve,
-            sync_fails,
         )
         .unwrap();
         assert!(t.resolved.python.is_file());
@@ -1483,19 +1511,21 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || {
-                events.borrow_mut().push("check");
-                t.check()
-            },
-            || {
-                events.borrow_mut().push("lock");
-                Ok(())
-            },
-            approve,
-            || {
-                assert!(!t.resolved.venv_dir.exists(), "removed before the sync");
-                events.borrow_mut().push("sync");
-                Ok(())
+            SyncSteps {
+                check: || {
+                    events.borrow_mut().push("check");
+                    t.check()
+                },
+                lock: || {
+                    events.borrow_mut().push("lock");
+                    Ok(())
+                },
+                approve,
+                sync: || {
+                    assert!(!t.resolved.venv_dir.exists(), "removed before the sync");
+                    events.borrow_mut().push("sync");
+                    Ok(())
+                },
             },
         )
         .unwrap();
@@ -1540,10 +1570,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            lock_must_not_run,
-            refused,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: lock_must_not_run,
+                approve: refused,
+                sync: sync_fails,
+            },
         )
         .unwrap_err();
         assert!(t.resolved.python.is_file(), "a refused venv must stay");
@@ -1558,21 +1590,23 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || {
-                events.borrow_mut().push("check");
-                t.check()
-            },
-            || {
-                events.borrow_mut().push("lock");
-                Ok(())
-            },
-            || {
-                events.borrow_mut().push("approve");
-                Ok(())
-            },
-            || {
-                events.borrow_mut().push("sync");
-                Ok(())
+            SyncSteps {
+                check: || {
+                    events.borrow_mut().push("check");
+                    t.check()
+                },
+                lock: || {
+                    events.borrow_mut().push("lock");
+                    Ok(())
+                },
+                approve: || {
+                    events.borrow_mut().push("approve");
+                    Ok(())
+                },
+                sync: || {
+                    events.borrow_mut().push("sync");
+                    Ok(())
+                },
             },
         )
         .unwrap();
@@ -1590,13 +1624,15 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || {
-                t.stamp();
-                Ok(())
+            SyncSteps {
+                check: || t.check(),
+                lock: || {
+                    t.stamp();
+                    Ok(())
+                },
+                approve,
+                sync: sync_fails,
             },
-            approve,
-            sync_fails,
         )
         .unwrap();
         assert!(t.resolved.python.is_file(), "the built venv must stay");
@@ -1615,10 +1651,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || Ok(()),
-            count,
-            || Ok(()),
+            SyncSteps {
+                check: || t.check(),
+                lock: || Ok(()),
+                approve: count,
+                sync: || Ok(()),
+            },
         )
         .unwrap();
         assert_eq!(asked.get(), 1, "the same venv is asked about once");
@@ -1644,10 +1682,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            swap,
-            refuse_second,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: swap,
+                approve: refuse_second,
+                sync: sync_fails,
+            },
         )
         .unwrap_err();
         assert_eq!(asked.get(), 2);
@@ -1706,10 +1746,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || Ok(()),
-            approve,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: || Ok(()),
+                approve,
+                sync: sync_fails,
+            },
         )
         .unwrap_err();
         assert!(err.to_string().contains("sync must not run"), "{err}");
@@ -1723,10 +1765,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            lock_must_not_run,
-            approve,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: lock_must_not_run,
+                approve,
+                sync: sync_fails,
+            },
         )
         .unwrap();
     }
@@ -1810,10 +1854,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || Ok(()),
-            approve,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: || Ok(()),
+                approve,
+                sync: sync_fails,
+            },
         );
         fs::set_permissions(&t.tools, fs::Permissions::from_mode(0o755)).unwrap();
         let err = result.expect_err("a venv that stays must not be synced");
