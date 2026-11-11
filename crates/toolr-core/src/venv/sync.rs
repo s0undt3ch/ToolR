@@ -999,6 +999,16 @@ mod tests {
         assert_eq!(fs::read(venv.join(FRESHNESS_MARKER)).unwrap(), b"");
     }
 
+    /// Set `path`'s mtime, so tests order sync inputs without sleeping.
+    fn set_mtime(path: &Path, when: SystemTime) {
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(when)
+            .unwrap();
+    }
+
     /// A trusted repository with an in-tree venv and its own trust store.
     struct InTree {
         _tmp: TempDir,
@@ -1015,13 +1025,16 @@ mod tests {
             let venv = tools.join(".venv");
             venv_with_interpreter(&venv);
             fs::write(tools.join("uv.lock"), b"locks").unwrap();
+            set_mtime(
+                &tools.join("uv.lock"),
+                SystemTime::now() - Duration::from_secs(60),
+            );
             let store = TrustStore::at(tmp.path().join("state").join("trust"));
             store.trust(&root).unwrap();
             let resolved = ResolvedVenv {
                 repo_key: String::new(),
                 ..dummy_resolved(venv)
             };
-            std::thread::sleep(Duration::from_millis(20));
             Self {
                 _tmp: tmp,
                 tools,

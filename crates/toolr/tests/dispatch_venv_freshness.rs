@@ -396,7 +396,13 @@ fn own_stale_in_tree_venv_is_synced_in_place() {
     let marker = t.fx.venv_dir.join("keep-me");
     fs::write(&marker, "").unwrap();
     fs::remove_file(&t.fx.uv_argv_log).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(20));
+    // Age the sync stamp rather than sleep, so the bumped lock reads newer.
+    fs::File::options()
+        .write(true)
+        .open(t.fx.venv_dir.join(".toolr-sync-stamp"))
+        .unwrap()
+        .set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(60))
+        .unwrap();
     fs::write(t.fx.tools_dir.join("uv.lock"), "version = 1\n# bumped\n").unwrap();
     let output = t.toolr().args(["hello", "world"]).output().unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
