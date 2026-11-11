@@ -412,18 +412,25 @@ fn approve_removal(
 }
 
 /// Which venv sits at `venv_dir`, so a removal approved before the lock is applied only to
-/// the venv the user was asked about. `None` where there is no stable identity (non-unix) or
-/// no venv, so an approval never carries over a lock there.
+/// the venv the user was asked about. `None` when there is no venv or it can't be read, so an
+/// approval never carries over a lock then.
 fn venv_identity(venv_dir: &Path) -> Option<(u64, u64)> {
+    let meta = fs::symlink_metadata(venv_dir).ok()?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let meta = fs::symlink_metadata(venv_dir).ok()?;
         Some((meta.dev(), meta.ino()))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let _ = venv_dir;
+        use std::os::windows::fs::MetadataExt;
+        // NTFS name tunnelling can keep the creation time across a fast delete and recreate;
+        // acceptable, as the window is only between the user's answer and taking the lock.
+        Some((meta.creation_time(), 0))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = meta;
         None
     }
 }
