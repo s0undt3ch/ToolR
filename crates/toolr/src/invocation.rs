@@ -66,13 +66,33 @@ impl RootArgv {
             .get_arguments()
             .find(|a| matches!(a.get_action(), ArgAction::Version))
             .expect("the root declares --version");
-        let short = version.get_short();
+        self.root_flag_given(version)
+    }
+
+    /// `-q` or `--quiet` among the root flags.
+    pub(crate) fn is_quiet(&self) -> bool {
+        let root = crate::cli::root_command();
+        let quiet = root
+            .get_arguments()
+            .find(|a| a.get_id() == "quiet")
+            .expect("the root declares --quiet");
+        self.root_flag_given(quiet)
+    }
+
+    /// Whether `flag`, by any spelling or in a short cluster, comes before the command word.
+    fn root_flag_given(&self, flag: &clap::Arg) -> bool {
+        let short = flag.get_short();
         self.words[1..self.command_at].iter().any(|w| {
-            spellings(version).contains(w)
+            spellings(flag).contains(w)
                 || w.strip_prefix('-')
                     .filter(|c| !c.starts_with('-'))
                     .is_some_and(|c| c.chars().any(|ch| Some(ch) == short))
         })
+    }
+
+    /// No command word at all: a bare `toolr`, with or without root flags.
+    pub(crate) fn is_bare(&self) -> bool {
+        self.first_word().is_none()
     }
 
     /// The run needs no user manifest: `--version`, or one of toolr's own commands, which

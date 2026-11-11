@@ -20,12 +20,14 @@ use crate::parser::{
     BuildError, BuiltManifest, build_static_manifest, build_static_manifest_with_venv,
 };
 
-/// Whether [`refresh`] writes what it builds.
+/// Whether [`refresh`] writes what it builds. Callers only reach it for a
+/// trusted repository: an untrusted one is never refreshed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Persist {
     /// Rebuild under the rebuild lock (re-checked once held) and write.
     Write,
-    /// Build in memory: no lock, no snapshot clock, no write.
+    /// Build in memory: no lock, no snapshot clock, no write. For Tab, which
+    /// must leave the tree as found.
     InMemory,
 }
 

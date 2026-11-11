@@ -779,8 +779,38 @@ fn make_tree(py_files: &[(&str, &str)]) -> TempDir {
     tmp
 }
 
+/// Holds the process env lock with `TOOLR_TRUST_ALL` set, so a Tab resolve reads the tree.
+fn trusted() -> crate::test_env::EnvGuard {
+    let mut env = crate::test_env::EnvGuard::write();
+    env.set("TOOLR_TRUST_ALL", "1");
+    env
+}
+
+#[test]
+fn untrusted_project_resolves_to_an_empty_manifest_without_reading_it() {
+    let tmp = make_tree(&[
+        ("ci.py", "def (:\n"),
+        (".toolr-manifest.json", "{ not json"),
+    ]);
+    let state = TempDir::new().unwrap();
+    let mut env = crate::test_env::EnvGuard::write();
+    env.remove("TOOLR_TRUST_ALL");
+    env.set("XDG_STATE_HOME", state.path());
+
+    let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
+
+    assert_eq!(resolved.manifest, crate::manifest::Manifest::empty());
+    assert_eq!(
+        resolved.project_root,
+        dunce::canonicalize(tmp.path()).unwrap()
+    );
+    let written = std::fs::read_to_string(tmp.path().join("tools/.toolr-manifest.json")).unwrap();
+    assert_eq!(written, "{ not json");
+}
+
 #[test]
 fn returns_fresh_manifest_when_no_cache_exists() {
+    let _trust = trusted();
     let tmp = make_tree(&[(
         "ci.py",
         "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
@@ -796,6 +826,7 @@ fn returns_fresh_manifest_when_no_cache_exists() {
 
 #[test]
 fn returns_cached_manifest_when_hash_matches() {
+    let _trust = trusted();
     let tmp = make_tree(&[(
         "ci.py",
         "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
@@ -818,6 +849,7 @@ fn returns_cached_manifest_when_hash_matches() {
 /// path, and left as it is for the next non-TAB run to report and repair.
 #[test]
 fn corrupt_manifest_at_tab_rebuilds_in_memory() {
+    let _trust = trusted();
     let tmp = make_tree(&[(
         "ci.py",
         "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
@@ -853,6 +885,7 @@ fn re_parses_when_cached_hash_is_stale() {
 
 #[test]
 fn preserves_third_party_entries_from_cache_when_reparsing() {
+    let _trust = trusted();
     let tmp = make_tree(&[(
         "ci.py",
         "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
@@ -910,6 +943,7 @@ fn preserves_third_party_entries_from_cache_when_reparsing() {
 /// without one the error reaches `run_complete`.
 #[test]
 fn failed_rebuild_serves_the_cache() {
+    let _trust = trusted();
     let tmp = make_tree(&[(
         "ci.py",
         "group = command_group(\"ci\", \"CI utilities\", \"CI utilities.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
@@ -940,6 +974,7 @@ fn failed_rebuild_serves_the_cache() {
 #[cfg(unix)]
 #[test]
 fn symlinked_module_fails_resolve_with_and_without_a_cache() {
+    let _trust = trusted();
     let tmp = make_tree(&[(
         "demo.py",
         "group = command_group(\"demo\", \"Demo\", \"Demo.\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",

@@ -20,10 +20,17 @@ pub struct ResolvedManifest {
 /// `cwd`. Walks up to find `tools/` and either returns the cached manifest
 /// verbatim or re-parses and returns a fresh one in memory (with the
 /// cache's third-party entries preserved). A re-parse that fails serves
-/// the cache, if any, unless it found symlinked modules.
+/// the cache, if any, unless it found symlinked modules. An untrusted
+/// project is not read: its manifest is empty.
 pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     let project_root = discover_project_root(cwd)
         .with_context(|| format!("walking up from {} to find tools/", cwd.display()))?;
+    if !crate::trust::is_trusted_now(&project_root) {
+        return Ok(ResolvedManifest {
+            manifest: Manifest::empty(),
+            project_root,
+        });
+    }
     // No venv: globbing it is too costly on the hot path, so the cached
     // third-party state is canonical; the next dispatch re-globs. Never
     // written, so no lock. Every completion script sends stderr to

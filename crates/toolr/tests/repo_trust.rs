@@ -371,12 +371,14 @@ fn root_help_in_untrusted_repo_does_not_write_manifest() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(contains("demo"));
+        .stdout(contains("demo").not());
     assert!(
         !manifest_path(&repo).exists(),
         "`toolr --help` wrote the manifest into an untrusted repository"
     );
-    env.toolr(repo.path()).assert().stdout(contains("demo"));
+    env.toolr(repo.path())
+        .assert()
+        .stdout(contains("demo").not());
     assert!(
         !manifest_path(&repo).exists(),
         "bare `toolr` wrote the manifest into an untrusted repository"
@@ -417,7 +419,7 @@ fn stale_manifest_in_untrusted_repo_is_not_rewritten() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(contains("demo"))
+        .stdout(contains("demo").not())
         .stderr(contains("unreadable").not());
 
     assert_eq!(fs::read_to_string(&path).unwrap(), bytes);

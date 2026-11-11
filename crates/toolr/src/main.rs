@@ -37,6 +37,10 @@ fn main() -> ExitCode {
     }
 }
 
+/// Printed when an untrusted repository's commands are left out of `--help` or a bare run.
+pub(crate) const HIDDEN_COMMANDS_HINT: &str = "toolr: this repository's commands are hidden until you trust it; \
+     run `toolr project trust` to show them";
+
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let run = Invocation::new(RootArgv::new(std::env::args().collect()), cwd);
@@ -60,6 +64,9 @@ fn run() -> anyhow::Result<ExitCode> {
     }
     let manifest = built.manifest;
     let mut command = cli::build_command(&manifest);
+    let hint_hidden = (run.argv.is_bare() || run.argv.help_mode().is_some())
+        && !run.argv.is_quiet()
+        && bootstrap::untrusted_project_root(&run).is_some();
     // try_get_matches_from, so a `subcommand_required` error on a help request
     // (`toolr self --help`) still renders that command's help instead of the error.
     let matches = match command.clone().try_get_matches_from(run.argv.words()) {
@@ -72,6 +79,9 @@ fn run() -> anyhow::Result<ExitCode> {
                     ErrorKind::MissingSubcommand | ErrorKind::MissingRequiredArgument
                 )
             {
+                if hint_hidden {
+                    eprintln!("{HIDDEN_COMMANDS_HINT}");
+                }
                 dispatch::print_help_from_argv(&run.argv, &command, mode);
                 return Ok(ExitCode::SUCCESS);
             }
@@ -93,6 +103,9 @@ fn run() -> anyhow::Result<ExitCode> {
             e.exit()
         }
     };
+    if hint_hidden {
+        eprintln!("{HIDDEN_COMMANDS_HINT}");
+    }
     maybe_emit_cache_hint(&matches);
     dispatch::dispatch(&matches, &manifest, &mut command, run)
 }

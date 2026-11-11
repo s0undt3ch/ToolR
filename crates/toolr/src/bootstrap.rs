@@ -2,25 +2,34 @@
 //! tree before clap parses the user's command, building it when missing or
 //! stale.
 //!
-//! The build is written to disk only in a trusted repository (or with
-//! `TOOLR_TRUST_ALL=1`). An untrusted one gets an in-memory manifest and any
-//! existing file is left exactly as found. [`ensure_manifest`] holds the
-//! argv and trust policy; `toolr_core::manifest_build::refresh` does the
-//! rest.
+//! Only a trusted repository (or `TOOLR_TRUST_ALL=1`) has its `tools/` parsed
+//! and its manifest read or written. An untrusted one gets an empty manifest,
+//! so toolr shows only its built-in commands and leaves every file exactly as
+//! found. [`ensure_manifest`] holds the argv and trust policy;
+//! `toolr_core::manifest_build::refresh` does the rest.
 
 use std::path::Path;
 
-use toolr_core::manifest::manifest_path;
+use toolr_core::manifest::{Manifest, manifest_path};
 use toolr_core::manifest_build::{Persist, Refresh, refresh};
 use toolr_core::parser::BuiltManifest;
 use toolr_core::venv::resolve_venv_path;
 
 use crate::invocation::Invocation;
 
+/// The discovered project root when it is not trusted: toolr reads nothing
+/// of such a repository.
+pub(crate) fn untrusted_project_root(run: &Invocation) -> Option<&Path> {
+    run.root()
+        .ok()
+        .filter(|root| !toolr_core::trust::is_trusted_now(root))
+}
+
 /// Build the manifest when it's missing or stale: a pure-Rust parse of
 /// `tools/*.py` plus an execution-free glob of the venv's plugin fragments,
-/// so no repository code runs. The build is written only in a trusted
-/// repository; tab completion and `--version` never read the trust store.
+/// so no repository code runs. An untrusted repository is not read at all and
+/// gets an empty manifest; `--version` and built-in commands skip this step
+/// and never read the trust store.
 ///
 /// Returns the manifest this step validated or rebuilt, so the caller
 /// dispatches against it instead of re-reading a file another toolr
@@ -35,12 +44,10 @@ pub(crate) fn ensure_manifest(run: &Invocation) -> anyhow::Result<Option<BuiltMa
     let Ok(root) = run.root() else {
         return Ok(None);
     };
-    let persist = if toolr_core::trust::is_trusted_now(root) {
-        Persist::Write
-    } else {
-        Persist::InMemory
-    };
-    ensure_manifest_at(root, persist)
+    if untrusted_project_root(run).is_some() {
+        return Ok(Some(Manifest::empty().into()));
+    }
+    ensure_manifest_at(root, Persist::Write)
 }
 
 /// [`ensure_manifest`] for a discovered `root`. A rebuild that fails warns
