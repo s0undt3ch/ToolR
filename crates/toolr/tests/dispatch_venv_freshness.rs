@@ -462,3 +462,70 @@ fn forced_sync_removes_a_foreign_venv_first() {
     assert!(!planted.exists(), "uv ran against the planted venv");
     assert!(t.fx.uv_ran_sync());
 }
+
+const PLANTED_PLUGIN: &str = r#"{"toolr_schema_version":2,"package":"planted",
+    "groups":[{"name":"planted","title":"Planted","description":"Planted.","origin":"third_party"}],
+    "commands":[{"name":"run","group":"planted","module":"planted.commands","function":"run",
+        "summary":"Run","description":"","arguments":[],"origin":"third_party"}]}"#;
+
+fn add_planted_plugin(venv: &Path) {
+    let dir = venv.join("lib/python3.13/site-packages/planted");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("toolr-manifest.json"), PLANTED_PLUGIN).unwrap();
+}
+
+fn help(t: &Trusted) -> String {
+    let out = t.toolr().arg("--help").output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "stderr:\n{stderr}");
+    String::from_utf8(out.stdout).unwrap()
+}
+
+#[test]
+fn a_foreign_venvs_plugins_stay_out_of_help_until_toolr_builds_it() {
+    let t = Trusted::new();
+    add_planted_plugin(&t.fx.venv_dir);
+    add_planted_plugin(&t.fx.venv_template);
+    let before = help(&t);
+    assert!(before.contains("hello"), "help:\n{before}");
+    assert!(!before.contains("planted"), "help:\n{before}");
+    t.toolr()
+        .args(["project", "venv", "sync"])
+        .assert()
+        .success();
+    let after = help(&t);
+    assert!(after.contains("planted"), "help:\n{after}");
+}
+
+#[test]
+fn manifest_commands_never_read_a_foreign_venv() {
+    let t = Trusted::new();
+    add_planted_plugin(&t.fx.venv_dir);
+    let hint = "toolr didn't build the tools venv at";
+    let out = t
+        .toolr()
+        .args(["self", "build-manifest", "planted"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(hint) && stderr.contains("run `toolr project venv sync`"),
+        "stderr:\n{stderr}"
+    );
+    assert!(!t.fx.tools_dir.join("planted").exists());
+
+    let out = t
+        .toolr()
+        .args(["project", "manifest", "rebuild"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("leaving out its plugin commands") && stderr.contains(hint),
+        "stderr:\n{stderr}"
+    );
+    let manifest = fs::read_to_string(t.fx.tools_dir.join(".toolr-manifest.json")).unwrap();
+    assert!(!manifest.contains("planted"), "{manifest}");
+}

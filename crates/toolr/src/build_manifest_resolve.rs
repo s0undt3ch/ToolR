@@ -56,6 +56,9 @@ pub fn resolve_source_and_package(
                 },
             )?;
             let resolved = resolve_venv_path(&repo_root).context("resolving tools-venv path")?;
+            if toolr_core::venv::is_foreign(&resolved, &repo_root.join("tools")) {
+                anyhow::bail!("{}", foreign_venv_hint(&resolved.venv_dir));
+            }
             let dir = find_in_venv(&resolved.venv_dir, &pkg).with_context(|| {
                 format!(
                     "package `{pkg}` not found under {}; run `uv sync` or pass --source-dir",
@@ -71,6 +74,14 @@ pub fn resolve_source_and_package(
             anyhow::bail!("missing required argument: either `<package>` or `--source-dir PATH`")
         }
     }
+}
+
+/// Why toolr won't read or run an in-tree venv it didn't build, and the fix.
+pub(crate) fn foreign_venv_hint(venv_dir: &Path) -> String {
+    format!(
+        "toolr didn't build the tools venv at {} — run `toolr project venv sync` to rebuild it",
+        toolr_core::trust::shown(venv_dir)
+    )
 }
 
 fn leaf_dir_name(dir: &Path) -> Option<String> {

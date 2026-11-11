@@ -19,6 +19,17 @@ const RECORD_SCHEMA_VERSION: u32 = 2;
 /// Store subdirectory holding one entry per in-tree venv, out of `list()`'s way.
 const VENV_ENTRIES_DIR: &str = "venvs";
 
+/// Store subdirectory holding one sync lock per in-tree venv.
+const VENV_LOCKS_DIR: &str = "locks";
+
+/// Held while toolr checks, removes, syncs and stamps one in-tree venv;
+/// dropping it releases the lock. Holds nothing when the lock couldn't be
+/// taken, and the caller then goes on unlocked.
+#[derive(Debug)]
+pub struct VenvLock {
+    _file: Option<fs::File>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrustRecord {
     pub schema_version: u32,
@@ -324,6 +335,33 @@ impl TrustStore {
         self.dir
             .join(VENV_ENTRIES_DIR)
             .join(digest.to_hex().as_str())
+    }
+
+    fn venv_lock_path(&self, venv_dir: &Path) -> PathBuf {
+        let digest = blake3::hash(venv_entry_key(venv_dir).as_os_str().as_encoded_bytes());
+        self.dir
+            .join(VENV_LOCKS_DIR)
+            .join(format!("{}.lock", digest.to_hex()))
+    }
+
+    /// Block until this process holds the sync lock for the in-tree venv at
+    /// `venv_dir`, keyed like its entry.
+    pub fn lock_venv(&self, venv_dir: &Path) -> VenvLock {
+        let path = self.venv_lock_path(venv_dir);
+        let file = create_private_dir(&self.dir)
+            .and_then(|()| create_private_dir(&self.dir.join(VENV_LOCKS_DIR)))
+            .ok()
+            .and_then(|()| {
+                fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .truncate(false)
+                    .open(&path)
+                    .ok()
+            })
+            .and_then(|file| file.lock().ok().map(|()| file));
+        VenvLock { _file: file }
     }
 
     /// The token toolr last recorded for the in-tree venv at `venv_dir`, if any.
@@ -1278,6 +1316,37 @@ mod tests {
         store.trust(&f.root()).unwrap();
         store.untrust(&f.root()).unwrap();
         store.prune_venv_entries().unwrap();
+    }
+
+    #[test]
+    fn lock_venv_excludes_other_holders_until_dropped() {
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        let held = store.lock_venv(&venv);
+        assert!(held._file.is_some());
+        let other = fs::File::open(store.venv_lock_path(&venv)).unwrap();
+        assert!(matches!(
+            other.try_lock(),
+            Err(fs::TryLockError::WouldBlock)
+        ));
+        drop(held);
+        // Blocking: a test elsewhere forking right now can hold the
+        // descriptor until its child execs.
+        other.lock().unwrap();
+        assert!(store.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn lock_venv_without_a_usable_store_holds_nothing() {
+        let f = Fixture::new();
+        fs::write(f.store().dir(), b"not a directory").unwrap();
+        assert!(
+            f.store()
+                .lock_venv(&venv_in(&f.root(), "a"))
+                ._file
+                .is_none()
+        );
     }
 
     #[test]

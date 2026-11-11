@@ -267,6 +267,22 @@ fn trust_with_a_fresh_venv_asks_nothing() {
     assert!(!c.fx.uv_ran_sync());
 }
 
+/// An in-tree venv toolr built after trust is fresh, so trusting again asks nothing.
+#[test]
+fn retrust_with_a_venv_toolr_built_asks_nothing() {
+    let c = Clone::new();
+    c.toolr()
+        .env("TOOLR_AUTO_SYNC", "1")
+        .args(["project", "trust"])
+        .assert()
+        .success();
+    let _ = fs::remove_file(&c.fx.uv_argv_log);
+    let out = c.run_with_tty(&["project", "trust"], "");
+    assert!(out.status.success(), "stderr:\n{}", stderr(&out));
+    assert!(!stderr(&out).contains(SYNC_PROMPT), "{}", stderr(&out));
+    assert!(!c.fx.uv_ran_sync());
+}
+
 #[test]
 fn trust_reports_a_failed_sync() {
     let c = Clone::new();

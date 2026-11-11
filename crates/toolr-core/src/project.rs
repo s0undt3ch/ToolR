@@ -266,7 +266,7 @@ pub fn finalize_sync(repo_root: &Path, resolved: &ResolvedVenv) -> Result<()> {
     meta.write(&cache_dir)
         .with_context(|| format!("writing meta.json to {}", cache_dir.display()))?;
 
-    rebuild_manifest_full(repo_root, &resolved.venv_dir)
+    rebuild_manifest_full(repo_root, Some(&resolved.venv_dir))
         .with_context(|| "rebuilding manifest after sync")?;
     Ok(())
 }

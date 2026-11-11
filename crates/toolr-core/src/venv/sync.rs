@@ -84,14 +84,40 @@ impl UpgradeMode {
 /// the mtimes it stats the interpreter and reads `pyvenv.cfg`, and for an
 /// in-tree venv the default trust store; a store it can't open means `Foreign`.
 pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
+    let (store, trust_all) = default_store_for(resolved);
+    check_freshness_with(resolved, tools_dir, store.as_ref(), trust_all)
+}
+
+/// Only [`Freshness::Foreign`]'s test, for callers that read the venv's files
+/// without running it, such as the plugin-fragment glob.
+pub fn is_foreign(resolved: &ResolvedVenv, tools_dir: &Path) -> bool {
+    let (store, trust_all) = default_store_for(resolved);
+    is_foreign_with(resolved, tools_dir, store.as_ref(), trust_all)
+}
+
+/// The store a token check needs, and whether `TOOLR_TRUST_ALL` skips it.
+/// Cache venvs need neither, so they read no env and no store.
+fn default_store_for(resolved: &ResolvedVenv) -> (Option<TrustStore>, bool) {
     if !resolved.is_in_tree() {
-        return check_freshness_with(resolved, tools_dir, None, false);
+        return (None, false);
     }
     let trust_all = trust_all_env();
     let store = (!trust_all)
         .then(TrustStore::open_default)
         .and_then(Result::ok);
-    check_freshness_with(resolved, tools_dir, store.as_ref(), trust_all)
+    (store, trust_all)
+}
+
+fn is_foreign_with(
+    resolved: &ResolvedVenv,
+    tools_dir: &Path,
+    store: Option<&TrustStore>,
+    trust_all: bool,
+) -> bool {
+    resolved.is_in_tree()
+        && !trust_all
+        && fs::symlink_metadata(&resolved.venv_dir).is_ok()
+        && !built_by_toolr(resolved, tools_dir, store)
 }
 
 pub(crate) fn check_freshness_with(
@@ -100,11 +126,7 @@ pub(crate) fn check_freshness_with(
     store: Option<&TrustStore>,
     trust_all: bool,
 ) -> Freshness {
-    if resolved.is_in_tree()
-        && !trust_all
-        && fs::symlink_metadata(&resolved.venv_dir).is_ok()
-        && !built_by_toolr(resolved, tools_dir, store)
-    {
+    if is_foreign_with(resolved, tools_dir, store, trust_all) {
         return Freshness::Foreign;
     }
     let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
@@ -138,14 +160,32 @@ fn built_by_toolr(resolved: &ResolvedVenv, tools_dir: &Path, store: Option<&Trus
     if !store.is_trusted(root).unwrap_or(false) {
         return false;
     }
-    let Ok(marker) = fs::read_to_string(resolved.venv_dir.join(FRESHNESS_MARKER)) else {
-        return false;
-    };
-    matches!(store.venv_token(&resolved.venv_dir), Ok(Some(token)) if marker == token)
+    marker_token(store, &resolved.venv_dir).is_some()
 }
 
-/// Never follows a symlink: a linked `tools/.venv` loses only the link.
-fn remove_foreign_venv(venv_dir: &Path) -> std::io::Result<()> {
+/// The store's token for `venv_dir`, when the venv's marker holds it.
+fn marker_token(store: &TrustStore, venv_dir: &Path) -> Option<String> {
+    let marker = fs::read_to_string(venv_dir.join(FRESHNESS_MARKER)).ok()?;
+    store
+        .venv_token(venv_dir)
+        .ok()
+        .flatten()
+        .filter(|token| *token == marker)
+}
+
+/// Never follows a symlink: a linked `tools/.venv` loses only the link. A
+/// `tools` that is itself a symlink could be another project's, so that
+/// layout is refused rather than emptied.
+fn remove_foreign_venv(tools_dir: &Path, venv_dir: &Path) -> std::io::Result<()> {
+    let real_tools = fs::symlink_metadata(tools_dir).is_ok_and(|m| m.is_dir());
+    if !real_tools || venv_dir.parent() != Some(tools_dir) {
+        return Err(std::io::Error::other(format!(
+            "refusing to remove {}: {} isn't a real directory holding it. Make tools/ a \
+             plain directory of the repository, then run `toolr project venv sync`",
+            shown(venv_dir),
+            shown(tools_dir)
+        )));
+    }
     eprintln!(
         "toolr: removing {}: toolr didn't build this in-tree venv",
         shown(venv_dir)
@@ -251,24 +291,55 @@ pub fn sync_if_needed(
 ) -> Result<(), UvError> {
     // -U / -P explicitly ask for movement; never short-circuit on freshness.
     let bypass_stamp = force || !matches!(upgrade, UpgradeMode::None);
-    match check_freshness(resolved, tools_dir) {
+    let lock = || {
+        let (store, _) = default_store_for(resolved);
+        store.map(|s| s.lock_venv(&resolved.venv_dir))
+    };
+    sync_locked(
+        resolved,
+        tools_dir,
+        bypass_stamp,
+        || check_freshness(resolved, tools_dir),
+        lock,
+        || {
+            // Not `Http`: its message tells the user to install uv, which they already have.
+            let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
+                let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
+                UvError::Io(std::io::Error::other(msg))
+            })?;
+            if !status.success() {
+                return Err(UvError::SyncFailed(status.code()));
+            }
+            Ok(())
+        },
+    )
+}
+
+/// Check, lock, re-check, then remove a foreign venv and sync, all under the
+/// lock: another toolr may be building this venv, and until it stamps the
+/// marker the venv reads as foreign.
+fn sync_locked<L>(
+    resolved: &ResolvedVenv,
+    tools_dir: &Path,
+    bypass_stamp: bool,
+    check: impl Fn() -> Freshness,
+    lock: impl FnOnce() -> L,
+    sync: impl FnOnce() -> Result<(), UvError>,
+) -> Result<(), UvError> {
+    if !bypass_stamp && check() == Freshness::Fresh {
+        return Ok(());
+    }
+    let _lock = lock();
+    match check() {
         // uv runs an existing venv's interpreter to inspect it, so a planted one goes first.
-        Freshness::Foreign => remove_foreign_venv(&resolved.venv_dir).map_err(|e| {
+        Freshness::Foreign => remove_foreign_venv(tools_dir, &resolved.venv_dir).map_err(|e| {
             let msg = format!("couldn't remove {}: {e}", shown(&resolved.venv_dir));
             UvError::Io(std::io::Error::other(msg))
         })?,
         Freshness::Fresh if !bypass_stamp => return Ok(()),
         _ => {}
     }
-    // Not `Http`: its message tells the user to install uv, which they already have.
-    let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
-        let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
-        UvError::Io(std::io::Error::other(msg))
-    })?;
-    if !status.success() {
-        return Err(UvError::SyncFailed(status.code()));
-    }
-    Ok(())
+    sync()
 }
 
 /// Write the marker after toolr built or changed the venv: for an in-tree
@@ -278,15 +349,24 @@ pub(super) fn stamp_marker(resolved: &ResolvedVenv, tools_dir: &Path) -> Result<
     stamp_marker_with(resolved, tools_dir, store)
 }
 
-/// `store` is `None` when the venv needs no token. A store that fails leaves
-/// the marker empty, so the next run rebuilds the venv rather than the sync failing.
+/// `store` is `None` when the venv needs no token. A marker that already holds
+/// the store's token keeps it, so a resync never makes toolr's own venv read
+/// as foreign. A store that fails leaves the marker empty, so the next run
+/// rebuilds the venv rather than the sync failing.
 fn stamp_marker_with(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
     store: Option<Result<TrustStore>>,
 ) -> Result<()> {
     let root = tools_dir.parent().unwrap_or(tools_dir);
-    let token = match store.map(|s| s.and_then(|s| s.record_venv(root, &resolved.venv_dir))) {
+    let venv_dir = &resolved.venv_dir;
+    let token = store.map(|s| {
+        s.and_then(|s| match marker_token(&s, venv_dir) {
+            Some(token) => Ok(token),
+            None => s.record_venv(root, venv_dir),
+        })
+    });
+    let token = match token {
         None => String::new(),
         Some(Ok(token)) => token,
         Some(Err(e)) => {
@@ -1032,9 +1112,132 @@ mod tests {
     #[test]
     fn removing_a_foreign_venv_directory_removes_it() {
         let t = InTree::new();
-        remove_foreign_venv(&t.resolved.venv_dir).unwrap();
+        remove_foreign_venv(&t.tools, &t.resolved.venv_dir).unwrap();
         assert!(!t.resolved.venv_dir.exists());
-        assert!(remove_foreign_venv(&t.resolved.venv_dir).is_err());
+        assert!(remove_foreign_venv(&t.tools, &t.resolved.venv_dir).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_tools_dir_is_never_emptied() {
+        let tmp = TempDir::new().unwrap();
+        let other_tools = tmp.path().join("other").join("tools");
+        venv_with_interpreter(&other_tools.join(".venv"));
+        let tools = tmp.path().join("repo").join("tools");
+        fs::create_dir_all(tools.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&other_tools, &tools).unwrap();
+        let err = remove_foreign_venv(&tools, &tools.join(".venv")).unwrap_err();
+        assert!(err.to_string().contains("toolr project venv sync"), "{err}");
+        assert!(other_tools.join(".venv/bin/python").is_file());
+    }
+
+    #[test]
+    fn a_venv_outside_tools_is_never_removed() {
+        let t = InTree::new();
+        let elsewhere = t._tmp.path().join("elsewhere");
+        venv_with_interpreter(&elsewhere);
+        assert!(remove_foreign_venv(&t.tools, &elsewhere).is_err());
+        assert!(elsewhere.join("bin/python").is_file());
+    }
+
+    #[test]
+    fn a_matching_marker_keeps_its_token_across_a_resync() {
+        let t = InTree::new();
+        t.stamp();
+        let token = fs::read_to_string(t.marker()).unwrap();
+        t.stamp();
+        assert_eq!(fs::read_to_string(t.marker()).unwrap(), token);
+        assert_eq!(
+            t.store.venv_token(&t.resolved.venv_dir).unwrap(),
+            Some(token)
+        );
+        assert_eq!(t.check(), Freshness::Fresh);
+    }
+
+    /// Another toolr finishes building the venv while this one waits for the
+    /// lock: the re-check sees it fresh, so nothing is removed or synced.
+    #[test]
+    fn sync_locked_rechecks_after_waiting_for_the_lock() {
+        let t = InTree::new();
+        let synced = std::cell::Cell::new(false);
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || t.stamp(),
+            || {
+                synced.set(true);
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(!synced.get());
+        assert!(t.resolved.python.is_file());
+    }
+
+    #[test]
+    fn sync_locked_removes_a_foreign_venv_only_under_the_lock() {
+        let t = InTree::new();
+        let events = std::cell::RefCell::new(Vec::new());
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || {
+                events.borrow_mut().push("check");
+                t.check()
+            },
+            || events.borrow_mut().push("lock"),
+            || {
+                assert!(!t.resolved.venv_dir.exists(), "removed before the sync");
+                events.borrow_mut().push("sync");
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(*events.borrow(), ["check", "lock", "check", "sync"]);
+    }
+
+    #[test]
+    fn sync_locked_skips_the_lock_when_fresh() {
+        let t = InTree::new();
+        t.stamp();
+        let locked = std::cell::Cell::new(false);
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || locked.set(true),
+            || unreachable!("a fresh venv must not sync"),
+        )
+        .unwrap();
+        assert!(!locked.get());
+    }
+
+    #[test]
+    fn is_foreign_matches_the_freshness_check() {
+        let t = InTree::new();
+        assert!(is_foreign_with(
+            &t.resolved,
+            &t.tools,
+            Some(&t.store),
+            false
+        ));
+        assert!(!is_foreign_with(
+            &t.resolved,
+            &t.tools,
+            Some(&t.store),
+            true
+        ));
+        t.stamp();
+        assert!(!is_foreign_with(
+            &t.resolved,
+            &t.tools,
+            Some(&t.store),
+            false
+        ));
     }
 
     /// Through the real env: the default store under `XDG_STATE_HOME`.
@@ -1066,7 +1269,7 @@ mod tests {
         venv_with_interpreter(&target);
         let link = tmp.path().join(".venv");
         std::os::unix::fs::symlink(&target, &link).unwrap();
-        remove_foreign_venv(&link).unwrap();
+        remove_foreign_venv(tmp.path(), &link).unwrap();
         assert!(fs::symlink_metadata(&link).is_err());
         assert!(target.join("bin").join("python").is_file());
     }

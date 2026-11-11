@@ -13,7 +13,7 @@ use std::path::Path;
 use toolr_core::manifest::{Manifest, manifest_path};
 use toolr_core::manifest_build::{Persist, Refresh, refresh};
 use toolr_core::parser::BuiltManifest;
-use toolr_core::venv::resolve_venv_path;
+use toolr_core::venv::{is_foreign, resolve_venv_path};
 
 use crate::invocation::Invocation;
 
@@ -56,7 +56,11 @@ pub(crate) fn ensure_manifest(run: &Invocation) -> anyhow::Result<Option<BuiltMa
 /// propagate from writing the rebuilt manifest and for symlinked modules
 /// (F-17), which never fall back to the cache.
 fn ensure_manifest_at(root: &Path, persist: Persist) -> anyhow::Result<Option<BuiltManifest>> {
-    let venv = resolve_venv_path(root).ok().map(|r| r.venv_dir);
+    // A venv toolr didn't build contributes no plugin commands, not even to `--help`.
+    let venv = resolve_venv_path(root)
+        .ok()
+        .filter(|r| !is_foreign(r, &root.join("tools")))
+        .map(|r| r.venv_dir);
     let refreshed = refresh(root, venv.as_deref(), persist)?;
     let unreadable = refreshed.unreadable.is_some();
     if let Some(e) = refreshed.unreadable {
@@ -117,10 +121,19 @@ mod tests {
 
     static CACHE_HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    /// Restores `XDG_CACHE_HOME` on drop, then releases the module lock.
+    const GUARDED_ENV: [&str; 3] = ["XDG_CACHE_HOME", "XDG_STATE_HOME", "TOOLR_TRUST_ALL"];
+
+    /// Restores [`GUARDED_ENV`] on drop, then releases the module lock.
     struct CacheHomeGuard {
-        prev: Option<std::ffi::OsString>,
+        prev: Vec<Option<std::ffi::OsString>>,
         _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl CacheHomeGuard {
+        fn trust_all(&self) {
+            // SAFETY: as in `Drop::drop`; the lock is held while `self` lives.
+            unsafe { std::env::set_var("TOOLR_TRUST_ALL", "1") };
+        }
     }
 
     impl Drop for CacheHomeGuard {
@@ -128,23 +141,30 @@ mod tests {
             // SAFETY: CACHE_HOME_LOCK serialises every test in this module
             // that touches env vars, and it is still held here.
             unsafe {
-                match &self.prev {
-                    Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
-                    None => std::env::remove_var("XDG_CACHE_HOME"),
+                for (name, prev) in GUARDED_ENV.iter().zip(&self.prev) {
+                    match prev {
+                        Some(v) => std::env::set_var(name, v),
+                        None => std::env::remove_var(name),
+                    }
                 }
             }
         }
     }
 
-    /// Points `XDG_CACHE_HOME` at a fresh temp dir, so a persisting rebuild
-    /// writes its lock there instead of the real cache. Bind as `(home, _guard)`
-    /// so the env is restored before the dir is deleted.
+    /// Points `XDG_CACHE_HOME` and `XDG_STATE_HOME` at a fresh temp dir, so a
+    /// persisting rebuild writes its lock there instead of the real cache and
+    /// no trust store of the user's is read, and unsets `TOOLR_TRUST_ALL`.
+    /// Bind as `(home, _guard)` so the env is restored before the dir is deleted.
     fn temp_cache_home() -> (tempfile::TempDir, CacheHomeGuard) {
         let lock = CACHE_HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var_os("XDG_CACHE_HOME");
+        let prev = GUARDED_ENV.iter().map(std::env::var_os).collect();
         let home = tempfile::TempDir::new().unwrap();
         // SAFETY: as in `CacheHomeGuard::drop`.
-        unsafe { std::env::set_var("XDG_CACHE_HOME", home.path()) };
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", home.path());
+            std::env::set_var("XDG_STATE_HOME", home.path().join("state"));
+            std::env::remove_var("TOOLR_TRUST_ALL");
+        }
         (home, CacheHomeGuard { prev, _lock: lock })
     }
 
@@ -220,9 +240,8 @@ mod tests {
     /// the one written, stamped with the venv's plugin hash, so the file is
     /// already fresh. A write that skips the hash (the old bootstrap step)
     /// leaves it stale and forces a second build.
-    #[test]
-    fn ensure_manifest_writes_a_fresh_clone_once_with_the_plugin_hash() {
-        let (_home, _guard) = temp_cache_home();
+    /// A fresh clone with an in-tree venv carrying one plugin fragment.
+    fn in_tree_plugin_repo() -> (tempfile::TempDir, std::path::PathBuf) {
         let tmp = tools_repo();
         let tools = tmp.path().join("tools");
         std::fs::write(
@@ -238,8 +257,15 @@ mod tests {
             r#"{"toolr_schema_version": 2, "package": "demo", "groups": [], "commands": []}"#,
         )
         .unwrap();
-
         let root = toolr_core::discovery::discover_project_root(tmp.path()).unwrap();
+        (tmp, root)
+    }
+
+    #[test]
+    fn ensure_manifest_writes_a_fresh_clone_once_with_the_plugin_hash() {
+        let (_home, guard) = temp_cache_home();
+        guard.trust_all();
+        let (_tmp, root) = in_tree_plugin_repo();
         let served = ensure_manifest_at(&root, Persist::Write).unwrap().unwrap();
 
         let venv = toolr_core::venv::resolve_venv_path(&root).unwrap().venv_dir;
@@ -250,5 +276,15 @@ mod tests {
         assert_eq!(written.third_party_hash, plugin_hash);
         let verdict = compare(Some(&written), &root.join("tools"), Some(&venv)).unwrap();
         assert_eq!(verdict, FreshnessVerdict::Fresh);
+    }
+
+    /// Without a token in the trust store the venv is foreign, and its
+    /// fragments are never globbed.
+    #[test]
+    fn ensure_manifest_skips_a_foreign_venvs_fragments() {
+        let (_home, _guard) = temp_cache_home();
+        let (_tmp, root) = in_tree_plugin_repo();
+        let served = ensure_manifest_at(&root, Persist::Write).unwrap().unwrap();
+        assert_eq!(served.manifest.third_party_hash, empty_third_party_hash());
     }
 }

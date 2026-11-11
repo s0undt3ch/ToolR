@@ -333,7 +333,15 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
         },
     )?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
-    let built = rebuild_manifest_full(&repo_root, &resolved.venv_dir)?;
+    let foreign = toolr_core::venv::is_foreign(&resolved, &repo_root.join("tools"));
+    if foreign {
+        eprintln!(
+            "toolr: warning: leaving out its plugin commands: {}",
+            crate::build_manifest_resolve::foreign_venv_hint(&resolved.venv_dir)
+        );
+    }
+    let venv = (!foreign).then_some(resolved.venv_dir.as_path());
+    let built = rebuild_manifest_full(&repo_root, venv)?;
     for w in built.all_warnings() {
         eprintln!("toolr: warning: {w}");
     }
@@ -669,8 +677,8 @@ fn venv_run(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
                 "the tools venv's Python interpreter no longer exists (was it uninstalled?) — run `toolr project venv sync` to rebuild it (or drop --no-sync)"
             ),
             toolr_core::venv::Freshness::Foreign => anyhow::bail!(
-                "toolr didn't build the tools venv at {} — run `toolr project venv sync` to rebuild it (or drop --no-sync)",
-                shown(&resolved.venv_dir)
+                "{} (or drop --no-sync)",
+                crate::build_manifest_resolve::foreign_venv_hint(&resolved.venv_dir)
             ),
             toolr_core::venv::Freshness::Fresh => {}
         }

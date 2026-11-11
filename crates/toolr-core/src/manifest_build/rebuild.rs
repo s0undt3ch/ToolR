@@ -111,13 +111,13 @@ pub fn refresh(project_root: &Path, venv: Option<&Path>, persist: Persist) -> Re
 }
 
 /// Always rebuild `project_root`'s manifest from the tree and the venv's
-/// plugin fragments, and write it. The lock only serialises this with
-/// concurrent auto-rebuilds.
-pub fn rebuild_manifest_full(project_root: &Path, venv: &Path) -> Result<BuiltManifest> {
+/// plugin fragments, and write it; with no `venv`, it has no plugin commands.
+/// The lock only serialises this with concurrent auto-rebuilds.
+pub fn rebuild_manifest_full(project_root: &Path, venv: Option<&Path>) -> Result<BuiltManifest> {
     let tools = project_root.join("tools");
     let manifest_path = manifest_path(project_root);
     let _lock = acquire_rebuild_lock(&manifest_path);
-    let built = build_to_persist(&tools, || build(&tools, Some(venv), None)).map_err(|e| {
+    let built = build_to_persist(&tools, || build(&tools, venv, None)).map_err(|e| {
         context_unless_symlinked(e, "building static manifest (incl. third-party fragments)")
     })?;
     write_manifest(&manifest_path, &built.manifest)?;
@@ -191,7 +191,7 @@ mod tests {
         let venv = project.join("venv");
         std::fs::create_dir_all(venv.join("lib/python3.13/site-packages/foo-1.0.0.dist-info"))
             .unwrap();
-        rebuild_manifest_full(project, &venv).unwrap();
+        rebuild_manifest_full(project, Some(&venv)).unwrap();
         let m = load_manifest(&manifest_path(project)).unwrap();
         let group_names: Vec<_> = m.groups.iter().map(|g| g.name.as_str()).collect();
         assert!(group_names.contains(&"ci"));
@@ -212,7 +212,7 @@ mod tests {
             r#"{"toolr_schema_version": 1, "package": "demo"}"#,
         )
         .unwrap();
-        let built = rebuild_manifest_full(project, &venv).unwrap();
+        let built = rebuild_manifest_full(project, Some(&venv)).unwrap();
         assert_eq!(
             built.all_warnings().collect::<Vec<_>>(),
             [
@@ -239,7 +239,7 @@ mod tests {
         }
         let venv = project.join("venv");
         std::fs::create_dir(&venv).unwrap();
-        let built = rebuild_manifest_full(project, &venv).unwrap();
+        let built = rebuild_manifest_full(project, Some(&venv)).unwrap();
         assert_eq!(
             built.all_warnings().collect::<Vec<_>>(),
             [
@@ -282,7 +282,7 @@ mod tests {
         let (root, venv) = (project.clone(), project.join("venv"));
         let rebuilt = while_locked(
             &project,
-            move || rebuild_manifest_full(&root, &venv).map(|_| ()),
+            move || rebuild_manifest_full(&root, Some(&venv)).map(|_| ()),
             || assert!(!path.exists()),
         );
         rebuilt.unwrap();
