@@ -49,13 +49,20 @@ pub(crate) fn print_help_from_argv(argv: &RootArgv, root: &clap::Command, mode: 
     help::print(cmd, &path.join(" "), mode);
 }
 
+/// What `main` settled before dispatch.
+pub(crate) struct Preflight {
+    /// The proof the repository is trusted, when `main` asked for one.
+    pub(crate) trusted: Option<toolr_core::trust::Trusted>,
+    /// The venv `main` rebuilt to parse argv, for dispatch to reuse.
+    pub(crate) rebuilt_venv: Option<toolr_core::venv::ResolvedVenv>,
+}
+
 pub(crate) fn dispatch(
     matches: &ArgMatches,
     manifest: &Manifest,
     root: &mut clap::Command,
     run: Invocation,
-    grant: Option<toolr_core::trust::Trusted>,
-    rebuilt: Option<toolr_core::venv::ResolvedVenv>,
+    preflight: Preflight,
 ) -> anyhow::Result<ExitCode> {
     // `__complete` never sets help flags, so it must skip the interception.
     let mode = run.argv.help_mode().unwrap_or(HelpMode::Long);
@@ -89,7 +96,6 @@ pub(crate) fn dispatch(
         manifest,
         root,
         run,
-        grant,
-        rebuilt,
+        preflight,
     )
 }

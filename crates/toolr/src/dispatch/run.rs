@@ -122,8 +122,7 @@ pub(super) fn run_command(
     manifest: &Manifest,
     root: &mut clap::Command,
     run: Invocation,
-    grant: Option<toolr_core::trust::Trusted>,
-    rebuilt: Option<toolr_core::venv::ResolvedVenv>,
+    preflight: super::Preflight,
 ) -> anyhow::Result<ExitCode> {
     // Walk down the subcommand chain so nested groups (`docker image
     // build`) reach their leaf command. `path` collects every
@@ -165,7 +164,7 @@ pub(super) fn run_command(
     // `-h` among the command's trailing values read as help there; clap only matched a user
     // command then because the run was trusted or under `TOOLR_TRUST_ALL`, so this re-check
     // is a fallback.
-    let trusted = match grant {
+    let trusted = match preflight.trusted {
         Some(trusted) => trusted,
         None => {
             let quiet = output_opts.verbosity == Verbosity::Quiet;
@@ -177,7 +176,7 @@ pub(super) fn run_command(
     let quiet = output_opts.verbosity == Verbosity::Quiet;
     let verbose = output_opts.verbosity == Verbosity::Verbose;
     // `main` already rebuilt a foreign venv; syncing again could rebuild it twice.
-    let resolved = match rebuilt {
+    let resolved = match preflight.rebuilt_venv {
         Some(resolved) => resolved,
         None => ready_for_dispatch(&repo_root, &trusted, resolve_venv_path(&repo_root)?, quiet)?,
     };
