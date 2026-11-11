@@ -232,7 +232,8 @@ def _prepare_fixture(
         "manifest",
         "rebuild",
         cwd=dest,
-        env={**os.environ, "TOOLR_NO_CACHE_HINT": "1"},
+        # `manifest rebuild` asks for trust first; the fixture is a throwaway copy.
+        env={**os.environ, "TOOLR_NO_CACHE_HINT": "1", "TOOLR_TRUST_ALL": "1"},
         capture_output=True,
         stream_output=False,
     )

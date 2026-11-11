@@ -30,7 +30,8 @@ pub const SYNC_INPUTS_DESCRIPTION: &str =
 /// Decision returned by `check_freshness`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Freshness {
-    /// Venv has never been synced (marker absent or venv missing).
+    /// No venv to use: it was never synced there, or the marker or `uv.lock` is
+    /// absent. An in-tree venv that exists is `Foreign` or built by toolr, never this.
     Missing,
     /// An in-tree venv toolr didn't build: its marker doesn't hold the token
     /// the trust store has for it. Never reported for a cache-located venv or

@@ -206,6 +206,8 @@ Toolr regenerates the manifest when:
 Automatic rebuilds are written to disk only in a trusted repository (see
 [Repository trust](../concepts.md#repository-trust)). In an untrusted one the
 rebuilt manifest stays in memory and an existing file is left as found.
+Nothing in an untrusted repository reads that file either; `--help`, bare
+`toolr` and tab completion show only toolr's own commands there.
 
 ## Manual rebuild
 

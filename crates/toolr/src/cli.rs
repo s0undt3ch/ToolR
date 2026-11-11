@@ -444,7 +444,7 @@ fn build_project_venv_subcommand() -> Command {
         .subcommand(
             Command::new("sync")
                 .disable_help_flag(true)
-                .about("Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed since the last sync)")
+                .about("Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed since the last sync; an in-tree venv toolr didn't build is removed and rebuilt)")
                 .arg(
                     Arg::new("if-project")
                         .long("if-project")

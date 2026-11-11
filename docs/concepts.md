@@ -172,14 +172,46 @@ repository trusted, and neither does a run under `TOOLR_TRUST_ALL=1`.
 `toolr project init` trusts the directory it writes to. Inside a git
 repository that's the whole repository, with all its worktrees.
 
-These never need trust, because nothing executes: `--help`, bare
-`toolr`, tab completion, `toolr project manifest rebuild` and
-`toolr self build-manifest`.
+`--help`, bare `toolr` and tab completion need no trust, but in an untrusted
+repository they show only toolr's own commands. `--help` and bare `toolr`
+print a one-line hint on stderr that names `toolr project trust`. The hint
+doesn't appear under `-q` or on help for a built-in command.
 
-toolr doesn't write `tools/.toolr-manifest.json` into an untrusted
-repository on its own. There, `--help`, bare `toolr`, tab completion and
-refused commands build the manifest in memory. Only an explicit
-`toolr project manifest rebuild` or `toolr self build-manifest` writes it.
+These ask for trust first: `toolr <command>` for a command from the
+repository, `toolr project manifest rebuild` and
+`toolr self build-manifest <package>`. Under `-q` they refuse without asking.
+`toolr self build-manifest --source-dir` needs no trust. A mistyped command in
+an untrusted repository also asks for trust, because toolr can't tell it from
+a repository command. A bad value for a path option is reported after the
+prompt.
+
+Until you trust a repository, toolr reads and writes nothing under its
+`tools/` directory. It doesn't read `tools/.toolr-manifest.json`, parse the
+files in `tools/`, or look inside `tools/.venv`.
+
+Once a repository is trusted, toolr believes a committed
+`tools/.toolr-manifest.json` as repository content, like `tools/*.py`. Review
+a change to it as you would a change to the code.
+
+### In-tree venvs
+
+After trust, toolr uses an in-tree `tools/.venv` only if it built that venv.
+When toolr builds one, it writes a random token into the venv's
+`.toolr-sync-stamp` file and records the same token in the trust store, under
+`venvs/`. The venv is used only while the two match.
+
+Any other in-tree venv is removed and rebuilt, after the usual sync prompts.
+That includes a venv an older toolr built. toolr never runs a venv it didn't
+build. A symlinked venv is unlinked, not followed, and toolr refuses to remove
+anything when `tools/` is itself a symlink. Plugin manifests from such a venv
+aren't read. `toolr self build-manifest <package>` refuses against it, and
+`toolr project manifest rebuild` warns and builds without the plugins.
+
+Syncs of an in-tree venv take a lock held in the trust store. Worktrees keep
+separate tokens, so each one builds its own venv. Venvs in the cache and runs
+under `TOOLR_TRUST_ALL=1` skip the token check. `toolr project untrust` drops
+the repository's venv records, and `toolr self trusted --prune` drops records
+whose venv is gone.
 
 For automation, set `TOOLR_TRUST_ALL=1` (see the
 [environment variables](project-config.md#environment-variables) table for what counts as on).
