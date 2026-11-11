@@ -220,7 +220,10 @@ non-zero — still print their error to stderr and exit non-zero, so
 they aren't silently masked. So does an untrusted repository: the hook
 never prompts, so it prints the
 [repository trust](../concepts.md#repository-trust) refusal until you
-trust the repository.
+trust the repository. In a trusted repository whose in-tree `tools/.venv`
+toolr didn't build, such as one an older toolr built, it prints why it
+leaves that venv alone until you approve replacing it: run
+`toolr project venv sync` once on a terminal and answer `y`.
 
 ### First-time bootstrap
 

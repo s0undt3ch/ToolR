@@ -172,7 +172,8 @@ toolr project venv remove --help
 ### `toolr project venv path` {#project-venv-path}
 
 Print the absolute path to the resolved tools venv. Useful for
-shell-scripting or sanity-checking `venv-location`.
+shell-scripting or sanity-checking `venv-location`. It asks for
+[repository trust](concepts.md#repository-trust) first.
 
 ```sh
 toolr project venv path --help

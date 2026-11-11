@@ -117,6 +117,7 @@ code, or vice versa.
 | `TOOLR_TRUST_ALL` | boolean | `1`, `true`, `yes` | off |
 | `TOOLR_AUTO_SYNC` | boolean | `1`, `true`, `yes` | off |
 | `TOOLR_AUTO_INSTALL_UV` | boolean, alias of `TOOLR_AUTO_SYNC` (removed in 1.0) | as `TOOLR_AUTO_SYNC` | off |
+| `TOOLR_REPLACE_UNTRUSTED_VENV` | boolean | `1`, `true`, `yes` | off |
 | `TOOLR_NO_CACHE_HINT` | boolean | `1`, `true`, `yes` | off |
 | `TOOLR_VENV_LOCATION` | string | `in-tree`, `cache` | the TOML setting |
 
@@ -124,6 +125,10 @@ Booleans read `1`, `true` or `yes` (any case, surrounding whitespace ignored) as
 `0` and an empty value, is off, so `TOOLR_NO_CACHE_HINT=0` leaves the hint on. `TOOLR_AUTO_SYNC` decides alone
 once it is set; `TOOLR_AUTO_INSTALL_UV` counts only while it is unset. An option bound with `arg(env=)` on a
 `bool` also accepts `0`, `false` and `no`.
+
+`TOOLR_REPLACE_UNTRUSTED_VENV` lets toolr remove an in-tree `tools/.venv` it didn't build, and
+build a fresh one, without asking; see [Repository trust](concepts.md#repository-trust).
+`TOOLR_AUTO_SYNC` never does.
 
 ## `tools/uv.lock`
 
@@ -206,4 +211,6 @@ toolr project venv path
 
 Prints the absolute path where toolr expects the venv to live. If
 the printed path doesn't match the directory you intend (cache vs
-in-tree), revisit `venv-location`.
+in-tree), revisit `venv-location`. It asks for
+[repository trust](concepts.md#repository-trust) first, as it reads
+`tools/pyproject.toml`.
