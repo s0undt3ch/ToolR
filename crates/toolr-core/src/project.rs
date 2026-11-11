@@ -51,7 +51,7 @@ impl EnsureOpts {
         self.trust = mode;
         self
     }
-    pub(crate) fn with_trusted(mut self, proof: Trusted) -> Self {
+    pub fn with_trusted(mut self, proof: Trusted) -> Self {
         self.trusted = Some(proof);
         self
     }
@@ -87,12 +87,11 @@ pub fn ensure_venv_ready(
     opts: EnsureOpts,
 ) -> Result<(ResolvedVenv, UvBinary)> {
     let repo_root = discover_project_root(cwd).context(NothingToSync::NoProject)?;
-    let resolved = resolve_venv_path(&repo_root).context(NothingToSync::NoVenvPath)?;
-    // After the static pyproject read, so a broken one stays a benign
-    // `--quiet` exit; before anything repo-controlled runs.
+    // Before `tools/pyproject.toml` is read: toolr reads nothing of an untrusted repository.
     if !opts.trusted.as_ref().is_some_and(|t| t.covers(&repo_root)) {
         require_trust(&repo_root, opts.trust)?;
     }
+    let resolved = resolve_venv_path(&repo_root).context(NothingToSync::NoVenvPath)?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
     sync_if_needed(

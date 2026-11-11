@@ -539,3 +539,31 @@ fn build_manifest_package_needs_trust() {
         .stderr(contains("is not a directory"))
         .stderr(contains(REFUSAL).not());
 }
+
+/// Nothing of `tools/pyproject.toml` is read before trust: an unparsable one
+/// gets the refusal, not a parse error.
+#[test]
+fn venv_commands_refuse_before_reading_pyproject() {
+    let env = TrustEnv::new();
+    let dir = TempDir::new().unwrap();
+    fs::create_dir(dir.path().join("tools")).unwrap();
+    fs::write(
+        dir.path().join("tools/pyproject.toml"),
+        "[project\nnot toml",
+    )
+    .unwrap();
+    for args in [
+        &["-q", "project", "venv", "path"][..],
+        &["-q", "project", "venv", "sync", "-P", "rich"],
+        &["-q", "project", "venv", "sync", "--if-project"],
+        &["-q", "project", "venv", "lock", "-P", "rich"],
+        &["-q", "project", "venv", "remove", "rich"],
+    ] {
+        env.toolr(dir.path())
+            .args(args)
+            .assert()
+            .failure()
+            .stdout("")
+            .stderr(contains(REFUSAL).and(contains("parsing").not()));
+    }
+}
