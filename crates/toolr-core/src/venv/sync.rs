@@ -86,48 +86,52 @@ impl UpgradeMode {
 /// the mtimes it stats the interpreter and reads `pyvenv.cfg`, and for an
 /// in-tree venv the default trust store; a store it can't open means `Foreign`.
 pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
-    let (store, trust_all) = default_store_for(resolved);
-    check_freshness_with(resolved, tools_dir, store.as_ref(), trust_all)
+    with_default_check(resolved, |check| {
+        check_freshness_with(resolved, tools_dir, check)
+    })
 }
 
 /// For callers that read the venv's files without running it, such as the plugin-fragment glob.
 pub fn is_foreign(resolved: &ResolvedVenv, root: &Path) -> bool {
-    let (store, trust_all) = default_store_for(resolved);
-    is_foreign_with(resolved, root, store.as_ref(), trust_all)
+    with_default_check(resolved, |check| is_foreign_with(resolved, root, check))
 }
 
-/// The store a token check needs, and whether `TOOLR_TRUST_ALL` skips it.
-/// Cache venvs need neither, so they read no env and no store.
-fn default_store_for(resolved: &ResolvedVenv) -> (Option<TrustStore>, bool) {
-    if !resolved.is_in_tree() {
-        return (None, false);
+/// What vouches for an in-tree venv's token.
+#[derive(Clone, Copy)]
+pub(crate) enum TokenCheck<'a> {
+    /// No check: a cache venv, or `TOOLR_TRUST_ALL`.
+    Skip,
+    /// The store the token must be recorded in.
+    Store(&'a TrustStore),
+    /// The default store couldn't be opened, so nothing vouches for the venv (fail-closed).
+    NoStore,
+}
+
+/// Runs `f` with the check the default store and `TOOLR_TRUST_ALL` call for. Cache venvs need
+/// neither, so they read no env and no store.
+fn with_default_check<R>(resolved: &ResolvedVenv, f: impl FnOnce(TokenCheck<'_>) -> R) -> R {
+    if !resolved.is_in_tree() || trust_all_env() {
+        return f(TokenCheck::Skip);
     }
-    let trust_all = trust_all_env();
-    let store = (!trust_all)
-        .then(TrustStore::open_default)
-        .and_then(Result::ok);
-    (store, trust_all)
+    match TrustStore::open_default() {
+        Ok(store) => f(TokenCheck::Store(&store)),
+        Err(_) => f(TokenCheck::NoStore),
+    }
 }
 
-fn is_foreign_with(
-    resolved: &ResolvedVenv,
-    root: &Path,
-    store: Option<&TrustStore>,
-    trust_all: bool,
-) -> bool {
+fn is_foreign_with(resolved: &ResolvedVenv, root: &Path, check: TokenCheck<'_>) -> bool {
     resolved.is_in_tree()
-        && !trust_all
+        && !matches!(check, TokenCheck::Skip)
         && fs::symlink_metadata(&resolved.venv_dir).is_ok()
-        && !built_by_toolr(resolved, root, store)
+        && !built_by_toolr(resolved, root, check)
 }
 
 pub(crate) fn check_freshness_with(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
-    store: Option<&TrustStore>,
-    trust_all: bool,
+    check: TokenCheck<'_>,
 ) -> Freshness {
-    if is_foreign_with(resolved, project_root(tools_dir), store, trust_all) {
+    if is_foreign_with(resolved, project_root(tools_dir), check) {
         return Freshness::Foreign;
     }
     let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
@@ -154,8 +158,8 @@ pub(crate) fn check_freshness_with(
 
 /// The store vouches for a venv only while it trusts the repository, a check
 /// that also refuses a store inside it.
-fn built_by_toolr(resolved: &ResolvedVenv, root: &Path, store: Option<&TrustStore>) -> bool {
-    let Some(store) = store else {
+fn built_by_toolr(resolved: &ResolvedVenv, root: &Path, check: TokenCheck<'_>) -> bool {
+    let TokenCheck::Store(store) = check else {
         return false;
     };
     if !store.is_trusted(root).unwrap_or(false) {
@@ -1232,7 +1236,7 @@ mod tests {
         }
 
         fn check(&self) -> Freshness {
-            check_freshness_with(&self.resolved, &self.tools, Some(&self.store), false)
+            check_freshness_with(&self.resolved, &self.tools, TokenCheck::Store(&self.store))
         }
 
         fn stamp(&self) {
@@ -1252,7 +1256,7 @@ mod tests {
         assert_eq!(t.check(), Freshness::Foreign, "empty marker");
         fs::write(t.marker(), "0".repeat(64)).unwrap();
         assert_eq!(t.check(), Freshness::Foreign, "forged marker");
-        let no_store = check_freshness_with(&t.resolved, &t.tools, None, false);
+        let no_store = check_freshness_with(&t.resolved, &t.tools, TokenCheck::NoStore);
         assert_eq!(no_store, Freshness::Foreign, "no store");
     }
 
@@ -1296,7 +1300,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let resolved = synced_venv(tmp.path(), &[]);
         assert_eq!(
-            check_freshness_with(&resolved, tmp.path(), None, false),
+            check_freshness_with(&resolved, tmp.path(), TokenCheck::Skip),
             Freshness::Fresh
         );
     }
@@ -1306,7 +1310,7 @@ mod tests {
         let t = InTree::new();
         touch_marker(&t.resolved.venv_dir).unwrap();
         assert_eq!(
-            check_freshness_with(&t.resolved, &t.tools, None, true),
+            check_freshness_with(&t.resolved, &t.tools, TokenCheck::Skip),
             Freshness::Fresh
         );
     }
@@ -1745,21 +1749,18 @@ mod tests {
         assert!(is_foreign_with(
             &t.resolved,
             project_root(&t.tools),
-            Some(&t.store),
-            false
+            TokenCheck::Store(&t.store)
         ));
         assert!(!is_foreign_with(
             &t.resolved,
             project_root(&t.tools),
-            Some(&t.store),
-            true
+            TokenCheck::Skip
         ));
         t.stamp();
         assert!(!is_foreign_with(
             &t.resolved,
             project_root(&t.tools),
-            Some(&t.store),
-            false
+            TokenCheck::Store(&t.store)
         ));
     }
 
