@@ -198,6 +198,7 @@ fn retrust_rebuilds_the_in_tree_venv_once() {
             .toolr(&fx.root)
             .env("PATH", &fx.bin_dir)
             .env("TOOLR_AUTO_SYNC", "1")
+            .env("TOOLR_REPLACE_UNTRUSTED_VENV", "1")
             .env_remove("TOOLR_VENV_LOCATION")
             .args(args)
             .output()

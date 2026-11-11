@@ -12,7 +12,7 @@ use assert_cmd::Command;
 
 #[path = "common/mod.rs"]
 mod common;
-use common::{TrustEnv, VenvFixture};
+use common::{TrustEnv, VenvFixture, add_planted_plugin};
 use toolr_core::venv::SYNC_INPUTS_DESCRIPTION;
 
 const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\", \"Hi.\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
@@ -296,7 +296,8 @@ fn quiet_keeps_the_version_warning() {
 
 /// A trusted repository (real trust store, no `TOOLR_TRUST_ALL`) with an
 /// in-tree venv toolr hasn't built. A venv uv builds runs a `python` that
-/// drops `built`.
+/// drops `built`. [`Trusted::toolr`] approves replacing the venv with
+/// `TOOLR_REPLACE_UNTRUSTED_VENV`; [`Trusted::unapproved`] doesn't.
 struct Trusted {
     fx: VenvFixture,
     env: TrustEnv,
@@ -322,13 +323,123 @@ impl Trusted {
     }
 
     fn toolr(&self) -> Command {
+        let mut cmd = self.unapproved();
+        cmd.env(REPLACE_KEY, "1");
+        cmd
+    }
+
+    fn unapproved(&self) -> Command {
         let mut cmd = self.env.toolr(&self.fx.root);
         cmd.env("PATH", &self.fx.bin_dir)
             .env("TOOLR_AUTO_INSTALL_UV", "1")
+            .env_remove(REPLACE_KEY)
             .env_remove("TOOLR_AUTO_SYNC")
             .env_remove("TOOLR_VENV_LOCATION");
         cmd
     }
+
+    /// Run unapproved on a pty pre-loaded with `answers`.
+    fn on_tty(&self, args: &[&str], answers: &str) -> std::process::Output {
+        let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
+        cmd.args(args)
+            .current_dir(&self.fx.root)
+            .env_remove("TOOLR_TRUST_ALL")
+            .env_remove(REPLACE_KEY)
+            .env_remove("TOOLR_AUTO_SYNC")
+            .env_remove("TOOLR_VENV_LOCATION")
+            .env("TOOLR_AUTO_INSTALL_UV", "1")
+            .env("PATH", &self.fx.bin_dir)
+            .env("XDG_STATE_HOME", self.env.state.path())
+            .env("XDG_CACHE_HOME", self.env.cache.path())
+            .env("XDG_DATA_HOME", self.env.data.path())
+            .env("TOOLR_NO_CACHE_HINT", "1");
+        common::run_on_pty(cmd, answers)
+    }
+
+    /// Plant an interpreter that drops `pwned` if it ever runs.
+    fn plant(&self) -> std::path::PathBuf {
+        let pwned = self.fx.root.join("pwned");
+        common::write_executable(
+            &self.fx.venv_dir.join("bin").join("python"),
+            &format!("#!/bin/sh\necho pwned > {}\nexit 1\n", pwned.display()),
+        );
+        pwned
+    }
+}
+
+const REPLACE_KEY: &str = "TOOLR_REPLACE_UNTRUSTED_VENV";
+const REPLACE_PROMPT: &str = "Remove it and build a fresh one? [y/N]";
+const KEPT: &str = "Nothing was removed";
+
+/// Asserts the venv toolr didn't build was explained, kept and never run.
+fn assert_kept(t: &Trusted, out: &std::process::Output, pwned: &Path) {
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("so toolr won't run it")
+            && stderr.contains(KEPT)
+            && stderr.contains("toolr project venv sync")
+            && stderr.contains(REPLACE_KEY),
+        "stderr:\n{stderr}"
+    );
+    assert!(!pwned.exists(), "the planted interpreter ran");
+    assert!(!t.fx.uv_ran_sync(), "uv argv:\n{}", t.fx.uv_argv());
+    assert!(
+        t.fx.venv_dir.join("bin/python").is_file(),
+        "the venv must stay"
+    );
+}
+
+#[test]
+fn a_venv_toolr_didnt_build_stays_without_approval() {
+    for args in [&["hello", "world"][..], &["project", "venv", "sync"][..]] {
+        let t = Trusted::new();
+        let pwned = t.plant();
+        // `TOOLR_AUTO_INSTALL_UV` and `TOOLR_AUTO_SYNC` consent to syncing, never to removing.
+        let out = t
+            .unapproved()
+            .env("TOOLR_AUTO_SYNC", "1")
+            .args(args)
+            .output()
+            .unwrap();
+        assert_kept(&t, &out, &pwned);
+        for off in ["0", ""] {
+            let out = t
+                .unapproved()
+                .env(REPLACE_KEY, off)
+                .args(args)
+                .output()
+                .unwrap();
+            assert_kept(&t, &out, &pwned);
+        }
+    }
+}
+
+#[test]
+fn a_venv_toolr_didnt_build_is_replaced_only_on_y() {
+    let t = Trusted::new();
+    let pwned = t.plant();
+    for (answers, args) in [
+        ("n\n", &["hello", "world"][..]),
+        ("\x04", &["hello", "world"][..]),
+        ("y\n", &["-q", "hello", "world"][..]),
+    ] {
+        let out = t.on_tty(args, answers);
+        assert_kept(&t, &out, &pwned);
+        let asked = String::from_utf8_lossy(&out.stderr).contains(REPLACE_PROMPT);
+        assert_eq!(asked, args[0] != "-q", "{args:?}");
+    }
+    let out = t.on_tty(&["hello", "world"], "y\n");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches(REPLACE_PROMPT).count(),
+        1,
+        "stderr:\n{stderr}"
+    );
+    assert!(!pwned.exists(), "the planted interpreter ran");
+    assert!(t.fx.uv_ran_sync());
+    assert!(t.built.exists(), "the rebuilt venv should run the command");
 }
 
 #[test]
@@ -351,6 +462,12 @@ fn planted_in_tree_venv_is_rebuilt_not_run() {
     );
     assert!(t.fx.uv_ran_sync(), "uv argv:\n{}", t.fx.uv_argv());
     assert!(t.built.exists(), "the rebuilt venv should run the command");
+    let locks = t.env.state.path().join("toolr/trust/locks");
+    let left: Vec<_> = fs::read_dir(&locks).unwrap().collect();
+    assert!(
+        left.is_empty(),
+        "a finished sync leaves no lock file: {left:?}"
+    );
 }
 
 #[test]
@@ -469,17 +586,6 @@ fn forced_sync_removes_a_foreign_venv_first() {
     assert!(t.fx.uv_ran_sync());
 }
 
-const PLANTED_PLUGIN: &str = r#"{"toolr_schema_version":2,"package":"planted",
-    "groups":[{"name":"planted","title":"Planted","description":"Planted.","origin":"third_party"}],
-    "commands":[{"name":"run","group":"planted","module":"planted.commands","function":"run",
-        "summary":"Run","description":"","arguments":[],"origin":"third_party"}]}"#;
-
-fn add_planted_plugin(venv: &Path) {
-    let dir = venv.join("lib/python3.13/site-packages/planted");
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("toolr-manifest.json"), PLANTED_PLUGIN).unwrap();
-}
-
 fn help(t: &Trusted) -> String {
     let out = t.toolr().arg("--help").output().unwrap();
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -495,12 +601,57 @@ fn a_foreign_venvs_plugins_stay_out_of_help_until_toolr_builds_it() {
     let before = help(&t);
     assert!(before.contains("hello"), "help:\n{before}");
     assert!(!before.contains("planted"), "help:\n{before}");
+    assert_eq!(t.fx.uv_argv(), "", "help must not rebuild the venv");
     t.toolr()
         .args(["project", "venv", "sync"])
         .assert()
         .success();
     let after = help(&t);
     assert!(after.contains("planted"), "help:\n{after}");
+}
+
+/// A plugin command is unknown until the foreign venv is rebuilt, so the rebuild runs before
+/// clap, and dispatch doesn't sync a second time.
+#[test]
+fn a_plugin_command_rebuilds_a_foreign_venv_and_runs() {
+    let t = Trusted::new();
+    add_planted_plugin(&t.fx.venv_dir);
+    add_planted_plugin(&t.fx.venv_template);
+    let output = t.toolr().args(["planted", "run"]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(".venv: toolr didn't build this in-tree venv"),
+        "stderr:\n{stderr}"
+    );
+    let syncs = t.fx.uv_argv().lines().filter(|w| *w == "sync").count();
+    assert_eq!(syncs, 1, "uv argv:\n{}", t.fx.uv_argv());
+    assert!(t.built.exists(), "the command should reach dispatch");
+}
+
+#[test]
+fn a_plugin_command_on_a_foreign_venv_that_cant_be_rebuilt_names_the_fix() {
+    let t = Trusted::new();
+    add_planted_plugin(&t.fx.venv_dir);
+    let output = t
+        .toolr()
+        .env("PATH", t.fx.root.join("empty-path"))
+        .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .args(["--quiet", "planted", "run"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("toolr didn't build the in-tree tools venv")
+            && stderr.contains("run `toolr project venv sync`"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("unrecognized subcommand"),
+        "stderr:\n{stderr}"
+    );
+    assert!(!t.built.exists(), "the foreign interpreter must not run");
 }
 
 #[test]

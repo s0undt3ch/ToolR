@@ -9,10 +9,13 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Output;
 
-use common::{TrustEnv, VenvFixture};
+use common::{TrustEnv, VenvFixture, add_planted_plugin};
 
 const TRUST_PROMPT: &str = "Trust it? [y/N]";
 const SYNC_PROMPT: &str = "Sync it now? [y/N]";
+/// Asked once the sync is agreed: the never-synced in-tree venv wasn't built by toolr.
+const REPLACE_PROMPT: &str = "Remove it and build a fresh one? [y/N]";
+const KEPT: &str = "Nothing was removed";
 const UV_PROMPT: &str = "didn't find it on PATH";
 const HINT: &str = "run `toolr project venv sync` when you're ready";
 const REFUSAL: &str = "refusing to run code from an untrusted repository";
@@ -171,11 +174,12 @@ fn stdout(out: &Output) -> String {
 #[test]
 fn trust_then_yes_syncs_the_venv() {
     let c = Clone::new();
-    let out = c.run_with_tty(&["project", "trust"], "y\n");
+    let out = c.run_with_tty(&["project", "trust"], "y\ny\n");
     let err = stderr(&out);
     assert!(out.status.success(), "{err}");
     assert_eq!(stdout(&out), format!("{}\n", c.root()));
     assert!(err.contains(SYNC_PROMPT), "{err}");
+    assert_eq!(err.matches(REPLACE_PROMPT).count(), 1, "{err}");
     assert!(!err.contains(UV_PROMPT), "{err}");
     assert!(c.fx.uv_ran_sync(), "the venv should have been synced");
     assert!(c.fx.venv_dir.join(".toolr-sync-stamp").is_file());
@@ -245,11 +249,30 @@ fn trust_without_a_terminal_declines_with_hint() {
     assert!(c.is_trusted());
 }
 
+/// Consent to sync is not consent to remove a venv toolr didn't build.
 #[test]
-fn trust_without_a_terminal_syncs_with_auto_install_uv() {
+fn trust_without_a_terminal_and_auto_sync_keeps_a_venv_toolr_didnt_build() {
     let c = Clone::new();
     c.toolr()
         .env("TOOLR_AUTO_SYNC", "1")
+        .env("TOOLR_AUTO_INSTALL_UV", "1")
+        .args(["project", "trust"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(KEPT));
+    assert!(!c.fx.uv_ran_sync());
+    assert!(
+        c.venv_dir.join("bin/python").is_file(),
+        "the venv must stay"
+    );
+}
+
+#[test]
+fn trust_without_a_terminal_replaces_with_the_replace_key() {
+    let c = Clone::new();
+    c.toolr()
+        .env("TOOLR_AUTO_SYNC", "1")
+        .env("TOOLR_REPLACE_UNTRUSTED_VENV", "1")
         .args(["project", "trust"])
         .assert()
         .success()
@@ -273,6 +296,7 @@ fn retrust_with_a_venv_toolr_built_asks_nothing() {
     let c = Clone::new();
     c.toolr()
         .env("TOOLR_AUTO_SYNC", "1")
+        .env("TOOLR_REPLACE_UNTRUSTED_VENV", "1")
         .args(["project", "trust"])
         .assert()
         .success();
@@ -287,7 +311,7 @@ fn retrust_with_a_venv_toolr_built_asks_nothing() {
 fn trust_reports_a_failed_sync() {
     let c = Clone::new();
     c.fx.write_uv_stub("exit 3");
-    let out = c.run_with_tty(&["project", "trust"], "y\n");
+    let out = c.run_with_tty(&["project", "trust"], "y\ny\n");
     let err = stderr(&out);
     assert!(!out.status.success(), "{err}");
     assert!(err.contains("syncing its tools venv failed"), "{err}");
@@ -315,14 +339,53 @@ fn trust_then_yes_installs_uv_without_its_own_prompt() {
 #[test]
 fn dispatch_trust_and_sync_then_runs() {
     let c = Clone::new();
-    let out = c.run_with_tty(&["hello", "world"], "y\ny\n");
+    let out = c.run_with_tty(&["hello", "world"], "y\ny\ny\n");
     let err = stderr(&out);
     assert!(out.status.success(), "{err}");
     assert!(err.contains(TRUST_PROMPT), "{err}");
-    assert!(err.contains(SYNC_PROMPT), "{err}");
+    assert_eq!(err.matches(SYNC_PROMPT).count(), 1, "{err}");
+    assert_eq!(err.matches(REPLACE_PROMPT).count(), 1, "{err}");
     assert!(!err.contains(UV_PROMPT), "{err}");
     assert!(c.fx.uv_ran_sync());
     assert!(c.sentinel.exists(), "the command should have run");
+}
+
+/// The never-synced in-tree venv is foreign once trusted, so its plugin command is unknown
+/// until the sync that follows the trust prompt rebuilds it.
+#[test]
+fn dispatch_trust_and_sync_then_runs_a_plugin_command() {
+    let c = Clone::new();
+    add_planted_plugin(&c.fx.venv_dir);
+    add_planted_plugin(&c.fx.venv_template);
+    let out = c.run_with_tty(&["planted", "run"], "y\ny\ny\n");
+    let err = stderr(&out);
+    assert!(out.status.success(), "{err}");
+    assert!(err.contains(TRUST_PROMPT), "{err}");
+    assert_eq!(err.matches(SYNC_PROMPT).count(), 1, "{err}");
+    assert_eq!(err.matches(REPLACE_PROMPT).count(), 1, "{err}");
+    assert!(c.sentinel.exists(), "the command should have run");
+}
+
+#[test]
+fn dispatch_replace_declined_keeps_the_venv_and_explains() {
+    let c = Clone::new();
+    let out = c.run_with_tty(&["hello", "world"], "y\ny\nn\n");
+    let err = stderr(&out);
+    assert!(!out.status.success(), "{err}");
+    assert!(err.contains(REPLACE_PROMPT), "{err}");
+    assert!(
+        err.contains("so toolr won't run it") && err.contains(KEPT),
+        "{err}"
+    );
+    assert!(!c.fx.uv_ran_sync());
+    assert!(
+        !c.sentinel.exists(),
+        "the venv toolr didn't build must not run"
+    );
+    assert!(
+        c.venv_dir.join("bin/python").is_file(),
+        "the venv must stay"
+    );
 }
 
 #[test]
@@ -365,7 +428,7 @@ fn dispatch_with_a_fresh_venv_asks_only_for_trust() {
 #[test]
 fn dispatch_auto_install_uv_answers_the_sync_prompt() {
     let c = Clone::new();
-    let tty_out = c.run_with_tty_env(&["hello", "world"], "y\n", &[("TOOLR_AUTO_SYNC", "1")]);
+    let tty_out = c.run_with_tty_env(&["hello", "world"], "y\ny\n", &[("TOOLR_AUTO_SYNC", "1")]);
     let err = stderr(&tty_out);
     assert!(tty_out.status.success(), "{err}");
     assert!(!err.contains(SYNC_PROMPT), "{err}");

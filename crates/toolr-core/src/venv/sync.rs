@@ -339,6 +339,7 @@ pub fn sync_if_needed(
         bypass_stamp,
         || check_freshness(resolved, tools_dir),
         lock,
+        || approve_removal_on_tty(&resolved.venv_dir, quiet),
         || {
             // Not `Http`: its message tells the user to install uv, which they already have.
             let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
@@ -353,17 +354,69 @@ pub fn sync_if_needed(
     )
 }
 
-/// Check, lock, re-check, then remove a foreign venv and sync, all under the
-/// lock: another toolr may be building this venv, and until it stamps the
-/// marker the venv reads as foreign. Without the lock toolr never removes a
-/// venv it didn't build: it fails naming the store, which couldn't record a
-/// rebuilt venv's token either. Any other venv syncs unlocked.
+/// Set truthy, it approves replacing an in-tree venv toolr didn't build without asking, for
+/// runs with no terminal. Syncing consent (`TOOLR_AUTO_SYNC`) never does.
+pub const REPLACE_VENV_ENV: &str = "TOOLR_REPLACE_UNTRUSTED_VENV";
+
+/// Why toolr won't run an in-tree venv it didn't build, for the removal prompt and the refusal.
+fn untrusted_venv_reason(venv_dir: &Path) -> String {
+    format!(
+        "toolr didn't build {} since you trusted this repository, so toolr won't run it: \
+         it may have come with the repository, and running it would run code you never approved",
+        shown(venv_dir)
+    )
+}
+
+/// Approve removing a venv toolr didn't build: [`REPLACE_VENV_ENV`], or a `y` on the terminal.
+/// `quiet` never asks.
+fn approve_removal_on_tty(venv_dir: &Path, quiet: bool) -> Result<(), UvError> {
+    use std::io::IsTerminal as _;
+    let by_env = crate::env::env_truthy(REPLACE_VENV_ENV);
+    let stdin = std::io::stdin();
+    let ask = !by_env && !quiet && stdin.is_terminal();
+    let prompt_io = ask.then(|| (stdin.lock(), std::io::stderr()));
+    match prompt_io {
+        Some((mut input, mut out)) => {
+            approve_removal(venv_dir, by_env, Some((&mut input, &mut out)))
+        }
+        None => approve_removal(venv_dir, by_env, None),
+    }
+}
+
+fn approve_removal(
+    venv_dir: &Path,
+    by_env: bool,
+    prompt_io: Option<(&mut dyn std::io::BufRead, &mut dyn std::io::Write)>,
+) -> Result<(), UvError> {
+    if by_env {
+        return Ok(());
+    }
+    let reason = untrusted_venv_reason(venv_dir);
+    if let Some((input, out)) = prompt_io {
+        let _ = writeln!(out, "toolr: {reason}.");
+        if crate::prompt::yes_no(input, out, "Remove it and build a fresh one?", false) {
+            return Ok(());
+        }
+    }
+    Err(UvError::Io(std::io::Error::other(format!(
+        "{reason}. Nothing was removed. To replace it, run `toolr project venv sync` on a \
+         terminal and answer y, set {REPLACE_VENV_ENV}=1, or remove {} yourself",
+        shown(venv_dir)
+    ))))
+}
+
+/// Check, lock, re-check, then, once `approve` agrees, remove a foreign venv and sync, all
+/// under the lock: another toolr may be building this venv, and until it stamps the marker
+/// the venv reads as foreign. Without the lock toolr never removes a venv it didn't build: it
+/// fails naming the store, which couldn't record a rebuilt venv's token either. Any other
+/// venv syncs unlocked.
 fn sync_locked<L>(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
     bypass_stamp: bool,
     check: impl Fn() -> Freshness,
     lock: impl FnOnce() -> Result<L>,
+    approve: impl FnOnce() -> Result<(), UvError>,
     sync: impl FnOnce() -> Result<(), UvError>,
 ) -> Result<(), UvError> {
     if !bypass_stamp && check() == Freshness::Fresh {
@@ -379,9 +432,11 @@ fn sync_locked<L>(
     };
     match state {
         // uv runs an existing venv's interpreter to inspect it, so a planted one goes first.
-        Freshness::Foreign => remove_foreign_venv(tools_dir, &resolved.venv_dir).map_err(|e| {
-            let msg = format!("couldn't remove {}: {e}", shown(&resolved.venv_dir));
-            UvError::Io(std::io::Error::other(msg))
+        Freshness::Foreign => approve().and_then(|()| {
+            remove_foreign_venv(tools_dir, &resolved.venv_dir).map_err(|e| {
+                let msg = format!("couldn't remove {}: {e}", shown(&resolved.venv_dir));
+                UvError::Io(std::io::Error::other(msg))
+            })
         })?,
         Freshness::Fresh if !bypass_stamp => return Ok(()),
         _ => {}
@@ -1228,6 +1283,7 @@ mod tests {
             false,
             || t.check(),
             || t.store.lock_venv(&t.resolved.venv_dir, false),
+            approve,
             sync_fails,
         )
         .unwrap_err();
@@ -1251,6 +1307,7 @@ mod tests {
             false,
             || t.check(),
             || -> Result<()> { Err(anyhow::anyhow!("read-only store")) },
+            approve,
             || {
                 synced.set(true);
                 t.stamp();
@@ -1324,6 +1381,7 @@ mod tests {
                 t.stamp();
                 Ok(())
             },
+            approve,
             sync_fails,
         )
         .unwrap();
@@ -1346,6 +1404,7 @@ mod tests {
                 events.borrow_mut().push("lock");
                 Ok(())
             },
+            approve,
             || {
                 assert!(!t.resolved.venv_dir.exists(), "removed before the sync");
                 events.borrow_mut().push("sync");
@@ -1354,6 +1413,58 @@ mod tests {
         )
         .unwrap();
         assert_eq!(*events.borrow(), ["check", "lock", "check", "sync"]);
+    }
+
+    #[test]
+    fn an_untrusted_venv_stays_unless_the_user_or_the_env_approves() {
+        let t = InTree::new();
+        let refusal = |e: UvError| {
+            let msg = e.to_string();
+            assert!(
+                msg.contains("toolr didn't build")
+                    && msg.contains("Nothing was removed")
+                    && msg.contains("toolr project venv sync")
+                    && msg.contains("TOOLR_REPLACE_UNTRUSTED_VENV=1"),
+                "{msg}"
+            );
+        };
+        for answer in ["n\n", "\n", ""] {
+            let (mut input, mut out) = (std::io::Cursor::new(answer), Vec::new());
+            refusal(
+                approve_removal(&t.resolved.venv_dir, false, Some((&mut input, &mut out)))
+                    .unwrap_err(),
+            );
+            let asked = String::from_utf8(out).unwrap();
+            assert!(
+                asked.contains("so toolr won't run it")
+                    && asked.contains("Remove it and build a fresh one? [y/N]"),
+                "{asked}"
+            );
+        }
+        refusal(approve_removal(&t.resolved.venv_dir, false, None).unwrap_err());
+        // `quiet` never asks, so no terminal is needed to show it refuses.
+        refusal(approve_removal_on_tty(&t.resolved.venv_dir, true).unwrap_err());
+        approve_removal(&t.resolved.venv_dir, true, None).unwrap();
+        let (mut input, mut out) = (std::io::Cursor::new("y\n"), Vec::new());
+        approve_removal(&t.resolved.venv_dir, false, Some((&mut input, &mut out))).unwrap();
+
+        let refused = || approve_removal(&t.resolved.venv_dir, false, None);
+        sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || Ok(()),
+            refused,
+            sync_fails,
+        )
+        .unwrap_err();
+        assert!(t.resolved.python.is_file(), "a refused venv must stay");
+    }
+
+    /// The user's `y` to removing a foreign venv.
+    fn approve() -> Result<(), UvError> {
+        Ok(())
     }
 
     /// A sync that must not run: passing it to `sync_locked().unwrap()` fails the
@@ -1371,6 +1482,7 @@ mod tests {
             false,
             || t.check(),
             || Ok(()),
+            approve,
             sync_fails,
         )
         .unwrap_err();
@@ -1387,6 +1499,7 @@ mod tests {
             false,
             || t.check(),
             || -> Result<()> { unreachable!("a fresh venv takes no lock") },
+            approve,
             sync_fails,
         )
         .unwrap();
@@ -1419,15 +1532,54 @@ mod tests {
     /// Through the real env: the default store under `XDG_STATE_HOME`.
     #[cfg(unix)]
     #[test]
-    fn sync_if_needed_fails_when_a_foreign_venv_cant_be_removed() {
-        use std::os::unix::fs::PermissionsExt;
+    fn sync_if_needed_quiet_never_removes_a_foreign_venv() {
         let t = InTree::new();
         let mut env = crate::test_env::EnvGuard::write();
         env.set("XDG_STATE_HOME", t._tmp.path().join("default-state"));
         env.remove("TOOLR_TRUST_ALL");
+        env.set("TOOLR_AUTO_SYNC", "1");
         let uv = stub_uv(t._tmp.path(), 0);
+        let err = sync_if_needed(&uv, &t.tools, &t.resolved, false, true, &UpgradeMode::None)
+            .expect_err("a venv that stays must not be synced");
+        assert!(err.to_string().contains("Nothing was removed"), "{err:?}");
+        assert!(t.resolved.python.is_file());
+    }
+
+    #[test]
+    fn only_the_replace_key_approves_without_a_terminal() {
+        let t = InTree::new();
+        let mut env = crate::test_env::EnvGuard::write();
+        env.set("TOOLR_AUTO_SYNC", "1");
+        env.set("TOOLR_AUTO_INSTALL_UV", "1");
+        for off in [None, Some("0"), Some("")] {
+            match off {
+                Some(v) => env.set(REPLACE_VENV_ENV, v),
+                None => env.remove(REPLACE_VENV_ENV),
+            }
+            assert!(
+                approve_removal_on_tty(&t.resolved.venv_dir, true).is_err(),
+                "{off:?}"
+            );
+        }
+        env.set(REPLACE_VENV_ENV, "1");
+        approve_removal_on_tty(&t.resolved.venv_dir, true).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sync_locked_fails_when_an_approved_foreign_venv_cant_be_removed() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = InTree::new();
         fs::set_permissions(&t.tools, fs::Permissions::from_mode(0o555)).unwrap();
-        let result = sync_if_needed(&uv, &t.tools, &t.resolved, false, true, &UpgradeMode::None);
+        let result = sync_locked(
+            &t.resolved,
+            &t.tools,
+            false,
+            || t.check(),
+            || Ok(()),
+            approve,
+            sync_fails,
+        );
         fs::set_permissions(&t.tools, fs::Permissions::from_mode(0o755)).unwrap();
         let err = result.expect_err("a venv that stays must not be synced");
         assert!(
