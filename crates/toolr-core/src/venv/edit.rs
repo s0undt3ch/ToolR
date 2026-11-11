@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use crate::uv::UvBinary;
 
 use super::resolve::ResolvedVenv;
-use super::sync::touch_marker_after_success;
+use super::sync::stamp_marker;
 
 /// Run `uv add <specs...> --project <tools>` synchronously. uv mutates
 /// `tools/pyproject.toml`, refreshes `tools/uv.lock`, and re-syncs the
@@ -39,7 +39,7 @@ pub fn run_uv_add(
         .status()
         .with_context(|| format!("spawning uv at {}", uv.path.display()))?;
     if status.success() {
-        touch_marker_after_success(&resolved.venv_dir)?;
+        stamp_marker(resolved, tools_dir)?;
     }
     Ok(status)
 }
@@ -71,7 +71,7 @@ pub fn run_uv_remove(
         .status()
         .with_context(|| format!("spawning uv at {}", uv.path.display()))?;
     if status.success() {
-        touch_marker_after_success(&resolved.venv_dir)?;
+        stamp_marker(resolved, tools_dir)?;
     }
     Ok(status)
 }

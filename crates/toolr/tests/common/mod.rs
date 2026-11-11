@@ -8,7 +8,8 @@
 //!     `validate_venv` passes.
 //!   - A `bin/uv` stub (`#!/bin/sh`) that responds to `--version` and
 //!     exits 0 for every other subcommand. Logs argv to a file so tests
-//!     can inspect what uv would have been called with.
+//!     can inspect what uv would have been called with. Its `sync` rebuilds
+//!     a removed venv from a pristine copy, as real uv would.
 //!
 //! Tests run `common::toolr().env("PATH", &fx.bin_dir)
 //! .current_dir(&fx.root)` to make toolr find the stub uv only.
@@ -27,6 +28,8 @@ pub struct VenvFixture {
     pub root: PathBuf,
     pub tools_dir: PathBuf,
     pub venv_dir: PathBuf,
+    /// What the stub uv's `sync` copies to `venv_dir` when it is gone.
+    pub venv_template: PathBuf,
     pub bin_dir: PathBuf,
     pub uv_argv_log: PathBuf,
 }
@@ -73,12 +76,15 @@ impl VenvFixture {
         let bin_dir = root.join("test-bin");
         fs::create_dir_all(&bin_dir).unwrap();
         let uv_argv_log = root.join("uv-argv.log");
+        let venv_template = root.join("venv-template");
+        copy_dir(&venv_dir, &venv_template);
 
         let fx = Self {
             _tmp: tmp,
             root,
             tools_dir,
             venv_dir,
+            venv_template,
             bin_dir,
             uv_argv_log,
         };
@@ -87,13 +93,22 @@ impl VenvFixture {
     }
 
     /// (Re)write the stub uv, running `sync_action` (a shell snippet) on
-    /// `uv sync`. PATH holds only the stub dir, so use absolute tool paths.
+    /// `uv sync` after it rebuilds a missing venv. PATH holds only the stub
+    /// dir, so use absolute tool paths.
     pub fn write_uv_stub(&self, sync_action: &str) {
         let stub_body = format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> {log}\ncase \"$1\" in\n  --version) echo 'uv 0.5.0';;\n  sync) {sync_action}\n    ;;\nesac\nexit 0\n",
-            log = self.uv_argv_log.display()
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> {log}\ncase \"$1\" in\n  --version) echo 'uv 0.5.0';;\n  sync) [ -e \"$UV_PROJECT_ENVIRONMENT\" ] || /bin/cp -R {template} \"$UV_PROJECT_ENVIRONMENT\"\n    {sync_action}\n    ;;\nesac\nexit 0\n",
+            log = self.uv_argv_log.display(),
+            template = self.venv_template.display(),
         );
         write_executable(&self.bin_dir.join("uv"), &stub_body);
+    }
+
+    /// Make `body` the venv's `bin/python`, now and in every venv uv rebuilds.
+    pub fn write_python(&self, body: &str) {
+        for venv in [&self.venv_dir, &self.venv_template] {
+            write_executable(&venv.join("bin").join("python"), body);
+        }
     }
 
     /// Read the captured uv argv lines (each token on a separate line).
@@ -202,6 +217,19 @@ impl Project {
 
     pub fn manifest(&self) -> String {
         std::fs::read_to_string(self.tools().join(".toolr-manifest.json")).unwrap()
+    }
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
     }
 }
 

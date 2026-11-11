@@ -2,6 +2,7 @@
 //! such as `tools/uv.lock` (#527; see `check_freshness`): a stale venv is
 //! re-synced first, and when that can't happen the command is refused rather than run on old code. It also
 //! warns when the venv's `toolr-py` minor version differs from the binary (#529).
+//! In a trusted repository, an in-tree venv toolr didn't build is rebuilt, never run.
 #![cfg(unix)]
 
 use std::fs;
@@ -11,7 +12,7 @@ use assert_cmd::Command;
 
 #[path = "common/mod.rs"]
 mod common;
-use common::VenvFixture;
+use common::{TrustEnv, VenvFixture};
 use toolr_core::venv::SYNC_INPUTS_DESCRIPTION;
 
 const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\", \"Hi.\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
@@ -291,4 +292,173 @@ fn quiet_keeps_the_version_warning() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "stderr:\n{stderr}");
     assert!(stderr.contains("toolr-py 0.0.1"), "stderr:\n{stderr}");
+}
+
+/// A trusted repository (real trust store, no `TOOLR_TRUST_ALL`) with an
+/// in-tree venv toolr hasn't built. A venv uv builds runs a `python` that
+/// drops `built`.
+struct Trusted {
+    fx: VenvFixture,
+    env: TrustEnv,
+    built: std::path::PathBuf,
+}
+
+impl Trusted {
+    fn new() -> Self {
+        let fx = VenvFixture::new();
+        let built = fx.root.join("built");
+        fx.write_python(&format!(
+            "#!/bin/sh\necho ran > {}\nexit 0\n",
+            built.display()
+        ));
+        fs::write(fx.tools_dir.join("hello.py"), HELLO_TOOLS).unwrap();
+        let env = TrustEnv::new();
+        let t = Self { fx, env, built };
+        t.toolr()
+            .args(["project", "trust", "--no-sync"])
+            .assert()
+            .success();
+        t
+    }
+
+    fn toolr(&self) -> Command {
+        let mut cmd = self.env.toolr(&self.fx.root);
+        cmd.env("PATH", &self.fx.bin_dir)
+            .env("TOOLR_AUTO_INSTALL_UV", "1")
+            .env_remove("TOOLR_AUTO_SYNC")
+            .env_remove("TOOLR_VENV_LOCATION");
+        cmd
+    }
+}
+
+#[test]
+fn planted_in_tree_venv_is_rebuilt_not_run() {
+    let t = Trusted::new();
+    let pwned = t.fx.root.join("pwned");
+    common::write_executable(
+        &t.fx.venv_dir.join("bin").join("python"),
+        &format!("#!/bin/sh\necho pwned > {}\nexit 1\n", pwned.display()),
+    );
+    fs::write(t.fx.venv_dir.join(".toolr-sync-stamp"), "").unwrap();
+    let output = t.toolr().args(["hello", "world"]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(!pwned.exists(), "the planted interpreter ran");
+    assert!(
+        stderr.contains("toolr: removing ")
+            && stderr.contains(".venv: toolr didn't build this in-tree venv"),
+        "stderr:\n{stderr}"
+    );
+    assert!(t.fx.uv_ran_sync(), "uv argv:\n{}", t.fx.uv_argv());
+    assert!(t.built.exists(), "the rebuilt venv should run the command");
+}
+
+#[test]
+fn quiet_still_names_the_removed_venv() {
+    let t = Trusted::new();
+    let output = t
+        .toolr()
+        .args(["--quiet", "hello", "world"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("toolr didn't build this in-tree venv"),
+        "stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn own_in_tree_venv_is_reused() {
+    let t = Trusted::new();
+    t.toolr()
+        .args(["project", "venv", "sync"])
+        .assert()
+        .success();
+    assert!(t.fx.uv_ran_sync());
+    fs::remove_file(&t.fx.uv_argv_log).unwrap();
+    let output = t.toolr().args(["hello", "world"]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert_eq!(t.fx.uv_argv(), "", "toolr's own venv must not be re-synced");
+    assert!(!stderr.contains("removing"), "stderr:\n{stderr}");
+    assert!(t.built.exists());
+}
+
+#[test]
+fn own_stale_in_tree_venv_is_synced_in_place() {
+    let t = Trusted::new();
+    t.toolr()
+        .args(["project", "venv", "sync"])
+        .assert()
+        .success();
+    let marker = t.fx.venv_dir.join("keep-me");
+    fs::write(&marker, "").unwrap();
+    fs::remove_file(&t.fx.uv_argv_log).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    fs::write(t.fx.tools_dir.join("uv.lock"), "version = 1\n# bumped\n").unwrap();
+    let output = t.toolr().args(["hello", "world"]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(t.fx.uv_ran_sync(), "uv argv:\n{}", t.fx.uv_argv());
+    assert!(!stderr.contains("removing"), "stderr:\n{stderr}");
+    assert!(
+        marker.exists(),
+        "a stale venv toolr built must not be rebuilt"
+    );
+    fs::remove_file(&t.fx.uv_argv_log).unwrap();
+    t.toolr().args(["hello", "world"]).assert().success();
+    assert_eq!(t.fx.uv_argv(), "", "the resync must leave a valid token");
+}
+
+#[test]
+fn foreign_venv_is_refused_without_uv() {
+    let t = Trusted::new();
+    let output = t
+        .toolr()
+        .env("PATH", t.fx.root.join("empty-path"))
+        .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .args(["--quiet", "hello", "world"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("toolr didn't build the in-tree tools venv")
+            && stderr.contains("toolr project venv sync"),
+        "stderr:\n{stderr}"
+    );
+    assert!(!t.built.exists(), "the foreign interpreter must not run");
+}
+
+#[test]
+fn venv_run_no_sync_refuses_a_foreign_venv() {
+    let t = Trusted::new();
+    let output = t
+        .toolr()
+        .args(["project", "venv", "run", "--no-sync", "true"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("toolr didn't build the tools venv at")
+            && stderr.contains("run `toolr project venv sync`"),
+        "stderr:\n{stderr}"
+    );
+    assert_eq!(t.fx.uv_argv(), "");
+}
+
+#[test]
+fn forced_sync_removes_a_foreign_venv_first() {
+    let t = Trusted::new();
+    let planted = t.fx.venv_dir.join("planted");
+    fs::write(&planted, "").unwrap();
+    t.toolr()
+        .args(["project", "venv", "sync", "--force"])
+        .assert()
+        .success();
+    assert!(!planted.exists(), "uv ran against the planted venv");
+    assert!(t.fx.uv_ran_sync());
 }

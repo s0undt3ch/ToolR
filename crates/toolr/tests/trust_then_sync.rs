@@ -26,34 +26,50 @@ struct Clone {
     fx: VenvFixture,
     env: TrustEnv,
     sentinel: PathBuf,
+    venv_dir: PathBuf,
 }
 
 impl Clone {
     fn new() -> Self {
         let fx = VenvFixture::new();
         let sentinel = fx.root.join("ran");
-        fs::write(
-            fx.venv_dir.join("bin").join("python"),
-            format!("#!/bin/sh\necho ran > {}\nexit 0\n", sentinel.display()),
-        )
-        .unwrap();
+        fx.write_python(&format!(
+            "#!/bin/sh\necho ran > {}\nexit 0\n",
+            sentinel.display()
+        ));
         fs::write(fx.tools_dir.join("hello.py"), HELLO_TOOLS).unwrap();
+        let venv_dir = fx.venv_dir.clone();
         Self {
             fx,
             env: TrustEnv::new(),
             sentinel,
+            venv_dir,
         }
     }
 
-    /// Sync once with trust bypassed, so the venv is fresh, then forget it.
+    /// Sync once with trust bypassed, so the venv is fresh, then forget it. A
+    /// cache venv: an in-tree one synced without a trust record is rebuilt
+    /// once the repository is trusted.
     fn fresh() -> Self {
-        let clone = Self::new();
+        let mut clone = Self::new();
+        let pyproject = clone.fx.tools_dir.join("pyproject.toml");
+        let body = fs::read_to_string(&pyproject)
+            .unwrap()
+            .replace("venv-location = \"in-tree\"", "venv-location = \"cache\"");
+        fs::write(&pyproject, body).unwrap();
         clone
             .toolr()
             .env("TOOLR_TRUST_ALL", "1")
             .args(["project", "venv", "sync"])
             .assert()
             .success();
+        let out = clone
+            .toolr()
+            .env("TOOLR_TRUST_ALL", "1")
+            .args(["project", "venv", "path"])
+            .output()
+            .unwrap();
+        clone.venv_dir = PathBuf::from(String::from_utf8(out.stdout).unwrap().trim());
         let _ = fs::remove_file(&clone.fx.uv_argv_log);
         clone
     }
@@ -83,7 +99,7 @@ impl Clone {
     /// Leave `bin/python` dangling as `mise prune` does; the stub uv's `sync`
     /// restores it, as real uv rebuilds such a venv.
     fn make_broken(&self) {
-        let python = self.fx.venv_dir.join("bin").join("python");
+        let python = self.venv_dir.join("bin").join("python");
         let saved = self.fx.root.join("python-before-prune");
         fs::rename(&python, &saved).unwrap();
         std::os::unix::fs::symlink(self.fx.root.join("pruned").join("python3.13"), &python)

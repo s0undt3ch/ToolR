@@ -282,3 +282,51 @@ fn deleted_worktree_claimed_elsewhere_gets_cautious_hint() {
             repair_command(&evil)
         )));
 }
+
+/// A stub uv whose `sync` builds a minimal venv at `$UV_PROJECT_ENVIRONMENT`
+/// and logs each call to `log`.
+fn venv_building_uv(bin: &Path, log: &Path) {
+    fs::create_dir_all(bin).unwrap();
+    common::write_executable(
+        &bin.join("uv"),
+        &format!(
+            "#!/bin/sh\ncase \"$1\" in\n  --version) echo 'uv 0.5.0';;\n  sync)\n    echo \"sync $PWD\" >> {log}\n    \
+             /bin/mkdir -p \"$UV_PROJECT_ENVIRONMENT/bin\" \"$UV_PROJECT_ENVIRONMENT/lib/python3.13/site-packages/toolr\"\n    \
+             : > \"$UV_PROJECT_ENVIRONMENT/lib/python3.13/site-packages/toolr/__init__.py\"\n    \
+             printf '#!/bin/sh\\nexit 0\\n' > \"$UV_PROJECT_ENVIRONMENT/bin/python\"\n    \
+             /bin/chmod +x \"$UV_PROJECT_ENVIRONMENT/bin/python\";;\nesac\nexit 0\n",
+            log = log.display()
+        ),
+    );
+}
+
+#[test]
+fn worktrees_keep_separate_venv_tokens() {
+    let env = TrustEnv::new();
+    let tmp = TempDir::new().unwrap();
+    let main = init_repo(&tmp.path().join("main"));
+    let a = add_worktree(&main, &tmp.path().join("a"), "a");
+    let b = add_worktree(&main, &tmp.path().join("b"), "b");
+    let bin = tmp.path().join("bin");
+    let log = tmp.path().join("uv.log");
+    venv_building_uv(&bin, &log);
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    trust(&env, &main);
+    let run = |wt: &Path, args: &[&str]| {
+        env.toolr(wt)
+            .env("PATH", &path)
+            .env_remove("TOOLR_VENV_LOCATION")
+            .args(args)
+            .assert()
+            .success();
+    };
+    for wt in [&a, &b] {
+        fs::write(wt.join("tools/uv.lock"), "version = 1\n").unwrap();
+        run(wt, &["project", "venv", "sync"]);
+    }
+    assert_eq!(fs::read_to_string(&log).unwrap().lines().count(), 2);
+    fs::remove_file(&log).unwrap();
+    run(&a, &["greet", "hi"]);
+    run(&b, &["greet", "hi"]);
+    assert!(!log.exists(), "a worktree's sync rebuilt the other's venv");
+}

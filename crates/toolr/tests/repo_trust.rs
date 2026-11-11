@@ -112,9 +112,12 @@ fn help_and_complete_need_no_trust() {
     assert!(!h.sentinel.exists());
 }
 
+/// Trust covers `tools/`, not a committed `tools/.venv`: with no uv to rebuild
+/// it, the command is refused rather than run on the planted interpreter.
 #[test]
-fn trust_then_dispatch_runs() {
+fn trust_then_dispatch_never_runs_the_planted_venv() {
     let h = Hostile::new();
+    let no_uv = TempDir::new().unwrap();
     let root = h.root().display().to_string();
     h.toolr()
         .args(["project", "trust"])
@@ -127,13 +130,15 @@ fn trust_then_dispatch_runs() {
         .success()
         .stdout(format!("{root}\n"));
     h.toolr()
+        .env("PATH", no_uv.path())
+        .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .env_remove("TOOLR_AUTO_SYNC")
         .args(["hello", "world"])
         .assert()
-        .stderr(contains(REFUSAL).not());
-    assert!(
-        h.sentinel.exists(),
-        "trusted dispatch should have run the repository's code"
-    );
+        .failure()
+        .stderr(contains(REFUSAL).not())
+        .stderr(contains("toolr didn't build the in-tree tools venv"));
+    assert!(!h.sentinel.exists(), "the planted interpreter ran");
 }
 
 #[test]

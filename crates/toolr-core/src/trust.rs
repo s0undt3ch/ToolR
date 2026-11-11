@@ -16,6 +16,9 @@ pub use repo_key::{KeyKind, RepairHint, RepoKey};
 
 const RECORD_SCHEMA_VERSION: u32 = 2;
 
+/// Store subdirectory holding one entry per in-tree venv, out of `list()`'s way.
+const VENV_ENTRIES_DIR: &str = "venvs";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrustRecord {
     pub schema_version: u32,
@@ -26,6 +29,17 @@ pub struct TrustRecord {
     pub repo_path: PathBuf,
     pub trusted_at: DateTime<Utc>,
     pub toolr_version: String,
+}
+
+/// The token toolr wrote into an in-tree venv it built. One per venv, not per
+/// record, so worktrees of one repository don't overwrite each other's.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct VenvEntry {
+    /// The trust record this venv belongs to.
+    key: PathBuf,
+    kind: KeyKind,
+    venv_dir: PathBuf,
+    token: String,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -124,6 +138,54 @@ fn untrusted_message(repo: &Path, repair: Option<&RepairHint>) -> String {
 /// against.
 fn canonical(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// What venv entries are keyed by: the canonical parent plus the venv's own
+/// name, so a symlinked `tools/.venv` keys by the link toolr resolved.
+fn venv_entry_key(venv_dir: &Path) -> PathBuf {
+    match (venv_dir.parent(), venv_dir.file_name()) {
+        (Some(parent), Some(name)) => canonical(parent).join(name),
+        _ => venv_dir.to_path_buf(),
+    }
+}
+
+fn new_token() -> Result<String> {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).context("reading the OS random number generator")?;
+    Ok(bytes
+        .iter()
+        .flat_map(|b| [HEX[usize::from(b >> 4)], HEX[usize::from(b & 0xf)]])
+        .map(char::from)
+        .collect())
+}
+
+fn create_private_dir(dir: &Path) -> Result<()> {
+    fs::create_dir_all(dir).context("creating trust store")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+            .context("securing trust store")?;
+    }
+    Ok(())
+}
+
+/// Atomically replace `dest` (inside `dir`) with `bytes`, readable only by the user.
+fn write_private(dir: &Path, dest: &Path, bytes: &[u8]) -> Result<()> {
+    let mut tmp = tempfile::Builder::new()
+        .prefix(".trust.")
+        .suffix(".tmp")
+        .tempfile_in(dir)?;
+    tmp.write_all(bytes)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        tmp.as_file()
+            .set_permissions(fs::Permissions::from_mode(0o600))?;
+    }
+    fs::rename(tmp.into_temp_path(), dest)?;
+    Ok(())
 }
 
 /// The one place a project root becomes a trust key.
@@ -227,21 +289,10 @@ impl TrustStore {
             trusted_at: Utc::now(),
             toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         };
-        self.ensure_dir()?;
-        let mut tmp = tempfile::Builder::new()
-            .prefix(".trust.")
-            .suffix(".tmp")
-            .tempfile_in(&self.dir)
-            .context("creating trust record")?;
-        tmp.write_all(&serde_json::to_vec_pretty(&record)?)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            tmp.as_file()
-                .set_permissions(fs::Permissions::from_mode(0o600))?;
-        }
-        let tmp = tmp.into_temp_path();
-        fs::rename(&tmp, self.record_path(&key.key, key.kind)).context("writing trust record")?;
+        create_private_dir(&self.dir)?;
+        let bytes = serde_json::to_vec_pretty(&record)?;
+        write_private(&self.dir, &self.record_path(&key.key, key.kind), &bytes)
+            .context("writing trust record")?;
         Ok((record, Trusted::from_key(key, false)))
     }
 
@@ -252,16 +303,102 @@ impl TrustStore {
         let key = resolve_key(root);
         self.guard(&key)?;
         let existed = self.remove_record(&key.key, key.kind)?;
+        self.remove_venv_entries_where(|e| {
+            e.is_some_and(|e| e.key == key.key && e.kind == key.kind)
+        })?;
         Ok((key.display, existed))
     }
 
-    /// Removes the records stored under `key` (of either kind), as `toolr self
-    /// trusted --prune` does: the key is never re-resolved as a project root.
-    /// Returns whether a record existed.
+    /// Removes the records stored under `key` (of either kind), and their venv
+    /// entries, as `toolr self trusted --prune` does: the key is never
+    /// re-resolved as a project root. Returns whether a record existed.
     pub fn untrust_key(&self, key: &Path) -> Result<bool> {
         let repository = self.remove_record(key, KeyKind::Repository)?;
         let per_path = self.remove_record(key, KeyKind::PerPath)?;
+        self.remove_venv_entries_where(|e| e.is_some_and(|e| e.key == key))?;
         Ok(repository || per_path)
+    }
+
+    fn venv_entry_path(&self, venv_key: &Path) -> PathBuf {
+        let digest = blake3::hash(venv_key.as_os_str().as_encoded_bytes());
+        self.dir
+            .join(VENV_ENTRIES_DIR)
+            .join(digest.to_hex().as_str())
+    }
+
+    /// The token toolr last recorded for the in-tree venv at `venv_dir`, if any.
+    pub fn venv_token(&self, venv_dir: &Path) -> Result<Option<String>> {
+        let venv_key = venv_entry_key(venv_dir);
+        let bytes = match fs::read(self.venv_entry_path(&venv_key)) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e).context("reading venv entry"),
+        };
+        let entry: VenvEntry = serde_json::from_slice(&bytes).context("parsing venv entry")?;
+        Ok((entry.venv_dir == venv_key).then_some(entry.token))
+    }
+
+    /// Mint a token for the in-tree venv toolr just built at `venv_dir`, under
+    /// `root`'s trust key, and return it for the venv's marker.
+    pub fn record_venv(&self, root: &Path, venv_dir: &Path) -> Result<String> {
+        let key = resolve_key(root);
+        self.guard(&key)?;
+        let venv_key = venv_entry_key(venv_dir);
+        let entry = VenvEntry {
+            key: key.key,
+            kind: key.kind,
+            venv_dir: venv_key.clone(),
+            token: new_token()?,
+        };
+        let dir = self.dir.join(VENV_ENTRIES_DIR);
+        create_private_dir(&self.dir)?;
+        create_private_dir(&dir)?;
+        let bytes = serde_json::to_vec_pretty(&entry)?;
+        write_private(&dir, &self.venv_entry_path(&venv_key), &bytes)
+            .context("writing venv entry")?;
+        Ok(entry.token)
+    }
+
+    /// Drop venv entries whose trust record is gone, whose venv no longer
+    /// exists, or that don't parse.
+    pub fn prune_venv_entries(&self) -> Result<()> {
+        self.remove_venv_entries_where(|e| match e {
+            None => true,
+            Some(e) => {
+                !self.record_path(&e.key, e.kind).exists()
+                    || fs::symlink_metadata(&e.venv_dir).is_err()
+            }
+        })
+    }
+
+    /// `doomed` sees `None` for an entry that doesn't parse. Leftover temp
+    /// files are skipped.
+    fn remove_venv_entries_where(&self, doomed: impl Fn(Option<&VenvEntry>) -> bool) -> Result<()> {
+        let read = match fs::read_dir(self.dir.join(VENV_ENTRIES_DIR)) {
+            Ok(r) => r,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e).context("reading venv entries"),
+        };
+        for item in read {
+            let path = item.context("reading venv entries")?.path();
+            if path
+                .file_name()
+                .is_some_and(|n| n.as_encoded_bytes().starts_with(b"."))
+            {
+                continue;
+            }
+            let entry = fs::read(&path)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<VenvEntry>(&b).ok());
+            if doomed(entry.as_ref()) {
+                match fs::remove_file(&path) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e).context("removing venv entry"),
+                }
+            }
+        }
+        Ok(())
     }
 
     fn remove_record(&self, key: &Path, kind: KeyKind) -> Result<bool> {
@@ -292,17 +429,6 @@ impl TrustStore {
             .collect();
         out.sort_by(|a, b| a.repo_path.cmp(&b.repo_path));
         Ok(out)
-    }
-
-    fn ensure_dir(&self) -> Result<()> {
-        fs::create_dir_all(&self.dir).context("creating trust store")?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&self.dir, fs::Permissions::from_mode(0o700))
-                .context("securing trust store")?;
-        }
-        Ok(())
     }
 
     /// True when the store directory resolves under `canonical_root`.
@@ -613,6 +739,9 @@ mod tests {
             store.trust(&f.root()).unwrap_err(),
             store.untrust(&f.root()).unwrap_err(),
             store.is_trusted(&f.root()).unwrap_err(),
+            store
+                .record_venv(&f.root(), &f.root().join("tools/.venv"))
+                .unwrap_err(),
         ] {
             assert!(matches!(
                 err.downcast_ref::<TrustError>(),
@@ -1019,6 +1148,167 @@ mod tests {
                 evil.display()
             )),
             "{text}"
+        );
+    }
+
+    fn venv_in(root: &Path, name: &str) -> PathBuf {
+        let venv = root.join(name).join("tools/.venv");
+        fs::create_dir_all(&venv).unwrap();
+        venv
+    }
+
+    #[test]
+    fn record_venv_then_venv_token_round_trips() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        let venv = venv_in(&f.root(), "a");
+        assert_eq!(store.venv_token(&venv).unwrap(), None);
+        let token = store.record_venv(&f.root(), &venv).unwrap();
+        assert_eq!(token.len(), 64);
+        assert!(token.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_eq!(store.venv_token(&venv).unwrap(), Some(token.clone()));
+        let again = store.record_venv(&f.root(), &venv).unwrap();
+        assert_ne!(again, token);
+        assert_eq!(store.venv_token(&venv).unwrap(), Some(again));
+        assert_eq!(store.venv_token(&venv_in(&f.root(), "b")).unwrap(), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn venv_entry_keys_a_symlinked_venv_by_its_link() {
+        let f = Fixture::new();
+        let store = f.store();
+        let target = venv_in(&f.root(), "target");
+        let link = f.root().join("link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let token = store.record_venv(&f.root(), &link).unwrap();
+        assert_eq!(store.venv_token(&link).unwrap(), Some(token));
+        assert_eq!(store.venv_token(&target).unwrap(), None);
+    }
+
+    #[test]
+    fn corrupt_venv_entry_is_an_error() {
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        store.record_venv(&f.root(), &venv).unwrap();
+        let entry = fs::read_dir(store.dir().join("venvs"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        fs::write(entry, b"{not json").unwrap();
+        assert!(store.venv_token(&venv).is_err());
+    }
+
+    #[test]
+    fn unreadable_venv_entries_are_errors() {
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        let entry = store.venv_entry_path(&venv_entry_key(&venv));
+        fs::create_dir_all(&entry).unwrap();
+        assert!(store.venv_token(&venv).is_err());
+        fs::remove_dir(&entry).unwrap();
+        fs::remove_dir(entry.parent().unwrap()).unwrap();
+        fs::write(entry.parent().unwrap(), b"not a directory").unwrap();
+        assert!(store.prune_venv_entries().is_err());
+    }
+
+    #[test]
+    fn venv_entry_key_keeps_a_path_without_a_name() {
+        assert_eq!(venv_entry_key(Path::new("/")), Path::new("/"));
+    }
+
+    #[test]
+    fn untrust_removes_its_venv_entries() {
+        let f = Fixture::new();
+        let other = TempDir::new().unwrap();
+        let other_root = fs::canonicalize(other.path()).unwrap();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        store.trust(&other_root).unwrap();
+        let (a, b) = (venv_in(&f.root(), "a"), venv_in(&f.root(), "b"));
+        let kept = venv_in(&other_root, "c");
+        for venv in [&a, &b] {
+            store.record_venv(&f.root(), venv).unwrap();
+        }
+        let kept_token = store.record_venv(&other_root, &kept).unwrap();
+        store.untrust(&f.root()).unwrap();
+        assert_eq!(store.venv_token(&a).unwrap(), None);
+        assert_eq!(store.venv_token(&b).unwrap(), None);
+        assert_eq!(store.venv_token(&kept).unwrap(), Some(kept_token));
+        assert!(store.untrust_key(&other_root).unwrap());
+        assert_eq!(store.venv_token(&kept).unwrap(), None);
+    }
+
+    #[test]
+    fn prune_drops_venv_entries_for_missing_venvs() {
+        let f = Fixture::new();
+        let orphaned = TempDir::new().unwrap();
+        let orphaned_root = fs::canonicalize(orphaned.path()).unwrap();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        store.trust(&orphaned_root).unwrap();
+        let (kept, gone) = (venv_in(&f.root(), "kept"), venv_in(&f.root(), "gone"));
+        let unrecorded = venv_in(&orphaned_root, "c");
+        let kept_token = store.record_venv(&f.root(), &kept).unwrap();
+        store.record_venv(&f.root(), &gone).unwrap();
+        store.record_venv(&orphaned_root, &unrecorded).unwrap();
+        fs::remove_dir_all(&gone).unwrap();
+        fs::remove_file(store.record_path(&orphaned_root, KeyKind::PerPath)).unwrap();
+        fs::write(store.dir().join("venvs/junk"), b"{not json").unwrap();
+        fs::write(store.dir().join("venvs/.trust.abc.tmp"), b"{}").unwrap();
+
+        store.prune_venv_entries().unwrap();
+        assert_eq!(store.venv_token(&kept).unwrap(), Some(kept_token));
+        assert_eq!(store.venv_token(&gone).unwrap(), None);
+        assert_eq!(store.venv_token(&unrecorded).unwrap(), None);
+        assert!(!store.dir().join("venvs/junk").exists());
+        assert!(store.dir().join("venvs/.trust.abc.tmp").exists());
+    }
+
+    #[test]
+    fn prune_and_untrust_without_venv_entries_are_no_ops() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.prune_venv_entries().unwrap();
+        store.trust(&f.root()).unwrap();
+        store.untrust(&f.root()).unwrap();
+        store.prune_venv_entries().unwrap();
+    }
+
+    #[test]
+    fn list_ignores_venv_entries() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        store
+            .record_venv(&f.root(), &venv_in(&f.root(), "a"))
+            .unwrap();
+        assert_eq!(store.list().unwrap().len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn venv_entry_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let f = Fixture::new();
+        let store = f.store();
+        store
+            .record_venv(&f.root(), &venv_in(&f.root(), "a"))
+            .unwrap();
+        let dir = store.dir().join("venvs");
+        assert_eq!(
+            fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        let file = fs::read_dir(&dir).unwrap().next().unwrap().unwrap().path();
+        assert_eq!(
+            fs::metadata(file).unwrap().permissions().mode() & 0o777,
+            0o600
         );
     }
 

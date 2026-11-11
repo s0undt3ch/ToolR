@@ -668,6 +668,10 @@ fn venv_run(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
             toolr_core::venv::Freshness::Broken => anyhow::bail!(
                 "the tools venv's Python interpreter no longer exists (was it uninstalled?) — run `toolr project venv sync` to rebuild it (or drop --no-sync)"
             ),
+            toolr_core::venv::Freshness::Foreign => anyhow::bail!(
+                "toolr didn't build the tools venv at {} — run `toolr project venv sync` to rebuild it (or drop --no-sync)",
+                shown(&resolved.venv_dir)
+            ),
             toolr_core::venv::Freshness::Fresh => {}
         }
         toolr_core::venv::validate_venv(&resolved.venv_dir, &resolved.python)

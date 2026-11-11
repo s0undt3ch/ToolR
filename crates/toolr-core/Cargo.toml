@@ -19,6 +19,7 @@ full = [
     "dep:blake3",
     "dep:chrono",
     "dep:uuid",
+    "dep:getrandom",
     "dep:email_address",
     "dep:pep440_rs",
     "dep:walkdir",
@@ -45,6 +46,7 @@ thiserror = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
 # `command` uses it, so toolr-py links it too.
 libc.workspace = true
 email_address = { workspace = true, optional = true }
