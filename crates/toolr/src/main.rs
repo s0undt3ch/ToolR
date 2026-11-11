@@ -63,19 +63,29 @@ fn run() -> anyhow::Result<ExitCode> {
     let mut manifest = user_manifest(&run)?;
     let mut command = cli::build_command(&manifest);
     let mut parsed = command.clone().try_get_matches_from(run.argv.words());
-    // The manifest leaves out a foreign venv's plugin commands, so an unknown command word may
-    // be one of them: rebuild the venv, then parse again. Dispatch reuses the rebuilt venv.
+    // The manifest leaves out the plugin commands of an in-tree venv toolr didn't build, and
+    // nothing of that venv is read to tell whether the word is one: rebuild the venv, then
+    // parse again. Dispatch reuses the rebuilt venv. When there is no rebuild, the word may
+    // just be a typo, so clap's error comes first and the venv's hint follows it.
     let mut rebuilt = None;
     if let Err(e) = &parsed
         && e.kind() == clap::error::ErrorKind::InvalidSubcommand
         && let Some(proof) = &grant
-        && let Some(venv) =
-            dispatch::rebuild_foreign_venv(proof.root(), proof, run.argv.is_quiet())?
     {
-        rebuilt = Some(venv);
-        manifest = user_manifest(&run)?;
-        command = cli::build_command(&manifest);
-        parsed = command.clone().try_get_matches_from(run.argv.words());
+        match dispatch::rebuild_foreign_venv(proof.root(), proof, run.argv.is_quiet()) {
+            Ok(None) => {}
+            Ok(Some(venv)) => {
+                rebuilt = Some(venv);
+                manifest = user_manifest(&run)?;
+                command = cli::build_command(&manifest);
+                parsed = command.clone().try_get_matches_from(run.argv.words());
+            }
+            Err(hint) => {
+                let _ = e.print();
+                eprintln!("toolr: {hint:#}");
+                return Ok(ExitCode::from(e.exit_code() as u8));
+            }
+        }
     }
     // Only bare, root help and a user command word reach clap untrusted; a built-in's help
     // never lists repository commands, so it needs no hint.

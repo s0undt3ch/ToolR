@@ -415,6 +415,80 @@ fn a_venv_toolr_didnt_build_stays_without_approval() {
     }
 }
 
+/// The refusal, once, with nothing in front of it: no I/O-error wrapper, no repeated cause.
+fn refusal(t: &Trusted) -> String {
+    let venv = toolr_core::trust::shown(&fs::canonicalize(&t.fx.venv_dir).unwrap());
+    format!(
+        "toolr: toolr didn't build {venv} since you trusted this repository, so toolr won't run \
+         it: it may have come with the repository, and running it would run code you never \
+         approved. Nothing was removed. To replace it, run `toolr project venv sync` on a \
+         terminal and answer y, set {REPLACE_KEY}=1, or remove {venv} yourself\n"
+    )
+}
+
+#[test]
+fn the_refusal_is_printed_once() {
+    let t = Trusted::new();
+    let out = t
+        .unapproved()
+        .args(["-q", "hello", "world"])
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stderr), refusal(&t));
+}
+
+/// The word isn't read from the venv to tell a typo from a plugin command, so clap's error
+/// comes first and the venv's hint follows.
+#[test]
+fn a_typo_with_a_venv_toolr_didnt_build_gets_claps_error_then_the_hint() {
+    let t = Trusted::new();
+    let out = t.unapproved().arg("typo").output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "stderr:\n{stderr}");
+    assert!(
+        stderr.starts_with("error: unrecognized subcommand 'typo'"),
+        "stderr:\n{stderr}"
+    );
+    assert!(stderr.ends_with(&refusal(&t)), "stderr:\n{stderr}");
+    assert!(
+        t.fx.venv_dir.join("bin/python").is_file(),
+        "the venv must stay"
+    );
+}
+
+/// uv creates the venv before it resolves, so a first sync that fails leaves a venv toolr
+/// started; the next sync finishes it without asking to replace it.
+#[test]
+fn a_failed_first_sync_leaves_a_venv_toolr_still_owns() {
+    let t = Trusted::new();
+    fs::remove_dir_all(&t.fx.venv_dir).unwrap();
+    t.fx.write_uv_stub("exit 3");
+    let out = t
+        .unapproved()
+        .args(["project", "venv", "sync"])
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(
+        t.fx.venv_dir.join("bin/python").is_file(),
+        "uv created the venv"
+    );
+    assert!(!t.fx.venv_dir.join(".toolr-sync-stamp").exists());
+    t.fx.write_uv_stub("");
+    let out = t
+        .unapproved()
+        .args(["project", "venv", "sync"])
+        .write_stdin("")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "stderr:\n{stderr}");
+    assert!(!stderr.contains("toolr didn't build"), "stderr:\n{stderr}");
+    t.unapproved().args(["hello", "world"]).assert().success();
+    assert!(t.built.exists());
+}
+
 #[test]
 fn a_venv_toolr_didnt_build_is_replaced_only_on_y() {
     let t = Trusted::new();
@@ -630,7 +704,7 @@ fn a_plugin_command_rebuilds_a_foreign_venv_and_runs() {
 }
 
 #[test]
-fn a_plugin_command_on_a_foreign_venv_that_cant_be_rebuilt_names_the_fix() {
+fn a_plugin_command_whose_venv_cant_be_rebuilt_gets_claps_error_then_the_fix() {
     let t = Trusted::new();
     add_planted_plugin(&t.fx.venv_dir);
     let output = t
@@ -641,17 +715,17 @@ fn a_plugin_command_on_a_foreign_venv_that_cant_be_rebuilt_names_the_fix() {
         .output()
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!output.status.success(), "stderr:\n{stderr}");
+    assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
     assert!(
-        stderr.contains("toolr didn't build the in-tree tools venv")
+        stderr.starts_with("error: unrecognized subcommand 'planted'")
+            && stderr.contains("toolr didn't build the in-tree tools venv")
             && stderr.contains("run `toolr project venv sync`"),
         "stderr:\n{stderr}"
     );
     assert!(
-        !stderr.contains("unrecognized subcommand"),
-        "stderr:\n{stderr}"
+        !t.built.exists(),
+        "the venv toolr didn't build must not run"
     );
-    assert!(!t.built.exists(), "the foreign interpreter must not run");
 }
 
 #[test]
