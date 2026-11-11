@@ -45,17 +45,20 @@ fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let run = Invocation::new(RootArgv::new(std::env::args().collect()), cwd);
     // Before anything reads `tools/`: an untrusted repository's own command can only be
-    // found by reading it, so the user is asked first. Help never prompts.
-    let grant = match bootstrap::untrusted_project_root(&run) {
-        Some(root) if run.argv.names_user_command() && run.argv.help_mode().is_none() => {
-            Some(toolr_core::trust::require_trust(
-                root,
-                toolr_core::trust::TrustMode {
-                    never_prompt: run.argv.is_quiet(),
-                },
-            )?)
-        }
-        _ => None,
+    // found by reading it, so the user is asked first. Help and `--version` never prompt, and
+    // only a user command reads the trust store here; dispatch reuses the proof.
+    let asks_trust = run.argv.names_user_command()
+        && run.argv.help_mode().is_none()
+        && !run.argv.wants_version();
+    let grant = if asks_trust && let Ok(root) = run.root() {
+        let mode = toolr_core::trust::TrustMode {
+            never_prompt: run.argv.is_quiet(),
+        };
+        let proof = toolr_core::trust::require_trust(root, mode)?;
+        run.mark_trusted();
+        Some(proof)
+    } else {
+        None
     };
     let mut built = match bootstrap::ensure_manifest(&run)? {
         Some(built) => built,
@@ -81,7 +84,8 @@ fn run() -> anyhow::Result<ExitCode> {
     // never lists repository commands, so it needs no hint.
     let hint_hidden = (run.argv.is_bare() || run.argv.names_user_command())
         && !run.argv.is_quiet()
-        && bootstrap::untrusted_project_root(&run).is_some();
+        && !run.argv.wants_version()
+        && run.untrusted_root().is_some();
     // try_get_matches_from, so a `subcommand_required` error on a help request
     // (`toolr self --help`) still renders that command's help instead of the error.
     let matches = match command.clone().try_get_matches_from(run.argv.words()) {

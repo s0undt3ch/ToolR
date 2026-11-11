@@ -158,6 +158,8 @@ pub(crate) struct Invocation {
     pub(crate) cwd: PathBuf,
     /// Looked up on first use, so Tab completion and `--version` never walk the tree.
     root: OnceCell<Result<PathBuf, DiscoveryError>>,
+    /// Whether the root is trusted, read from the trust store once per run.
+    trusted: OnceCell<bool>,
 }
 
 impl Invocation {
@@ -166,7 +168,23 @@ impl Invocation {
             argv,
             cwd,
             root: OnceCell::new(),
+            trusted: OnceCell::new(),
         }
+    }
+
+    /// The discovered project root when it is not trusted: toolr reads nothing of such a
+    /// repository.
+    pub(crate) fn untrusted_root(&self) -> Option<&Path> {
+        let root = self.root().ok()?;
+        let trusted = *self
+            .trusted
+            .get_or_init(|| toolr_core::trust::is_trusted_now(root));
+        (!trusted).then_some(root)
+    }
+
+    /// Record that this run already proved the root trusted, so no later step reads the store.
+    pub(crate) fn mark_trusted(&self) {
+        let _ = self.trusted.set(true);
     }
 
     fn resolved(&self) -> &Result<PathBuf, DiscoveryError> {

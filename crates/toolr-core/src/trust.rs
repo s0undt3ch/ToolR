@@ -199,10 +199,14 @@ fn write_private(dir: &Path, dest: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// The canonical home directory, worked out once per lookup for both key resolution and the guard.
+fn canonical_home() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| canonical(&h))
+}
+
 /// The one place a project root becomes a trust key.
 fn resolve_key(root: &Path) -> RepoKey {
-    let home = dirs::home_dir().map(|h| canonical(&h));
-    RepoKey::resolve(root, home.as_deref())
+    RepoKey::resolve(root, canonical_home().as_deref())
 }
 
 #[derive(Debug, Clone)]
@@ -236,11 +240,15 @@ impl TrustStore {
         self.dir.join(format!("{}.json", digest.to_hex()))
     }
 
-    /// Every store operation that enters a repository passes through here (not
-    /// `untrust_key`, which only deletes a record by its stored key): the store must not resolve
-    /// inside the repository whose trust it holds.
-    fn guard(&self, key: &RepoKey) -> Result<(), TrustError> {
-        self.guard_with_home(key, dirs::home_dir().map(|h| canonical(&h)).as_deref())
+    /// `root`'s key, once the guard has passed it. Every store operation that enters a
+    /// repository passes through here or [`decide`] (not `untrust_key`, which only deletes a
+    /// record by its stored key): the store must not resolve inside the repository whose trust
+    /// it holds.
+    fn resolve_guarded(&self, root: &Path) -> Result<RepoKey, TrustError> {
+        let home = canonical_home();
+        let key = RepoKey::resolve(root, home.as_deref());
+        self.guard_with_home(&key, home.as_deref())?;
+        Ok(key)
     }
 
     /// Checks the key, the shown repository path (a worktree outside the
@@ -259,8 +267,7 @@ impl TrustStore {
     }
 
     pub fn is_trusted(&self, root: &Path) -> Result<bool> {
-        let key = resolve_key(root);
-        self.guard(&key)?;
+        let key = self.resolve_guarded(root)?;
         self.is_trusted_key(&key)
     }
 
@@ -285,8 +292,7 @@ impl TrustStore {
     /// [`Self::trust`], plus the proof that `root` is now trusted. Private, so
     /// proofs only come from the default store (see [`grant_trust`]).
     fn grant(&self, root: &Path) -> Result<(TrustRecord, Trusted)> {
-        let key = resolve_key(root);
-        self.guard(&key)?;
+        let key = self.resolve_guarded(root)?;
         self.grant_key(&key)
     }
 
@@ -311,8 +317,7 @@ impl TrustStore {
     /// project root that no longer exists resolves per-path, so the record of a
     /// deleted non-git project can still be removed.
     pub fn untrust(&self, root: &Path) -> Result<(PathBuf, bool)> {
-        let key = resolve_key(root);
-        self.guard(&key)?;
+        let key = self.resolve_guarded(root)?;
         let existed = self.remove_record(&key.key, key.kind)?;
         self.remove_venv_entries_where(|e| {
             e.is_some_and(|e| e.key == key.key && e.kind == key.kind)
@@ -379,8 +384,7 @@ impl TrustStore {
     /// Mint a token for the in-tree venv toolr just built at `venv_dir`, under
     /// `root`'s trust key, and return it for the venv's marker.
     pub fn record_venv(&self, root: &Path, venv_dir: &Path) -> Result<String> {
-        let key = resolve_key(root);
-        self.guard(&key)?;
+        let key = self.resolve_guarded(root)?;
         let venv_key = venv_entry_key(venv_dir);
         let entry = VenvEntry {
             key: key.key,
@@ -532,12 +536,13 @@ fn decide(
     mode: TrustMode,
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
 ) -> Result<Trusted, TrustError> {
-    let key = resolve_key(root);
+    let home = canonical_home();
+    let key = RepoKey::resolve(root, home.as_deref());
     let trusted = |granted_at_prompt| Trusted::from_key(&key, granted_at_prompt);
     if all_env {
         return Ok(trusted(false));
     }
-    store.guard(&key)?;
+    store.guard_with_home(&key, home.as_deref())?;
     match store.is_trusted_key(&key) {
         Ok(true) => return Ok(trusted(false)),
         Ok(false) => {}

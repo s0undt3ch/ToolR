@@ -17,14 +17,6 @@ use toolr_core::venv::{is_foreign, resolve_venv_path};
 
 use crate::invocation::Invocation;
 
-/// The discovered project root when it is not trusted: toolr reads nothing
-/// of such a repository.
-pub(crate) fn untrusted_project_root(run: &Invocation) -> Option<&Path> {
-    run.root()
-        .ok()
-        .filter(|root| !toolr_core::trust::is_trusted_now(root))
-}
-
 /// Build the manifest when it's missing or stale: a pure-Rust parse of
 /// `tools/*.py` plus an execution-free glob of the venv's plugin fragments,
 /// so no repository code runs. An untrusted repository is not read at all and
@@ -44,7 +36,7 @@ pub(crate) fn ensure_manifest(run: &Invocation) -> anyhow::Result<Option<BuiltMa
     let Ok(root) = run.root() else {
         return Ok(None);
     };
-    if untrusted_project_root(run).is_some() {
+    if run.untrusted_root().is_some() {
         return Ok(Some(Manifest::empty().into()));
     }
     ensure_manifest_at(root, Persist::Write)
