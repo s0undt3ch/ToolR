@@ -23,10 +23,23 @@ const VENV_ENTRIES_DIR: &str = "venvs";
 const VENV_LOCKS_DIR: &str = "locks";
 
 /// Held while toolr checks, removes, syncs and stamps one in-tree venv;
-/// dropping it releases the lock.
+/// dropping it deletes the lock file on unix, then releases the lock.
 #[derive(Debug)]
 pub struct VenvLock {
-    _file: fs::File,
+    file: Option<fs::File>,
+    #[cfg_attr(not(unix), allow(dead_code))]
+    path: PathBuf,
+}
+
+impl Drop for VenvLock {
+    fn drop(&mut self) {
+        // While still held, so no other toolr has the lock yet. A waiter on this file finds the
+        // path gone once it gets the lock and starts over. Only unix can tell the waiter's file
+        // from a new one at the path (`is_same_file`), so elsewhere the file stays.
+        #[cfg(unix)]
+        let _ = fs::remove_file(&self.path);
+        drop(self.file.take());
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +211,42 @@ fn write_private(dir: &Path, dest: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// Delete the lock file at `path` unless another toolr holds it, or it can't be opened. Only on
+/// unix: see [`VenvLock`]'s `Drop`.
+#[cfg(not(unix))]
+fn remove_free_lock(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn remove_free_lock(path: &Path) -> Result<()> {
+    let Ok(file) = fs::File::open(path) else {
+        return Ok(());
+    };
+    if file.try_lock().is_err() {
+        return Ok(());
+    }
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e).context("removing venv lock"),
+    }
+}
+
+/// Whether `path` still names the open `file`. Elsewhere than unix lock files are never deleted,
+/// so its existence is enough.
+#[cfg(unix)]
+fn is_same_file(file: &fs::File, path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let ids = |m: fs::Metadata| (m.dev(), m.ino());
+    fs::metadata(path).map(ids).ok() == file.metadata().map(ids).ok()
+}
+
+#[cfg(not(unix))]
+fn is_same_file(_file: &fs::File, path: &Path) -> bool {
+    path.exists()
+}
+
 /// The canonical home directory, worked out once per lookup for both key resolution and the guard.
 fn canonical_home() -> Option<PathBuf> {
     dirs::home_dir().map(|h| canonical(&h))
@@ -349,12 +398,18 @@ impl TrustStore {
     }
 
     /// Block until this process holds the sync lock for the in-tree venv at
-    /// `venv_dir`, keyed like its entry, saying so on stderr while it waits.
-    pub fn lock_venv(&self, venv_dir: &Path) -> Result<VenvLock> {
-        self.lock_venv_with(venv_dir, &mut std::io::stderr())
+    /// `venv_dir`, keyed like its entry, saying so on stderr while it waits
+    /// unless `quiet`.
+    pub fn lock_venv(&self, venv_dir: &Path, quiet: bool) -> Result<VenvLock> {
+        self.lock_venv_with(venv_dir, quiet, &mut std::io::stderr())
     }
 
-    fn lock_venv_with(&self, venv_dir: &Path, out: &mut dyn Write) -> Result<VenvLock> {
+    fn lock_venv_with(
+        &self,
+        venv_dir: &Path,
+        quiet: bool,
+        out: &mut dyn Write,
+    ) -> Result<VenvLock> {
         let failed = || {
             format!(
                 "locking the tools venv in the trust store {}",
@@ -364,27 +419,39 @@ impl TrustStore {
         create_private_dir(&self.dir)
             .and_then(|()| create_private_dir(&self.dir.join(VENV_LOCKS_DIR)))
             .with_context(failed)?;
-        let file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(self.venv_lock_path(venv_dir))
-            .with_context(failed)?;
-        match file.try_lock() {
-            Err(fs::TryLockError::WouldBlock) => {
-                let _ = writeln!(
-                    out,
-                    "toolr: waiting for another toolr to finish syncing {}…",
-                    shown(venv_dir)
-                );
-                // Before blocking, so the line shows while toolr waits.
-                let _ = out.flush();
-                file.lock().with_context(failed)?;
+        let path = self.venv_lock_path(venv_dir);
+        loop {
+            let file = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(&path)
+                .with_context(failed)?;
+            match file.try_lock() {
+                Err(fs::TryLockError::WouldBlock) => {
+                    if !quiet {
+                        let _ = writeln!(
+                            out,
+                            "toolr: waiting for another toolr to finish syncing {}…",
+                            shown(venv_dir)
+                        );
+                        // Before blocking, so the line shows while toolr waits.
+                        let _ = out.flush();
+                    }
+                    file.lock().with_context(failed)?;
+                }
+                other => other.map_err(std::io::Error::from).with_context(failed)?,
             }
-            other => other.map_err(std::io::Error::from).with_context(failed)?,
+            // A prune may have removed the file before this process locked it, and another
+            // toolr may hold a new file at the path, so only a lock on the current file counts.
+            if is_same_file(&file, &path) {
+                return Ok(VenvLock {
+                    file: Some(file),
+                    path,
+                });
+            }
         }
-        Ok(VenvLock { _file: file })
     }
 
     /// The token toolr last recorded for the in-tree venv at `venv_dir`, if any.
@@ -420,7 +487,7 @@ impl TrustStore {
     }
 
     /// Drop venv entries whose trust record is gone, whose venv no longer
-    /// exists, or that don't parse.
+    /// exists, or that don't parse, then the sync locks no entry is left for.
     pub fn prune_venv_entries(&self) -> Result<()> {
         self.remove_venv_entries_where(|e| match e {
             None => true,
@@ -428,7 +495,34 @@ impl TrustStore {
                 !self.record_path(&e.key, e.kind).exists()
                     || fs::symlink_metadata(&e.venv_dir).is_err()
             }
-        })
+        })?;
+        self.prune_venv_locks()
+    }
+
+    /// A lock and its entry share a name, bar `.lock`. A lock another toolr holds stays: it may
+    /// be building a venv whose entry isn't written yet.
+    fn prune_venv_locks(&self) -> Result<()> {
+        let read = match fs::read_dir(self.dir.join(VENV_LOCKS_DIR)) {
+            Ok(r) => r,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e).context("reading venv locks"),
+        };
+        let entries = self.dir.join(VENV_ENTRIES_DIR);
+        for item in read {
+            let path = item.context("reading venv locks")?.path();
+            let Some(stem) = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".lock"))
+                .filter(|stem| !stem.is_empty() && !stem.starts_with('.'))
+            else {
+                continue;
+            };
+            if !entries.join(stem).exists() {
+                remove_free_lock(&path)?;
+            }
+        }
+        Ok(())
     }
 
     /// `doomed` sees `None` for an entry that doesn't parse. Leftover temp
@@ -451,6 +545,11 @@ impl TrustStore {
                 .ok()
                 .and_then(|b| serde_json::from_slice::<VenvEntry>(&b).ok());
             if doomed(entry.as_ref()) {
+                if let Some(name) = path.file_name() {
+                    let mut lock = name.to_os_string();
+                    lock.push(".lock");
+                    remove_free_lock(&self.dir.join(VENV_LOCKS_DIR).join(lock))?;
+                }
                 match fs::remove_file(&path) {
                     Ok(()) => {}
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -1358,13 +1457,18 @@ mod tests {
         let f = Fixture::new();
         let store = f.store();
         let venv = venv_in(&f.root(), "a");
-        let held = store.lock_venv(&venv).unwrap();
+        let held = store.lock_venv(&venv, false).unwrap();
         let other = fs::File::open(store.venv_lock_path(&venv)).unwrap();
         assert!(matches!(
             other.try_lock(),
             Err(fs::TryLockError::WouldBlock)
         ));
         drop(held);
+        #[cfg(unix)]
+        assert!(
+            !store.venv_lock_path(&venv).exists(),
+            "releasing deletes the file"
+        );
         // Blocking: a test elsewhere forking right now can hold the
         // descriptor until its child execs.
         other.lock().unwrap();
@@ -1375,7 +1479,10 @@ mod tests {
     fn lock_venv_without_a_usable_store_names_it() {
         let f = Fixture::new();
         fs::write(f.store().dir(), b"not a directory").unwrap();
-        let err = f.store().lock_venv(&venv_in(&f.root(), "a")).unwrap_err();
+        let err = f
+            .store()
+            .lock_venv(&venv_in(&f.root(), "a"), false)
+            .unwrap_err();
         assert!(
             format!("{err:#}").contains(&shown(f.store().dir())),
             "{err:#}"
@@ -1408,14 +1515,14 @@ mod tests {
         let store = f.store();
         let venv = venv_in(&f.root(), "a");
         let mut free = SharedOut::default();
-        drop(store.lock_venv_with(&venv, &mut free).unwrap());
+        drop(store.lock_venv_with(&venv, false, &mut free).unwrap());
         assert_eq!(free.text(), "", "an uncontended lock says nothing");
 
-        let held = store.lock_venv(&venv).unwrap();
+        let held = store.lock_venv(&venv, false).unwrap();
         let out = SharedOut::default();
         let waiter = {
             let (store, venv, mut out) = (store.clone(), venv.clone(), out.clone());
-            std::thread::spawn(move || store.lock_venv_with(&venv, &mut out).map(drop))
+            std::thread::spawn(move || store.lock_venv_with(&venv, false, &mut out).map(drop))
         };
         // The timeout only bounds a failing run; the line appearing is what passes.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
@@ -1431,6 +1538,159 @@ mod tests {
         );
         drop(held);
         waiter.join().unwrap().unwrap();
+    }
+
+    /// Waits on `venv`'s lock in a thread while `held` holds it, releases `held` once the waiter
+    /// is blocked, and returns what the waiter wrote and the lock it took.
+    fn wait_on_held_lock(
+        store: &TrustStore,
+        venv: &Path,
+        quiet: bool,
+        held: VenvLock,
+    ) -> (String, VenvLock) {
+        let out = SharedOut::default();
+        let waiter = {
+            let (store, venv, mut out) = (store.clone(), venv.to_path_buf(), out.clone());
+            std::thread::spawn(move || store.lock_venv_with(&venv, quiet, &mut out))
+        };
+        if quiet {
+            // Nothing to watch for, so give the waiter time to block.
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        } else {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            while !out.text().contains("waiting") && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+        drop(held);
+        let lock = waiter.join().unwrap().unwrap();
+        (out.text(), lock)
+    }
+
+    #[test]
+    fn lock_venv_waits_silently_when_quiet() {
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        let held = store.lock_venv(&venv, true).unwrap();
+        let (said, _lock) = wait_on_held_lock(&store, &venv, true, held);
+        assert_eq!(said, "");
+    }
+
+    /// The holder deletes the file the waiter blocks on as it releases it.
+    #[cfg(unix)]
+    #[test]
+    fn a_waiter_whose_file_was_deleted_locks_the_current_one() {
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        let path = store.venv_lock_path(&venv);
+        let held = store.lock_venv(&venv, false).unwrap();
+        let (_, lock) = wait_on_held_lock(&store, &venv, false, held);
+        // The waiter locked the deleted file first, then created and locked a new one.
+        let other = fs::File::open(&path).unwrap();
+        assert!(matches!(
+            other.try_lock(),
+            Err(fs::TryLockError::WouldBlock)
+        ));
+        drop(lock);
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn untrust_removes_the_free_locks_of_its_venv_entries() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        let (free, held) = (venv_in(&f.root(), "free"), venv_in(&f.root(), "held"));
+        for venv in [&free, &held] {
+            store.record_venv(&f.root(), venv).unwrap();
+        }
+        let holding = store.lock_venv(&held, true).unwrap();
+        // Never locked, so no test forking meanwhile can hold it.
+        fs::write(store.venv_lock_path(&free), b"").unwrap();
+        store.untrust(&f.root()).unwrap();
+        assert!(!store.venv_lock_path(&free).exists());
+        assert!(store.venv_lock_path(&held).exists(), "a held lock stays");
+        assert_eq!(store.venv_token(&held).unwrap(), None);
+        drop(holding);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prune_removes_only_free_locks_without_an_entry() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        let (kept, orphan, held) = (
+            venv_in(&f.root(), "kept"),
+            venv_in(&f.root(), "orphan"),
+            venv_in(&f.root(), "held"),
+        );
+        store.record_venv(&f.root(), &kept).unwrap();
+        let holding = store.lock_venv(&held, true).unwrap();
+        // Never locked, so no test forking meanwhile can hold them.
+        for venv in [&kept, &orphan] {
+            fs::write(store.venv_lock_path(venv), b"").unwrap();
+        }
+        let locks = store.dir().join(VENV_LOCKS_DIR);
+        for junk in ["junk", ".tmp.lock", ".lock"] {
+            fs::write(locks.join(junk), b"").unwrap();
+        }
+
+        store.prune_venv_entries().unwrap();
+        assert!(store.venv_lock_path(&kept).exists());
+        assert!(!store.venv_lock_path(&orphan).exists());
+        assert!(store.venv_lock_path(&held).exists(), "a held lock stays");
+        for junk in ["junk", ".tmp.lock", ".lock"] {
+            assert!(locks.join(junk).exists(), "{junk}");
+        }
+        drop(holding);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prune_skips_an_unreadable_lock_and_reports_an_unremovable_one() {
+        use std::os::unix::fs::PermissionsExt;
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        let lock = store.venv_lock_path(&venv);
+        fs::create_dir_all(lock.parent().unwrap()).unwrap();
+        fs::write(&lock, b"").unwrap();
+        fs::set_permissions(&lock, fs::Permissions::from_mode(0o000)).unwrap();
+        // Root opens it regardless, and then removes it.
+        if fs::File::open(&lock).is_err() {
+            store.prune_venv_entries().unwrap();
+            assert!(
+                fs::symlink_metadata(&lock).is_ok(),
+                "an unreadable lock stays"
+            );
+        }
+        fs::remove_file(&lock).unwrap();
+        fs::create_dir(&lock).unwrap();
+        let err = store.prune_venv_entries().unwrap_err();
+        assert!(format!("{err:#}").contains("removing venv lock"), "{err:#}");
+    }
+
+    #[test]
+    fn prune_with_an_unreadable_locks_dir_is_an_error() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        fs::write(store.dir().join(VENV_LOCKS_DIR), b"not a directory").unwrap();
+        let err = store.prune_venv_entries().unwrap_err();
+        assert!(format!("{err:#}").contains("reading venv locks"), "{err:#}");
+    }
+
+    #[test]
+    fn prune_without_a_locks_dir_is_a_no_op() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        store.prune_venv_entries().unwrap();
+        assert!(!store.dir().join(VENV_LOCKS_DIR).exists());
     }
 
     #[test]

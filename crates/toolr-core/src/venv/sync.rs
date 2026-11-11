@@ -330,7 +330,7 @@ pub fn sync_if_needed(
             return Ok(None);
         }
         TrustStore::open_default()?
-            .lock_venv(&resolved.venv_dir)
+            .lock_venv(&resolved.venv_dir, quiet)
             .map(Some)
     };
     sync_locked(
@@ -1227,7 +1227,7 @@ mod tests {
             &t.tools,
             false,
             || t.check(),
-            || t.store.lock_venv(&t.resolved.venv_dir),
+            || t.store.lock_venv(&t.resolved.venv_dir, false),
             sync_fails,
         )
         .unwrap_err();
