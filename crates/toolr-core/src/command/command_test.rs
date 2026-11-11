@@ -1207,7 +1207,9 @@ mod test_suite {
         #[cfg(unix)]
         fn slow_sink_is_not_a_timeout(timeouts: (Option<f64>, Option<f64>)) -> Result<()> {
             const PAYLOAD: usize = 8000;
-            let (sink, drainer) = full_pipe(Duration::from_secs(3), PAYLOAD)?;
+            // The budget also covers spawning `sh`, so it needs headroom on a loaded host; the
+            // drainer delay stays at twice the budget so a slow sink still outlasts it.
+            let (sink, drainer) = full_pipe(Duration::from_secs(6), PAYLOAD)?;
             let config = CommandConfig {
                 args: sh(&format!("printf '%0{PAYLOAD}d' 0")),
                 stdout_stream: dup_sink(sink),
@@ -1226,13 +1228,13 @@ mod test_suite {
         #[cfg(unix)]
         #[test]
         fn slow_sink_is_not_a_timeout_secs_timeout() -> Result<()> {
-            slow_sink_is_not_a_timeout((Some(1.0), None))
+            slow_sink_is_not_a_timeout((Some(3.0), None))
         }
 
         #[cfg(unix)]
         #[test]
         fn slow_sink_is_not_a_no_output_timeout() -> Result<()> {
-            slow_sink_is_not_a_timeout((None, Some(1.0)))
+            slow_sink_is_not_a_timeout((None, Some(3.0)))
         }
 
         /// A background writer that finishes well inside the limits (or with none set)
