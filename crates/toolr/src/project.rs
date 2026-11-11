@@ -349,14 +349,13 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
     // The rebuild parses `tools/*.py` and globs the venv's plugin fragments.
     trust_root(&repo_root, quiet)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
-    let foreign = toolr_core::venv::is_foreign(&resolved, &repo_root);
-    if foreign {
+    let venv = resolved.usable_venv_dir(&repo_root);
+    if venv.is_none() {
         eprintln!(
             "toolr: warning: leaving out its plugin commands: {}",
             crate::build_manifest_resolve::foreign_venv_hint(&resolved.venv_dir)
         );
     }
-    let venv = (!foreign).then_some(resolved.venv_dir.as_path());
     let built = rebuild_manifest_full(&repo_root, venv)?;
     for w in built.all_warnings() {
         eprintln!("toolr: warning: {w}");

@@ -51,13 +51,13 @@ pub fn resolve_source_and_package(
             // The lookup reads the repository's tools venv.
             toolr_core::trust::require_trust_quietly(&repo_root, quiet)?;
             let resolved = resolve_venv_path(&repo_root).context("resolving tools-venv path")?;
-            if toolr_core::venv::is_foreign(&resolved, &repo_root) {
+            let Some(venv_dir) = resolved.usable_venv_dir(&repo_root) else {
                 anyhow::bail!("{}", foreign_venv_hint(&resolved.venv_dir));
-            }
-            let dir = find_in_venv(&resolved.venv_dir, &pkg).with_context(|| {
+            };
+            let dir = find_in_venv(venv_dir, &pkg).with_context(|| {
                 format!(
                     "package `{pkg}` not found under {}; run `uv sync` or pass --source-dir",
-                    resolved.venv_dir.display()
+                    venv_dir.display()
                 )
             })?;
             Ok(ResolvedSource {

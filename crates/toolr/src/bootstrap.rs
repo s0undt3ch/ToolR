@@ -13,7 +13,7 @@ use std::path::Path;
 use toolr_core::manifest::{Manifest, manifest_path};
 use toolr_core::manifest_build::{Persist, Refresh, refresh};
 use toolr_core::parser::BuiltManifest;
-use toolr_core::venv::{is_foreign, resolve_venv_path};
+use toolr_core::venv::resolve_venv_path;
 
 use crate::invocation::Invocation;
 
@@ -51,8 +51,7 @@ fn ensure_manifest_at(root: &Path) -> anyhow::Result<Option<BuiltManifest>> {
     // A venv toolr didn't build contributes no plugin commands, not even to `--help`.
     let venv = resolve_venv_path(root)
         .ok()
-        .filter(|r| !is_foreign(r, root))
-        .map(|r| r.venv_dir);
+        .and_then(|r| r.usable_venv_dir(root).map(Path::to_path_buf));
     let refreshed = refresh(root, venv.as_deref(), Persist::Write)?;
     let unreadable = refreshed.unreadable.is_some();
     if let Some(e) = refreshed.unreadable {
