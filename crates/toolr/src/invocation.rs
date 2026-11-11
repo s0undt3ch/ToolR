@@ -112,7 +112,8 @@ impl RootArgv {
         self.first_word() == Some("__complete")
     }
 
-    /// The help form asked for before any `--`: `--help` wins over `-h`.
+    /// The help form asked for before any `--`: `--help` wins over `-h`, which also counts in
+    /// a short cluster of root flags (`-qh`), never in a user command's own words.
     pub(crate) fn help_mode(&self) -> Option<HelpMode> {
         let words: Vec<&str> = self
             .words
@@ -121,10 +122,14 @@ impl RootArgv {
             .map(String::as_str)
             .take_while(|w| *w != "--")
             .collect();
+        let root_cluster = self.words[1..self.command_at].iter().any(|w| {
+            w.strip_prefix('-')
+                .is_some_and(|c| !c.starts_with('-') && c.contains('h'))
+        });
         if words.contains(&"--help") {
             Some(HelpMode::Long)
         } else {
-            words.contains(&"-h").then_some(HelpMode::Short)
+            (root_cluster || words.contains(&"-h")).then_some(HelpMode::Short)
         }
     }
 
@@ -318,6 +323,24 @@ mod tests {
         assert_eq!(argv(&["ci", "-h"]).help_mode(), Some(HelpMode::Short));
         assert_eq!(argv(&["run", "--", "pytest", "--help"]).help_mode(), None);
         assert_eq!(argv(&["ci"]).help_mode(), None);
+    }
+
+    #[test]
+    fn root_flag_clusters_and_the_separator_classify_the_gate() {
+        let a = argv(&["-qv", "greet"]);
+        assert!(a.is_quiet() && a.names_user_command() && a.help_mode().is_none());
+        let a = argv(&["-qh"]);
+        assert!(a.is_quiet() && a.is_bare());
+        assert_eq!(a.help_mode(), Some(HelpMode::Short));
+        assert_eq!(argv(&["-qh", "greet"]).help_mode(), Some(HelpMode::Short));
+        let a = argv(&["greet", "--", "--help"]);
+        assert!(a.names_user_command() && a.help_mode().is_none());
+        // A user command's own short cluster is not toolr's help.
+        assert_eq!(argv(&["greet", "-xh"]).help_mode(), None);
+        // `--` is kept as the command word, so the gate still asks for trust.
+        let a = argv(&["--", "greet"]);
+        assert!(a.names_user_command() && !a.is_bare() && a.help_mode().is_none());
+        assert!(!argv(&["--quiet"]).names_user_command());
     }
 
     #[test]

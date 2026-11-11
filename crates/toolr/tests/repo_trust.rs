@@ -540,6 +540,37 @@ fn build_manifest_package_needs_trust() {
         .stderr(contains(REFUSAL).not());
 }
 
+#[test]
+fn a_help_flag_after_the_separator_is_the_commands_and_still_refused() {
+    let h = Hostile::new();
+    h.toolr()
+        .args(["-q", "hello", "--", "--help"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    assert!(!h.sentinel.exists());
+}
+
+#[test]
+fn version_and_clustered_help_never_read_the_trust_store_or_refuse() {
+    let h = Hostile::new();
+    for args in [&["--version"][..], &["-V", "hello"], &["-qV"]] {
+        h.toolr()
+            .args(args)
+            .assert()
+            .success()
+            .stdout(contains(env!("CARGO_PKG_VERSION")))
+            .stderr("");
+    }
+    h.toolr().args(["-qh"]).assert().success().stderr("");
+    // The hidden command is unknown, but help is never refused.
+    h.toolr()
+        .args(["-qh", "hello"])
+        .assert()
+        .stderr(contains(REFUSAL).not());
+    assert!(!h.sentinel.exists());
+}
+
 /// Nothing of `tools/pyproject.toml` is read before trust: an unparsable one
 /// gets the refusal, not a parse error.
 #[test]
