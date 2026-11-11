@@ -372,16 +372,17 @@ impl TrustStore {
             .open(self.venv_lock_path(venv_dir))
             .with_context(failed)?;
         match file.try_lock() {
-            Ok(()) => {}
             Err(fs::TryLockError::WouldBlock) => {
                 let _ = writeln!(
                     out,
                     "toolr: waiting for another toolr to finish syncing {}…",
                     shown(venv_dir)
                 );
+                // Before blocking, so the line shows while toolr waits.
+                let _ = out.flush();
                 file.lock().with_context(failed)?;
             }
-            Err(fs::TryLockError::Error(e)) => return Err(e).with_context(failed),
+            other => other.map_err(std::io::Error::from).with_context(failed)?,
         }
         Ok(VenvLock { _file: file })
     }

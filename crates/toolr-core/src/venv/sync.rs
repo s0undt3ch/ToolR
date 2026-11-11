@@ -179,6 +179,8 @@ fn read_marker(venv_dir: &Path) -> Option<String> {
         options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
     }
     let path = venv_dir.join(FRESHNESS_MARKER);
+    // Unix refuses a link at open, which leaves no gap for a swap.
+    #[cfg(not(unix))]
     if !fs::symlink_metadata(&path).ok()?.is_file() {
         return None;
     }
@@ -1344,20 +1346,15 @@ mod tests {
     fn sync_locked_skips_the_lock_when_fresh() {
         let t = InTree::new();
         t.stamp();
-        let locked = std::cell::Cell::new(false);
         sync_locked(
             &t.resolved,
             &t.tools,
             false,
             || t.check(),
-            || {
-                locked.set(true);
-                Ok(())
-            },
+            || -> Result<()> { unreachable!("a fresh venv takes no lock") },
             sync_fails,
         )
         .unwrap();
-        assert!(!locked.get());
     }
 
     #[test]
