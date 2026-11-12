@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import secrets
 import sys
@@ -40,6 +41,8 @@ BREAKING_FOOTER_RE: Final[re.Pattern[str]] = re.compile(r"^BREAKING[ -]CHANGE:",
 SKIP_TRAILER_RE: Final[re.Pattern[str]] = re.compile(
     r"^Release-Notes:[ \t]*skip[ \t]*$", re.MULTILINE | re.IGNORECASE
 )
+# GitHub rejects a release body longer than this many characters.
+GITHUB_BODY_MAX_CHARS: Final[int] = 125_000
 NOTE_TYPES: Final[frozenset[str]] = frozenset({"feat", "fix", "revert"})
 
 group = command_group("release-notes", "Manage queued release notes", docstring=__doc__)
@@ -69,6 +72,37 @@ def _render(notes_dir: Path) -> str:
     breaking = [n for n in notes if n.startswith(BREAKING_PREFIX)]
     other = [n for n in notes if not n.startswith(BREAKING_PREFIX)]
     return "\n\n".join(breaking + other)
+
+
+def _full_changes_url(ctx: Context, repo: str, version: str, prerelease: bool) -> str:
+    if not prerelease:
+        return f"https://github.com/{repo}/blob/v{version}/CHANGELOG.md"
+    # A pre-release has no CHANGELOG section: compare against the last final release instead.
+    # The pattern skips the floating `vX`/`vX.Y` tags; the exclude skips other pre-releases.
+    final_tag = ("--match", "v[0-9]*.[0-9]*.[0-9]*", "--exclude", "*-*")
+    ret = _git(ctx, "describe", "--tags", "--abbrev=0", *final_tag)
+    previous: str = ret.stdout.read().strip() if not ret.returncode else ""  # type: ignore[assignment]
+    if not previous:
+        return f"https://github.com/{repo}/commits/v{version}"
+    return f"https://github.com/{repo}/compare/{previous}...v{version}"
+
+
+def _github_body(rendered: str) -> str | None:
+    """Drop git-cliff's ``## Unreleased`` heading, or return ``None`` if the rest is too long."""
+    body = rendered.partition("\n")[2].lstrip("\n")
+    # Count UTF-16 code units, which is never fewer than characters.
+    return body if len(body.encode("utf-16-le")) // 2 <= GITHUB_BODY_MAX_CHARS else None
+
+
+def _github_warning(message: str) -> None:
+    """Show ``message`` on the workflow run page, as an annotation and in the job summary."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        sys.stdout.write(f"::warning title=Release body::{message}\n")
+        sys.stdout.flush()
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with Path(summary).open("a", encoding="utf-8") as f:
+            f.write(f"> [!WARNING]\n> {message}\n")
 
 
 def _slug_from_branch(branch: str) -> str | None:
@@ -324,6 +358,58 @@ def render(ctx: Context, github_env: str | None = None) -> None:
     # Rich would expand tabs, so write the bytes directly.
     sys.stdout.write(f"{text}\n")
     sys.stdout.flush()
+
+
+@group.command
+def github_body(
+    ctx: Context,
+    version: str,
+    repo: str,
+    output: str,
+    rendered: str = ".release-changes.md",
+    prerelease: bool = False,
+) -> None:
+    """Write the GitHub release body: the queued notes and a link to the full list of changes.
+
+    The commit lists go only in `CHANGELOG.md`. A body over GitHub's 125,000 character limit
+    becomes the link alone.
+
+    Args:
+        version: Release version, without the leading `v`.
+        repo: GitHub repository as `owner/name`.
+        output: File to write the release body to.
+        rendered: File to keep git-cliff's render in, for `clear --rendered`.
+        prerelease: Link a comparison with the last final release, since a pre-release has no CHANGELOG section.
+    """
+    _exit_on_problems(ctx, _file_problems(ctx.repo_root))
+    url = _full_changes_url(ctx, repo, version, prerelease)
+    env = {
+        **os.environ,
+        "TOOLR_RELEASE_NOTES": _render(ctx.repo_root / NOTES_DIR),
+        "TOOLR_FULL_CHANGELOG_URL": url,
+    }
+    rendered_path = Path(rendered).resolve()
+    config = str(ctx.repo_root / "cliff.toml")
+    cliff_args = [
+        "--config",
+        config,
+        "--unreleased",
+        "--strip",
+        "all",
+        "--output",
+        str(rendered_path),
+    ]
+    ret = ctx.run("git-cliff", *cliff_args, cwd=ctx.repo_root, env=env)
+    if ret.returncode:
+        ctx.error(f"git-cliff failed with exit code {ret.returncode}")
+        ctx.exit(ret.returncode)
+    body = _github_body(rendered_path.read_text(encoding="utf-8"))
+    if body is None:
+        message = f"The release notes are over {GITHUB_BODY_MAX_CHARS} characters; the release body is only a link"
+        ctx.warn(message)
+        _github_warning(message)
+        body = f"The release notes are too long for a GitHub release. See [the full list of changes]({url}).\n"
+    Path(output).write_text(body, encoding="utf-8")
 
 
 def _slug_from_current_branch(ctx: Context) -> str:

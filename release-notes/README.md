@@ -2,8 +2,10 @@
 
 Each `*.md` file here is one queued release note. On release, `toolr release-notes render` joins them into
 the `### Notes` section of the GitHub release body and `CHANGELOG.md`, and `toolr release-notes clear`
-empties the directory. This README, subdirectories and files that don't end in `.md` are never treated as
-notes.
+empties the directory. The per-commit lists go only in `CHANGELOG.md`: `toolr release-notes github-body`
+writes the GitHub release body as the notes plus a link to the full list of changes, or the link alone when
+the notes are over GitHub's 125,000 character limit. This README, subdirectories and files that don't end
+in `.md` are never treated as notes.
 
 This file is the canonical statement of the rules below. `CONTRIBUTING.md` and `CLAUDE.md` summarise it.
 
@@ -56,9 +58,9 @@ of the changelog.
 
 To cut a pre-release, run the `Release` workflow (`release.yml`) with a version such as `1.0.0-rc.1`
 (`X.Y.Z-rc.N`). It is tagged `v1.0.0-rc.1` and published as a GitHub pre-release, so `latest` lookups skip it,
-and the wheels carry the PEP 440 form `1.0.0rc1`. Its release body shows every note and change queued since
-the last final release, but it gets no `CHANGELOG.md` section and leaves the notes queued. The next final
-release rolls up everything since the previous final release, pre-releases included.
+and the wheels carry the PEP 440 form `1.0.0rc1`. Its release body shows every note queued since
+the last final release and links a comparison with it, but it gets no `CHANGELOG.md` section and leaves the
+notes queued. The next final release rolls up everything since the previous final release, pre-releases included.
 
 The policy lives in four files: `tools/version.py` (version parsing and the `release-prerelease` output),
 `.github/workflows/_prepare-release.yml` (skips the CHANGELOG and notes-clearing steps for a pre-release),
