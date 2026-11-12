@@ -36,7 +36,7 @@ def test_final_release_only_steps(step_id: str) -> None:
     assert _step(step_id).get("if") == FINAL_ONLY
 
 
-@pytest.mark.parametrize("step_id", ["git-cliff", "prepare-release-notes", "commit-release"])
+@pytest.mark.parametrize("step_id", ["prepare-release-notes", "commit-release"])
 def test_prerelease_still_renders_and_commits(step_id: str) -> None:
     """The rc's GitHub release body is still rendered, and the release commit made."""
     assert "if" not in _step(step_id)

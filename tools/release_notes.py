@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import secrets
 import sys
@@ -40,6 +41,8 @@ BREAKING_FOOTER_RE: Final[re.Pattern[str]] = re.compile(r"^BREAKING[ -]CHANGE:",
 SKIP_TRAILER_RE: Final[re.Pattern[str]] = re.compile(
     r"^Release-Notes:[ \t]*skip[ \t]*$", re.MULTILINE | re.IGNORECASE
 )
+# GitHub rejects a release body longer than this many characters.
+GITHUB_BODY_MAX_CHARS: Final[int] = 125_000
 NOTE_TYPES: Final[frozenset[str]] = frozenset({"feat", "fix", "revert"})
 
 group = command_group("release-notes", "Manage queued release notes", docstring=__doc__)
@@ -69,6 +72,19 @@ def _render(notes_dir: Path) -> str:
     breaking = [n for n in notes if n.startswith(BREAKING_PREFIX)]
     other = [n for n in notes if not n.startswith(BREAKING_PREFIX)]
     return "\n\n".join(breaking + other)
+
+
+def _full_changes_url(repo: str, version: str, prerelease: bool) -> str:
+    # A pre-release has no CHANGELOG section, so it links its commit history instead.
+    if prerelease:
+        return f"https://github.com/{repo}/commits/v{version}"
+    return f"https://github.com/{repo}/blob/v{version}/CHANGELOG.md"
+
+
+def _github_body(rendered: str, url: str) -> str | None:
+    """Drop git-cliff's ``## Unreleased`` heading, or return ``None`` if the rest is too long."""
+    body = rendered.partition("\n")[2].lstrip("\n")
+    return body if len(body) <= GITHUB_BODY_MAX_CHARS else None
 
 
 def _slug_from_branch(branch: str) -> str | None:
@@ -324,6 +340,58 @@ def render(ctx: Context, github_env: str | None = None) -> None:
     # Rich would expand tabs, so write the bytes directly.
     sys.stdout.write(f"{text}\n")
     sys.stdout.flush()
+
+
+@group.command
+def github_body(
+    ctx: Context,
+    version: str,
+    repo: str,
+    output: str,
+    rendered: str = ".release-changes.md",
+    prerelease: bool = False,
+) -> None:
+    """Write the GitHub release body: the queued notes and a link to the full list of changes.
+
+    The commit lists go only in `CHANGELOG.md`. A body over GitHub's 125,000 character limit
+    becomes the link alone.
+
+    Args:
+        version: Release version, without the leading `v`.
+        repo: GitHub repository as `owner/name`.
+        output: File to write the release body to.
+        rendered: File to keep git-cliff's render in, for `clear --rendered`.
+        prerelease: Link the tag's commit history, since a pre-release has no CHANGELOG section.
+    """
+    _exit_on_problems(ctx, _file_problems(ctx.repo_root))
+    url = _full_changes_url(repo, version, prerelease)
+    env = {
+        **os.environ,
+        "TOOLR_RELEASE_NOTES": _render(ctx.repo_root / NOTES_DIR),
+        "TOOLR_FULL_CHANGELOG_URL": url,
+    }
+    rendered_path = Path(rendered).resolve()
+    config = str(ctx.repo_root / "cliff.toml")
+    cliff_args = [
+        "--config",
+        config,
+        "--unreleased",
+        "--strip",
+        "all",
+        "--output",
+        str(rendered_path),
+    ]
+    ret = ctx.run("git-cliff", *cliff_args, cwd=ctx.repo_root, env=env)
+    if ret.returncode:
+        ctx.error(f"git-cliff failed with exit code {ret.returncode}")
+        ctx.exit(ret.returncode)
+    body = _github_body(rendered_path.read_text(encoding="utf-8"), url)
+    if body is None:
+        ctx.warn(
+            f"The release notes are over {GITHUB_BODY_MAX_CHARS} characters; the release body is only a link"
+        )
+        body = f"The release notes are too long for a GitHub release. See [the full list of changes]({url}).\n"
+    Path(output).write_text(body, encoding="utf-8")
 
 
 def _slug_from_current_branch(ctx: Context) -> str:

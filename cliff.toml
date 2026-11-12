@@ -36,6 +36,13 @@ body = """
 
 {%- endif %}\
 
+{#- `_prepare-release.yml` sets this for the GitHub release body: the commit lists go only in CHANGELOG.md. #}
+{%- set full_changelog_url = get_env(name="TOOLR_FULL_CHANGELOG_URL", default="") -%}
+
+{%- if full_changelog_url != "" %}
+
+See [the full list of changes]({{ full_changelog_url }}).
+{% else -%}
 {%- for group, commits in commits | filter(attribute="merge_commit", value=false) | group_by(attribute="group") %}
 
     ### {{ group | upper_first }}
@@ -46,6 +53,7 @@ body = """
             ([`{{ commit.id | truncate(length=7, end="") }}`]({{ self::remote_url() }}/commit/{{ commit.id }}))\
     {% endfor %}
 {%- endfor %}\n
+{%- endif %}
 
 {%- if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
 
