@@ -13,4 +13,4 @@ MISE_VERSION=v2026.11.6
 # in tools/uv.lock, or the binary can emit a runner schema the tools venv
 # rejects. Renovate's "toolr release" group bumps all three together, and
 # tests/workflows/test_dogfood_toolr_pin.py fails when they drift.
-TOOLR_VERSION=0.35.1
+TOOLR_VERSION=0.37.0
