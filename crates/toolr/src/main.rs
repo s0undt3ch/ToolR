@@ -70,7 +70,11 @@ fn run() -> anyhow::Result<ExitCode> {
     };
     warn_commands_hidden(&run);
     maybe_emit_cache_hint(&matches);
-    dispatch::dispatch(&matches, &manifest, &mut command, run, grant, rebuilt)
+    let preflight = dispatch::Preflight {
+        trusted: grant,
+        rebuilt_venv: rebuilt,
+    };
+    dispatch::dispatch(&matches, &manifest, &mut command, run, preflight)
 }
 
 /// What clap made of argv, against the manifest it was given.

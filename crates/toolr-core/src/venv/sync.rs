@@ -86,48 +86,52 @@ impl UpgradeMode {
 /// the mtimes it stats the interpreter and reads `pyvenv.cfg`, and for an
 /// in-tree venv the default trust store; a store it can't open means `Foreign`.
 pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
-    let (store, trust_all) = default_store_for(resolved);
-    check_freshness_with(resolved, tools_dir, store.as_ref(), trust_all)
+    with_default_check(resolved, |check| {
+        check_freshness_with(resolved, tools_dir, check)
+    })
 }
 
 /// For callers that read the venv's files without running it, such as the plugin-fragment glob.
 pub fn is_foreign(resolved: &ResolvedVenv, root: &Path) -> bool {
-    let (store, trust_all) = default_store_for(resolved);
-    is_foreign_with(resolved, root, store.as_ref(), trust_all)
+    with_default_check(resolved, |check| is_foreign_with(resolved, root, check))
 }
 
-/// The store a token check needs, and whether `TOOLR_TRUST_ALL` skips it.
-/// Cache venvs need neither, so they read no env and no store.
-fn default_store_for(resolved: &ResolvedVenv) -> (Option<TrustStore>, bool) {
-    if !resolved.is_in_tree() {
-        return (None, false);
+/// What vouches for an in-tree venv's token.
+#[derive(Clone, Copy)]
+pub(crate) enum TokenCheck<'a> {
+    /// No check: a cache venv, or `TOOLR_TRUST_ALL`.
+    Skip,
+    /// The store the token must be recorded in.
+    Store(&'a TrustStore),
+    /// The default store couldn't be opened, so nothing vouches for the venv (fail-closed).
+    NoStore,
+}
+
+/// Runs `f` with the check the default store and `TOOLR_TRUST_ALL` call for. Cache venvs need
+/// neither, so they read no env and no store.
+fn with_default_check<R>(resolved: &ResolvedVenv, f: impl FnOnce(TokenCheck<'_>) -> R) -> R {
+    if !resolved.is_in_tree() || trust_all_env() {
+        return f(TokenCheck::Skip);
     }
-    let trust_all = trust_all_env();
-    let store = (!trust_all)
-        .then(TrustStore::open_default)
-        .and_then(Result::ok);
-    (store, trust_all)
+    match TrustStore::open_default() {
+        Ok(store) => f(TokenCheck::Store(&store)),
+        Err(_) => f(TokenCheck::NoStore),
+    }
 }
 
-fn is_foreign_with(
-    resolved: &ResolvedVenv,
-    root: &Path,
-    store: Option<&TrustStore>,
-    trust_all: bool,
-) -> bool {
+fn is_foreign_with(resolved: &ResolvedVenv, root: &Path, check: TokenCheck<'_>) -> bool {
     resolved.is_in_tree()
-        && !trust_all
+        && !matches!(check, TokenCheck::Skip)
         && fs::symlink_metadata(&resolved.venv_dir).is_ok()
-        && !built_by_toolr(resolved, root, store)
+        && !built_by_toolr(resolved, root, check)
 }
 
 pub(crate) fn check_freshness_with(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
-    store: Option<&TrustStore>,
-    trust_all: bool,
+    check: TokenCheck<'_>,
 ) -> Freshness {
-    if is_foreign_with(resolved, project_root(tools_dir), store, trust_all) {
+    if is_foreign_with(resolved, project_root(tools_dir), check) {
         return Freshness::Foreign;
     }
     let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
@@ -154,8 +158,8 @@ pub(crate) fn check_freshness_with(
 
 /// The store vouches for a venv only while it trusts the repository, a check
 /// that also refuses a store inside it.
-fn built_by_toolr(resolved: &ResolvedVenv, root: &Path, store: Option<&TrustStore>) -> bool {
-    let Some(store) = store else {
+fn built_by_toolr(resolved: &ResolvedVenv, root: &Path, check: TokenCheck<'_>) -> bool {
+    let TokenCheck::Store(store) = check else {
         return false;
     };
     if !store.is_trusted(root).unwrap_or(false) {
@@ -341,20 +345,22 @@ pub fn sync_if_needed(
         resolved,
         tools_dir,
         bypass_stamp,
-        || check_freshness(resolved, tools_dir),
-        lock,
-        || approve_removal_on_tty(&resolved.venv_dir, quiet),
-        || {
-            claim_before_build(resolved, tools_dir);
-            // Not `Http`: its message tells the user to install uv, which they already have.
-            let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
-                let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
-                UvError::Io(std::io::Error::other(msg))
-            })?;
-            if !status.success() {
-                return Err(UvError::SyncFailed(status.code()));
-            }
-            Ok(())
+        SyncSteps {
+            check: || check_freshness(resolved, tools_dir),
+            lock,
+            approve: || approve_removal_on_tty(&resolved.venv_dir, quiet),
+            sync: || {
+                claim_before_build(resolved, tools_dir);
+                // Not `Http`: its message tells the user to install uv, which they already have.
+                let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
+                    let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
+                    UvError::Io(std::io::Error::other(msg))
+                })?;
+                if !status.success() {
+                    return Err(UvError::SyncFailed(status.code()));
+                }
+                Ok(())
+            },
         },
     )
 }
@@ -440,21 +446,41 @@ fn still_approved(approved: Option<(u64, u64)>, now: Option<(u64, u64)>) -> bool
     approved.is_some() && approved == now
 }
 
+/// The seams of [`sync_locked`], so tests drive it with closures.
+struct SyncSteps<C, L, A, S> {
+    /// The venv's freshness now.
+    check: C,
+    /// Take the sync lock; the guard it returns is held until the sync is done.
+    lock: L,
+    /// Approve removing a venv toolr didn't build.
+    approve: A,
+    /// Run uv.
+    sync: S,
+}
+
 /// Check; for a venv toolr didn't build, ask `approve` before taking the lock, so no other
 /// toolr waits on the answer. Then lock, re-check, and remove such a venv only if it is still
 /// the one approved, asking again only for a different one; then sync. Another toolr may be
 /// building this venv, and until it stamps the marker the venv reads as one toolr didn't
 /// build. Without the lock toolr never removes such a venv: it fails naming the store, which
 /// couldn't record a rebuilt venv's token either. Any other venv syncs unlocked.
-fn sync_locked<L>(
+fn sync_locked<G>(
     resolved: &ResolvedVenv,
     tools_dir: &Path,
     bypass_stamp: bool,
-    check: impl Fn() -> Freshness,
-    lock: impl FnOnce() -> Result<L>,
-    mut approve: impl FnMut() -> Result<(), UvError>,
-    sync: impl FnOnce() -> Result<(), UvError>,
+    steps: SyncSteps<
+        impl Fn() -> Freshness,
+        impl FnOnce() -> Result<G>,
+        impl FnMut() -> Result<(), UvError>,
+        impl FnOnce() -> Result<(), UvError>,
+    >,
 ) -> Result<(), UvError> {
+    let SyncSteps {
+        check,
+        lock,
+        mut approve,
+        sync,
+    } = steps;
     let before = check();
     if !bypass_stamp && before == Freshness::Fresh {
         return Ok(());
@@ -540,11 +566,11 @@ fn stamp_marker_with(
         s.and_then(|s| match marker_token(&s, venv_dir) {
             Some(token) => {
                 if s.venv_pending(venv_dir) {
-                    s.settle_venv(root, venv_dir, &token)?;
+                    s.settle_venv(root, venv_dir, Some(&token))?;
                 }
                 Ok(token)
             }
-            None => s.record_venv(root, venv_dir),
+            None => s.settle_venv(root, venv_dir, None),
         })
     });
     let token = match token {
@@ -1232,7 +1258,7 @@ mod tests {
         }
 
         fn check(&self) -> Freshness {
-            check_freshness_with(&self.resolved, &self.tools, Some(&self.store), false)
+            check_freshness_with(&self.resolved, &self.tools, TokenCheck::Store(&self.store))
         }
 
         fn stamp(&self) {
@@ -1252,7 +1278,7 @@ mod tests {
         assert_eq!(t.check(), Freshness::Foreign, "empty marker");
         fs::write(t.marker(), "0".repeat(64)).unwrap();
         assert_eq!(t.check(), Freshness::Foreign, "forged marker");
-        let no_store = check_freshness_with(&t.resolved, &t.tools, None, false);
+        let no_store = check_freshness_with(&t.resolved, &t.tools, TokenCheck::NoStore);
         assert_eq!(no_store, Freshness::Foreign, "no store");
     }
 
@@ -1296,7 +1322,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let resolved = synced_venv(tmp.path(), &[]);
         assert_eq!(
-            check_freshness_with(&resolved, tmp.path(), None, false),
+            check_freshness_with(&resolved, tmp.path(), TokenCheck::Skip),
             Freshness::Fresh
         );
     }
@@ -1306,7 +1332,7 @@ mod tests {
         let t = InTree::new();
         touch_marker(&t.resolved.venv_dir).unwrap();
         assert_eq!(
-            check_freshness_with(&t.resolved, &t.tools, None, true),
+            check_freshness_with(&t.resolved, &t.tools, TokenCheck::Skip),
             Freshness::Fresh
         );
     }
@@ -1364,10 +1390,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || t.store.lock_venv(&t.resolved.venv_dir, false),
-            approve,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: || t.store.lock_venv(&t.resolved.venv_dir, false),
+                approve,
+                sync: sync_fails,
+            },
         )
         .unwrap_err();
         assert!(err.to_string().contains(&shown(t.store.dir())), "{err}");
@@ -1388,13 +1416,15 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || -> Result<()> { Err(anyhow::anyhow!("read-only store")) },
-            approve,
-            || {
-                synced.set(true);
-                t.stamp();
-                Ok(())
+            SyncSteps {
+                check: || t.check(),
+                lock: || -> Result<()> { Err(anyhow::anyhow!("read-only store")) },
+                approve,
+                sync: || {
+                    synced.set(true);
+                    t.stamp();
+                    Ok(())
+                },
             },
         )
         .unwrap();
@@ -1459,13 +1489,15 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || {
-                t.stamp();
-                Ok(())
+            SyncSteps {
+                check: || t.check(),
+                lock: || {
+                    t.stamp();
+                    Ok(())
+                },
+                approve,
+                sync: sync_fails,
             },
-            approve,
-            sync_fails,
         )
         .unwrap();
         assert!(t.resolved.python.is_file());
@@ -1479,19 +1511,21 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || {
-                events.borrow_mut().push("check");
-                t.check()
-            },
-            || {
-                events.borrow_mut().push("lock");
-                Ok(())
-            },
-            approve,
-            || {
-                assert!(!t.resolved.venv_dir.exists(), "removed before the sync");
-                events.borrow_mut().push("sync");
-                Ok(())
+            SyncSteps {
+                check: || {
+                    events.borrow_mut().push("check");
+                    t.check()
+                },
+                lock: || {
+                    events.borrow_mut().push("lock");
+                    Ok(())
+                },
+                approve,
+                sync: || {
+                    assert!(!t.resolved.venv_dir.exists(), "removed before the sync");
+                    events.borrow_mut().push("sync");
+                    Ok(())
+                },
             },
         )
         .unwrap();
@@ -1536,10 +1570,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            lock_must_not_run,
-            refused,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: lock_must_not_run,
+                approve: refused,
+                sync: sync_fails,
+            },
         )
         .unwrap_err();
         assert!(t.resolved.python.is_file(), "a refused venv must stay");
@@ -1554,21 +1590,23 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || {
-                events.borrow_mut().push("check");
-                t.check()
-            },
-            || {
-                events.borrow_mut().push("lock");
-                Ok(())
-            },
-            || {
-                events.borrow_mut().push("approve");
-                Ok(())
-            },
-            || {
-                events.borrow_mut().push("sync");
-                Ok(())
+            SyncSteps {
+                check: || {
+                    events.borrow_mut().push("check");
+                    t.check()
+                },
+                lock: || {
+                    events.borrow_mut().push("lock");
+                    Ok(())
+                },
+                approve: || {
+                    events.borrow_mut().push("approve");
+                    Ok(())
+                },
+                sync: || {
+                    events.borrow_mut().push("sync");
+                    Ok(())
+                },
             },
         )
         .unwrap();
@@ -1586,13 +1624,15 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || {
-                t.stamp();
-                Ok(())
+            SyncSteps {
+                check: || t.check(),
+                lock: || {
+                    t.stamp();
+                    Ok(())
+                },
+                approve,
+                sync: sync_fails,
             },
-            approve,
-            sync_fails,
         )
         .unwrap();
         assert!(t.resolved.python.is_file(), "the built venv must stay");
@@ -1611,10 +1651,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || Ok(()),
-            count,
-            || Ok(()),
+            SyncSteps {
+                check: || t.check(),
+                lock: || Ok(()),
+                approve: count,
+                sync: || Ok(()),
+            },
         )
         .unwrap();
         assert_eq!(asked.get(), 1, "the same venv is asked about once");
@@ -1640,10 +1682,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            swap,
-            refuse_second,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: swap,
+                approve: refuse_second,
+                sync: sync_fails,
+            },
         )
         .unwrap_err();
         assert_eq!(asked.get(), 2);
@@ -1702,10 +1746,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || Ok(()),
-            approve,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: || Ok(()),
+                approve,
+                sync: sync_fails,
+            },
         )
         .unwrap_err();
         assert!(err.to_string().contains("sync must not run"), "{err}");
@@ -1719,10 +1765,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            lock_must_not_run,
-            approve,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: lock_must_not_run,
+                approve,
+                sync: sync_fails,
+            },
         )
         .unwrap();
     }
@@ -1745,21 +1793,18 @@ mod tests {
         assert!(is_foreign_with(
             &t.resolved,
             project_root(&t.tools),
-            Some(&t.store),
-            false
+            TokenCheck::Store(&t.store)
         ));
         assert!(!is_foreign_with(
             &t.resolved,
             project_root(&t.tools),
-            Some(&t.store),
-            true
+            TokenCheck::Skip
         ));
         t.stamp();
         assert!(!is_foreign_with(
             &t.resolved,
             project_root(&t.tools),
-            Some(&t.store),
-            false
+            TokenCheck::Store(&t.store)
         ));
     }
 
@@ -1809,10 +1854,12 @@ mod tests {
             &t.resolved,
             &t.tools,
             false,
-            || t.check(),
-            || Ok(()),
-            approve,
-            sync_fails,
+            SyncSteps {
+                check: || t.check(),
+                lock: || Ok(()),
+                approve,
+                sync: sync_fails,
+            },
         );
         fs::set_permissions(&t.tools, fs::Permissions::from_mode(0o755)).unwrap();
         let err = result.expect_err("a venv that stays must not be synced");

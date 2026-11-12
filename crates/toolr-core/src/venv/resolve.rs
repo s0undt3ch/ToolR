@@ -31,6 +31,13 @@ impl ResolvedVenv {
     pub fn is_in_tree(&self) -> bool {
         self.repo_key.is_empty()
     }
+
+    /// The venv directory, unless it is an in-tree venv toolr didn't build (see
+    /// [`super::is_foreign`]): for callers that only read the venv's files, such as the plugin
+    /// fragment glob. Callers that act on a foreign venv use the freshness check instead.
+    pub fn usable_venv_dir(&self, root: &Path) -> Option<&Path> {
+        (!super::sync::is_foreign(self, root)).then_some(self.venv_dir.as_path())
+    }
 }
 
 /// Suffix of the cache slot that holds only an in-tree venv's `meta.json`.
