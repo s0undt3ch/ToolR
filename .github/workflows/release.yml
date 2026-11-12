@@ -474,6 +474,11 @@ jobs:
           skip-existing: true
           verbose: true
 
+      # The PyPI step refuses to overwrite these, and the GitHub release would upload them.
+      - name: Remove the Test PyPI attestations
+        id: remove-test-pypi-attestations
+        run: rm -fv dist/*.publish.attestation
+
       - name: Push the release commit and tag
         id: push-release
         env:
