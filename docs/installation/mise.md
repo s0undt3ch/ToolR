@@ -209,8 +209,8 @@ benign situations:
 - The current directory isn't a toolr-using repo (no
   `tools/pyproject.toml`). The hook fires on every `cd` even into
   non-toolr directories; this is normal, not an error.
-- toolr can't read where the tools venv lives, for example a bare `tools/`
-  directory without a `pyproject.toml`.
+- toolr can't read where the tools venv lives in a trusted repository,
+  for example from a `tools/pyproject.toml` that doesn't parse.
 - `uv` isn't installed and `TOOLR_AUTO_SYNC=1` isn't set.
   The hook can't reasonably prompt for consent on every shell
   enter, so it stays out of the way.
@@ -220,7 +220,10 @@ non-zero — still print their error to stderr and exit non-zero, so
 they aren't silently masked. So does an untrusted repository: the hook
 never prompts, so it prints the
 [repository trust](../concepts.md#repository-trust) refusal until you
-trust the repository.
+trust the repository. In a trusted repository whose in-tree `tools/.venv`
+toolr didn't build, such as one an older toolr built, it prints why it
+leaves that venv alone until you approve replacing it: run
+`toolr project venv sync` once on a terminal and answer `y`.
 
 ### First-time bootstrap
 

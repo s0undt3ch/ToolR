@@ -742,18 +742,17 @@ fn symlinked_tools_module_is_rejected_over_a_stale_version_cache() {
     }
 }
 
-/// An untrusted repository never writes a cache, so every run rebuilds in
-/// memory; the error must surface there too rather than leaving `demo`
-/// as an unrecognised subcommand. Walking `tools/` executes nothing.
+/// An untrusted repository is not walked, so a symlinked module goes unreported
+/// until the repository is trusted.
 #[cfg(unix)]
 #[test]
-fn symlinked_tools_module_is_rejected_in_an_untrusted_repo() {
+fn symlinked_tools_module_is_not_walked_in_an_untrusted_repo() {
     let tmp = TempDir::new().unwrap();
     let root = symlinked_module_project(&tmp);
     let env = common::TrustEnv::new();
-    for args in [&["--help"][..], &["demo", "hello"][..]] {
-        assert_rejected(env.toolr(&root), args);
-    }
+    let output = env.toolr(&root).arg("--help").output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("symlinked"));
     assert!(!root.join("tools/.toolr-manifest.json").exists());
 }
 
@@ -878,20 +877,16 @@ fn group_conflict_warns_once_per_build() {
     );
 }
 
-/// An untrusted repository builds in memory on every run, so it warns on every run.
+/// An untrusted repository is not built at all, so it has no build warnings to repeat.
 #[test]
-fn group_conflict_warns_on_every_untrusted_run() {
+fn group_conflict_is_not_built_before_trust() {
     let tmp = TempDir::new().unwrap();
     conflicting_group_project(&tmp);
     let env = common::TrustEnv::new();
-    for _ in 0..2 {
-        let output = env.toolr(tmp.path()).arg("--help").output().unwrap();
-        assert!(output.status.success(), "{output:?}");
-        assert_eq!(
-            String::from_utf8_lossy(&output.stderr),
-            GROUP_CONFLICT_WARNING
-        );
-    }
+    let output = env.toolr(tmp.path()).arg("--help").output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("warning"), "{stderr}");
 }
 
 /// Identical warnings from separate re-declarations each print, whether the

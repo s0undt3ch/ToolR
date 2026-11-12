@@ -4,6 +4,8 @@ mod complete;
 mod run;
 mod self_cmd;
 
+pub(crate) use run::rebuild_foreign_venv;
+
 use std::process::ExitCode;
 
 use clap::ArgMatches;
@@ -52,6 +54,8 @@ pub(crate) fn dispatch(
     manifest: &Manifest,
     root: &mut clap::Command,
     run: Invocation,
+    grant: Option<toolr_core::trust::Trusted>,
+    rebuilt: Option<toolr_core::venv::ResolvedVenv>,
 ) -> anyhow::Result<ExitCode> {
     // `__complete` never sets help flags, so it must skip the interception.
     let mode = run.argv.help_mode().unwrap_or(HelpMode::Long);
@@ -79,5 +83,13 @@ pub(crate) fn dispatch(
         help::print(root, "toolr", HelpMode::Long);
         return Ok(ExitCode::SUCCESS);
     };
-    run::run_command(matches, (first_name, first_matches), manifest, root, run)
+    run::run_command(
+        matches,
+        (first_name, first_matches),
+        manifest,
+        root,
+        run,
+        grant,
+        rebuilt,
+    )
 }

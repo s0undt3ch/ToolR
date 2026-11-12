@@ -2631,6 +2631,7 @@ dependencies = [
  "dunce",
  "email_address",
  "flate2",
+ "getrandom 0.4.3",
  "glob",
  "libc",
  "pep440_rs",

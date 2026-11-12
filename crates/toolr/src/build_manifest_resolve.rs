@@ -17,7 +17,10 @@ pub struct ResolvedSource {
     pub package_name: String,
 }
 
-pub fn resolve_source_and_package(matches: &clap::ArgMatches) -> Result<ResolvedSource> {
+pub fn resolve_source_and_package(
+    matches: &clap::ArgMatches,
+    quiet: bool,
+) -> Result<ResolvedSource> {
     let source_dir = matches.get_one::<String>("source-dir").map(PathBuf::from);
     let package_arg = matches.get_one::<String>("package").cloned();
     let positional_pkg = matches.get_one::<String>("package_positional").cloned();
@@ -45,7 +48,12 @@ pub fn resolve_source_and_package(matches: &clap::ArgMatches) -> Result<Resolved
             let cwd = std::env::current_dir().context("getting current directory")?;
             let repo_root =
                 discover_project_root(&cwd).context("resolving repo root for tools-venv lookup")?;
+            // The lookup reads the repository's tools venv.
+            toolr_core::trust::require_trust_quietly(&repo_root, quiet)?;
             let resolved = resolve_venv_path(&repo_root).context("resolving tools-venv path")?;
+            if toolr_core::venv::is_foreign(&resolved, &repo_root) {
+                anyhow::bail!("{}", foreign_venv_hint(&resolved.venv_dir));
+            }
             let dir = find_in_venv(&resolved.venv_dir, &pkg).with_context(|| {
                 format!(
                     "package `{pkg}` not found under {}; run `uv sync` or pass --source-dir",
@@ -61,6 +69,14 @@ pub fn resolve_source_and_package(matches: &clap::ArgMatches) -> Result<Resolved
             anyhow::bail!("missing required argument: either `<package>` or `--source-dir PATH`")
         }
     }
+}
+
+/// Why toolr won't read or run an in-tree venv it didn't build, and the fix.
+pub(crate) fn foreign_venv_hint(venv_dir: &Path) -> String {
+    format!(
+        "{} — run `toolr project venv sync` to rebuild it",
+        toolr_core::venv::untrusted_venv_reason(venv_dir)
+    )
 }
 
 fn leaf_dir_name(dir: &Path) -> Option<String> {

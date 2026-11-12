@@ -122,6 +122,8 @@ pub(super) fn run_command(
     manifest: &Manifest,
     root: &mut clap::Command,
     run: Invocation,
+    grant: Option<toolr_core::trust::Trusted>,
+    rebuilt: Option<toolr_core::venv::ResolvedVenv>,
 ) -> anyhow::Result<ExitCode> {
     // Walk down the subcommand chain so nested groups (`docker image
     // build`) reach their leaf command. `path` collects every
@@ -159,23 +161,25 @@ pub(super) fn run_command(
     )
     .map_err(|e| render_path_value_error(e, root, &path))?;
     // Before anything of the repo's runs: the venv path may `uv sync`, and the
-    // host-Python path imports `tools/*.py` directly. Building the spec above
-    // runs none of it, so a bad path value is reported before the trust prompt.
-    let trusted = toolr_core::trust::require_trust(
-        &repo_root,
-        toolr_core::trust::TrustMode {
-            never_prompt: output_opts.verbosity == Verbosity::Quiet,
-        },
-    )?;
+    // host-Python path imports `tools/*.py` directly. `main` proved trust already, unless a
+    // `-h` among the command's trailing values read as help there; clap only matched a user
+    // command then because the run was trusted or under `TOOLR_TRUST_ALL`, so this re-check
+    // is a fallback.
+    let trusted = match grant {
+        Some(trusted) => trusted,
+        None => {
+            let quiet = output_opts.verbosity == Verbosity::Quiet;
+            toolr_core::trust::require_trust_quietly(&repo_root, quiet)?
+        }
+    };
 
     let tempfile = write_spec_to_tempfile(&spec)?;
-    let resolved = resolve_venv_path(&repo_root)?;
     let quiet = output_opts.verbosity == Verbosity::Quiet;
     let verbose = output_opts.verbosity == Verbosity::Verbose;
-    let resolved = if trusted.granted_at_prompt() {
-        sync_after_trust_prompt(&trusted, resolved)?
-    } else {
-        resync_if_needed(&repo_root, resolved, quiet)?
+    // `main` already rebuilt a foreign venv; syncing again could rebuild it twice.
+    let resolved = match rebuilt {
+        Some(resolved) => resolved,
+        None => ready_for_dispatch(&repo_root, &trusted, resolve_venv_path(&repo_root)?, quiet)?,
     };
     let python = resolved.python.clone();
 
@@ -223,31 +227,77 @@ pub(super) fn run_command(
     Ok(ExitCode::from(process_exit_code(status)))
 }
 
+/// Sync the venv as dispatch needs it: after a trust prompt the user is asked first.
+fn ready_for_dispatch(
+    repo_root: &std::path::Path,
+    trusted: &toolr_core::trust::Trusted,
+    resolved: toolr_core::venv::ResolvedVenv,
+    quiet: bool,
+) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
+    if trusted.granted_at_prompt() {
+        sync_after_trust_prompt(trusted, resolved)
+    } else {
+        resync_if_needed(repo_root, resolved, quiet)
+    }
+}
+
+/// Rebuild a foreign in-tree venv before the manifest is built: the manifest leaves out its
+/// plugin commands, so clap would reject one before dispatch could rebuild it. Returns the
+/// rebuilt venv for dispatch, or `None` when there was nothing foreign to rebuild.
+pub(crate) fn rebuild_foreign_venv(
+    repo_root: &std::path::Path,
+    trusted: &toolr_core::trust::Trusted,
+    quiet: bool,
+) -> anyhow::Result<Option<toolr_core::venv::ResolvedVenv>> {
+    let Ok(resolved) = resolve_venv_path(repo_root) else {
+        return Ok(None);
+    };
+    if !toolr_core::venv::is_foreign(&resolved, repo_root) {
+        return Ok(None);
+    }
+    ready_for_dispatch(repo_root, trusted, resolved, quiet).map(Some)
+}
+
 /// Re-sync a venv that a `tools/` file uv reads (see `check_freshness`)
-/// has moved past, so a lock bump never runs old code (#527), or whose
-/// interpreter was uninstalled under it (#609). A never-synced venv is left
-/// alone, so a fresh clone installs nothing before it.
+/// has moved past, so a lock bump never runs old code (#527), whose
+/// interpreter was uninstalled under it (#609), or that toolr didn't build.
+/// A never-synced venv is left alone, so a fresh clone installs nothing before it.
 fn resync_if_needed(
     repo_root: &std::path::Path,
     resolved: toolr_core::venv::ResolvedVenv,
     quiet: bool,
 ) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
     use toolr_core::venv::{Freshness, SYNC_INPUTS_DESCRIPTION, check_freshness};
-    let problem = match check_freshness(&resolved, &repo_root.join("tools")) {
+    let freshness = check_freshness(&resolved, &repo_root.join("tools"));
+    let problem = match freshness {
         Freshness::Stale => {
             format!("the tools venv is out of date with {SYNC_INPUTS_DESCRIPTION}")
         }
         Freshness::Broken => "the tools venv's Python interpreter no longer exists".to_owned(),
+        Freshness::Foreign => toolr_core::venv::untrusted_venv_reason(&resolved.venv_dir),
         Freshness::Missing | Freshness::Fresh => return Ok(resolved),
     };
-    if !quiet {
+    // The sync names a foreign venv itself as it removes it.
+    if !quiet && freshness != Freshness::Foreign {
         eprintln!("toolr: {problem}; syncing it first");
     }
-    let (resolved, _uv) =
-        crate::project::ready_venv(repo_root, quiet, |o| o).with_context(|| {
-            format!("{problem} and could not be synced; run `toolr project venv sync`")
-        })?;
+    let (resolved, _uv) = crate::project::ready_venv(repo_root, quiet, |o| o).map_err(|e| {
+        if is_untrusted_venv(&e) {
+            // Already says why and how to approve.
+            return e;
+        }
+        e.context(format!(
+            "{problem} and could not be synced; run `toolr project venv sync`"
+        ))
+    })?;
     Ok(resolved)
+}
+
+fn is_untrusted_venv(e: &anyhow::Error) -> bool {
+    matches!(
+        e.downcast_ref::<toolr_core::uv::UvError>(),
+        Some(toolr_core::uv::UvError::UntrustedVenv(_))
+    )
 }
 
 /// The user has just trusted the repository at the prompt: a venv that needs

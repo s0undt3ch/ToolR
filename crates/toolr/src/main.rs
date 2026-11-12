@@ -13,12 +13,14 @@ mod self_cache;
 mod self_cache_prune;
 mod value_parsers;
 
+use std::ops::ControlFlow;
 use std::process::ExitCode;
 
 use toolr_core::discovery::DiscoveryError;
 
 use crate::invocation::{Invocation, RootArgv};
 use toolr_core::manifest::{Manifest, ManifestError, load_manifest};
+use toolr_core::trust::Trusted;
 
 fn main() -> ExitCode {
     match run() {
@@ -37,16 +39,158 @@ fn main() -> ExitCode {
     }
 }
 
+/// Printed when an untrusted repository's commands are left out of `--help` or a bare run.
+const HIDDEN_COMMANDS_HINT: &str = "toolr: this repository's commands are hidden until you trust it; \
+     run `toolr project trust` to show them";
+
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let run = Invocation::new(RootArgv::new(std::env::args().collect()), cwd);
-    let mut built = match bootstrap::ensure_manifest(&run)? {
+    // Help and `--version` never prompt; only a user command is asked about trust here.
+    let asks_trust = run.argv.names_user_command()
+        && run.argv.help_mode().is_none()
+        && !run.argv.wants_version();
+    let grant = if asks_trust {
+        run.require_trust()?
+    } else {
+        None
+    };
+    let Parsed {
+        manifest,
+        mut command,
+        matches,
+        rebuilt,
+    } = match parse_with_rebuild(&run, grant.as_ref())? {
+        ControlFlow::Break(code) => return Ok(code),
+        ControlFlow::Continue(parsed) => parsed,
+    };
+    let matches = match matches {
+        Ok(m) => m,
+        Err(e) => return Ok(report_parse_error(&run, &command, &e)),
+    };
+    warn_commands_hidden(&run);
+    maybe_emit_cache_hint(&matches);
+    dispatch::dispatch(&matches, &manifest, &mut command, run, grant, rebuilt)
+}
+
+/// What clap made of argv, against the manifest it was given.
+struct Parsed {
+    manifest: Manifest,
+    command: clap::Command,
+    matches: Result<clap::ArgMatches, clap::Error>,
+    /// The venv rebuilt along the way, for dispatch to reuse.
+    rebuilt: Option<toolr_core::venv::ResolvedVenv>,
+}
+
+fn parse(
+    run: &Invocation,
+) -> anyhow::Result<(
+    Manifest,
+    clap::Command,
+    Result<clap::ArgMatches, clap::Error>,
+)> {
+    let manifest = user_manifest(run)?;
+    let command = cli::build_command(&manifest);
+    let matches = command.clone().try_get_matches_from(run.argv.words());
+    Ok((manifest, command, matches))
+}
+
+/// Parse argv. The manifest leaves out the plugin commands of an in-tree venv toolr didn't
+/// build, and nothing of that venv is read to tell whether the word is one: rebuild the venv,
+/// then parse again. When there is no rebuild, the word may just be a typo, so clap's error
+/// comes first and the venv's hint follows it (`Break`).
+fn parse_with_rebuild(
+    run: &Invocation,
+    grant: Option<&Trusted>,
+) -> anyhow::Result<ControlFlow<ExitCode, Parsed>> {
+    let (manifest, command, matches) = parse(run)?;
+    let unknown_word = matches
+        .as_ref()
+        .err()
+        .filter(|e| e.kind() == clap::error::ErrorKind::InvalidSubcommand);
+    let (Some(e), Some(proof)) = (unknown_word, grant) else {
+        return Ok(ControlFlow::Continue(Parsed {
+            manifest,
+            command,
+            matches,
+            rebuilt: None,
+        }));
+    };
+    match dispatch::rebuild_foreign_venv(proof.root(), proof, run.argv.is_quiet()) {
+        Ok(None) => {}
+        Ok(Some(venv)) => {
+            let (manifest, command, matches) = parse(run)?;
+            return Ok(ControlFlow::Continue(Parsed {
+                manifest,
+                command,
+                matches,
+                rebuilt: Some(venv),
+            }));
+        }
+        Err(hint) => {
+            let _ = e.print();
+            eprintln!("toolr: {hint:#}");
+            return Ok(ControlFlow::Break(ExitCode::from(e.exit_code() as u8)));
+        }
+    }
+    Ok(ControlFlow::Continue(Parsed {
+        manifest,
+        command,
+        matches,
+        rebuilt: None,
+    }))
+}
+
+/// Say that an untrusted repository's commands are hidden. Only bare, root help and a user
+/// command word reach clap untrusted; a built-in's help never lists repository commands.
+fn warn_commands_hidden(run: &Invocation) {
+    let hidden = (run.argv.is_bare() || run.argv.names_user_command())
+        && !run.argv.is_quiet()
+        && !run.argv.wants_version()
+        && run.untrusted_root().is_some();
+    if hidden {
+        eprintln!("{HIDDEN_COMMANDS_HINT}");
+    }
+}
+
+/// Render a parse failure and pick the exit code. `try_get_matches_from`, so a
+/// `subcommand_required` error on a help request (`toolr self --help`) still renders that
+/// command's help instead of the error.
+fn report_parse_error(run: &Invocation, command: &clap::Command, e: &clap::Error) -> ExitCode {
+    use clap::error::ErrorKind;
+    if let Some(mode) = run.argv.help_mode()
+        && matches!(
+            e.kind(),
+            ErrorKind::MissingSubcommand | ErrorKind::MissingRequiredArgument
+        )
+    {
+        dispatch::print_help_from_argv(&run.argv, command, mode);
+        return ExitCode::SUCCESS;
+    }
+    let _ = e.print();
+    if let Some(hint) = misplaced_root_flag_hint(e, command, &run.argv) {
+        eprintln!("{hint}");
+    // Outside a project an unknown command is most likely a wrong directory.
+    } else if e.kind() == ErrorKind::InvalidSubcommand
+        && run.argv.names_user_command()
+        && let Some(hint) = no_project_hint(run)
+    {
+        eprintln!("{hint}");
+    } else {
+        warn_commands_hidden(run);
+    }
+    ExitCode::from(e.exit_code() as u8)
+}
+
+/// The manifest clap parses against, validated or rebuilt first, with its warnings printed.
+fn user_manifest(run: &Invocation) -> anyhow::Result<Manifest> {
+    let mut built = match bootstrap::ensure_manifest(run)? {
         Some(built) => built,
         // Tab and `--version` need no manifest and must not walk the tree.
         None if run.argv.is_tab_completion() || run.argv.skips_manifest_build() => {
             Manifest::empty().into()
         }
-        None => load_or_empty(&run)?.into(),
+        None => load_or_empty(run)?.into(),
     };
     // Covers fragments and a hand-edited committed manifest alike. Tab
     // completion drops the same entries in `resolve_manifest_at_tab`.
@@ -58,43 +202,7 @@ fn run() -> anyhow::Result<ExitCode> {
             eprintln!("toolr: warning: {message}");
         }
     }
-    let manifest = built.manifest;
-    let mut command = cli::build_command(&manifest);
-    // try_get_matches_from, so a `subcommand_required` error on a help request
-    // (`toolr self --help`) still renders that command's help instead of the error.
-    let matches = match command.clone().try_get_matches_from(run.argv.words()) {
-        Ok(m) => m,
-        Err(e) => {
-            use clap::error::ErrorKind;
-            if let Some(mode) = run.argv.help_mode()
-                && matches!(
-                    e.kind(),
-                    ErrorKind::MissingSubcommand | ErrorKind::MissingRequiredArgument
-                )
-            {
-                dispatch::print_help_from_argv(&run.argv, &command, mode);
-                return Ok(ExitCode::SUCCESS);
-            }
-            if let Some(hint) = misplaced_root_flag_hint(&e, &command, &run.argv) {
-                let _ = e.print();
-                eprintln!("{hint}");
-                return Ok(ExitCode::from(e.exit_code() as u8));
-            }
-            // Genuine error: print it the way clap does; outside a project an
-            // unknown command is most likely a wrong directory, so say so.
-            if e.kind() == ErrorKind::InvalidSubcommand
-                && run.argv.names_user_command()
-                && let Some(hint) = no_project_hint(&run)
-            {
-                let _ = e.print();
-                eprintln!("{hint}");
-                return Ok(ExitCode::from(e.exit_code() as u8));
-            }
-            e.exit()
-        }
-    };
-    maybe_emit_cache_hint(&matches);
-    dispatch::dispatch(&matches, &manifest, &mut command, run)
+    Ok(built.manifest)
 }
 
 /// The line to follow clap's "unexpected argument" when the argument is one of toolr's root

@@ -2,25 +2,26 @@
 //! tree before clap parses the user's command, building it when missing or
 //! stale.
 //!
-//! The build is written to disk only in a trusted repository (or with
-//! `TOOLR_TRUST_ALL=1`). An untrusted one gets an in-memory manifest and any
-//! existing file is left exactly as found. [`ensure_manifest`] holds the
-//! argv and trust policy; `toolr_core::manifest_build::refresh` does the
-//! rest.
+//! Only a trusted repository (or `TOOLR_TRUST_ALL=1`) has its `tools/` parsed
+//! and its manifest read or written. An untrusted one gets an empty manifest,
+//! so toolr shows only its built-in commands and leaves every file exactly as
+//! found. [`ensure_manifest`] holds the argv and trust policy;
+//! `toolr_core::manifest_build::refresh` does the rest.
 
 use std::path::Path;
 
-use toolr_core::manifest::manifest_path;
+use toolr_core::manifest::{Manifest, manifest_path};
 use toolr_core::manifest_build::{Persist, Refresh, refresh};
 use toolr_core::parser::BuiltManifest;
-use toolr_core::venv::resolve_venv_path;
+use toolr_core::venv::{is_foreign, resolve_venv_path};
 
 use crate::invocation::Invocation;
 
 /// Build the manifest when it's missing or stale: a pure-Rust parse of
 /// `tools/*.py` plus an execution-free glob of the venv's plugin fragments,
-/// so no repository code runs. The build is written only in a trusted
-/// repository; tab completion and `--version` never read the trust store.
+/// so no repository code runs. An untrusted repository is not read at all and
+/// gets an empty manifest; `--version` and built-in commands skip this step
+/// and never read the trust store.
 ///
 /// Returns the manifest this step validated or rebuilt, so the caller
 /// dispatches against it instead of re-reading a file another toolr
@@ -35,12 +36,10 @@ pub(crate) fn ensure_manifest(run: &Invocation) -> anyhow::Result<Option<BuiltMa
     let Ok(root) = run.root() else {
         return Ok(None);
     };
-    let persist = if toolr_core::trust::is_trusted_now(root) {
-        Persist::Write
-    } else {
-        Persist::InMemory
-    };
-    ensure_manifest_at(root, persist)
+    if run.untrusted_root().is_some() {
+        return Ok(Some(Manifest::empty().into()));
+    }
+    ensure_manifest_at(root)
 }
 
 /// [`ensure_manifest`] for a discovered `root`. A rebuild that fails warns
@@ -48,9 +47,13 @@ pub(crate) fn ensure_manifest(run: &Invocation) -> anyhow::Result<Option<BuiltMa
 /// which has none to fall back to and returns the error. Errors also
 /// propagate from writing the rebuilt manifest and for symlinked modules
 /// (F-17), which never fall back to the cache.
-fn ensure_manifest_at(root: &Path, persist: Persist) -> anyhow::Result<Option<BuiltManifest>> {
-    let venv = resolve_venv_path(root).ok().map(|r| r.venv_dir);
-    let refreshed = refresh(root, venv.as_deref(), persist)?;
+fn ensure_manifest_at(root: &Path) -> anyhow::Result<Option<BuiltManifest>> {
+    // A venv toolr didn't build contributes no plugin commands, not even to `--help`.
+    let venv = resolve_venv_path(root)
+        .ok()
+        .filter(|r| !is_foreign(r, root))
+        .map(|r| r.venv_dir);
+    let refreshed = refresh(root, venv.as_deref(), Persist::Write)?;
     let unreadable = refreshed.unreadable.is_some();
     if let Some(e) = refreshed.unreadable {
         eprintln!(
@@ -67,7 +70,7 @@ fn ensure_manifest_at(root: &Path, persist: Persist) -> anyhow::Result<Option<Bu
         Refresh::Failed {
             error,
             cached: None,
-        } if persist == Persist::Write && !unreadable => return Err(error),
+        } if !unreadable => return Err(error),
         Refresh::Failed { error, cached } => {
             warn_and_keep_cache(&error, cached.is_some());
             cached.map(Into::into)
@@ -94,7 +97,7 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Persist, ensure_manifest_at, manifest_path};
+    use super::{ensure_manifest_at, manifest_path};
     use toolr_core::freshness::{FreshnessVerdict, compare};
     use toolr_core::manifest::{Manifest, load_manifest};
     use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
@@ -110,35 +113,84 @@ mod tests {
 
     static CACHE_HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    /// Restores `XDG_CACHE_HOME` on drop, then releases the module lock.
-    struct CacheHomeGuard {
-        prev: Option<std::ffi::OsString>,
-        _lock: std::sync::MutexGuard<'static, ()>,
+    const GUARDED_ENV: [&str; 3] = ["XDG_CACHE_HOME", "XDG_STATE_HOME", "TOOLR_TRUST_ALL"];
+
+    /// Restores [`GUARDED_ENV`] to what it was at capture, on drop. Only while
+    /// `CACHE_HOME_LOCK` is held.
+    struct EnvRestore {
+        prev: Vec<Option<std::ffi::OsString>>,
     }
 
-    impl Drop for CacheHomeGuard {
+    impl EnvRestore {
+        fn capture() -> Self {
+            Self {
+                prev: GUARDED_ENV.iter().map(std::env::var_os).collect(),
+            }
+        }
+    }
+
+    impl Drop for EnvRestore {
         fn drop(&mut self) {
             // SAFETY: CACHE_HOME_LOCK serialises every test in this module
-            // that touches env vars, and it is still held here.
+            // that touches env vars, and its holder outlives this value.
             unsafe {
-                match &self.prev {
-                    Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
-                    None => std::env::remove_var("XDG_CACHE_HOME"),
+                for (name, prev) in GUARDED_ENV.iter().zip(&self.prev) {
+                    match prev {
+                        Some(v) => std::env::set_var(name, v),
+                        None => std::env::remove_var(name),
+                    }
                 }
             }
         }
     }
 
-    /// Points `XDG_CACHE_HOME` at a fresh temp dir, so a persisting rebuild
-    /// writes its lock there instead of the real cache. Bind as `(home, _guard)`
-    /// so the env is restored before the dir is deleted.
+    /// Restores [`GUARDED_ENV`] on drop, then releases the module lock: fields drop in order.
+    struct CacheHomeGuard {
+        _restore: EnvRestore,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl CacheHomeGuard {
+        fn trust_all(&self) {
+            // SAFETY: as in `EnvRestore::drop`; the lock is held while `self` lives.
+            unsafe { std::env::set_var("TOOLR_TRUST_ALL", "1") };
+        }
+    }
+
+    /// Points `XDG_CACHE_HOME` and `XDG_STATE_HOME` at a fresh temp dir, so a
+    /// persisting rebuild writes its lock there instead of the real cache and
+    /// no trust store of the user's is read, and unsets `TOOLR_TRUST_ALL`.
+    /// Bind as `(home, _guard)` so the env is restored before the dir is deleted.
     fn temp_cache_home() -> (tempfile::TempDir, CacheHomeGuard) {
         let lock = CACHE_HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var_os("XDG_CACHE_HOME");
+        let restore = EnvRestore::capture();
         let home = tempfile::TempDir::new().unwrap();
-        // SAFETY: as in `CacheHomeGuard::drop`.
-        unsafe { std::env::set_var("XDG_CACHE_HOME", home.path()) };
-        (home, CacheHomeGuard { prev, _lock: lock })
+        // SAFETY: as in `EnvRestore::drop`.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", home.path());
+            std::env::set_var("XDG_STATE_HOME", home.path().join("state"));
+            std::env::remove_var("TOOLR_TRUST_ALL");
+        }
+        (
+            home,
+            CacheHomeGuard {
+                _restore: restore,
+                _lock: lock,
+            },
+        )
+    }
+
+    #[test]
+    fn the_env_guard_puts_back_a_value_that_was_set() {
+        let (home, _guard) = temp_cache_home();
+        let restore = EnvRestore::capture();
+        // SAFETY: `_guard` holds CACHE_HOME_LOCK.
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+        drop(restore);
+        assert_eq!(
+            std::env::var_os("XDG_CACHE_HOME").as_deref(),
+            Some(home.path().as_os_str())
+        );
     }
 
     /// The rebuild lock landed in the temp cache home, proving the redirect, under
@@ -156,30 +208,15 @@ mod tests {
         let (home, _guard) = temp_cache_home();
         let tmp = tools_repo();
 
-        let fresh = ensure_manifest_at(tmp.path(), Persist::Write).unwrap();
+        let fresh = ensure_manifest_at(tmp.path()).unwrap();
 
         assert!(fresh.is_some());
         assert!(manifest_path(tmp.path()).is_file());
         assert_one_lock_in(home.path(), tmp.path());
     }
 
-    /// An untrusted repository gets the rebuilt manifest in memory only, and
-    /// takes no rebuild lock.
-    #[test]
-    fn ensure_manifest_does_not_persist_when_untrusted() {
-        let (home, _guard) = temp_cache_home();
-        let tmp = tools_repo();
-
-        let fresh = ensure_manifest_at(tmp.path(), Persist::InMemory).unwrap();
-
-        assert!(fresh.is_some());
-        assert!(!manifest_path(tmp.path()).exists());
-        let lock = toolr_core::manifest::lock_path_for_repo(&home.path().join("toolr"), tmp.path());
-        assert!(!lock.exists());
-    }
-
     /// A failed build with a manifest to fall back to warns and serves it,
-    /// even when persisting: only a trusted fresh clone exits.
+    /// only a trusted fresh clone exits.
     #[test]
     fn ensure_manifest_serves_the_cache_when_a_persisting_build_fails() {
         let (_home, _guard) = temp_cache_home();
@@ -190,7 +227,7 @@ mod tests {
         stale.toolr_version = "0.0.0-stale".into();
         toolr_core::manifest::write_manifest(&path, &stale).unwrap();
 
-        let served = ensure_manifest_at(tmp.path(), Persist::Write).unwrap();
+        let served = ensure_manifest_at(tmp.path()).unwrap();
 
         assert_eq!(served.map(|b| b.manifest), Some(stale));
     }
@@ -204,7 +241,7 @@ mod tests {
         std::fs::write(manifest_path(tmp.path()), "not json").unwrap();
         std::fs::write(tmp.path().join("tools/broken.py"), "def not closed(\n").unwrap();
 
-        let served = ensure_manifest_at(tmp.path(), Persist::Write).unwrap();
+        let served = ensure_manifest_at(tmp.path()).unwrap();
 
         assert!(served.is_none());
     }
@@ -213,9 +250,8 @@ mod tests {
     /// the one written, stamped with the venv's plugin hash, so the file is
     /// already fresh. A write that skips the hash (the old bootstrap step)
     /// leaves it stale and forces a second build.
-    #[test]
-    fn ensure_manifest_writes_a_fresh_clone_once_with_the_plugin_hash() {
-        let (_home, _guard) = temp_cache_home();
+    /// A fresh clone with an in-tree venv carrying one plugin fragment.
+    fn in_tree_plugin_repo() -> (tempfile::TempDir, std::path::PathBuf) {
         let tmp = tools_repo();
         let tools = tmp.path().join("tools");
         std::fs::write(
@@ -231,9 +267,16 @@ mod tests {
             r#"{"toolr_schema_version": 2, "package": "demo", "groups": [], "commands": []}"#,
         )
         .unwrap();
-
         let root = toolr_core::discovery::discover_project_root(tmp.path()).unwrap();
-        let served = ensure_manifest_at(&root, Persist::Write).unwrap().unwrap();
+        (tmp, root)
+    }
+
+    #[test]
+    fn ensure_manifest_writes_a_fresh_clone_once_with_the_plugin_hash() {
+        let (_home, guard) = temp_cache_home();
+        guard.trust_all();
+        let (_tmp, root) = in_tree_plugin_repo();
+        let served = ensure_manifest_at(&root).unwrap().unwrap();
 
         let venv = toolr_core::venv::resolve_venv_path(&root).unwrap().venv_dir;
         let written = load_manifest(&manifest_path(&root)).unwrap();
@@ -243,5 +286,15 @@ mod tests {
         assert_eq!(written.third_party_hash, plugin_hash);
         let verdict = compare(Some(&written), &root.join("tools"), Some(&venv)).unwrap();
         assert_eq!(verdict, FreshnessVerdict::Fresh);
+    }
+
+    /// Without a token in the trust store the venv is foreign, and its
+    /// fragments are never globbed.
+    #[test]
+    fn ensure_manifest_skips_a_foreign_venvs_fragments() {
+        let (_home, _guard) = temp_cache_home();
+        let (_tmp, root) = in_tree_plugin_repo();
+        let served = ensure_manifest_at(&root).unwrap().unwrap();
+        assert_eq!(served.manifest.third_party_hash, empty_third_party_hash());
     }
 }

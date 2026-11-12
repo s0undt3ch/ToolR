@@ -1,5 +1,5 @@
 Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed
-since the last sync)
+since the last sync; an in-tree venv toolr didn't build is removed and rebuilt)
 
 Usage: toolr project venv sync [OPTIONS]
 

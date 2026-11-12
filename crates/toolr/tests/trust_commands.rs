@@ -187,3 +187,42 @@ fn quiet_init_trusts_without_saying_so() {
         .success()
         .stdout(format!("{root}\n"));
 }
+
+#[cfg(unix)]
+#[test]
+fn retrust_rebuilds_the_in_tree_venv_once() {
+    let env = TrustEnv::new();
+    let fx = common::VenvFixture::new();
+    let toolr = |args: &[&str]| {
+        let out = env
+            .toolr(&fx.root)
+            .env("PATH", &fx.bin_dir)
+            .env("TOOLR_AUTO_SYNC", "1")
+            .env("TOOLR_REPLACE_UNTRUSTED_VENV", "1")
+            .env_remove("TOOLR_VENV_LOCATION")
+            .args(args)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8(out.stderr).unwrap();
+        assert!(out.status.success(), "toolr {args:?}: {stderr}");
+        let synced = fx.uv_ran_sync();
+        let _ = fs::remove_file(&fx.uv_argv_log);
+        (
+            synced,
+            stderr.contains("toolr didn't build this in-tree venv"),
+        )
+    };
+    for round in 0..2 {
+        assert_eq!(
+            toolr(&["project", "trust"]),
+            (true, true),
+            "trust, round {round}"
+        );
+        assert_eq!(
+            toolr(&["project", "venv", "sync"]),
+            (false, false),
+            "round {round}"
+        );
+        toolr(&["project", "untrust"]);
+    }
+}

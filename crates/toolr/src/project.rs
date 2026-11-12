@@ -11,7 +11,9 @@ use clap::ArgMatches;
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 use toolr_core::exit_status::process_exit_code;
-use toolr_core::trust::{TrustMode, TrustStore, require_trust, shown, trust_all_env};
+use toolr_core::trust::{
+    TrustMode, TrustStore, Trusted, require_trust_quietly, shown, trust_all_env,
+};
 
 /// `quiet` is the root `-q`, the only place toolr takes it. A handler that may install uv must honour it and get a case in
 /// `tests/quiet_uv_consent.rs`. The `-q` output rule is stated on the arg in
@@ -20,7 +22,7 @@ pub fn dispatch_project(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     match matches.subcommand() {
         Some(("init", init_m)) => project_init(init_m, quiet),
         Some(("venv", venv_m)) => match venv_m.subcommand() {
-            Some(("path", _)) => venv_path(),
+            Some(("path", _)) => venv_path(quiet),
             Some(("shell", _)) => venv_shell(quiet),
             Some(("run", run_m)) => venv_run(run_m, quiet),
             Some(("sync", sync_m)) => venv_sync(sync_m, quiet),
@@ -71,6 +73,25 @@ impl ProjectCtx {
         toolr_core::discovery::discover_project_root(&self.cwd)
             .context(toolr_core::project::NothingToSync::NoProject)
     }
+}
+
+/// Before anything reads `tools/pyproject.toml`: toolr reads nothing of an untrusted repository.
+fn trust_root(repo_root: &Path, quiet: bool) -> Result<Trusted> {
+    require_trust_quietly(repo_root, quiet)
+}
+
+/// Fail unless `tools/pyproject.toml` declares every one of `packages`; `fix` ends the message.
+fn require_declared(tools_dir: &Path, packages: &[String], fix: &str) -> Result<()> {
+    let pyproject = tools_dir.join("pyproject.toml");
+    for pkg in packages {
+        if !pyproject_declares_dependency(&pyproject, pkg)? {
+            anyhow::bail!(
+                "package `{pkg}` is not declared in {} — {fix}",
+                pyproject.display(),
+            );
+        }
+    }
+    Ok(())
 }
 
 /// `venv sync --if-project`'s exit: success, silently, when `result` failed because there
@@ -325,8 +346,18 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
 
     let cwd = std::env::current_dir()?;
     let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+    // The rebuild parses `tools/*.py` and globs the venv's plugin fragments.
+    trust_root(&repo_root, quiet)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
-    let built = rebuild_manifest_full(&repo_root, &resolved.venv_dir)?;
+    let foreign = toolr_core::venv::is_foreign(&resolved, &repo_root);
+    if foreign {
+        eprintln!(
+            "toolr: warning: leaving out its plugin commands: {}",
+            crate::build_manifest_resolve::foreign_venv_hint(&resolved.venv_dir)
+        );
+    }
+    let venv = (!foreign).then_some(resolved.venv_dir.as_path());
+    let built = rebuild_manifest_full(&repo_root, venv)?;
     for w in built.all_warnings() {
         eprintln!("toolr: warning: {w}");
     }
@@ -350,34 +381,25 @@ fn venv_sync(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
         .map(|vals| vals.cloned().collect())
         .unwrap_or_default();
 
-    let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs.clone());
-
-    // Pre-flight pyproject guard for -P entries (matches the old
-    // `venv upgrade` behavior). -U on its own skips the check because
-    // uv re-locks everything.
-    let preflight = || -> Result<()> {
-        if upgrade_pkgs.is_empty() {
-            return Ok(());
-        }
-        let pyproject = ctx.repo_root()?.join("tools/pyproject.toml");
-        for pkg in &upgrade_pkgs {
-            if !pyproject_declares_dependency(&pyproject, pkg)? {
-                anyhow::bail!(
-                    "package `{pkg}` is not declared in {} — add it to `[project] dependencies` first",
-                    pyproject.display(),
-                );
-            }
-        }
-        Ok(())
-    }();
     let if_project = matches.get_flag("if-project");
-    if let Some(code) = nothing_to_sync_exit(&preflight, if_project) {
+    let repo_root = ctx.repo_root();
+    if let Some(code) = nothing_to_sync_exit(&repo_root, if_project) {
         return Ok(code);
     }
-    preflight?;
+    let repo_root = repo_root?;
+    let trusted = trust_root(&repo_root, quiet)?;
+    // -U on its own skips the check because uv re-locks everything.
+    require_declared(
+        &repo_root.join("tools"),
+        &upgrade_pkgs,
+        "add it to `[project] dependencies` first",
+    )?;
+    let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
     let result = ready_venv(&ctx.cwd, quiet, |o| {
-        o.with_force_sync(force).with_upgrade(upgrade)
+        o.with_force_sync(force)
+            .with_upgrade(upgrade)
+            .with_trusted(trusted)
     });
 
     if let Some(code) = nothing_to_sync_exit(&result, if_project) {
@@ -432,24 +454,18 @@ fn venv_lock(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
         .map(|vals| vals.cloned().collect())
         .unwrap_or_default();
 
-    let tools_dir = ctx.repo_root()?.join("tools");
-
-    // -P pre-flight guard — same as venv sync.
-    if !upgrade_pkgs.is_empty() {
-        let pyproject = tools_dir.join("pyproject.toml");
-        for pkg in &upgrade_pkgs {
-            if !pyproject_declares_dependency(&pyproject, pkg)? {
-                anyhow::bail!(
-                    "package `{pkg}` is not declared in {} — add it to `[project] dependencies` first",
-                    pyproject.display(),
-                );
-            }
-        }
-    }
+    let repo_root = ctx.repo_root()?;
+    let trusted = trust_root(&repo_root, quiet)?;
+    let tools_dir = repo_root.join("tools");
+    require_declared(
+        &tools_dir,
+        &upgrade_pkgs,
+        "add it to `[project] dependencies` first",
+    )?;
 
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o)?;
+    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o.with_trusted(trusted))?;
 
     let status = toolr_core::venv::run_uv_lock(&uv, &tools_dir, &resolved, &upgrade, quiet)?;
     if !status.success() {
@@ -497,20 +513,13 @@ fn venv_remove(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
         .cloned()
         .collect();
 
-    let tools_dir = ctx.repo_root()?.join("tools");
-
-    // Pre-flight: every named package must already be declared.
+    let repo_root = ctx.repo_root()?;
+    let trusted = trust_root(&repo_root, quiet)?;
+    let tools_dir = repo_root.join("tools");
+    require_declared(&tools_dir, &packages, "nothing to remove")?;
     let pyproject = tools_dir.join("pyproject.toml");
-    for pkg in &packages {
-        if !pyproject_declares_dependency(&pyproject, pkg)? {
-            anyhow::bail!(
-                "package `{pkg}` is not declared in {} — nothing to remove",
-                pyproject.display(),
-            );
-        }
-    }
 
-    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o)?;
+    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o.with_trusted(trusted))?;
 
     let status = toolr_core::venv::run_uv_remove(&uv, &tools_dir, &resolved, &packages, quiet)?;
     if !status.success() {
@@ -594,9 +603,10 @@ fn normalize_dist_name(name: &str) -> String {
     value
 }
 
-fn venv_path() -> Result<ExitCode> {
+fn venv_path(quiet: bool) -> Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+    trust_root(&repo_root, quiet)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
     println!("{}", resolved.venv_dir.display());
     Ok(ExitCode::SUCCESS)
@@ -641,12 +651,7 @@ fn venv_run(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
         // Pure path: never touch the venv. Resolve, gate on freshness,
         // validate, then run. Needs no uv / consent / network.
         let repo_root = ctx.repo_root()?;
-        require_trust(
-            &repo_root,
-            TrustMode {
-                never_prompt: quiet,
-            },
-        )?;
+        trust_root(&repo_root, quiet)?;
         let resolved = toolr_core::venv::resolve_venv_path(&repo_root)
             .context("resolving the tools venv path")?;
         let tools = repo_root.join("tools");
@@ -660,6 +665,10 @@ fn venv_run(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
             ),
             toolr_core::venv::Freshness::Broken => anyhow::bail!(
                 "the tools venv's Python interpreter no longer exists (was it uninstalled?) — run `toolr project venv sync` to rebuild it (or drop --no-sync)"
+            ),
+            toolr_core::venv::Freshness::Foreign => anyhow::bail!(
+                "{} (or drop --no-sync)",
+                crate::build_manifest_resolve::foreign_venv_hint(&resolved.venv_dir)
             ),
             toolr_core::venv::Freshness::Fresh => {}
         }

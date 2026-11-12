@@ -49,6 +49,10 @@ pub enum UvError {
     UserRefusedInstall,
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    /// toolr won't use or remove an in-tree venv it didn't build: the message says why and
+    /// how to approve replacing it. Complete on its own, so callers add no context to it.
+    #[error("{0}")]
+    UntrustedVenv(String),
     /// `Command::output()` failed even though the candidate binary was
     /// on disk and looked executable. Almost always a libc / dynamic-
     /// loader mismatch (a glibc-linked uv on a musl host, or vice

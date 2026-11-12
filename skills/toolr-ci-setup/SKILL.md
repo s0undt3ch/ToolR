@@ -249,8 +249,11 @@ prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
       TOOLR_TRUST_ALL: "1"
   ```
 
-`--help`, tab completion and manifest builds
-(`toolr self build-manifest`) never need trust.
+`--help`, bare `toolr` and tab completion need no trust, but show only
+toolr's own commands until the repository is trusted.
+`toolr self build-manifest --source-dir` needs no trust; the other manifest
+builds (`toolr self build-manifest <package>`, `toolr project manifest rebuild`)
+do.
 
 ## Common failure modes
 

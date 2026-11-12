@@ -23,7 +23,11 @@ local hook:
 ```
 
 That's the same definition toolr used to ship; it works identically
-when invoked locally.
+when invoked locally. The rebuild asks for
+[repository trust](../concepts.md#repository-trust) first, and a hook has
+no terminal to ask on, so it refuses in a repository you haven't trusted. Run
+`toolr project trust` once in your checkout, and set `TOOLR_TRUST_ALL=1` where
+the hook runs in CI.
 
 ## Why the change
 

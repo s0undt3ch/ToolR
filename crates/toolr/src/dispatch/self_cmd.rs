@@ -30,8 +30,9 @@ pub(super) fn run_self(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Resul
 }
 
 /// List trusted roots, one per line, marking those that no longer exist.
-/// `--prune` drops the missing ones and lists what's left. The listing is the
-/// result, so `--quiet` only drops the `pruned` notes.
+/// `--prune` drops the missing ones, and venv entries whose venv or record is
+/// gone, and lists what's left. The listing is the result, so `--quiet` only
+/// drops the `pruned` notes.
 fn run_self_trusted(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
     let store = toolr_core::trust::TrustStore::open_default()?;
     let prune = matches.get_flag("prune");
@@ -47,11 +48,14 @@ fn run_self_trusted(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<E
             println!("{} (missing)", shown(repo));
         }
     }
+    if prune {
+        store.prune_venv_entries()?;
+    }
     Ok(ExitCode::SUCCESS)
 }
 
 fn run_self_build_manifest(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
-    let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches)?;
+    let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches, quiet)?;
 
     let output_path = resolve_output_path(matches, &resolved.source_dir);
 

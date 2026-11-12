@@ -4,8 +4,187 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+use std::path::Path;
+
 use predicates::prelude::PredicateBooleanExt;
 use tempfile::TempDir;
+
+const GREET: &str = "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\", \"Greetings.\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n";
+
+/// A repository with a real `greet` command whose fresh manifest also names a
+/// `planted` one, so it is the manifest cache, not a rebuild, that would show it.
+fn planted_repo() -> TempDir {
+    let repo = TempDir::new().unwrap();
+    let tools = common::write_project(repo.path());
+    std::fs::write(tools.join("greet.py"), GREET).unwrap();
+    common::build_manifest(repo.path());
+    let path = tools.join(".toolr-manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    manifest["groups"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "name": "planted", "title": "Planted", "description": "Planted.", "origin": "static"
+        }));
+    manifest["commands"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "name": "go", "group": "planted", "module": "planted", "function": "go",
+            "summary": "Planted.", "description": "", "arguments": [], "origin": "static"
+        }));
+    std::fs::write(&path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
+    repo
+}
+
+fn snapshot(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    let mut files = BTreeMap::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                let rel = path.strip_prefix(root).unwrap().display().to_string();
+                files.insert(rel, std::fs::read(&path).unwrap());
+            }
+        }
+    }
+    files
+}
+
+#[test]
+fn help_hides_repository_commands_before_trust() {
+    let repo = planted_repo();
+    let env = common::TrustEnv::new();
+
+    env.toolr(repo.path())
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(
+            predicates::str::contains("greet")
+                .not()
+                .and(predicates::str::contains("planted").not())
+                .and(predicates::str::contains("project")),
+        )
+        .stderr(predicates::str::contains("toolr project trust"));
+
+    // A trusted repository believes its fresh cache, planted entry included.
+    common::toolr()
+        .current_dir(repo.path())
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("greet").and(predicates::str::contains("planted")));
+}
+
+#[test]
+fn bare_toolr_hides_repository_commands_before_trust() {
+    let repo = planted_repo();
+    let env = common::TrustEnv::new();
+
+    env.toolr(repo.path())
+        .assert()
+        .success()
+        .stdout(
+            predicates::str::contains("greet")
+                .not()
+                .and(predicates::str::contains("planted").not())
+                .and(predicates::str::contains("project")),
+        )
+        .stderr(predicates::str::contains("toolr project trust"));
+}
+
+#[test]
+fn tab_offers_only_builtins_before_trust() {
+    let repo = planted_repo();
+    let env = common::TrustEnv::new();
+
+    env.toolr(repo.path())
+        .arg("__complete")
+        .arg(repo.path())
+        .arg("")
+        .assert()
+        .success()
+        .stdout(
+            predicates::str::contains("greet")
+                .not()
+                .and(predicates::str::contains("planted").not()),
+        )
+        .stderr("");
+}
+
+#[test]
+fn nothing_is_read_before_trust() {
+    let repo = TempDir::new().unwrap();
+    let tools = common::write_project(repo.path());
+    std::fs::write(tools.join("broken.py"), "def (:\n").unwrap();
+    std::fs::write(tools.join(".toolr-manifest.json"), "{ not json").unwrap();
+    let env = common::TrustEnv::new();
+
+    env.toolr(repo.path())
+        .arg("--help")
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("warning").not());
+}
+
+#[test]
+fn nothing_is_written_before_trust() {
+    let repo = planted_repo();
+    let env = common::TrustEnv::new();
+    let before = snapshot(repo.path());
+
+    env.toolr(repo.path()).arg("--help").assert().success();
+    env.toolr(repo.path()).assert().success();
+    env.toolr(repo.path())
+        .arg("__complete")
+        .arg(repo.path())
+        .arg("")
+        .assert()
+        .success();
+    env.toolr(repo.path())
+        .args(["-q", "greet", "hi"])
+        .assert()
+        .failure();
+
+    assert_eq!(snapshot(repo.path()), before);
+}
+
+#[test]
+fn a_builtin_command_help_gets_no_hint() {
+    let repo = planted_repo();
+    let env = common::TrustEnv::new();
+
+    for args in [["self", "--help"], ["project", "--help"]] {
+        env.toolr(repo.path())
+            .args(args)
+            .assert()
+            .success()
+            .stderr("");
+    }
+    env.toolr(repo.path())
+        .args(["project", "trust", "--help"])
+        .assert()
+        .success()
+        .stderr("");
+}
+
+#[test]
+fn quiet_hides_the_hint() {
+    let repo = planted_repo();
+    let env = common::TrustEnv::new();
+
+    env.toolr(repo.path())
+        .args(["-q", "--help"])
+        .assert()
+        .success()
+        .stderr("");
+}
 
 #[test]
 #[cfg(unix)]

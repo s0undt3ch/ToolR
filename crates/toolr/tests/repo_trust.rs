@@ -112,9 +112,12 @@ fn help_and_complete_need_no_trust() {
     assert!(!h.sentinel.exists());
 }
 
+/// Trust covers `tools/`, not a committed `tools/.venv`: with no uv to rebuild
+/// it, the command is refused rather than run on the planted interpreter.
 #[test]
-fn trust_then_dispatch_runs() {
+fn trust_then_dispatch_never_runs_the_planted_venv() {
     let h = Hostile::new();
+    let no_uv = TempDir::new().unwrap();
     let root = h.root().display().to_string();
     h.toolr()
         .args(["project", "trust"])
@@ -127,13 +130,15 @@ fn trust_then_dispatch_runs() {
         .success()
         .stdout(format!("{root}\n"));
     h.toolr()
+        .env("PATH", no_uv.path())
+        .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .env_remove("TOOLR_AUTO_SYNC")
         .args(["hello", "world"])
         .assert()
-        .stderr(contains(REFUSAL).not());
-    assert!(
-        h.sentinel.exists(),
-        "trusted dispatch should have run the repository's code"
-    );
+        .failure()
+        .stderr(contains(REFUSAL).not())
+        .stderr(contains("so toolr won't run it"));
+    assert!(!h.sentinel.exists(), "the planted interpreter ran");
 }
 
 #[test]
@@ -371,12 +376,14 @@ fn root_help_in_untrusted_repo_does_not_write_manifest() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(contains("demo"));
+        .stdout(contains("demo").not());
     assert!(
         !manifest_path(&repo).exists(),
         "`toolr --help` wrote the manifest into an untrusted repository"
     );
-    env.toolr(repo.path()).assert().stdout(contains("demo"));
+    env.toolr(repo.path())
+        .assert()
+        .stdout(contains("demo").not());
     assert!(
         !manifest_path(&repo).exists(),
         "bare `toolr` wrote the manifest into an untrusted repository"
@@ -417,7 +424,7 @@ fn stale_manifest_in_untrusted_repo_is_not_rewritten() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(contains("demo"))
+        .stdout(contains("demo").not())
         .stderr(contains("unreadable").not());
 
     assert_eq!(fs::read_to_string(&path).unwrap(), bytes);
@@ -447,4 +454,173 @@ fn trust_all_env_help_writes_manifest() {
         .assert()
         .success();
     assert!(manifest_path(&repo).is_file());
+}
+
+#[test]
+fn quiet_user_command_refuses_before_trust() {
+    let h = Hostile::new();
+    h.toolr()
+        .args(["-q", "hello", "world"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL))
+        .stderr(contains("unrecognized subcommand").not());
+    assert!(!h.sentinel.exists());
+}
+
+#[test]
+fn user_command_help_never_prompts() {
+    let h = Hostile::new();
+    for flag in ["--help", "-h"] {
+        let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
+        cmd.args(["hello", flag])
+            .current_dir(h.repo.path())
+            .env_remove("TOOLR_TRUST_ALL")
+            .env("XDG_STATE_HOME", h.env.state.path())
+            .env("XDG_CACHE_HOME", h.env.cache.path())
+            .env("XDG_DATA_HOME", h.env.data.path())
+            .env("TOOLR_NO_CACHE_HINT", "1");
+        let out = common::run_on_pty(cmd, "");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!err.contains("Trust it?"), "{flag}: {err}");
+        assert!(err.contains("toolr project trust"), "{flag}: {err}");
+    }
+    assert!(!h.sentinel.exists());
+}
+
+#[test]
+fn user_command_runs_under_trust_all() {
+    let h = Hostile::new();
+    h.toolr()
+        .env("TOOLR_TRUST_ALL", "1")
+        .args(["hello", "world"])
+        .assert()
+        .stderr(contains(REFUSAL).not());
+    assert!(h.sentinel.exists());
+}
+
+#[test]
+fn manifest_rebuild_needs_trust() {
+    let h = Hostile::new();
+    let manifest = h.repo.path().join("tools/.toolr-manifest.json");
+    let _ = fs::remove_file(&manifest);
+    h.toolr()
+        .args(["-q", "project", "manifest", "rebuild"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    assert!(!manifest.exists());
+    h.toolr().args(["project", "trust"]).assert().success();
+    h.toolr()
+        .args(["project", "manifest", "rebuild"])
+        .assert()
+        .success();
+    assert!(manifest.exists());
+}
+
+#[test]
+fn build_manifest_package_needs_trust() {
+    let h = Hostile::new();
+    h.toolr()
+        .args(["-q", "self", "build-manifest", "some_pkg"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    h.toolr()
+        .args([
+            "-q",
+            "self",
+            "build-manifest",
+            "--source-dir",
+            "missing-dir",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("is not a directory"))
+        .stderr(contains(REFUSAL).not());
+}
+
+#[test]
+fn a_help_flag_after_the_separator_is_the_commands_and_still_refused() {
+    let h = Hostile::new();
+    h.toolr()
+        .args(["-q", "hello", "--", "--help"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    assert!(!h.sentinel.exists());
+}
+
+#[test]
+fn version_and_clustered_help_never_read_the_trust_store_or_refuse() {
+    let h = Hostile::new();
+    for args in [&["--version"][..], &["-V", "hello"], &["-qV"]] {
+        h.toolr()
+            .args(args)
+            .assert()
+            .success()
+            .stdout(contains(env!("CARGO_PKG_VERSION")))
+            .stderr("");
+    }
+    h.toolr().args(["-qh"]).assert().success().stderr("");
+    // The hidden command is unknown, but help is never refused.
+    h.toolr()
+        .args(["-qh", "hello"])
+        .assert()
+        .stderr(contains(REFUSAL).not());
+    assert!(!h.sentinel.exists());
+}
+
+/// Nothing of `tools/pyproject.toml` is read before trust: an unparsable one
+/// gets the refusal, not a parse error.
+#[test]
+fn venv_commands_refuse_before_reading_pyproject() {
+    let env = TrustEnv::new();
+    let dir = TempDir::new().unwrap();
+    fs::create_dir(dir.path().join("tools")).unwrap();
+    fs::write(
+        dir.path().join("tools/pyproject.toml"),
+        "[project\nnot toml",
+    )
+    .unwrap();
+    for args in [
+        &["-q", "project", "venv", "path"][..],
+        &["-q", "project", "venv", "sync", "-P", "rich"],
+        &["-q", "project", "venv", "sync", "--if-project"],
+        &["-q", "project", "venv", "lock", "-P", "rich"],
+        &["-q", "project", "venv", "remove", "rich"],
+    ] {
+        env.toolr(dir.path())
+            .args(args)
+            .assert()
+            .failure()
+            .stdout("")
+            .stderr(contains(REFUSAL).and(contains("parsing").not()));
+    }
+}
+
+/// A `-h` among a command's own trailing values reads as help to the gate in
+/// `main`, so it asks nothing. Untrusted, the manifest is empty and clap rejects
+/// the command; only a trusted or `TOOLR_TRUST_ALL` run reaches dispatch, whose
+/// own trust check is then a fallback.
+#[test]
+fn a_help_word_in_trailing_values_still_gets_the_trust_check() {
+    let h = Hostile::new();
+    let hello = h.repo.path().join("tools/hello.py");
+    let source = fs::read_to_string(&hello)
+        .unwrap()
+        .replace("def world(ctx):", "def world(ctx, *words):");
+    fs::write(&hello, source).unwrap();
+    h.toolr()
+        .args(["hello", "world", "x", "-h"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL).not());
+    assert!(!h.sentinel.exists(), "nothing runs untrusted");
+    h.toolr()
+        .env("TOOLR_TRUST_ALL", "1")
+        .args(["hello", "world", "x", "-h"])
+        .assert()
+        .stderr(contains(REFUSAL).not());
+    assert!(h.sentinel.exists(), "dispatch reached the command");
 }

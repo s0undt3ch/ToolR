@@ -787,23 +787,15 @@ fn fresh_clone_build_error_is_fatal() {
     }
 }
 
-/// An untrusted fresh clone builds in memory, so a failed build warns and
-/// falls back to toolr's own commands.
+/// An untrusted fresh clone is not built, so a broken module is not even noticed.
 #[test]
-fn untrusted_fresh_clone_build_error_warns() {
+fn untrusted_fresh_clone_is_not_built() {
     let p = project_with_venv(true);
     p.write_tool("broken.py", BROKEN_PY);
     let env = common::TrustEnv::new();
     let (code, stderr) = run_in(env.toolr(&p.root), &p.root, &["--help"]);
     assert_eq!(code, 0, "{stderr}");
-    assert_eq!(
-        stderr,
-        format!(
-            "{FALLBACK_WARNING}toolr: warning: cause: parsing <root>/tools/broken.py\n\
-             toolr: warning: no cached manifest available — `toolr \
-             <user-cmd>` will likely fail until you fix the build error\n{REBUILD_POINTER}"
-        )
-    );
+    assert!(!stderr.contains("warning"), "{stderr}");
     assert!(!p.tools().join(".toolr-manifest.json").exists());
 }
 

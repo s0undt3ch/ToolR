@@ -315,6 +315,8 @@ impl<'a> Session<'a> {
             .arg("-Cwd")
             .arg(self.fx.tmp.path())
             .env("PATH", path_with_toolr())
+            // Tab in an untrusted repository offers only toolr's own commands.
+            .env("TOOLR_TRUST_ALL", "1")
             .env("XDG_CACHE_HOME", common::test_cache_home())
             .envs(home_env(&self.fx.home()))
             .output()

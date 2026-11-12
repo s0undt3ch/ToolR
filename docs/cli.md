@@ -172,7 +172,8 @@ toolr project venv remove --help
 ### `toolr project venv path` {#project-venv-path}
 
 Print the absolute path to the resolved tools venv. Useful for
-shell-scripting or sanity-checking `venv-location`.
+shell-scripting or sanity-checking `venv-location`. It asks for
+[repository trust](concepts.md#repository-trust) first.
 
 ```sh
 toolr project venv path --help
@@ -228,7 +229,10 @@ toolr project venv run --help
 
 Regenerate the static + dynamic manifest in place. Equivalent to what
 toolr does automatically when it detects drift, but explicit and
-reportable.
+reportable. It asks for [repository trust](concepts.md#repository-trust)
+first, and refuses without asking under `--quiet` or without a terminal, as in
+a pre-commit hook: run `toolr project trust` once, or set `TOOLR_TRUST_ALL=1`
+in CI.
 
 ```sh
 toolr project manifest rebuild --help

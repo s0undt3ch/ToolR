@@ -324,6 +324,7 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
             // `~/` completes inside the fixture.
             .env("HOME", fx.tmp.path())
             // The shell runs toolr itself, so mirror `common::toolr`'s cache isolation.
+            .env("TOOLR_TRUST_ALL", "1")
             .env("XDG_CACHE_HOME", common::test_cache_home())
             .output()
             .unwrap();
@@ -2159,6 +2160,7 @@ fn assert_bash_keys_line(bash: &str, fx: &Fixture, rcfile: &Path, typed: &str, w
         .env("PWD", fx.tmp.path())
         .env("PATH", path_with_toolr())
         .env("HOME", fx.tmp.path())
+        .env("TOOLR_TRUST_ALL", "1")
         .env("XDG_CACHE_HOME", common::test_cache_home())
         // No escape sequences, and no user readline settings.
         .env("TERM", "dumb")
@@ -2600,6 +2602,7 @@ fn fish_complete_with(fx: &Fixture, prelude: &str, line: &str) -> String {
         .arg(prelude)
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
+        .env("TOOLR_TRUST_ALL", "1")
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .output()
         .unwrap();
@@ -2746,6 +2749,7 @@ _toolr
         .args(words)
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
+        .env("TOOLR_TRUST_ALL", "1")
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .env("ZSH_QUOTE", quote)
         .env("ZSH_PRELUDE", prelude)
@@ -3221,6 +3225,7 @@ fn zsh_session(fx: &Fixture, load: ZshLoad, rc: &str, input: &str) -> (String, S
         .env("ZDOTDIR", fx.tmp.path())
         .env("HOME", fx.tmp.path())
         .env("PATH", path_with_toolr())
+        .env("TOOLR_TRUST_ALL", "1")
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .env("TERM", "dumb");
     let (out, tty) = common::run_on_pty_with_tty(cmd, input);

@@ -66,13 +66,33 @@ impl RootArgv {
             .get_arguments()
             .find(|a| matches!(a.get_action(), ArgAction::Version))
             .expect("the root declares --version");
-        let short = version.get_short();
+        self.root_flag_given(version)
+    }
+
+    /// `-q` or `--quiet` among the root flags.
+    pub(crate) fn is_quiet(&self) -> bool {
+        let root = crate::cli::root_command();
+        let quiet = root
+            .get_arguments()
+            .find(|a| a.get_id() == "quiet")
+            .expect("the root declares --quiet");
+        self.root_flag_given(quiet)
+    }
+
+    /// Whether `flag`, by any spelling or in a short cluster, comes before the command word.
+    fn root_flag_given(&self, flag: &clap::Arg) -> bool {
+        let short = flag.get_short();
         self.words[1..self.command_at].iter().any(|w| {
-            spellings(version).contains(w)
+            spellings(flag).contains(w)
                 || w.strip_prefix('-')
                     .filter(|c| !c.starts_with('-'))
                     .is_some_and(|c| c.chars().any(|ch| Some(ch) == short))
         })
+    }
+
+    /// No command word at all: a bare `toolr`, with or without root flags.
+    pub(crate) fn is_bare(&self) -> bool {
+        self.first_word().is_none()
     }
 
     /// The run needs no user manifest: `--version`, or one of toolr's own commands, which
@@ -92,7 +112,8 @@ impl RootArgv {
         self.first_word() == Some("__complete")
     }
 
-    /// The help form asked for before any `--`: `--help` wins over `-h`.
+    /// The help form asked for before any `--`: `--help` wins over `-h`, which also counts in
+    /// a short cluster of root flags (`-qh`), never in a user command's own words.
     pub(crate) fn help_mode(&self) -> Option<HelpMode> {
         let words: Vec<&str> = self
             .words
@@ -101,10 +122,14 @@ impl RootArgv {
             .map(String::as_str)
             .take_while(|w| *w != "--")
             .collect();
+        let root_cluster = self.words[1..self.command_at].iter().any(|w| {
+            w.strip_prefix('-')
+                .is_some_and(|c| !c.starts_with('-') && c.contains('h'))
+        });
         if words.contains(&"--help") {
             Some(HelpMode::Long)
         } else {
-            words.contains(&"-h").then_some(HelpMode::Short)
+            (root_cluster || words.contains(&"-h")).then_some(HelpMode::Short)
         }
     }
 
@@ -138,6 +163,8 @@ pub(crate) struct Invocation {
     pub(crate) cwd: PathBuf,
     /// Looked up on first use, so Tab completion and `--version` never walk the tree.
     root: OnceCell<Result<PathBuf, DiscoveryError>>,
+    /// Whether the root is trusted, read from the trust store once per run.
+    trusted: OnceCell<bool>,
 }
 
 impl Invocation {
@@ -146,7 +173,29 @@ impl Invocation {
             argv,
             cwd,
             root: OnceCell::new(),
+            trusted: OnceCell::new(),
         }
+    }
+
+    /// The discovered project root when it is not trusted: toolr reads nothing of such a
+    /// repository.
+    pub(crate) fn untrusted_root(&self) -> Option<&Path> {
+        let root = self.root().ok()?;
+        let trusted = *self
+            .trusted
+            .get_or_init(|| toolr_core::trust::is_trusted_now(root));
+        (!trusted).then_some(root)
+    }
+
+    /// Prove the project root trusted, asking on a terminal unless `-q`, and remember it so no
+    /// later step reads the store. `None` when there is no project.
+    pub(crate) fn require_trust(&self) -> anyhow::Result<Option<toolr_core::trust::Trusted>> {
+        let Ok(root) = self.root() else {
+            return Ok(None);
+        };
+        let proof = toolr_core::trust::require_trust_quietly(root, self.argv.is_quiet())?;
+        let _ = self.trusted.set(true);
+        Ok(Some(proof))
     }
 
     fn resolved(&self) -> &Result<PathBuf, DiscoveryError> {
@@ -280,6 +329,24 @@ mod tests {
         assert_eq!(argv(&["ci", "-h"]).help_mode(), Some(HelpMode::Short));
         assert_eq!(argv(&["run", "--", "pytest", "--help"]).help_mode(), None);
         assert_eq!(argv(&["ci"]).help_mode(), None);
+    }
+
+    #[test]
+    fn root_flag_clusters_and_the_separator_classify_the_gate() {
+        let a = argv(&["-qv", "greet"]);
+        assert!(a.is_quiet() && a.names_user_command() && a.help_mode().is_none());
+        let a = argv(&["-qh"]);
+        assert!(a.is_quiet() && a.is_bare());
+        assert_eq!(a.help_mode(), Some(HelpMode::Short));
+        assert_eq!(argv(&["-qh", "greet"]).help_mode(), Some(HelpMode::Short));
+        let a = argv(&["greet", "--", "--help"]);
+        assert!(a.names_user_command() && a.help_mode().is_none());
+        // A user command's own short cluster is not toolr's help.
+        assert_eq!(argv(&["greet", "-xh"]).help_mode(), None);
+        // `--` is kept as the command word, so the gate still asks for trust.
+        let a = argv(&["--", "greet"]);
+        assert!(a.names_user_command() && !a.is_bare() && a.help_mode().is_none());
+        assert!(!argv(&["--quiet"]).names_user_command());
     }
 
     #[test]
