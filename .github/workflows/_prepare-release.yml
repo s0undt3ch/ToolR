@@ -183,12 +183,13 @@ jobs:
         # Inputs come from env vars only, no `${{ }}` in the body: tests run it directly.
         run: |
           set -euo pipefail
-          prerelease_arg=()
+          prerelease_arg=""
           if [ "${RELEASE_PRERELEASE}" = "true" ]; then
-            prerelease_arg=(--prerelease)
+            prerelease_arg="--prerelease"
           fi
+          # shellcheck disable=SC2086 # empty for a final release, so it must not be quoted
           toolr release-notes github-body "${RELEASE_VERSION}" "${GITHUB_REPO}" release-notes.md \
-            --rendered .release-changes.md "${prerelease_arg[@]}"
+            --rendered .release-changes.md ${prerelease_arg}
           echo "release-notes-filename=release-notes.md" >> "$GITHUB_OUTPUT"
 
       - name: Upload Release Notes Artifact
