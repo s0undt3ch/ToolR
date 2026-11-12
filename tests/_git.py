@@ -56,7 +56,7 @@ class Git:
                 continue
             path = repo / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text)
+            path.write_text(text, encoding="utf-8")
             self(repo, "add", "--", name)
         self(repo, "commit", "--allow-empty", "-q", "-m", message)
 
