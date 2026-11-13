@@ -137,6 +137,10 @@ TEST_PYTHONS = [_cp_tag_to_dotted(t) for t in ALL_CPYTHONS]
 # (push to `main`, or a `full-build`-labelled PR).
 TEST_PYTHONS_NARROW = [TEST_PYTHONS[-1]]
 
+# Not the latest: 3.15 defaults to UTF-8 mode (PEP 686), which hides cp1252 bugs
+# (an `open()` without `encoding=`) that hit every Windows user on 3.11-3.14.
+TEST_PYTHONS_WINDOWS_NARROW = ["3.14"]
+
 # The toolr binary wheel uses `bindings = "bin"` → produces a single
 # py3-none-<plat> wheel per platform. One cibuildwheel invocation
 # suffices regardless of CPython matrix.
@@ -424,9 +428,12 @@ def generate_build_matrix(
         tested against the single shared abi3 wheel). Always the full
         range — used as-is for `test-linux`.
       - `test-pythons-narrow` — dotted-form CPython versions for
-        `test-windows`/`test-macos`: the latest CPython only, unless
-        `workflow` resolved to `release` (push to `main`, or a
-        `full-build`-labelled PR), in which case it's the full range too.
+        `test-macos`: the latest CPython only, unless `workflow` resolved
+        to `release` (push to `main`, or a `full-build`-labelled PR), in
+        which case it's the full range too.
+      - `test-pythons-windows` — the same for `test-windows`, but pinned to
+        `TEST_PYTHONS_WINDOWS_NARROW` (3.14) outside release mode, so PRs
+        run without PEP 686's UTF-8 default.
       - `run-full-bench` — `true`/`false`: whether ci.yml's macOS + Windows
         bench jobs run (push to `main` or a `full-bench`-labelled PR). The
         Linux bench always runs; this only gates the other two.
@@ -463,7 +470,11 @@ def generate_build_matrix(
             t for t in _BINARY_ARCHIVE_TRIPLES if t["triple"] in _CI_BINARY_ARCHIVE_TRIPLE_NAMES
         ]
 
-    test_pythons_narrow = TEST_PYTHONS if workflow == Workflow.RELEASE else TEST_PYTHONS_NARROW
+    if workflow == Workflow.RELEASE:
+        test_pythons_narrow = test_pythons_windows = TEST_PYTHONS
+    else:
+        test_pythons_narrow = TEST_PYTHONS_NARROW
+        test_pythons_windows = TEST_PYTHONS_WINDOWS_NARROW
 
     outputs: dict[str, object] = {
         "platform-matrix": _WHEEL_PLATFORM_MATRIX,
@@ -472,6 +483,7 @@ def generate_build_matrix(
         "pythons-py": ABI3_WHEEL_PYTHONS,
         "test-pythons": TEST_PYTHONS,
         "test-pythons-narrow": test_pythons_narrow,
+        "test-pythons-windows": test_pythons_windows,
         "run-full-bench": run_full_bench,
         "run-full-ci": run_full_ci,
     }
@@ -510,7 +522,8 @@ def generate_build_matrix(
             "(abi3 stable-ABI — one wheel covers all CPython >=3.11)\n"
         )
         wfh.write(f"- Test interpreters (Linux): `{', '.join(TEST_PYTHONS)}`\n")
-        wfh.write(f"- Test interpreters (Windows/macOS): `{', '.join(test_pythons_narrow)}`\n\n")
+        wfh.write(f"- Test interpreters (macOS): `{', '.join(test_pythons_narrow)}`\n")
+        wfh.write(f"- Test interpreters (Windows): `{', '.join(test_pythons_windows)}`\n\n")
         wfh.write("### Benchmarks\n\n")
         wfh.write(
             f"- Full suite (macOS + Windows): `{json.dumps(run_full_bench)}` — {bench_reason}\n\n"

@@ -11,6 +11,7 @@ import pytest
 from toolr.testing import make_context
 
 from tools.ci import FULL_BUILD_LABEL
+from tools.ci import TEST_PYTHONS
 from tools.ci import _run_full_ci
 from tools.ci import generate_build_matrix
 
@@ -193,3 +194,34 @@ def test_generate_build_matrix_emits_run_full_ci(
 
     assert "run-full-ci=false\n" in output.read_text()
     assert "Full CI: `false`" in summary.read_text()
+
+
+@pytest.mark.parametrize(
+    ("event_name", "ref", "windows", "macos"),
+    [
+        pytest.param("pull_request", "", ["3.14"], [TEST_PYTHONS[-1]], id="pr"),
+        pytest.param("push", "refs/heads/main", TEST_PYTHONS, TEST_PYTHONS, id="push-main"),
+    ],
+)
+def test_generate_build_matrix_windows_pythons(
+    pr_repo: PrRepoFactory,
+    pr_event: EventFactory,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    event_name: str,
+    ref: str,
+    windows: list[str],
+    macos: list[str],
+) -> None:
+    repo, shas = pr_repo(["tools/ci.py"])
+    pr_event(shas, event_name=event_name)
+    monkeypatch.setenv("GITHUB_REF", ref)
+    output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "step_summary"))
+
+    generate_build_matrix(make_context(repo))
+
+    lines = output.read_text().splitlines()
+    assert f"test-pythons-windows={json.dumps(windows)}" in lines
+    assert f"test-pythons-narrow={json.dumps(macos)}" in lines
