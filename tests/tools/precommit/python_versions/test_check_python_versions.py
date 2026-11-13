@@ -38,22 +38,23 @@ def make_python_versions_tree(tmp_path: Path) -> Callable[[], Path]:
 @pytest.mark.parametrize(
     ("path", "old", "new", "expected_fragment"),
     [
-        ("mise.toml", '"3.11.16"', "", "mise.toml [tools] python"),
+        # Regex, not the literal pin: the 3.11 patch moves with every mise bump.
+        ("mise.toml", r'"3\.11\.\d+"', "", "mise.toml [tools] python"),
         (
             "crates/toolr-py/pyproject.toml",
-            '"Programming Language :: Python :: 3.15",',
+            re.escape('"Programming Language :: Python :: 3.15",'),
             "",
             "crates/toolr-py/pyproject.toml project.classifiers",
         ),
         (
             "Cargo.toml",
-            '"abi3-py311"',
+            re.escape('"abi3-py311"'),
             '"abi3-py312"',
             "Cargo.toml workspace.dependencies.pyo3.features",
         ),
         (
             ".github/workflows/_test.yml",
-            'cptag="cp311"',
+            re.escape('cptag="cp311"'),
             'cptag="cp312"',
             ".github/workflows/_test.yml cp-tag",
         ),
@@ -70,8 +71,8 @@ def test_mismatch_reported(
     root = make_python_versions_tree()
     target = root / path
     text = target.read_text(encoding="utf-8")
-    assert old in text
-    target.write_text(text.replace(old, new, 1), encoding="utf-8")
+    assert re.search(old, text)
+    target.write_text(re.sub(old, new, text, count=1), encoding="utf-8")
 
     mismatches = python_version_mismatches(root)
 
