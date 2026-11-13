@@ -14,6 +14,8 @@ addopts = [
 ]
 
 [tool.uv]
+# soupsieve>=4.0 (GHSA-mmhr-3c5m-f64f) needs 3.11.5+; keeps the vulnerable 2.10 fork out of the lock.
+environments = ["python_full_version >= '3.11.5'"]
 # `dev` is uv's implicit default; add `pre-commit` so a bare `uv sync` also
 # installs the venv `mypy` the prek mypy hook runs, plus its import-resolution
 # deps.
