@@ -45,6 +45,7 @@ jobs:
       pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
       test-pythons: ${{ steps.generate-build-matrix.outputs.test-pythons }}
       test-pythons-narrow: ${{ steps.generate-build-matrix.outputs.test-pythons-narrow }}
+      test-pythons-windows: ${{ steps.generate-build-matrix.outputs.test-pythons-windows }}
       run-full-bench: ${{ steps.generate-build-matrix.outputs.run-full-bench }}
       run-full-ci: ${{ steps.generate-build-matrix.outputs.run-full-ci }}
       # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
@@ -490,8 +491,8 @@ jobs:
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       # First entry carries the once-per-OS Rust pass; must be a member of `pythons` below.
-      rust-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons-narrow)[0] }}
-      pythons: ${{ needs.prepare-ci.outputs.test-pythons-narrow }}
+      rust-python: ${{ fromJson(needs.prepare-ci.outputs.test-pythons-windows)[0] }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons-windows }}
       run-powershell-tests: true
     permissions:
       contents: read
