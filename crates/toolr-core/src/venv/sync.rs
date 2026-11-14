@@ -170,16 +170,9 @@ fn built_by_toolr(resolved: &ResolvedVenv, root: &Path, check: TokenCheck<'_>) -
     if !store.is_trusted(root).unwrap_or(false) {
         return false;
     }
-    marker_token(store, &resolved.venv_dir).is_some() || pending_build(store, &resolved.venv_dir)
-}
-
-/// A toolr is building the venv right now: it claimed it under the sync lock, still holds the
-/// lock, and hasn't written the marker. A claim whose lock is free is from a sync that was
-/// killed, and covers nothing; a failed sync ends its own (see [`abandon_build`]).
-fn pending_build(store: &TrustStore, venv_dir: &Path) -> bool {
-    fs::symlink_metadata(venv_dir.join(FRESHNESS_MARKER)).is_err()
-        && store.venv_pending(venv_dir)
-        && store.venv_locked(venv_dir)
+    // Only the marker vouches: a pending claim may be a killed sync's, and no check made
+    // without the lock can tell (see [`wait_for_a_claimed_build`]).
+    marker_token(store, &resolved.venv_dir).is_some()
 }
 
 /// The project root above `tools_dir`.
@@ -353,6 +346,7 @@ pub fn sync_if_needed(
 ) -> Result<(), UvError> {
     // -U / -P explicitly ask for movement; never short-circuit on freshness.
     let bypass_stamp = force || !matches!(upgrade, UpgradeMode::None);
+    wait_for_a_claimed_build(resolved, quiet);
     // Only an in-tree venv's token needs the store; without its lock toolr can't record one.
     let lock = || lock_in_tree(resolved, quiet);
     sync_locked(
@@ -534,6 +528,18 @@ fn sync_locked<G>(
     sync()
 }
 
+/// Before the first check: a pending claim says a toolr may be building the venv, which reads
+/// as foreign until it is stamped. Taking the lock and dropping it waits for that build, or ends
+/// a claim a killed sync left, so the check that follows asks only about what is really there,
+/// and still asks before the lock. A lock that fails here fails again in [`sync_locked`].
+fn wait_for_a_claimed_build(resolved: &ResolvedVenv, quiet: bool) {
+    if let Some(Ok(store)) = token_store(resolved)
+        && store.venv_pending(&resolved.venv_dir)
+    {
+        let _ = store.lock_venv(&resolved.venv_dir, quiet);
+    }
+}
+
 /// The sync lock of an in-tree venv whose token toolr checks; `None` for any other venv.
 pub(super) fn lock_in_tree(
     resolved: &ResolvedVenv,
@@ -546,7 +552,8 @@ pub(super) fn lock_in_tree(
 }
 
 /// Under the lock, just before uv runs: record that toolr is building this in-tree venv (see
-/// [`TrustStore::claim_venv`]), so another toolr that sees it unstamped waits on the lock.
+/// [`TrustStore::claim_venv`]), so another toolr's sync that sees it unstamped waits on the
+/// lock before asking about it (see [`wait_for_a_claimed_build`]).
 /// Returns whether there was no venv, the one case [`abandon_build`] may remove what uv left.
 fn claim_before_build(resolved: &ResolvedVenv, tools_dir: &Path) -> bool {
     let absent = fs::symlink_metadata(&resolved.venv_dir)
@@ -1731,26 +1738,20 @@ mod tests {
         assert!(t.resolved.python.is_file(), "the unapproved venv must stay");
     }
 
-    /// While the toolr that claimed the venv holds the sync lock, its half-built venv is its
-    /// own, so another toolr waits on the lock instead of asking about it. A marker that
-    /// doesn't match still isn't toolr's, and once the lock is free the claim covers nothing.
+    /// A claim never vouches for a venv, not even while its builder holds the sync lock: only a
+    /// matching marker does. The stamp settles the claim, and a rebuild keeps the token.
     #[test]
-    fn a_claimed_venv_without_a_marker_is_toolrs_while_its_builder_holds_the_lock() {
+    fn a_claimed_venv_without_a_marker_is_foreign_until_stamped() {
         let t = InTree::new();
         let root = t.tools.parent().unwrap();
         let venv = &t.resolved.venv_dir;
         assert_eq!(t.check(), Freshness::Foreign);
         let lock = t.store.lock_venv(venv, true).unwrap();
         t.store.claim_venv(root, venv).unwrap();
-        assert_eq!(t.check(), Freshness::Missing, "toolr's half-built venv");
+        assert_eq!(t.check(), Freshness::Foreign, "the builder holds the lock");
         touch_marker(venv).unwrap();
         assert_eq!(t.check(), Freshness::Foreign, "a marker that doesn't match");
         fs::remove_file(t.marker()).unwrap();
-        drop(lock);
-        assert_eq!(t.check(), Freshness::Foreign, "no builder holds the lock");
-
-        let lock = t.store.lock_venv(venv, true).unwrap();
-        t.store.claim_venv(root, venv).unwrap();
         t.stamp();
         drop(lock);
         assert!(!t.store.venv_pending(venv), "the stamp settles it");
@@ -1764,8 +1765,8 @@ mod tests {
         assert!(!t.store.venv_pending(venv));
     }
 
-    /// A sync killed part way leaves its claim but releases its lock: the claim covers nothing,
-    /// and the next toolr to take the lock ends it, so it can't cover the venv then either.
+    /// A sync killed part way leaves its claim and releases its lock; the next toolr to take the
+    /// lock ends the claim. Neither before nor after does it vouch for the venv.
     #[test]
     fn a_claim_left_by_an_interrupted_sync_covers_nothing() {
         let t = InTree::new();
@@ -1782,8 +1783,44 @@ mod tests {
         assert_eq!(t.check(), Freshness::Foreign, "under the lock too");
     }
 
-    /// An entry from this fix's first, identity-bound claim still loads, and its claim covers
-    /// nothing without the lock.
+    /// R2-01's shape: a killed sync's claim, its lock file left behind (as a SIGKILL leaves it,
+    /// and as Windows always does), and another toolr holding that lock for a moment, say while
+    /// it checks the venv. The claim still doesn't vouch for the venv, so nothing runs it.
+    #[cfg(unix)]
+    #[test]
+    fn a_stale_claim_never_vouches_while_another_toolr_holds_the_lock() {
+        let t = InTree::new();
+        let root = t.tools.parent().unwrap();
+        let venv = &t.resolved.venv_dir;
+        let killed = t.store.lock_venv(venv, true).unwrap();
+        t.store.claim_venv(root, venv).unwrap();
+        let lock_file = fs::read_dir(t.store.dir().join("locks"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        drop(killed);
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_file)
+            .unwrap();
+        held.try_lock().unwrap();
+
+        assert!(t.store.venv_pending(venv));
+        assert_eq!(t.check(), Freshness::Foreign);
+        assert!(is_foreign_with(
+            &t.resolved,
+            root,
+            TokenCheck::Store(&t.store)
+        ));
+    }
+
+    /// An entry from this fix's first, identity-bound claim still loads, and its claim vouches
+    /// for nothing.
     #[cfg(unix)]
     #[test]
     fn a_stored_claim_with_an_identity_covers_nothing() {
@@ -1888,6 +1925,34 @@ printf '*\n' > "$UV_PROJECT_ENVIRONMENT/.gitignore"
         assert!(matches!(err, UvError::SyncFailed(Some(3))), "{err:?}");
         assert!(t.resolved.python.is_file());
         assert!(!t.store.venv_pending(&t.resolved.venv_dir));
+        assert_eq!(t.check(), Freshness::Fresh);
+    }
+
+    /// Another toolr is building the venv: the sync waits for its lock rather than asking about
+    /// the unstamped venv, and finds it fresh once the builder stamps it.
+    #[cfg(unix)]
+    #[test]
+    fn a_sync_waits_for_a_claimed_build_before_asking() {
+        let t = InTree::new();
+        let _env = default_store_env(&t);
+        let venv = &t.resolved.venv_dir;
+        let builder = t.store.lock_venv(venv, true).unwrap();
+        t.store.claim_venv(t.tools.parent().unwrap(), venv).unwrap();
+        let uv = stub_uv(t._tmp.path(), 7);
+        std::thread::scope(|scope| {
+            let waiter = scope.spawn(|| {
+                sync_if_needed(&uv, &t.tools, &t.resolved, false, true, &UpgradeMode::None)
+            });
+            std::thread::sleep(Duration::from_millis(300));
+            assert!(
+                !waiter.is_finished(),
+                "asked instead of waiting for the builder"
+            );
+            t.stamp();
+            drop(builder);
+            let synced = waiter.join().unwrap();
+            assert!(synced.is_ok(), "{synced:?}");
+        });
         assert_eq!(t.check(), Freshness::Fresh);
     }
 

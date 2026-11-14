@@ -45,8 +45,8 @@ pub(super) struct VenvEntry {
     pub(super) kind: KeyKind,
     venv_dir: PathBuf,
     token: String,
-    /// toolr is building the venv: while the toolr that claimed it holds the sync lock, a venv
-    /// here with no marker is that toolr's half-built one. The claim never outlives the run.
+    /// toolr is building the venv: a sync that finds the claim waits for the sync lock before it
+    /// asks about the venv. It never vouches for the venv, and never outlives the run.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pending: bool,
 }
@@ -182,8 +182,8 @@ impl TrustStore {
                     path,
                 };
                 // No builder is running now, so a claim left is from a toolr that didn't
-                // finish. Kept, it would cover the venv while this lock is held; on failure the
-                // lock is released, and the claim covers nothing.
+                // finish; ended, it sends no later sync to wait for a build that isn't running.
+                // On failure the lock is released, and the claim vouches for nothing anyway.
                 self.end_claim(venv_dir).with_context(failed)?;
                 return Ok(lock);
             }
@@ -196,21 +196,14 @@ impl TrustStore {
     }
 
     /// Whether toolr began building the in-tree venv at `venv_dir` and no sync has stamped or
-    /// ended the claim since (see [`Self::claim_venv`]). It counts only while the sync lock is
-    /// held (see [`Self::venv_locked`]).
+    /// ended the claim since (see [`Self::claim_venv`]). A killed sync leaves one too, so it
+    /// says only to wait for the sync lock, never that the venv is toolr's.
     pub fn venv_pending(&self, venv_dir: &Path) -> bool {
         // An unreadable entry counts as no claim, so the venv is asked about, never trusted.
         self.venv_entry(venv_dir)
             .ok()
             .flatten()
             .is_some_and(|e| e.pending)
-    }
-
-    /// Whether a toolr, this process included, holds the sync lock for the in-tree venv at
-    /// `venv_dir` now. Creates nothing; a lock that can't be opened counts as free.
-    pub fn venv_locked(&self, venv_dir: &Path) -> bool {
-        fs::File::open(self.venv_lock_path(venv_dir))
-            .is_ok_and(|file| matches!(file.try_lock(), Err(fs::TryLockError::WouldBlock)))
     }
 
     fn venv_entry(&self, venv_dir: &Path) -> Result<Option<VenvEntry>> {
@@ -225,8 +218,8 @@ impl TrustStore {
     }
 
     /// Under the sync lock, before uv builds or rebuilds the in-tree venv at `venv_dir`: mark it
-    /// as being built by toolr, keeping any token it has, so another toolr that sees it before
-    /// the marker is written waits on the lock instead of asking about it.
+    /// as being built by toolr, keeping any token it has, so another toolr's sync that sees it
+    /// before the marker is written waits on the lock instead of asking about it.
     pub fn claim_venv(&self, root: &Path, venv_dir: &Path) -> Result<()> {
         // An unreadable entry keeps no token: a new one is minted and the old marker stops
         // matching, so the venv is asked about again (fail-safe).
@@ -441,20 +434,6 @@ mod tests {
         fs::write(&entry, b"not json").unwrap();
         store.end_claim(&venv).unwrap();
         assert!(!store.venv_pending(&venv));
-    }
-
-    /// The probe sees a holder, this process included, and creates no lock file.
-    #[test]
-    fn venv_locked_reports_a_held_lock_only() {
-        let f = Fixture::new();
-        let store = f.store();
-        let venv = venv_in(&f.root(), "a");
-        assert!(!store.venv_locked(&venv));
-        assert!(!store.dir().join(VENV_LOCKS_DIR).exists());
-        let held = store.lock_venv(&venv, true).unwrap();
-        assert!(store.venv_locked(&venv));
-        drop(held);
-        assert!(!store.venv_locked(&venv));
     }
 
     /// No builder runs while this process holds the lock, so a claim found then is ended.
