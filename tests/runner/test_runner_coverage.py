@@ -941,6 +941,7 @@ def test_run_trims_toolr_frames_before_an_import_error_in_the_command_body(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def fake_target(ctx, **_kw) -> None:
+        # The failing import is the scenario under test, so it must run inside the command body.
         import toolr_u18_missing_dep  # noqa: F401, PLC0415
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
