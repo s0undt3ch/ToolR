@@ -99,6 +99,12 @@
       addLabels: ["dependencies:python"],
     },
     {
+      description: "Hold the docs toolchain below its next majors until the Zensical move",
+      matchPackageNames: ["mkdocs", "mkdocs-material"],
+      matchUpdateTypes: ["major"],
+      enabled: false,
+    },
+    {
       description: "Tag GitHub Actions updates",
       matchManagers: ["github-actions"],
       addLabels: ["dependencies:github-actions"],
