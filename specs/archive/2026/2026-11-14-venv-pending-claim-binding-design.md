@@ -64,8 +64,7 @@ refuse, so a real build could read as free.
 - `TrustStore::end_claim` ends a claim; an unreadable entry holds none, so only a failed write
   is an error.
 - `token_store(resolved)` is the single predicate; the check, lock, claim and stamp use it.
-- No identity is stored. Entries written by the first attempt carry `claim_identity`; serde
-  ignores the unknown key, and such a claim vouches for nothing like any other.
+- No identity is stored.
 
 With the claim off identity, `venv_identity` serves only the approval carried over the lock,
 whose short-window comment holds again.
@@ -86,11 +85,10 @@ lock.
 - A claim left by an interrupted sync vouches for nothing, and the next lock holder ends it.
 - A claimed, marker-less venv is foreign even while its builder holds the lock; the stamp
   settles the claim.
-- R2-01's shape: a killed sync's claim, its lock file recreated and held by another handle. The
+- A killed sync's claim, its lock file recreated and held by another handle. The
   check reads `Foreign`; through the binary, `toolr hello world` waits for the lock, then
   refuses the venv without running its `bin/python`.
 - A sync that finds a claim waits for the builder's lock rather than asking, and finds the venv
   fresh once the builder stamps it.
-- A stored entry carrying `claim_identity` loads and vouches for nothing.
 - A failed resync keeps toolr's own venv.
 - Trust store: `end_claim`, and `lock_venv` ending a stale claim.

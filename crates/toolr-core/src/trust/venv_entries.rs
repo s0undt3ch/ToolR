@@ -46,7 +46,8 @@ pub(super) struct VenvEntry {
     venv_dir: PathBuf,
     token: String,
     /// toolr is building the venv: a sync that finds the claim waits for the sync lock before it
-    /// asks about the venv. It never vouches for the venv, and never outlives the run.
+    /// asks about the venv. It never vouches for the venv. The sync that ends the build stamps or ends it;
+    /// one a killed sync left stays until the next sync lock holder ends it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pending: bool,
 }
@@ -199,7 +200,7 @@ impl TrustStore {
     /// ended the claim since (see [`Self::claim_venv`]). A killed sync leaves one too, so it
     /// says only to wait for the sync lock, never that the venv is toolr's.
     pub fn venv_pending(&self, venv_dir: &Path) -> bool {
-        // An unreadable entry counts as no claim, so the venv is asked about, never trusted.
+        // An unreadable entry counts as no claim: nothing to wait for.
         self.venv_entry(venv_dir)
             .ok()
             .flatten()

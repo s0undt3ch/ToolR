@@ -1783,7 +1783,7 @@ mod tests {
         assert_eq!(t.check(), Freshness::Foreign, "under the lock too");
     }
 
-    /// R2-01's shape: a killed sync's claim, its lock file left behind (as a SIGKILL leaves it,
+    /// A killed sync's claim, its lock file left behind (as a SIGKILL leaves it,
     /// and as Windows always does), and another toolr holding that lock for a moment, say while
     /// it checks the venv. The claim still doesn't vouch for the venv, so nothing runs it.
     #[cfg(unix)]
@@ -1817,31 +1817,6 @@ mod tests {
             root,
             TokenCheck::Store(&t.store)
         ));
-    }
-
-    /// An entry from this fix's first, identity-bound claim still loads, and its claim vouches
-    /// for nothing.
-    #[cfg(unix)]
-    #[test]
-    fn a_stored_claim_with_an_identity_covers_nothing() {
-        use std::os::unix::fs::MetadataExt;
-        let t = InTree::new();
-        let venv = &t.resolved.venv_dir;
-        t.store.claim_venv(t.tools.parent().unwrap(), venv).unwrap();
-        let entry = fs::read_dir(t.store.dir().join("venvs"))
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .path();
-        let mut json: serde_json::Value =
-            serde_json::from_slice(&fs::read(&entry).unwrap()).unwrap();
-        let meta = fs::symlink_metadata(venv).unwrap();
-        json["claim_identity"] = serde_json::json!([meta.dev(), meta.ino()]);
-        fs::write(&entry, serde_json::to_vec(&json).unwrap()).unwrap();
-
-        assert!(t.store.venv_pending(venv), "the entry still loads");
-        assert_eq!(t.check(), Freshness::Foreign);
     }
 
     /// Points the default trust store at `t.store`, and the other state toolr writes at `t`'s

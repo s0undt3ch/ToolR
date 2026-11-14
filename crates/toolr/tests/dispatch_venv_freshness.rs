@@ -507,7 +507,7 @@ fn a_failed_first_sync_leaves_no_venv_to_ask_about() {
     assert!(t.built.exists());
 }
 
-/// R2-01: a sync killed mid-build leaves its claim and its lock file, and another toolr holds
+/// A sync killed mid-build leaves its claim and its lock file, and another toolr holds
 /// that lock for a moment. The command must neither run the venv uv was building nor treat it as
 /// toolr's: it waits for the lock, then refuses the venv as one toolr didn't build.
 #[test]
