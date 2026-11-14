@@ -110,13 +110,18 @@ pub(crate) enum TokenCheck<'a> {
 /// Runs `f` with the check the default store and `TOOLR_TRUST_ALL` call for. Cache venvs need
 /// neither, so they read no env and no store.
 fn with_default_check<R>(resolved: &ResolvedVenv, f: impl FnOnce(TokenCheck<'_>) -> R) -> R {
-    if !resolved.is_in_tree() || trust_all_env() {
-        return f(TokenCheck::Skip);
+    match token_store(resolved) {
+        None => f(TokenCheck::Skip),
+        Some(Ok(store)) => f(TokenCheck::Store(&store)),
+        Some(Err(_)) => f(TokenCheck::NoStore),
     }
-    match TrustStore::open_default() {
-        Ok(store) => f(TokenCheck::Store(&store)),
-        Err(_) => f(TokenCheck::NoStore),
-    }
+}
+
+/// The one rule for which venvs carry a token: an in-tree venv, unless `TOOLR_TRUST_ALL` is
+/// set. `None` when it needs none, else the default store, which may fail to open. The check,
+/// the lock, the claim and the stamp all go through this, so they can't disagree.
+fn token_store(resolved: &ResolvedVenv) -> Option<Result<TrustStore>> {
+    (resolved.is_in_tree() && !trust_all_env()).then(TrustStore::open_default)
 }
 
 fn is_foreign_with(resolved: &ResolvedVenv, root: &Path, check: TokenCheck<'_>) -> bool {
@@ -169,9 +174,14 @@ fn built_by_toolr(resolved: &ResolvedVenv, root: &Path, check: TokenCheck<'_>) -
 }
 
 /// toolr claimed the venv before uv ran and no marker was written since: a sync that failed
-/// or was killed part way. A marker that doesn't match still means someone else's venv.
+/// part way. The claim covers only the directory uv left (see [`TrustStore::bind_claim`]), so a
+/// venv put there since reads as someone else's, as does one whose marker doesn't match. A
+/// sync killed before it could bind its claim leaves none, and the venv is asked about.
 fn pending_build(store: &TrustStore, venv_dir: &Path) -> bool {
-    store.venv_pending(venv_dir) && fs::symlink_metadata(venv_dir.join(FRESHNESS_MARKER)).is_err()
+    let bound = store.claim_identity(venv_dir);
+    bound.is_some()
+        && bound == venv_identity(venv_dir)
+        && fs::symlink_metadata(venv_dir.join(FRESHNESS_MARKER)).is_err()
 }
 
 /// The project root above `tools_dir`.
@@ -352,7 +362,9 @@ pub fn sync_if_needed(
             sync: || {
                 claim_before_build(resolved, tools_dir);
                 // Not `Http`: its message tells the user to install uv, which they already have.
-                let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
+                let ran = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet);
+                bind_claim_after_build(resolved);
+                let status = ran.map_err(|e| {
                     let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
                     UvError::Io(std::io::Error::other(msg))
                 })?;
@@ -521,33 +533,36 @@ pub(super) fn lock_in_tree(
     resolved: &ResolvedVenv,
     quiet: bool,
 ) -> Result<Option<crate::trust::VenvLock>> {
-    if !resolved.is_in_tree() || trust_all_env() {
-        return Ok(None);
-    }
-    TrustStore::open_default()?
-        .lock_venv(&resolved.venv_dir, quiet)
-        .map(Some)
+    token_store(resolved)
+        .transpose()?
+        .map(|store| store.lock_venv(&resolved.venv_dir, quiet))
+        .transpose()
 }
 
 /// Under the lock, just before uv runs: record that toolr is building this in-tree venv (see
 /// [`TrustStore::claim_venv`]). Best effort: without the claim a failed first sync leaves a
 /// venv toolr must ask about before replacing, as it did before claims existed.
 fn claim_before_build(resolved: &ResolvedVenv, tools_dir: &Path) {
-    if !resolved.is_in_tree() || trust_all_env() {
-        return;
-    }
     // Store or claim failures are ignored: the venv then reads as one toolr didn't build and
     // the user is asked before it is replaced (fail-safe).
-    if let Ok(store) = TrustStore::open_default() {
+    if let Some(Ok(store)) = token_store(resolved) {
         let _ = store.claim_venv(project_root(tools_dir), &resolved.venv_dir);
+    }
+}
+
+/// After uv exits, whatever its status: bind the claim to the venv directory it left, or end
+/// the claim if there is none. A success is stamped over this next. Failures are ignored: an
+/// unbound claim covers no venv, so the venv is asked about (fail-safe).
+fn bind_claim_after_build(resolved: &ResolvedVenv) {
+    if let Some(Ok(store)) = token_store(resolved) {
+        let _ = store.bind_claim(&resolved.venv_dir, venv_identity(&resolved.venv_dir));
     }
 }
 
 /// Write the marker after toolr built or changed the venv: for an in-tree
 /// venv, with a fresh token recorded in the default trust store.
 pub(super) fn stamp_marker(resolved: &ResolvedVenv, tools_dir: &Path) -> Result<()> {
-    let store = (resolved.is_in_tree() && !trust_all_env()).then(TrustStore::open_default);
-    stamp_marker_with(resolved, tools_dir, store)
+    stamp_marker_with(resolved, tools_dir, token_store(resolved))
 }
 
 /// `store` is `None` when the venv needs no token, and the marker then keeps
@@ -1268,6 +1283,16 @@ mod tests {
         fn marker(&self) -> PathBuf {
             self.resolved.venv_dir.join(FRESHNESS_MARKER)
         }
+
+        /// What `sync_if_needed` does once uv has exited.
+        fn bind(&self) {
+            self.store
+                .bind_claim(
+                    &self.resolved.venv_dir,
+                    venv_identity(&self.resolved.venv_dir),
+                )
+                .unwrap();
+        }
     }
 
     #[test]
@@ -1703,6 +1728,12 @@ mod tests {
         assert_eq!(t.check(), Freshness::Foreign);
         t.store.claim_venv(root, &t.resolved.venv_dir).unwrap();
         assert!(t.store.venv_pending(&t.resolved.venv_dir));
+        assert_eq!(
+            t.check(),
+            Freshness::Foreign,
+            "a claim uv hasn't returned from"
+        );
+        t.bind();
         assert_eq!(t.check(), Freshness::Missing, "toolr's half-built venv");
         touch_marker(&t.resolved.venv_dir).unwrap();
         assert_eq!(t.check(), Freshness::Foreign, "a marker that doesn't match");
@@ -1717,10 +1748,65 @@ mod tests {
         let token = fs::read_to_string(t.marker()).unwrap();
         // A rebuild keeps the token, and its stamp settles the claim again.
         t.store.claim_venv(root, &t.resolved.venv_dir).unwrap();
+        t.bind();
         assert_eq!(t.check(), Freshness::Fresh);
         t.stamp();
         assert_eq!(fs::read_to_string(t.marker()).unwrap(), token);
         assert!(!t.store.venv_pending(&t.resolved.venv_dir));
+    }
+
+    /// The reported shape: the first sync fails and uv left no venv, then a venv appears with
+    /// no marker. The claim must not carry over to it.
+    #[test]
+    fn a_claim_does_not_cover_a_venv_that_appears_after_a_failed_sync() {
+        let t = InTree::new();
+        let root = t.tools.parent().unwrap();
+        let venv = &t.resolved.venv_dir;
+        fs::remove_dir_all(venv).unwrap();
+        t.store.claim_venv(root, venv).unwrap();
+        t.bind();
+        assert!(!t.store.venv_pending(venv), "no directory ends the claim");
+
+        venv_with_interpreter(venv);
+        assert_eq!(t.check(), Freshness::Foreign, "a venv toolr never built");
+    }
+
+    /// uv left a venv, then it was replaced by another while the claim was still pending.
+    #[test]
+    fn a_bound_claim_does_not_cover_a_replaced_venv() {
+        let t = InTree::new();
+        let root = t.tools.parent().unwrap();
+        let venv = &t.resolved.venv_dir;
+        t.store.claim_venv(root, venv).unwrap();
+        t.bind();
+        assert_eq!(t.check(), Freshness::Missing, "uv's own half-built venv");
+
+        // The old directory stays until the new one exists, so the inode can't be reused.
+        let old = venv.with_extension("old");
+        fs::rename(venv, &old).unwrap();
+        venv_with_interpreter(venv);
+        assert_eq!(t.check(), Freshness::Foreign, "a different directory");
+    }
+
+    /// A sync killed before it could bind covers nothing.
+    #[test]
+    fn an_unbound_claim_covers_no_venv() {
+        let t = InTree::new();
+        t.store
+            .claim_venv(t.tools.parent().unwrap(), &t.resolved.venv_dir)
+            .unwrap();
+        assert_eq!(t.store.claim_identity(&t.resolved.venv_dir), None);
+        assert_eq!(t.check(), Freshness::Foreign);
+    }
+
+    /// Binding touches nothing once the venv is stamped.
+    #[test]
+    fn binding_without_a_pending_claim_changes_nothing() {
+        let t = InTree::new();
+        t.stamp();
+        t.bind();
+        assert!(!t.store.venv_pending(&t.resolved.venv_dir));
+        assert_eq!(t.check(), Freshness::Fresh);
     }
 
     /// A lock that must not be taken: a fresh venv, or a removal refused before locking.

@@ -49,6 +49,10 @@ pub(super) struct VenvEntry {
     /// toolr's own half-built one, such as after a failed or interrupted first sync.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pending: bool,
+    /// The venv directory the claim covers, recorded once uv has exited (see
+    /// [`TrustStore::bind_claim`]). A claim without one covers nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    claim_identity: Option<(u64, u64)>,
 }
 
 /// What venv entries are keyed by: the canonical parent plus the venv's own
@@ -200,6 +204,17 @@ impl TrustStore {
             .is_some_and(|e| e.pending)
     }
 
+    /// The identity of the venv directory a pending claim is bound to, when the claim is
+    /// pending and bound. A claim no one bound, or one over a directory that has since been
+    /// replaced, is for the caller to compare against the directory now.
+    pub fn claim_identity(&self, venv_dir: &Path) -> Option<(u64, u64)> {
+        self.venv_entry(venv_dir)
+            .ok()
+            .flatten()
+            .filter(|e| e.pending)
+            .and_then(|e| e.claim_identity)
+    }
+
     fn venv_entry(&self, venv_dir: &Path) -> Result<Option<VenvEntry>> {
         let venv_key = venv_entry_key(venv_dir);
         let bytes = match fs::read(self.venv_entry_path(&venv_key)) {
@@ -221,7 +236,19 @@ impl TrustStore {
             Some(token) => token,
             None => new_token()?,
         };
-        self.write_entry(root, venv_dir, &token, true)
+        self.write_entry(root, venv_dir, &token, true, None)
+    }
+
+    /// After uv exits without the sync being stamped: bind a pending claim to the directory
+    /// uv left, so only that directory counts as toolr's half-built venv. `None`, uv left no
+    /// directory, ends the claim, keeping the token. Nothing changes without a pending claim.
+    pub fn bind_claim(&self, venv_dir: &Path, identity: Option<(u64, u64)>) -> Result<()> {
+        let Some(mut entry) = self.venv_entry(venv_dir)?.filter(|e| e.pending) else {
+            return Ok(());
+        };
+        entry.pending = identity.is_some();
+        entry.claim_identity = identity;
+        self.store_entry(&entry)
     }
 
     /// Record the in-tree venv toolr just built at `venv_dir` under `root`'s trust key, clearing
@@ -232,25 +259,36 @@ impl TrustStore {
             Some(token) => token.to_owned(),
             None => new_token()?,
         };
-        self.write_entry(root, venv_dir, &token, false)?;
+        self.write_entry(root, venv_dir, &token, false, None)?;
         Ok(token)
     }
 
-    fn write_entry(&self, root: &Path, venv_dir: &Path, token: &str, pending: bool) -> Result<()> {
+    fn write_entry(
+        &self,
+        root: &Path,
+        venv_dir: &Path,
+        token: &str,
+        pending: bool,
+        claim_identity: Option<(u64, u64)>,
+    ) -> Result<()> {
         let key = self.resolve_guarded(root)?;
-        let venv_key = venv_entry_key(venv_dir);
-        let entry = VenvEntry {
+        self.store_entry(&VenvEntry {
             key: key.key,
             kind: key.kind,
-            venv_dir: venv_key.clone(),
+            venv_dir: venv_entry_key(venv_dir),
             token: token.to_owned(),
             pending,
-        };
+            claim_identity,
+        })
+    }
+
+    fn store_entry(&self, entry: &VenvEntry) -> Result<()> {
         let dir = self.dir.join(VENV_ENTRIES_DIR);
         create_private_dir(&self.dir)?;
         create_private_dir(&dir)?;
-        let bytes = serde_json::to_vec_pretty(&entry)?;
-        write_private(&dir, &self.venv_entry_path(&venv_key), &bytes).context("writing venv entry")
+        let bytes = serde_json::to_vec_pretty(entry)?;
+        write_private(&dir, &self.venv_entry_path(&entry.venv_dir), &bytes)
+            .context("writing venv entry")
     }
 
     /// Drop venv entries whose trust record is gone, whose venv no longer
