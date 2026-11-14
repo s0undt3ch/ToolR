@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import typing
 from collections.abc import Callable
 from pathlib import Path
 
@@ -137,6 +138,49 @@ def test_runner_propagates_exception_as_exit_1(
     assert result.returncode == 1
     assert "RuntimeError" in result.stderr
     assert "crashed" in result.stderr
+
+
+_CRASH_MODULE = """
+    from toolr import command_group
+
+    group = command_group("demo", "Demo", description="demo group")
+
+    @group.command
+    def crash(ctx) -> None:
+        "Do it."
+        raise RuntimeError("kaboom")
+    """
+
+
+def test_runner_traceback_starts_at_the_users_function(
+    tools_module: Callable[[str], Path],
+    spec_file: Callable[..., Path],
+    run_runner: Callable[[Path], subprocess.CompletedProcess[str]],
+) -> None:
+    """U-18: the first frame of a command's crash is the user's file, not toolr's runner."""
+    tools_module(_CRASH_MODULE)
+    result = run_runner(spec_file(command="crash", function="crash"))
+    assert result.returncode == 1
+    frames = [line for line in result.stderr.splitlines() if line.lstrip().startswith("File ")]
+    assert len(frames) == 1, result.stderr
+    assert "demo.py" in frames[0]
+    assert "_runner.py" not in result.stderr
+    assert "RuntimeError: kaboom" in result.stderr
+
+
+def test_runner_traceback_keeps_toolr_frames_under_debug(
+    tools_module: Callable[[str], Path],
+    spec_file: Callable[..., Path],
+    spec_payload: Callable[..., dict[str, object]],
+    run_runner: Callable[[Path], subprocess.CompletedProcess[str]],
+) -> None:
+    """`toolr -d` reaches the runner as verbosity `verbose` and keeps every frame."""
+    tools_module(_CRASH_MODULE)
+    context = dict(typing.cast("dict[str, object]", spec_payload()["context"]), verbosity="verbose")
+    result = run_runner(spec_file(command="crash", function="crash", context=context))
+    assert result.returncode == 1
+    assert "_runner.py" in result.stderr
+    assert result.stderr.index("_runner.py") < result.stderr.index("demo.py")
 
 
 def test_runner_fails_clearly_when_spec_env_unset(tmp_path: Path) -> None:

@@ -920,6 +920,38 @@ def test_run_returns_1_on_unhandled_exception(
     assert "toolr project venv sync" not in err
 
 
+def test_run_keeps_every_frame_when_the_fault_is_toolrs_own(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An exception raised wholly inside toolr has no user frame to start at, so none are trimmed."""
+
+    # `run()` itself fails before any user code: its own frame is the only one.
+    monkeypatch.setattr("toolr._runner._current_ctx", None)
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 1
+    err = capsys.readouterr().err
+    assert "_runner.py" in err
+    assert "AttributeError" in err
+
+
+def test_run_trims_toolr_frames_before_an_import_error_in_the_command_body(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_target(ctx, **_kw) -> None:
+        import toolr_u18_missing_dep  # noqa: F401, PLC0415
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 1
+    err = capsys.readouterr().err
+    assert "fake_target" in err
+    assert "_runner.py" not in err
+    assert "toolr_u18_missing_dep" in err
+    assert err.index("Traceback") < err.index("fake_target")
+
+
 def test_run_returns_130_on_keyboard_interrupt(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

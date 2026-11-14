@@ -636,6 +636,25 @@ def _append_repo_root(repo_root: str, path_list: list[str] | None = None) -> Non
         target.append(repo_root)
 
 
+_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
+
+
+def _print_exception(exc: BaseException, *, full: bool) -> None:
+    """Print ``exc`` and its traceback to stderr, starting at the user's code.
+
+    The frames above the command function are toolr's runner. They are dropped when a frame
+    of user code follows, so the traceback does not read as a toolr fault. If every frame is
+    toolr's, toolr itself is at fault and all of them stay, as they do for ``full`` (`-d`).
+    """
+    tb = exc.__traceback__
+    if not full:
+        user_tb = tb
+        while user_tb is not None and user_tb.tb_frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+            user_tb = user_tb.tb_next
+        tb = user_tb or tb
+    traceback.print_exception(type(exc), exc, tb, file=sys.stderr)
+
+
 def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     """Execute the command described by ``spec``. Returns a process exit code.
 
@@ -644,6 +663,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     Any other uncaught exception is logged to stderr and returns 1.
     """
     repo_root = Path(spec.context.repo_root)
+    full_traceback = spec.context.verbosity == "verbose"
     try:
         ctx = _build_context(spec)
         # Before `_import_target`, so a module-level `current_context()` in a
@@ -688,7 +708,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         # so it names the failing file and line, then summary and hint, remedy last.
         cause = exc.__cause__
         if isinstance(cause, ImportError):
-            traceback.print_exception(cause, file=sys.stderr)
+            _print_exception(cause, full=full_traceback)
         print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
         if isinstance(cause, ImportError):
             _print_missing_dep_hint(cause, sys.stderr)
@@ -699,7 +719,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         # bypasses `_import_target` entirely. Print the traceback and
         # add the same hint so the user gets the same affordance as a
         # top-level import failure.
-        traceback.print_exc(file=sys.stderr)
+        _print_exception(exc, full=full_traceback)
         _print_missing_dep_hint(exc, sys.stderr)
         return 1
     except KeyboardInterrupt:
@@ -711,8 +731,8 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         # the conventional shell exit code (128 + SIGINT) ourselves rather
         # than letting the interpreter print its default traceback.
         return 130
-    except Exception:  # noqa: BLE001
-        traceback.print_exc(file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001
+        _print_exception(exc, full=full_traceback)
         return 1
     return 0
 
