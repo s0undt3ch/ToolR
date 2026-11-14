@@ -1,8 +1,9 @@
 # Plan: keep the pending venv claim to its run
 
-1. `trust/venv_entries.rs`: drop `claim_identity` and `bind_claim`; add `venv_locked` and
-   `end_claim`; `lock_venv` ends a claim it finds.
-2. `venv/sync.rs`: `pending_build` requires the lock to be held; `claim_before_build` returns
+1. `trust/venv_entries.rs`: drop `claim_identity` and `bind_claim`; add `end_claim`;
+   `lock_venv` ends a claim it finds.
+2. `venv/sync.rs`: only the marker vouches for a venv, never a claim; `sync_if_needed` waits on
+   the lock when it finds a claim, before its first check; `claim_before_build` returns
    whether the venv was absent; `abandon_build` removes what a failed first sync left and
    ends the claim.
 3. `venv/sync.rs`: collapse the token predicate into `token_store`.

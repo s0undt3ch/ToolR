@@ -26,22 +26,35 @@ in the same file (M-06).
 
 The claim's original job, keeping a failed first sync's venv as toolr's in later runs, goes:
 a failed first sync now removes what it left. One cross-process job stays. While toolr A
-builds a first venv, the directory exists with no marker. toolr B checks it without the lock:
-`sync_locked` asks about a foreign venv before taking the lock, and `is_foreign`
-(`dispatch/run.rs`, `usable_venv_dir`) and `resync_if_needed` never take it. Without a live
-claim B reads A's build as foreign: on a terminal it asks to remove it, without one it fails.
-The lock alone can't stop that, so the claim stays, scoped to the lock.
+builds a first venv, the directory exists with no marker. toolr B's sync checks it before
+taking the lock, so it can ask about a foreign venv without making other toolrs wait on the
+answer. Without the claim, B reads A's build as foreign: on a terminal it asks to remove it,
+without one it fails. So the claim stays, but only to tell B's sync to wait for the lock.
+
+A second review (R2-01) showed why the claim must never vouch for the venv. The second design
+counted a claim while some toolr held the venv's sync lock, through a `try_lock` probe. Any
+holder counted, a toolr that was only probing included, and a SIGKILLed sync leaves its claim
+and its lock file behind (on Windows the file always stays). So a killed sync's claim read as
+live whenever another toolr probed at that moment. Dispatch took the resulting `Missing` as
+"nothing to sync" and ran `tools/.venv/bin/python`, which a hostile checkout can fill. The probe
+also opened the lock file read-only, which an flock emulated over NFS byte-range locks may
+refuse, so a real build could read as free.
 
 ## Design
 
-- A pending claim counts only while some toolr holds that venv's sync lock
-  (`TrustStore::venv_locked`, a `try_lock` probe that opens the lock file without creating
-  it). flock and `LockFileEx` locks die with their process, so a killed sync's claim covers
-  nothing: that venv is foreign and gets the usual question.
+- Only a marker holding the store's token vouches for an in-tree venv. A pending claim never
+  does, under the lock or not, so a marker-less venv always reads `Foreign`. Every caller that
+  sees `Foreign` already fails closed: dispatch syncs, which asks or refuses; `venv run
+  --no-sync` refuses; `usable_venv_dir` hides the venv's plugins. The `venv_locked` probe is
+  gone.
+- Before its first check, `sync_if_needed` looks for a pending claim. If there is one, it takes
+  the sync lock and drops it straight away: that waits for a live builder, and `lock_venv` ends
+  a claim a killed sync left. Then it checks and asks before locking, as before, so no toolr
+  waits on a human while holding the lock. A lock that fails there fails again in
+  `sync_locked`, which reports it.
 - Claims are written only under the lock, so a claim the lock holder finds is stale.
-  `lock_venv` ends it before returning, else the holder's own re-check would read it as live
-  (the probe sees this process's lock too). If ending it fails, the lock is released and the
-  claim stays dead.
+  `lock_venv` ends it before returning, so a later sync doesn't wait for a build that isn't
+  running.
 - The sync records whether the venv was absent just before claiming (after any approved
   foreign removal). When uv fails, or the stamp after it fails, toolr removes what uv left if
   the venv was absent, is now a real directory and sits directly in a real `tools/`
@@ -52,13 +65,17 @@ The lock alone can't stop that, so the claim stays, scoped to the lock.
   is an error.
 - `token_store(resolved)` is the single predicate; the check, lock, claim and stamp use it.
 - No identity is stored. Entries written by the first attempt carry `claim_identity`; serde
-  ignores the unknown key, and such a claim is lock-bound like any other.
+  ignores the unknown key, and such a claim vouches for nothing like any other.
 
 With the claim off identity, `venv_identity` serves only the approval carried over the lock,
 whose short-window comment holds again.
 
-Residual: between a lock holder acquiring the lock and ending a stale claim (two file
-operations), another toolr's probe could read that stale claim as live.
+Trade-offs, all failing closed, while another toolr's first build runs: dispatch waits for it
+through the sync; the venv's plugin commands are left out of the manifest and `--help`; `venv
+run --no-sync` and `self build-manifest <package>` call the venv foreign rather than unbuilt.
+A new claim taken by a build that starts between the wait and the check can still draw one
+removal question; answered `y`, the removal happens only if the venv is still foreign under the
+lock.
 
 ## Tests
 
@@ -66,8 +83,14 @@ operations), another toolr's probe could read that stale claim as live.
   `.gitignore` and fails: the venv is removed and the claim ended; files that arrive later
   are foreign. A variant where `tools/` refuses the removal: the directory stays, files
   checked out into it are foreign.
-- A claim left by an interrupted sync covers nothing, and the next lock holder ends it.
-- A claim counts while its builder holds the lock, and not after.
-- A stored entry carrying `claim_identity` loads and covers nothing.
+- A claim left by an interrupted sync vouches for nothing, and the next lock holder ends it.
+- A claimed, marker-less venv is foreign even while its builder holds the lock; the stamp
+  settles the claim.
+- R2-01's shape: a killed sync's claim, its lock file recreated and held by another handle. The
+  check reads `Foreign`; through the binary, `toolr hello world` waits for the lock, then
+  refuses the venv without running its `bin/python`.
+- A sync that finds a claim waits for the builder's lock rather than asking, and finds the venv
+  fresh once the builder stamps it.
+- A stored entry carrying `claim_identity` loads and vouches for nothing.
 - A failed resync keeps toolr's own venv.
-- Trust store: `end_claim`, `venv_locked`, and `lock_venv` ending a stale claim.
+- Trust store: `end_claim`, and `lock_venv` ending a stale claim.
