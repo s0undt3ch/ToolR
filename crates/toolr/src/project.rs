@@ -46,10 +46,10 @@ pub(crate) fn dispatch_project(
     }
 }
 
-/// Make the tools venv under `cwd` ready: the uv consent, uv's `--quiet` and the trust prompt
+/// Make the tools venv of the project at `repo_root` ready: the uv consent, uv's `--quiet` and the trust prompt
 /// all follow `quiet`, and `tweak` adds what the caller needs on top.
 pub(crate) fn ready_venv(
-    cwd: &Path,
+    repo_root: &Path,
     quiet: bool,
     tweak: impl FnOnce(toolr_core::project::EnsureOpts) -> toolr_core::project::EnsureOpts,
 ) -> Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> {
@@ -59,19 +59,18 @@ pub(crate) fn ready_venv(
         .with_trust(TrustMode {
             never_prompt: quiet,
         });
-    toolr_core::project::ensure_venv_ready(cwd, consent, tweak(opts))
+    toolr_core::project::ensure_venv_ready(repo_root, consent, tweak(opts))
 }
 
-/// What a `project` handler that works on the tools venv starts from: the run's working
-/// directory and its project root, looked up once.
+/// What a `project` handler that works on the tools venv starts from: the run and its
+/// project root, looked up once.
 struct ProjectCtx<'a> {
     run: &'a Invocation,
-    cwd: &'a Path,
 }
 
 impl<'a> ProjectCtx<'a> {
     fn new(run: &'a Invocation) -> Self {
-        Self { run, cwd: &run.cwd }
+        Self { run }
     }
 
     fn repo_root(&self) -> Result<PathBuf> {
@@ -398,7 +397,7 @@ fn venv_sync(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<Exit
     )?;
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let result = ready_venv(ctx.cwd, quiet, |o| {
+    let result = ready_venv(&repo_root, quiet, |o| {
         o.with_force_sync(force)
             .with_upgrade(upgrade)
             .with_trusted(trusted)
@@ -467,7 +466,7 @@ fn venv_lock(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<Exit
 
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let (resolved, uv) = ready_venv(ctx.cwd, quiet, |o| o.with_trusted(trusted))?;
+    let (resolved, uv) = ready_venv(&repo_root, quiet, |o| o.with_trusted(trusted))?;
 
     let status = toolr_core::venv::run_uv_lock(&uv, &tools_dir, &resolved, &upgrade, quiet)?;
     if !status.success() {
@@ -488,9 +487,10 @@ fn venv_add(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitC
         .cloned()
         .collect();
 
-    let tools_dir = ctx.repo_root()?.join("tools");
+    let repo_root = ctx.repo_root()?;
+    let tools_dir = repo_root.join("tools");
 
-    let (resolved, uv) = ready_venv(ctx.cwd, quiet, |o| o)?;
+    let (resolved, uv) = ready_venv(&repo_root, quiet, |o| o)?;
 
     let status = toolr_core::venv::run_uv_add(&uv, &tools_dir, &resolved, &specs, quiet)?;
     if !status.success() {
@@ -521,7 +521,7 @@ fn venv_remove(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<Ex
     require_declared(&tools_dir, &packages, "nothing to remove")?;
     let pyproject = tools_dir.join("pyproject.toml");
 
-    let (resolved, uv) = ready_venv(ctx.cwd, quiet, |o| o.with_trusted(trusted))?;
+    let (resolved, uv) = ready_venv(&repo_root, quiet, |o| o.with_trusted(trusted))?;
 
     let status = toolr_core::venv::run_uv_remove(&uv, &tools_dir, &resolved, &packages, quiet)?;
     if !status.success() {
@@ -616,7 +616,7 @@ fn venv_path(run: &Invocation, quiet: bool) -> Result<ExitCode> {
 fn venv_shell(run: &Invocation, quiet: bool) -> Result<ExitCode> {
     use std::process::Command;
 
-    let (resolved, _) = ready_venv(&run.cwd, quiet, |o| o)?;
+    let (resolved, _) = ready_venv(&run.project_root()?, quiet, |o| o)?;
 
     let shell = default_shell_path();
     let bin_dir = venv_bin_dir(&resolved.venv_dir);
@@ -680,7 +680,7 @@ fn venv_run(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitC
         // Default: freshness-gated auto-sync (same path as `venv sync`,
         // and as `venv shell`), then run. `--quiet` forwards to uv's
         // --quiet inside the sync.
-        ready_venv(ctx.cwd, quiet, |o| o)?.0
+        ready_venv(&ctx.repo_root()?, quiet, |o| o)?.0
     };
 
     run_command_in_venv(&resolved.venv_dir, &argv)

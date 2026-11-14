@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use crate::cache::meta::Meta;
-use crate::discovery::{DiscoveryError, discover_project_root};
+use crate::discovery::DiscoveryError;
 use crate::manifest_build::rebuild_manifest_full;
 use crate::trust::{TrustMode, Trusted, require_trust};
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
@@ -87,19 +87,18 @@ pub fn is_nothing_to_sync(err: &anyhow::Error) -> bool {
         )
 }
 
-/// One-stop "make the venv ready" entrypoint. Returns the resolved venv
+/// One-stop "make the venv ready" entrypoint for the project at `repo_root`. Returns the resolved venv
 /// + the chosen uv binary on success.
 pub fn ensure_venv_ready(
-    cwd: &Path,
+    repo_root: &Path,
     consent: ConsentMode,
     opts: EnsureOpts,
 ) -> Result<(ResolvedVenv, UvBinary)> {
-    let repo_root = discover_project_root(cwd).map_err(|e| NothingToSync::no_project(&e))?;
     // Before `tools/pyproject.toml` is read: toolr reads nothing of an untrusted repository.
-    if !opts.trusted.as_ref().is_some_and(|t| t.covers(&repo_root)) {
-        require_trust(&repo_root, opts.trust)?;
+    if !opts.trusted.as_ref().is_some_and(|t| t.covers(repo_root)) {
+        require_trust(repo_root, opts.trust)?;
     }
-    let resolved = resolve_venv_path(&repo_root).context(NothingToSync::NoVenvPath)?;
+    let resolved = resolve_venv_path(repo_root).context(NothingToSync::NoVenvPath)?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
     sync_if_needed(
@@ -116,7 +115,7 @@ pub fn ensure_venv_ready(
         e => anyhow::Error::new(e).context(format!("uv sync against {}", tools.display())),
     })?;
     validate_venv(&resolved.venv_dir, &resolved.python).context("validating the synced venv")?;
-    if let Err(e) = finalize_sync(&repo_root, &resolved) {
+    if let Err(e) = finalize_sync(repo_root, &resolved) {
         eprintln!("toolr: warning: failed to finalize sync (meta/manifest): {e}");
     }
     Ok((resolved, uv))
@@ -312,25 +311,6 @@ mod tests {
         let opts = EnsureOpts::default().with_force_sync(true).with_quiet(true);
         assert!(opts.force_sync);
         assert!(opts.quiet);
-    }
-
-    #[test]
-    fn ensure_venv_ready_reports_missing_project_root() {
-        let _env = EnvGuard::read();
-        // No `tools/pyproject.toml` - `ensure_venv_ready` must fail at
-        // discovery, before any uv interaction. A bare host `tools/` (the
-        // Windows runners' `C:\tools\`) fails there too.
-        let tmp = tempfile::tempdir().unwrap();
-        let err = ensure_venv_ready(tmp.path(), ConsentMode::default(), EnsureOpts::default())
-            .expect_err("expected ensure_venv_ready to fail without a project");
-        let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
-        assert!(
-            chain
-                .iter()
-                .any(|m| m.starts_with("no toolr project found above")),
-            "expected discovery to fail, got: {chain:?}"
-        );
-        assert!(is_nothing_to_sync(&err), "{err:#}");
     }
 
     #[test]
