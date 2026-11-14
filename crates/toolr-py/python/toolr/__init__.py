@@ -37,7 +37,6 @@ __all__ = [
 
 
 def __getattr__(name: str) -> str:
-    # `importlib.metadata` is about a fifth of `import toolr`; only
     # Deferred: `importlib.metadata` is a large share of `import toolr`; few callers read the version.
     if name == "__version__":
         import importlib.metadata  # noqa: PLC0415
