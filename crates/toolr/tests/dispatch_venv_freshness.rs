@@ -476,10 +476,10 @@ fn a_typo_with_an_unreadable_venv_setting_gets_only_claps_error() {
     );
 }
 
-/// uv creates the venv before it resolves, so a first sync that fails leaves a venv toolr
-/// started; the next sync finishes it without asking to replace it.
+/// uv creates the venv before it resolves, so a first sync that fails would leave a venv no
+/// marker vouches for; toolr removes it, and the next sync builds one without asking.
 #[test]
-fn a_failed_first_sync_leaves_a_venv_toolr_still_owns() {
+fn a_failed_first_sync_leaves_no_venv_to_ask_about() {
     let t = Trusted::new();
     fs::remove_dir_all(&t.fx.venv_dir).unwrap();
     t.fx.write_uv_stub("exit 3");
@@ -490,10 +490,9 @@ fn a_failed_first_sync_leaves_a_venv_toolr_still_owns() {
         .unwrap();
     assert!(!out.status.success());
     assert!(
-        t.fx.venv_dir.join("bin/python").is_file(),
-        "uv created the venv"
+        fs::symlink_metadata(&t.fx.venv_dir).is_err(),
+        "the venv uv created is removed"
     );
-    assert!(!t.fx.venv_dir.join(".toolr-sync-stamp").exists());
     t.fx.write_uv_stub("");
     let out = t
         .unapproved()
