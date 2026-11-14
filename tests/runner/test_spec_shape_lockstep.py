@@ -33,13 +33,65 @@ TWINS: dict[str, type[msgspec.Struct]] = {
 }
 
 
-def rust_fields(source: str, struct: str) -> list[str]:
-    """Field names of ``pub struct <struct> { ... }``, in declaration order."""
-    match = re.search(
-        rf"^pub struct {struct} \{{\n(?P<body>.*?)^\}}", source, re.MULTILINE | re.DOTALL
+STRUCT_RE = re.compile(
+    r"^(?P<attrs>(?:[ ]*(?:\#\[.*\]|///.*)\n)*)"
+    r"(?:pub(?:\([^)]+\))? )?struct (?P<name>\w+)(?:<[^>]*>)?(?P<open>\s*[{(;]|\s*where)",
+    re.MULTILINE,
+)
+FIELD_RE = re.compile(r"^ {4}(?:pub(?:\([^)]+\))? )?(?:r#)?(?P<name>\w+)\s*:(?!:)")
+RENAME_RE = re.compile(r'\brename\s*=\s*"(?P<wire>[^"]+)"')
+
+
+def _wire_name(name: str, attrs: list[str], struct: str) -> str | None:
+    """The key serde writes for a field, or ``None`` when serde never serialises it."""
+    text = " ".join(attrs)
+    if re.search(r"\bskip\b", text) or (
+        re.search(r"\bskip_serializing\b", text) and re.search(r"\bskip_deserializing\b", text)
+    ):
+        return None
+    assert not re.search(r"\b(rename\(|flatten)", text), (
+        f"`{struct}.{name}`: unsupported serde attribute `{text}`"
     )
-    assert match, f"`pub struct {struct}` not found in {SPEC_RS}"
-    return re.findall(r"^    pub (\w+):", match["body"], re.MULTILINE)
+    renamed = RENAME_RE.search(text)
+    return renamed["wire"] if renamed else name
+
+
+def rust_structs(source: str) -> dict[str, list[str]]:
+    """Wire field names of every struct in ``source``, in declaration order.
+
+    Not a Rust parser: it reads the one-attribute-per-line style rustfmt produces and
+    fails loudly on a shape it would misread (tuple structs, ``rename_all``, ``flatten``).
+    """
+    structs: dict[str, list[str]] = {}
+    for match in STRUCT_RE.finditer(source):
+        name = match["name"]
+        assert match["open"].strip() == "{", (
+            f"`struct {name}` is not a braced struct; the lock-step test cannot read it"
+        )
+        assert "rename_all" not in match["attrs"], (
+            f"`struct {name}` uses serde `rename_all`; the lock-step test does not apply it"
+        )
+        body = source[match.end() :].split("\n}", 1)[0]
+        fields: list[str] = []
+        attrs: list[str] = []
+        for line in body.splitlines():
+            if line.lstrip().startswith("#["):
+                attrs.append(line.strip())
+                continue
+            field = FIELD_RE.match(line)
+            if field:
+                wire = _wire_name(field["name"], attrs, name)
+                if wire is not None:
+                    fields.append(wire)
+                attrs = []
+        structs[name] = fields
+    return structs
+
+
+def rust_fields(source: str, struct: str) -> list[str]:
+    structs = rust_structs(source)
+    assert struct in structs, f"`struct {struct}` not found in {SPEC_RS}"
+    return structs[struct]
 
 
 @pytest.mark.parametrize("rust_struct", TWINS)
@@ -56,7 +108,97 @@ def test_rust_spec_fields_match_python_twin(rust_struct: str) -> None:
 
 
 def test_every_rust_spec_struct_is_covered() -> None:
-    declared = set(re.findall(r"^pub struct (\w+) \{", SPEC_RS.read_text(), re.MULTILINE))
+    declared = set(rust_structs(SPEC_RS.read_text()))
     assert declared == set(TWINS), (
         f"spec.rs structs without a Python twin check: {declared ^ set(TWINS)}"
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "pub struct S {\n    pub a: u8,\n    pub b: String,\n}\n", ["a", "b"], id="pub"
+        ),
+        pytest.param(
+            "pub struct S {\n    a: u8,\n    pub(crate) b: u8,\n}\n",
+            ["a", "b"],
+            id="private-and-pub-crate",
+        ),
+        pytest.param(
+            "pub struct S {\n    pub(super) a: u8,\n    pub(in crate::x) b: u8,\n}\n",
+            ["a", "b"],
+            id="pub-in-path",
+        ),
+        pytest.param(
+            "pub struct S {\n    pub r#type: u8,\n    pub r#match: u8,\n}\n",
+            ["type", "match"],
+            id="raw-identifiers",
+        ),
+        pytest.param(
+            'pub struct S {\n    #[serde(rename = "kind")]\n    pub ty: u8,\n    pub b: u8,\n}\n',
+            ["kind", "b"],
+            id="rename",
+        ),
+        pytest.param(
+            'pub struct S {\n    #[serde(default, rename = "k")]\n    /// doc\n    pub ty: u8,\n}\n',
+            ["k"],
+            id="rename-with-doc-between",
+        ),
+        pytest.param(
+            "pub struct S {\n    #[serde(skip)]\n    pub a: u8,\n    pub b: u8,\n}\n",
+            ["b"],
+            id="skip",
+        ),
+        pytest.param(
+            "pub struct S {\n    #[serde(skip_serializing, skip_deserializing)]\n    pub a: u8,\n    pub b: u8,\n}\n",
+            ["b"],
+            id="skip-both-directions",
+        ),
+        pytest.param(
+            "pub struct S {\n    #[serde(skip_serializing)]\n    pub a: u8,\n}\n",
+            ["a"],
+            id="skip-one-direction-stays",
+        ),
+        pytest.param(
+            'pub struct S {\n    #[serde(skip_serializing_if = "Option::is_none")]\n    pub a: Option<u8>,\n}\n',
+            ["a"],
+            id="skip-serializing-if-stays",
+        ),
+        pytest.param("pub struct S<'a> {\n    pub a: &'a str,\n}\n", ["a"], id="generic"),
+        pytest.param(
+            "struct S {\n    a: std::collections::BTreeMap<String, u8>,\n    b: u8,\n}\n",
+            ["a", "b"],
+            id="private-struct-and-path-type",
+        ),
+    ],
+)
+def test_rust_structs_follows_serde_wire_names(source: str, expected: list[str]) -> None:
+    assert rust_structs(source) == {"S": expected}
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        pytest.param("pub struct S(pub u8);\n", "not a braced struct", id="tuple-struct"),
+        pytest.param("pub struct S;\n", "not a braced struct", id="unit-struct"),
+        pytest.param(
+            '#[serde(rename_all = "camelCase")]\npub struct S {\n    pub a_b: u8,\n}\n',
+            "rename_all",
+            id="rename-all",
+        ),
+        pytest.param(
+            "pub struct S {\n    #[serde(flatten)]\n    pub a: u8,\n}\n",
+            "unsupported serde attribute",
+            id="flatten",
+        ),
+        pytest.param(
+            'pub struct S {\n    #[serde(rename(serialize = "x"))]\n    pub a: u8,\n}\n',
+            "unsupported serde attribute",
+            id="split-rename",
+        ),
+    ],
+)
+def test_rust_structs_rejects_shapes_it_cannot_read(source: str, message: str) -> None:
+    with pytest.raises(AssertionError, match=message):
+        rust_structs(source)
