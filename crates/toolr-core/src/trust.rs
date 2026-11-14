@@ -352,9 +352,13 @@ fn resolves_inside(path: &Path, canonical_root: &Path, cwd: &Path) -> bool {
 /// A crafted directory name could otherwise use control characters to
 /// overwrite the path the user is asked to trust.
 pub fn shown(path: &Path) -> String {
-    path.display()
-        .to_string()
-        .chars()
+    escape_control(&path.display().to_string())
+}
+
+/// `text` with every control character written as its escape (`\u{1b}`), for repo-derived
+/// text printed to a terminal.
+pub fn escape_control(text: &str) -> String {
+    text.chars()
         .map(|c| {
             if c.is_control() {
                 c.escape_default().to_string()

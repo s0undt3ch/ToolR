@@ -6,6 +6,8 @@ use anyhow::{Context, Result};
 use ruff_python_ast::ModModule;
 use ruff_python_parser::parse_module;
 
+use crate::trust::escape_control;
+
 /// Parse a raw docstring into the project's `Docstring` struct via the
 /// shared `SimpleDocstringParser`. Returns `None` only if the parser
 /// rejects the input (very unusual — in practice it accepts every
@@ -47,11 +49,13 @@ pub fn parse_python_file(path: &Path) -> Result<ModModule> {
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let parsed = parse_module(&source).map_err(|e| {
         let (line, column) = line_and_column(&source, usize::from(e.location.start()));
-        anyhow::anyhow!(
+        // ruff's message quotes the offending token from the repo file, and both the stale-cache
+        // warning and the fatal fresh-clone error print this text, so escape it here once.
+        anyhow::anyhow!(escape_control(&format!(
             "parsing {}: {} (line {line}, column {column})",
             path.display(),
             e.error
-        )
+        )))
     })?;
     Ok(parsed.into_syntax())
 }
@@ -89,6 +93,14 @@ mod tests {
         let rest = err.strip_prefix(&head).expect(&err);
         assert!(rest.ends_with("(line 2, column 5)"), "{rest}");
         assert!(!rest.contains("byte range"), "{rest}");
+    }
+
+    #[test]
+    fn syntax_error_text_has_no_raw_control_characters() {
+        let f = write_tmp("\x1b]0;pwn\x07 = 1\n");
+        let err = parse_python_file(f.path()).unwrap_err().to_string();
+        assert!(!err.chars().any(char::is_control), "{err:?}");
+        assert!(err.contains("\\u{1b}"), "{err}");
     }
 
     #[test]
