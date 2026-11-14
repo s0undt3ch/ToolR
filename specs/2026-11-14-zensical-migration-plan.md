@@ -96,3 +96,22 @@ Stack this work on the branch that caps `mkdocs<2` / `mkdocs-material<10` (creat
 
 `mise run test` (touched Python), `prek run --all-files`, a clean `zensical build` plus gate, and
 the RTD preview build.
+
+## Resume notes (parked 2026-11-14)
+
+No task is started. Pick up from task 1.
+
+- Tasks 1, 2, 3 and 6 need no Zensical and can start any time. Tasks 4, 5 and 7–12 wait until
+  Zensical 0.1.1 clears the uv cooldown (2026-11-17 or later). Never bypass `exclude-newer`.
+- Task 1 removes the `on_*` hooks, so the MkDocs build stops running the gate and stops injecting
+  `<link rel="alternate">`. Keep `alternate_link` as a pure function for task 7. Either run the
+  gate CLI in CI from task 1, or land tasks 1 and 9 together, so `main` never goes without a gate.
+- `!ENV` takes a scalar or a `[VAR, …, default]` list: try each variable, fall back to the last.
+  Resolve `site_dir` and `docs_dir` against the config file's directory.
+- Orphan check: skip dot-directories (`docs/.hooks`, `docs/.fixtures`); match `exclude_docs` per
+  line with `fnmatch`.
+- Before task 6, inspect a real `site/llms.txt` from the MkDocs build for the entry shape.
+- Check PyYAML is importable in the `dev` group before rewriting `tests/docs/test_llmstxt_gate.py`;
+  that file skips today when `mkdocs` is missing.
+- Stacked on `chore/docs-toolchain-cap` (PR #750): restack onto `main` once it merges. When the
+  swap lands, delete the Renovate rule holding `mkdocs`/`mkdocs-material` majors.
