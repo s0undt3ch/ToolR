@@ -9,13 +9,13 @@ min_version = "2026.11.1"
 # know, and the test matrix selects per-job versions via
 # `MISE_PYTHON_VERSION`. Checked against `requires-python` by
 # `toolr pre-commit check-python-versions`.
-python = ["3.15.2", "3.14.8", "3.13.15", "3.12.14", "3.11.16"]
-jactionlint = "v2.4.0"
+python = ["3.15.2", "3.14.10", "3.13.18", "3.12.16", "3.11.18"]
+jactionlint = "v2.5.0"
 shellcheck = "0.11.0"
 gitleaks = "8.30.1"
-ruff = "0.17.3"
-typos = "1.51.1"
-rumdl = "v0.3.2"
+ruff = "0.17.4"
+typos = "1.52.2"
+rumdl = "v0.3.3"
 gh = "2.103.3"
 # Renders the release changelog in `_prepare-release.yml`; the release
 # workflow tests run it against `cliff.toml`.
@@ -27,7 +27,7 @@ git-cliff = "2.14.2"
 # (rustfmt) need so the toolchain is identical everywhere.
 rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt" }
 uv = { version = "0.13.7" }
-prek = "0.5.9"
+prek = "0.5.10"
 "cargo:cargo-edit" = "0.13.14"
 # Rust coverage in CI (`_test.yml`); a prebuilt binary, so no from-source compile.
 "aqua:taiki-e/cargo-llvm-cov" = "0.9.1"
