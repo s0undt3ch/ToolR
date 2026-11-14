@@ -113,8 +113,7 @@ Not verified, so the plan tests them live or with actionlint:
 - That the cancelled gate on the real run is the only source of the stale FAILURE. Taken from
   the audit's evidence, not re-queried.
 
-[troubleshooting]:
-https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks
+[troubleshooting]: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks
 
 ## Live test (2026-11-14, on #753)
 
