@@ -173,15 +173,13 @@ fn built_by_toolr(resolved: &ResolvedVenv, root: &Path, check: TokenCheck<'_>) -
     marker_token(store, &resolved.venv_dir).is_some() || pending_build(store, &resolved.venv_dir)
 }
 
-/// toolr claimed the venv before uv ran and no marker was written since: a sync that failed
-/// part way. The claim covers only the directory uv left (see [`TrustStore::bind_claim`]), so a
-/// venv put there since reads as someone else's, as does one whose marker doesn't match. A
-/// sync killed before it could bind its claim leaves none, and the venv is asked about.
+/// A toolr is building the venv right now: it claimed it under the sync lock, still holds the
+/// lock, and hasn't written the marker. A claim whose lock is free is from a sync that was
+/// killed, and covers nothing; a failed sync ends its own (see [`abandon_build`]).
 fn pending_build(store: &TrustStore, venv_dir: &Path) -> bool {
-    let bound = store.claim_identity(venv_dir);
-    bound.is_some()
-        && bound == venv_identity(venv_dir)
-        && fs::symlink_metadata(venv_dir.join(FRESHNESS_MARKER)).is_err()
+    fs::symlink_metadata(venv_dir.join(FRESHNESS_MARKER)).is_err()
+        && store.venv_pending(venv_dir)
+        && store.venv_locked(venv_dir)
 }
 
 /// The project root above `tools_dir`.
@@ -231,12 +229,18 @@ fn marker_token(store: &TrustStore, venv_dir: &Path) -> Option<String> {
         .filter(|token| *token == marker)
 }
 
+/// Whether `venv_dir` sits directly in `tools_dir` and `tools_dir` is a real directory: a
+/// `tools` that is a symlink could be another project's, so nothing under it is removed.
+fn in_real_tools_dir(tools_dir: &Path, venv_dir: &Path) -> bool {
+    fs::symlink_metadata(tools_dir).is_ok_and(|m| m.is_dir())
+        && venv_dir.parent() == Some(tools_dir)
+}
+
 /// Never follows a symlink: a linked `tools/.venv` loses only the link. A
 /// `tools` that is itself a symlink could be another project's, so that
 /// layout is refused rather than emptied.
 fn remove_foreign_venv(tools_dir: &Path, venv_dir: &Path) -> std::io::Result<()> {
-    let real_tools = fs::symlink_metadata(tools_dir).is_ok_and(|m| m.is_dir());
-    if !real_tools || venv_dir.parent() != Some(tools_dir) {
+    if !in_real_tools_dir(tools_dir, venv_dir) {
         return Err(std::io::Error::other(format!(
             "refusing to remove {}: {} isn't a real directory holding it. Make tools/ a \
              plain directory of the repository, then run `toolr project venv sync`",
@@ -360,10 +364,12 @@ pub fn sync_if_needed(
             lock,
             approve: || approve_removal_on_tty(&resolved.venv_dir, quiet),
             sync: || {
-                claim_before_build(resolved, tools_dir);
+                let absent = claim_before_build(resolved, tools_dir);
                 // Not `Http`: its message tells the user to install uv, which they already have.
                 let ran = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet);
-                bind_claim_after_build(resolved);
+                if !matches!(&ran, Ok(status) if status.success()) {
+                    abandon_build(resolved, tools_dir, absent);
+                }
                 let status = ran.map_err(|e| {
                     let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
                     UvError::Io(std::io::Error::other(msg))
@@ -540,23 +546,35 @@ pub(super) fn lock_in_tree(
 }
 
 /// Under the lock, just before uv runs: record that toolr is building this in-tree venv (see
-/// [`TrustStore::claim_venv`]). Best effort: without the claim a failed first sync leaves a
-/// venv toolr must ask about before replacing, as it did before claims existed.
-fn claim_before_build(resolved: &ResolvedVenv, tools_dir: &Path) {
-    // Store or claim failures are ignored: the venv then reads as one toolr didn't build and
-    // the user is asked before it is replaced (fail-safe).
+/// [`TrustStore::claim_venv`]), so another toolr that sees it unstamped waits on the lock.
+/// Returns whether there was no venv, the one case [`abandon_build`] may remove what uv left.
+fn claim_before_build(resolved: &ResolvedVenv, tools_dir: &Path) -> bool {
+    let absent = fs::symlink_metadata(&resolved.venv_dir)
+        .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound);
+    // Store or claim failures are ignored: another toolr then asks about the venv rather than
+    // waiting for it (fail-safe).
     if let Some(Ok(store)) = token_store(resolved) {
         let _ = store.claim_venv(project_root(tools_dir), &resolved.venv_dir);
     }
+    absent
 }
 
-/// After uv exits, whatever its status: bind the claim to the venv directory it left, or end
-/// the claim if there is none. A success is stamped over this next. Failures are ignored: an
-/// unbound claim covers no venv, so the venv is asked about (fail-safe).
-fn bind_claim_after_build(resolved: &ResolvedVenv) {
-    if let Some(Ok(store)) = token_store(resolved) {
-        let _ = store.bind_claim(&resolved.venv_dir, venv_identity(&resolved.venv_dir));
+/// Still under the lock, after a sync that failed: remove the venv uv began when toolr found
+/// none before claiming, then end the claim. Nothing the failed sync left counts as toolr's
+/// later: a directory that stays, say because it couldn't be removed, is asked about. Only a
+/// real directory is removed; `remove_dir_all` doesn't follow a symlink.
+fn abandon_build(resolved: &ResolvedVenv, tools_dir: &Path, absent: bool) {
+    let Some(Ok(store)) = token_store(resolved) else {
+        return;
+    };
+    let venv_dir = &resolved.venv_dir;
+    let left_dir = fs::symlink_metadata(venv_dir).is_ok_and(|m| m.is_dir());
+    if absent && left_dir && in_real_tools_dir(tools_dir, venv_dir) {
+        let _ = fs::remove_dir_all(venv_dir);
     }
+    // Unended, the claim still covers nothing once the lock is released, and the next lock
+    // holder ends it.
+    let _ = store.end_claim(venv_dir);
 }
 
 /// Write the marker after toolr built or changed the venv: for an in-tree
@@ -794,12 +812,15 @@ mod tests {
     /// relies on `#!/bin/sh` + 0o755 perms.
     #[cfg(unix)]
     fn stub_uv(tmp: &Path, exit_code: i32) -> UvBinary {
-        use std::io::Write;
+        uv_script(tmp, &format!("exit {exit_code}"))
+    }
+
+    /// A uv-binary stub at `tmp/uv` that runs the shell `script`.
+    #[cfg(unix)]
+    fn uv_script(tmp: &Path, script: &str) -> UvBinary {
         use std::os::unix::fs::PermissionsExt;
         let stub = tmp.join("uv");
-        let mut f = fs::File::create(&stub).unwrap();
-        writeln!(f, "#!/bin/sh\nexit {exit_code}").unwrap();
-        drop(f);
+        fs::write(&stub, format!("#!/bin/sh\n{script}\n")).unwrap();
         let mut perms = fs::metadata(&stub).unwrap().permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&stub, perms).unwrap();
@@ -1258,7 +1279,8 @@ mod tests {
                 &tools.join("uv.lock"),
                 SystemTime::now() - Duration::from_secs(60),
             );
-            let store = TrustStore::at(tmp.path().join("state").join("trust"));
+            // Where `open_default` finds it under `XDG_STATE_HOME=<tmp>/state`.
+            let store = TrustStore::at(tmp.path().join("state").join("toolr").join("trust"));
             store.trust(&root).unwrap();
             let resolved = ResolvedVenv {
                 repo_key: String::new(),
@@ -1282,16 +1304,6 @@ mod tests {
 
         fn marker(&self) -> PathBuf {
             self.resolved.venv_dir.join(FRESHNESS_MARKER)
-        }
-
-        /// What `sync_if_needed` does once uv has exited.
-        fn bind(&self) {
-            self.store
-                .bind_claim(
-                    &self.resolved.venv_dir,
-                    venv_identity(&self.resolved.venv_dir),
-                )
-                .unwrap();
         }
     }
 
@@ -1719,92 +1731,162 @@ mod tests {
         assert!(t.resolved.python.is_file(), "the unapproved venv must stay");
     }
 
-    /// A first build that failed after uv created the venv leaves toolr's own venv, not one to
-    /// ask about; a marker that doesn't match still isn't toolr's.
+    /// While the toolr that claimed the venv holds the sync lock, its half-built venv is its
+    /// own, so another toolr waits on the lock instead of asking about it. A marker that
+    /// doesn't match still isn't toolr's, and once the lock is free the claim covers nothing.
     #[test]
-    fn a_claimed_venv_without_a_marker_is_toolrs_until_stamped() {
+    fn a_claimed_venv_without_a_marker_is_toolrs_while_its_builder_holds_the_lock() {
         let t = InTree::new();
         let root = t.tools.parent().unwrap();
+        let venv = &t.resolved.venv_dir;
         assert_eq!(t.check(), Freshness::Foreign);
-        t.store.claim_venv(root, &t.resolved.venv_dir).unwrap();
-        assert!(t.store.venv_pending(&t.resolved.venv_dir));
-        assert_eq!(
-            t.check(),
-            Freshness::Foreign,
-            "a claim uv hasn't returned from"
-        );
-        t.bind();
+        let lock = t.store.lock_venv(venv, true).unwrap();
+        t.store.claim_venv(root, venv).unwrap();
         assert_eq!(t.check(), Freshness::Missing, "toolr's half-built venv");
-        touch_marker(&t.resolved.venv_dir).unwrap();
+        touch_marker(venv).unwrap();
         assert_eq!(t.check(), Freshness::Foreign, "a marker that doesn't match");
         fs::remove_file(t.marker()).unwrap();
+        drop(lock);
+        assert_eq!(t.check(), Freshness::Foreign, "no builder holds the lock");
 
+        let lock = t.store.lock_venv(venv, true).unwrap();
+        t.store.claim_venv(root, venv).unwrap();
         t.stamp();
-        assert!(
-            !t.store.venv_pending(&t.resolved.venv_dir),
-            "the stamp settles it"
-        );
+        drop(lock);
+        assert!(!t.store.venv_pending(venv), "the stamp settles it");
         assert_eq!(t.check(), Freshness::Fresh);
         let token = fs::read_to_string(t.marker()).unwrap();
         // A rebuild keeps the token, and its stamp settles the claim again.
-        t.store.claim_venv(root, &t.resolved.venv_dir).unwrap();
-        t.bind();
+        t.store.claim_venv(root, venv).unwrap();
         assert_eq!(t.check(), Freshness::Fresh);
         t.stamp();
         assert_eq!(fs::read_to_string(t.marker()).unwrap(), token);
-        assert!(!t.store.venv_pending(&t.resolved.venv_dir));
+        assert!(!t.store.venv_pending(venv));
     }
 
-    /// The reported shape: the first sync fails and uv left no venv, then a venv appears with
-    /// no marker. The claim must not carry over to it.
+    /// A sync killed part way leaves its claim but releases its lock: the claim covers nothing,
+    /// and the next toolr to take the lock ends it, so it can't cover the venv then either.
     #[test]
-    fn a_claim_does_not_cover_a_venv_that_appears_after_a_failed_sync() {
+    fn a_claim_left_by_an_interrupted_sync_covers_nothing() {
         let t = InTree::new();
-        let root = t.tools.parent().unwrap();
         let venv = &t.resolved.venv_dir;
-        fs::remove_dir_all(venv).unwrap();
-        t.store.claim_venv(root, venv).unwrap();
-        t.bind();
-        assert!(!t.store.venv_pending(venv), "no directory ends the claim");
+        let killed = t.store.lock_venv(venv, true).unwrap();
+        t.store.claim_venv(t.tools.parent().unwrap(), venv).unwrap();
+        fs::write(venv.join(".gitignore"), "*\n").unwrap();
+        drop(killed);
+        assert!(t.store.venv_pending(venv));
+        assert_eq!(t.check(), Freshness::Foreign);
 
-        venv_with_interpreter(venv);
-        assert_eq!(t.check(), Freshness::Foreign, "a venv toolr never built");
+        let _lock = t.store.lock_venv(venv, true).unwrap();
+        assert!(!t.store.venv_pending(venv), "the lock holder ends it");
+        assert_eq!(t.check(), Freshness::Foreign, "under the lock too");
     }
 
-    /// uv left a venv, then it was replaced by another while the claim was still pending.
+    /// An entry from this fix's first, identity-bound claim still loads, and its claim covers
+    /// nothing without the lock.
+    #[cfg(unix)]
     #[test]
-    fn a_bound_claim_does_not_cover_a_replaced_venv() {
+    fn a_stored_claim_with_an_identity_covers_nothing() {
+        use std::os::unix::fs::MetadataExt;
         let t = InTree::new();
-        let root = t.tools.parent().unwrap();
         let venv = &t.resolved.venv_dir;
-        t.store.claim_venv(root, venv).unwrap();
-        t.bind();
-        assert_eq!(t.check(), Freshness::Missing, "uv's own half-built venv");
+        t.store.claim_venv(t.tools.parent().unwrap(), venv).unwrap();
+        let entry = fs::read_dir(t.store.dir().join("venvs"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&fs::read(&entry).unwrap()).unwrap();
+        let meta = fs::symlink_metadata(venv).unwrap();
+        json["claim_identity"] = serde_json::json!([meta.dev(), meta.ino()]);
+        fs::write(&entry, serde_json::to_vec(&json).unwrap()).unwrap();
 
-        // The old directory stays until the new one exists, so the inode can't be reused.
-        let old = venv.with_extension("old");
-        fs::rename(venv, &old).unwrap();
-        venv_with_interpreter(venv);
-        assert_eq!(t.check(), Freshness::Foreign, "a different directory");
-    }
-
-    /// A sync killed before it could bind covers nothing.
-    #[test]
-    fn an_unbound_claim_covers_no_venv() {
-        let t = InTree::new();
-        t.store
-            .claim_venv(t.tools.parent().unwrap(), &t.resolved.venv_dir)
-            .unwrap();
-        assert_eq!(t.store.claim_identity(&t.resolved.venv_dir), None);
+        assert!(t.store.venv_pending(venv), "the entry still loads");
         assert_eq!(t.check(), Freshness::Foreign);
     }
 
-    /// Binding touches nothing once the venv is stamped.
+    /// Points the default trust store at `t.store`, and the other state toolr writes at `t`'s
+    /// temp dir, so the real sync runs against them.
+    fn default_store_env(t: &InTree) -> crate::test_env::EnvGuard {
+        let mut env = crate::test_env::EnvGuard::write();
+        let tmp = t._tmp.path();
+        env.set("XDG_STATE_HOME", tmp.join("state"));
+        env.set("XDG_CACHE_HOME", tmp.join("cache"));
+        env.set("XDG_DATA_HOME", tmp.join("data"));
+        env.remove("TOOLR_TRUST_ALL");
+        env
+    }
+
+    /// What uv leaves when a first sync fails after it created the venv.
+    #[cfg(unix)]
+    const UV_FAILS_IN_A_NEW_VENV: &str = r#"mkdir -p "$UV_PROJECT_ENVIRONMENT/bin"
+printf '*\n' > "$UV_PROJECT_ENVIRONMENT/.gitignore"
+"#;
+
+    /// The reported shape, through the real sync: the first sync fails after uv created the
+    /// venv and its `.gitignore`, then a checkout puts files there. None of it is toolr's.
+    #[cfg(unix)]
     #[test]
-    fn binding_without_a_pending_claim_changes_nothing() {
+    fn a_failed_first_sync_leaves_no_venv_and_no_claim() {
         let t = InTree::new();
+        let _env = default_store_env(&t);
+        let venv = &t.resolved.venv_dir;
+        fs::remove_dir_all(venv).unwrap();
+        let uv = uv_script(t._tmp.path(), &format!("{UV_FAILS_IN_A_NEW_VENV}exit 1"));
+        let err = sync_if_needed(&uv, &t.tools, &t.resolved, false, true, &UpgradeMode::None)
+            .expect_err("uv failed");
+        assert!(matches!(err, UvError::SyncFailed(Some(1))), "{err:?}");
+        assert!(
+            fs::symlink_metadata(venv).is_err(),
+            "what uv left is removed"
+        );
+        assert!(!t.store.venv_pending(venv));
+
+        venv_with_interpreter(venv);
+        assert_eq!(t.check(), Freshness::Foreign);
+    }
+
+    /// When what uv left can't be removed the directory stays, but the claim still ends, so
+    /// files a checkout writes into it are asked about.
+    #[cfg(unix)]
+    #[test]
+    fn files_checked_out_into_a_failed_first_syncs_venv_are_foreign() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = InTree::new();
+        let _env = default_store_env(&t);
+        let venv = &t.resolved.venv_dir;
+        fs::remove_dir_all(venv).unwrap();
+        let script = format!(
+            "{UV_FAILS_IN_A_NEW_VENV}chmod 555 \"$(dirname \"$UV_PROJECT_ENVIRONMENT\")\"\nexit 1"
+        );
+        let uv = uv_script(t._tmp.path(), &script);
+        let result = sync_if_needed(&uv, &t.tools, &t.resolved, false, true, &UpgradeMode::None);
+        fs::set_permissions(&t.tools, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            matches!(result, Err(UvError::SyncFailed(Some(1)))),
+            "{result:?}"
+        );
+        assert!(venv.is_dir(), "tools/ refused the removal");
+        assert!(!t.store.venv_pending(venv));
+
+        venv_with_interpreter(venv);
+        assert_eq!(t.check(), Freshness::Foreign);
+    }
+
+    /// A failed resync of toolr's own venv leaves the venv in place and toolr's.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_resync_keeps_toolrs_venv() {
+        let t = InTree::new();
+        let _env = default_store_env(&t);
         t.stamp();
-        t.bind();
+        let uv = stub_uv(t._tmp.path(), 3);
+        let err = sync_if_needed(&uv, &t.tools, &t.resolved, true, true, &UpgradeMode::None)
+            .expect_err("uv failed");
+        assert!(matches!(err, UvError::SyncFailed(Some(3))), "{err:?}");
+        assert!(t.resolved.python.is_file());
         assert!(!t.store.venv_pending(&t.resolved.venv_dir));
         assert_eq!(t.check(), Freshness::Fresh);
     }

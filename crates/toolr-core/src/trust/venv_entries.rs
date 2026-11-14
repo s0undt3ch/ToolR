@@ -45,14 +45,10 @@ pub(super) struct VenvEntry {
     pub(super) kind: KeyKind,
     venv_dir: PathBuf,
     token: String,
-    /// toolr is building the venv: until a sync stamps it, a venv here with no marker is
-    /// toolr's own half-built one, such as after a failed or interrupted first sync.
+    /// toolr is building the venv: while the toolr that claimed it holds the sync lock, a venv
+    /// here with no marker is that toolr's half-built one. The claim never outlives the run.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pending: bool,
-    /// The venv directory the claim covers, recorded once uv has exited (see
-    /// [`TrustStore::bind_claim`]). A claim without one covers nothing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    claim_identity: Option<(u64, u64)>,
 }
 
 /// What venv entries are keyed by: the canonical parent plus the venv's own
@@ -181,10 +177,15 @@ impl TrustStore {
             // A prune may have removed the file before this process locked it, and another
             // toolr may hold a new file at the path, so only a lock on the current file counts.
             if is_same_file(&file, &path) {
-                return Ok(VenvLock {
+                let lock = VenvLock {
                     file: Some(file),
                     path,
-                });
+                };
+                // No builder is running now, so a claim left is from a toolr that didn't
+                // finish. Kept, it would cover the venv while this lock is held; on failure the
+                // lock is released, and the claim covers nothing.
+                self.end_claim(venv_dir).with_context(failed)?;
+                return Ok(lock);
             }
         }
     }
@@ -194,8 +195,9 @@ impl TrustStore {
         Ok(self.venv_entry(venv_dir)?.map(|e| e.token))
     }
 
-    /// Whether toolr began building the in-tree venv at `venv_dir` and no sync has stamped it
-    /// since (see [`Self::claim_venv`]).
+    /// Whether toolr began building the in-tree venv at `venv_dir` and no sync has stamped or
+    /// ended the claim since (see [`Self::claim_venv`]). It counts only while the sync lock is
+    /// held (see [`Self::venv_locked`]).
     pub fn venv_pending(&self, venv_dir: &Path) -> bool {
         // An unreadable entry counts as no claim, so the venv is asked about, never trusted.
         self.venv_entry(venv_dir)
@@ -204,15 +206,11 @@ impl TrustStore {
             .is_some_and(|e| e.pending)
     }
 
-    /// The identity of the venv directory a pending claim is bound to, when the claim is
-    /// pending and bound. A claim no one bound, or one over a directory that has since been
-    /// replaced, is for the caller to compare against the directory now.
-    pub fn claim_identity(&self, venv_dir: &Path) -> Option<(u64, u64)> {
-        self.venv_entry(venv_dir)
-            .ok()
-            .flatten()
-            .filter(|e| e.pending)
-            .and_then(|e| e.claim_identity)
+    /// Whether a toolr, this process included, holds the sync lock for the in-tree venv at
+    /// `venv_dir` now. Creates nothing; a lock that can't be opened counts as free.
+    pub fn venv_locked(&self, venv_dir: &Path) -> bool {
+        fs::File::open(self.venv_lock_path(venv_dir))
+            .is_ok_and(|file| matches!(file.try_lock(), Err(fs::TryLockError::WouldBlock)))
     }
 
     fn venv_entry(&self, venv_dir: &Path) -> Result<Option<VenvEntry>> {
@@ -226,9 +224,9 @@ impl TrustStore {
         Ok((entry.venv_dir == venv_key).then_some(entry))
     }
 
-    /// Before uv builds or rebuilds the in-tree venv at `venv_dir`: mark it as being built by
-    /// toolr, keeping any token it has, so a sync that fails or is killed before the marker is
-    /// written leaves a venv toolr still counts as its own.
+    /// Under the sync lock, before uv builds or rebuilds the in-tree venv at `venv_dir`: mark it
+    /// as being built by toolr, keeping any token it has, so another toolr that sees it before
+    /// the marker is written waits on the lock instead of asking about it.
     pub fn claim_venv(&self, root: &Path, venv_dir: &Path) -> Result<()> {
         // An unreadable entry keeps no token: a new one is minted and the old marker stops
         // matching, so the venv is asked about again (fail-safe).
@@ -236,19 +234,20 @@ impl TrustStore {
             Some(token) => token,
             None => new_token()?,
         };
-        self.write_entry(root, venv_dir, &token, true, None)
+        self.write_entry(root, venv_dir, &token, true)
     }
 
-    /// After uv exits without the sync being stamped: bind a pending claim to the directory
-    /// uv left, so only that directory counts as toolr's half-built venv. `None`, uv left no
-    /// directory, ends the claim, keeping the token. Nothing changes without a pending claim.
-    pub fn bind_claim(&self, venv_dir: &Path, identity: Option<(u64, u64)>) -> Result<()> {
-        let Some(mut entry) = self.venv_entry(venv_dir)?.filter(|e| e.pending) else {
-            return Ok(());
-        };
-        entry.pending = identity.is_some();
-        entry.claim_identity = identity;
-        self.store_entry(&entry)
+    /// End a pending [`Self::claim_venv`] without a stamp, keeping the token: after a failed
+    /// sync, or one the lock holder finds left by a toolr that didn't finish. An unreadable
+    /// entry holds no claim (see [`Self::venv_pending`]), so only a failed write is an error.
+    pub fn end_claim(&self, venv_dir: &Path) -> Result<()> {
+        match self.venv_entry(venv_dir) {
+            Ok(Some(mut entry)) if entry.pending => {
+                entry.pending = false;
+                self.store_entry(&entry)
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Record the in-tree venv toolr just built at `venv_dir` under `root`'s trust key, clearing
@@ -259,18 +258,11 @@ impl TrustStore {
             Some(token) => token.to_owned(),
             None => new_token()?,
         };
-        self.write_entry(root, venv_dir, &token, false, None)?;
+        self.write_entry(root, venv_dir, &token, false)?;
         Ok(token)
     }
 
-    fn write_entry(
-        &self,
-        root: &Path,
-        venv_dir: &Path,
-        token: &str,
-        pending: bool,
-        claim_identity: Option<(u64, u64)>,
-    ) -> Result<()> {
+    fn write_entry(&self, root: &Path, venv_dir: &Path, token: &str, pending: bool) -> Result<()> {
         let key = self.resolve_guarded(root)?;
         self.store_entry(&VenvEntry {
             key: key.key,
@@ -278,7 +270,6 @@ impl TrustStore {
             venv_dir: venv_entry_key(venv_dir),
             token: token.to_owned(),
             pending,
-            claim_identity,
         })
     }
 
@@ -419,6 +410,64 @@ mod tests {
         );
         assert!(!store.venv_pending(&venv));
         assert_eq!(store.venv_token(&venv).unwrap(), Some(token));
+    }
+
+    #[test]
+    fn ending_a_claim_keeps_the_token() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        let venv = venv_in(&f.root(), "a");
+        store.end_claim(&venv).unwrap();
+        assert_eq!(
+            store.venv_token(&venv).unwrap(),
+            None,
+            "no entry, nothing written"
+        );
+        store.claim_venv(&f.root(), &venv).unwrap();
+        let token = store.venv_token(&venv).unwrap();
+        store.end_claim(&venv).unwrap();
+        assert!(!store.venv_pending(&venv));
+        assert_eq!(store.venv_token(&venv).unwrap(), token);
+
+        // An unreadable entry holds no claim, so there is nothing to end.
+        let entries = store.dir().join(VENV_ENTRIES_DIR);
+        let entry = fs::read_dir(&entries)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        fs::write(&entry, b"not json").unwrap();
+        store.end_claim(&venv).unwrap();
+        assert!(!store.venv_pending(&venv));
+    }
+
+    /// The probe sees a holder, this process included, and creates no lock file.
+    #[test]
+    fn venv_locked_reports_a_held_lock_only() {
+        let f = Fixture::new();
+        let store = f.store();
+        let venv = venv_in(&f.root(), "a");
+        assert!(!store.venv_locked(&venv));
+        assert!(!store.dir().join(VENV_LOCKS_DIR).exists());
+        let held = store.lock_venv(&venv, true).unwrap();
+        assert!(store.venv_locked(&venv));
+        drop(held);
+        assert!(!store.venv_locked(&venv));
+    }
+
+    /// No builder runs while this process holds the lock, so a claim found then is ended.
+    #[test]
+    fn taking_the_lock_ends_a_claim_left_behind() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        let venv = venv_in(&f.root(), "a");
+        store.claim_venv(&f.root(), &venv).unwrap();
+        let _lock = store.lock_venv(&venv, true).unwrap();
+        assert!(!store.venv_pending(&venv));
+        assert!(store.venv_token(&venv).unwrap().is_some());
     }
 
     #[cfg(unix)]
