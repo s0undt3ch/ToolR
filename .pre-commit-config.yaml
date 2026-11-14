@@ -65,7 +65,7 @@ repos:
 
       - id: mypy
         name: Run mypy against the code base
-        files: ^(crates/toolr-py/python/|tests/).*\.py$
+        files: ^(crates/toolr-py/python/|tests/|tools/).*\.py$
         exclude: ^tests/([^/]*/)*files/.*$
 
       - id: uv-lock
