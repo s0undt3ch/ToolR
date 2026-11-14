@@ -38,6 +38,7 @@ STRUCT_RE = re.compile(
     r"(?:pub(?:\([^)]+\))? )?struct (?P<name>\w+)(?:<[^>]*>)?(?P<open>\s*[{(;]|\s*where)",
     re.MULTILINE,
 )
+# The 4-space indent is deliberate: rustfmt puts struct fields there, and it skips nested items.
 FIELD_RE = re.compile(r"^ {4}(?:pub(?:\([^)]+\))? )?(?:r#)?(?P<name>\w+)\s*:(?!:)")
 RENAME_RE = re.compile(r'\brename\s*=\s*"(?P<wire>[^"]+)"')
 
@@ -45,9 +46,10 @@ RENAME_RE = re.compile(r'\brename\s*=\s*"(?P<wire>[^"]+)"')
 def _wire_name(name: str, attrs: list[str], struct: str) -> str | None:
     """The key serde writes for a field, or ``None`` when serde never serialises it."""
     text = " ".join(attrs)
-    if re.search(r"\bskip\b", text) or (
-        re.search(r"\bskip_serializing\b", text) and re.search(r"\bskip_deserializing\b", text)
-    ):
+    skipped_both_ways = re.search(r"\bskip_serializing\b", text) and re.search(
+        r"\bskip_deserializing\b", text
+    )
+    if re.search(r"\bskip\b", text) or skipped_both_ways:
         return None
     assert not re.search(r"\b(rename\(|flatten)", text), (
         f"`{struct}.{name}`: unsupported serde attribute `{text}`"

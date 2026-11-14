@@ -32,6 +32,18 @@ def make_binary(tmp_path: Path) -> Callable[[str, int], Path]:
     return factory
 
 
+@pytest.fixture
+def path_toolr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """An executable `toolr` in a `bin/` directory that is the only entry on PATH."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    toolr = bin_dir / "toolr"
+    toolr.write_text("")
+    toolr.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir))
+    return toolr
+
+
 def test_env_override_wins_even_when_the_path_is_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_binary: Callable[[str, int], Path]
 ) -> None:
@@ -42,49 +54,34 @@ def test_env_override_wins_even_when_the_path_is_missing(
 
 
 @pytest.mark.parametrize(
-    ("release_mtime", "debug_mtime", "expected"),
-    [(2_000, 1_000, "release"), (1_000, 2_000, "debug")],
+    ("winner", "loser"),
+    [("release", "debug"), ("debug", "release")],
 )
 def test_newest_cargo_build_wins(
-    tmp_path: Path,
-    make_binary: Callable[[str, int], Path],
-    release_mtime: int,
-    debug_mtime: int,
-    expected: str,
+    tmp_path: Path, make_binary: Callable[[str, int], Path], winner: str, loser: str
 ) -> None:
-    release = make_binary("release", release_mtime)
-    debug = make_binary("debug", debug_mtime)
-    assert _find_capture_toolr(tmp_path) == {"release": release, "debug": debug}[expected]
+    make_binary(winner, 2_000)
+    make_binary(loser, 1_000)
+    assert _find_capture_toolr(tmp_path) == tmp_path / "target" / winner / "toolr"
 
 
 def test_single_cargo_build_is_used(
     tmp_path: Path, make_binary: Callable[[str, int], Path]
 ) -> None:
-    debug = make_binary("debug", 1_000)
-    assert _find_capture_toolr(tmp_path) == debug
+    make_binary("debug", 1_000)
+    assert _find_capture_toolr(tmp_path) == tmp_path / "target" / "debug" / "toolr"
 
 
 def test_cargo_build_beats_toolr_on_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_binary: Callable[[str, int], Path]
+    tmp_path: Path, make_binary: Callable[[str, int], Path], path_toolr: Path
 ) -> None:
-    on_path = tmp_path / "bin"
-    on_path.mkdir()
-    (on_path / "toolr").write_text("")
-    (on_path / "toolr").chmod(0o755)
-    monkeypatch.setenv("PATH", str(on_path))
-    debug = make_binary("debug", 1_000)
-    assert _find_capture_toolr(tmp_path) == debug
+    make_binary("debug", 1_000)
+    assert _find_capture_toolr(tmp_path) == tmp_path / "target" / "debug" / "toolr"
 
 
 @pytest.mark.skip_on_windows(reason="relies on the executable bit for PATH lookup")
-def test_falls_back_to_toolr_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    on_path = tmp_path / "bin"
-    on_path.mkdir()
-    toolr = on_path / "toolr"
-    toolr.write_text("")
-    toolr.chmod(0o755)
-    monkeypatch.setenv("PATH", str(on_path))
-    assert _find_capture_toolr(tmp_path / "repo") == toolr
+def test_falls_back_to_toolr_on_path(tmp_path: Path, path_toolr: Path) -> None:
+    assert _find_capture_toolr(tmp_path / "repo") == path_toolr
 
 
 def test_returns_none_when_nothing_is_found(tmp_path: Path) -> None:
