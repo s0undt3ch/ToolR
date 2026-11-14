@@ -115,14 +115,12 @@ jobs:
           disable_search: true
           flags: ${{ inputs.os }}
 
-      - name: Upload test results to Codecov
+      - name: Stage test results for Codecov
         if: ${{ !cancelled() }}
-        # codecov/test-results-action is deprecated in favour of running
-        # codecov-action a second time with report_type: test_results.
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        # Uploaded by ci.yml's `codecov-notify`; see _test.yml.
+        uses: ./.github/actions/codecov-stage-test-results
         with:
-          # Use OpenID Connect for secure authentication (no token needed)
-          use_oidc: true
-          report_type: test_results
           files: junit-dist-${{ inputs.os }}.xml
           flags: ${{ inputs.os }}
+          name: Test Distribution / ${{ inputs.display-name }}
+          artifact-name: dist-${{ inputs.os }}

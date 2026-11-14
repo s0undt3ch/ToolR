@@ -1,0 +1,35 @@
+name: Publish Codecov Test Results
+description: >-
+  Upload every artifact staged by `codecov-stage-test-results`, each under its
+  own flags and name, then run Codecov's `send-notifications`. Run it once, in
+  a job that needs every job that uploads coverage or stages test results.
+  The job needs `permissions: id-token: write` and `codecovcli` on `PATH`
+  (`ci.yml` installs it with mise from `mise.ci.toml`); fork PRs upload
+  tokenless.
+
+inputs:
+  send-notifications:
+    description: Run `send-notifications` after the uploads (for `codecov.notify.manual_trigger`).
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Download the staged test results
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        pattern: codecov-test-results-*
+        path: ${{ runner.temp }}/codecov-publish-test-results/staged
+
+    - name: Upload the test results and send notifications
+      shell: bash
+      env:
+        STAGED: ${{ runner.temp }}/codecov-publish-test-results/staged
+        SEND_NOTIFICATIONS: ${{ inputs.send-notifications }}
+      run: |
+        args=("$STAGED")
+        if [ "$SEND_NOTIFICATIONS" != "true" ]; then
+          args+=(--no-send-notifications)
+        fi
+        python "$GITHUB_ACTION_PATH/publish.py" "${args[@]}"
