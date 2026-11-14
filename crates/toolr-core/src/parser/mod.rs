@@ -45,8 +45,28 @@ pub use build::{
 pub fn parse_python_file(path: &Path) -> Result<ModModule> {
     let source =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let parsed = parse_module(&source).with_context(|| format!("parsing {}", path.display()))?;
+    let parsed = parse_module(&source).map_err(|e| {
+        let (line, column) = line_and_column(&source, usize::from(e.location.start()));
+        anyhow::anyhow!(
+            "parsing {}: {} (line {line}, column {column})",
+            path.display(),
+            e.error
+        )
+    })?;
     Ok(parsed.into_syntax())
+}
+
+/// The 1-based line and column (in characters) of byte `offset` in `source`; an offset past the
+/// end or inside a character counts as the nearest earlier boundary.
+fn line_and_column(source: &str, offset: usize) -> (usize, usize) {
+    let mut end = offset.min(source.len());
+    while !source.is_char_boundary(end) {
+        end -= 1;
+    }
+    let before = &source[..end];
+    let line = before.matches('\n').count() + 1;
+    let column = before.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
+    (line, column)
 }
 
 #[cfg(test)]
@@ -59,6 +79,26 @@ mod tests {
         let mut f = NamedTempFile::new().unwrap();
         f.write_all(source.as_bytes()).unwrap();
         f
+    }
+
+    #[test]
+    fn syntax_error_names_the_file_message_line_and_column() {
+        let f = write_tmp("x = 1\ndef not closed(\n");
+        let err = parse_python_file(f.path()).unwrap_err().to_string();
+        let head = format!("parsing {}: ", f.path().display());
+        let rest = err.strip_prefix(&head).expect(&err);
+        assert!(rest.ends_with("(line 2, column 5)"), "{rest}");
+        assert!(!rest.contains("byte range"), "{rest}");
+    }
+
+    #[test]
+    fn line_and_column_counts_characters_and_clamps() {
+        assert_eq!(line_and_column("", 0), (1, 1));
+        assert_eq!(line_and_column("ab\ncd", 4), (2, 2));
+        assert_eq!(line_and_column("é=\n", 2), (1, 2));
+        // Inside the two-byte `é`, and past the end.
+        assert_eq!(line_and_column("é=", 1), (1, 1));
+        assert_eq!(line_and_column("a\n", 99), (2, 1));
     }
 
     #[test]
