@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use crate::cache::meta::Meta;
-use crate::discovery::discover_project_root;
+use crate::discovery::{DiscoveryError, discover_project_root};
 use crate::manifest_build::rebuild_manifest_full;
 use crate::trust::{TrustMode, Trusted, require_trust};
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
@@ -57,15 +57,23 @@ impl EnsureOpts {
     }
 }
 
-/// Failures of [`ensure_venv_ready`] that mean there is no tools venv to ready: attached
-/// as the context of the underlying error, so `venv sync --if-project` recognises them by
-/// type ([`is_nothing_to_sync`]) and the message stays what it was.
+/// Failures that mean there is no tools venv to ready, so `venv sync --if-project` recognises
+/// them by type ([`is_nothing_to_sync`]). `NoProject` is the one "no project" error every
+/// built-in reports; it carries the discovery message as its own text.
 #[derive(Debug, thiserror::Error)]
 pub enum NothingToSync {
-    #[error("locating project root for the tools venv")]
-    NoProject,
+    #[error("{0}")]
+    NoProject(String),
+    /// Context of the underlying error.
     #[error("resolving the tools venv path")]
     NoVenvPath,
+}
+
+impl NothingToSync {
+    /// `NoProject` for a failed project-root lookup.
+    pub fn no_project(why: &DiscoveryError) -> Self {
+        Self::NoProject(why.to_string())
+    }
 }
 
 /// Whether `err` says there was nothing to sync: no project, no readable venv location, or
@@ -86,7 +94,7 @@ pub fn ensure_venv_ready(
     consent: ConsentMode,
     opts: EnsureOpts,
 ) -> Result<(ResolvedVenv, UvBinary)> {
-    let repo_root = discover_project_root(cwd).context(NothingToSync::NoProject)?;
+    let repo_root = discover_project_root(cwd).map_err(|e| NothingToSync::no_project(&e))?;
     // Before `tools/pyproject.toml` is read: toolr reads nothing of an untrusted repository.
     if !opts.trusted.as_ref().is_some_and(|t| t.covers(&repo_root)) {
         require_trust(&repo_root, opts.trust)?;
@@ -317,7 +325,9 @@ mod tests {
             .expect_err("expected ensure_venv_ready to fail without a project");
         let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
         assert!(
-            chain.iter().any(|m| m.contains("locating project root")),
+            chain
+                .iter()
+                .any(|m| m.starts_with("no toolr project found above")),
             "expected discovery to fail, got: {chain:?}"
         );
         assert!(is_nothing_to_sync(&err), "{err:#}");
@@ -326,7 +336,7 @@ mod tests {
     #[test]
     fn nothing_to_sync_is_recognised_by_type_not_by_text() {
         use crate::trust::TrustError;
-        let no_project = anyhow::anyhow!("boom").context(NothingToSync::NoProject);
+        let no_project = anyhow::Error::new(NothingToSync::NoProject("boom".into()));
         let no_venv_path = anyhow::anyhow!("boom").context(NothingToSync::NoVenvPath);
         let refused = UvError::UserRefusedInstall.into_anyhow();
         let wrapped = UvError::UserRefusedInstall
@@ -337,10 +347,11 @@ mod tests {
         }
 
         // The same words from another source, and a trust refusal, are not it.
-        let lookalike = anyhow::anyhow!("locating project root for the tools venv");
+        let lookalike = anyhow::anyhow!("no toolr project found above /x");
         let path = PathBuf::from("/x/locating project root/user declined uv install");
-        let untrusted = anyhow::Error::new(TrustError::StoreInsideRepo(path))
-            .context(NothingToSync::NoProject.to_string());
+        let untrusted = anyhow::Error::new(TrustError::StoreInsideRepo(path)).context(
+            NothingToSync::NoProject("no toolr project found above /x".into()).to_string(),
+        );
         let failed_sync = anyhow::anyhow!("uv sync failed");
         for err in [&lookalike, &untrusted, &failed_sync] {
             assert!(!is_nothing_to_sync(err), "{err:#}");

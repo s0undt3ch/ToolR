@@ -77,13 +77,13 @@ pub(crate) fn dispatch(
         return complete::run_complete(sub, &run.argv);
     }
     if let Some(("self", self_matches)) = matches.subcommand() {
-        return self_cmd::run_self(self_matches, matches.get_flag("quiet"));
+        return self_cmd::run_self(self_matches, &run, matches.get_flag("quiet"));
     }
     if let Some(("__install-uv-now", _)) = matches.subcommand() {
         return self_cmd::run_install_uv_now();
     }
     if let Some(("project", project_m)) = matches.subcommand() {
-        return crate::project::dispatch_project(project_m, matches.get_flag("quiet"));
+        return crate::project::dispatch_project(project_m, &run, matches.get_flag("quiet"));
     }
     let Some((first_name, first_matches)) = matches.subcommand() else {
         // Same renderer as `--help`, so the styles never mix.
