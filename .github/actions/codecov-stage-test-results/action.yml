@@ -1,0 +1,54 @@
+name: Stage Codecov Test Results
+description: >-
+  Stage JUnit test-result files, with the flags and name Codecov should file
+  them under, as an artifact for `codecov-publish-test-results` to upload once
+  every coverage upload is in. Uploading test results straight away makes
+  Codecov post checks and the PR comment early, ignoring
+  `codecov.notify.manual_trigger`.
+
+inputs:
+  files:
+    description: Newline-separated JUnit XML paths. Missing files are skipped with a warning.
+    required: true
+  flags:
+    description: Comma-separated Codecov flags for these results.
+    required: false
+    default: ''
+  name:
+    description: Codecov upload name.
+    required: false
+    default: ''
+  artifact-name:
+    description: >-
+      Unique suffix for the artifact, which is named
+      `codecov-test-results-<artifact-name>`.
+    required: true
+  retention-days:
+    description: Days to keep the staged artifact.
+    required: false
+    default: '1'
+
+runs:
+  using: composite
+  steps:
+    # Explicit `!cancelled()`: the results matter most when a test step failed.
+    - name: Stage the test-result files
+      id: stage
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        INPUT_FILES: ${{ inputs.files }}
+        INPUT_FLAGS: ${{ inputs.flags }}
+        INPUT_NAME: ${{ inputs.name }}
+        STAGE_DIR: ${{ runner.temp }}/codecov-stage-test-results/${{ inputs.artifact-name }}
+      # `python`, as GitHub's own `shell: python` uses, is on PATH on every hosted runner OS.
+      run: python "$GITHUB_ACTION_PATH/stage.py"
+
+    - name: Upload the staged test results
+      if: ${{ !cancelled() && steps.stage.outputs.staged != '0' }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: codecov-test-results-${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/codecov-stage-test-results/${{ inputs.artifact-name }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: error

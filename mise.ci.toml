@@ -1,0 +1,10 @@
+# CI-only tools, loaded with `MISE_ENV=ci` and locked in `mise.ci.lock`
+# (`MISE_ENV=ci mise lock`), so contributors never install them.
+
+# Uploads test results in `ci.yml`'s `codecov-notify` job.
+[tools."github:codecov/codecov-cli"]
+version = "11.3.2"
+
+# Asset autodetection picks the Alpine (musl) build; the runners are glibc.
+[tools."github:codecov/codecov-cli".platforms]
+linux-x64 = { asset_pattern = "codecovcli_linux" }

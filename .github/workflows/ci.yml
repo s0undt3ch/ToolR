@@ -806,8 +806,8 @@ jobs:
 
   codecov-notify:
     name: Codecov Notify
-    # `.codecov.yml` sets `manual_trigger`, so Codecov computes statuses
-    # only once this runs, after every job that uploads coverage.
+    # `.codecov.yml` sets `manual_trigger`, but a test-results upload notifies
+    # anyway, so those are uploaded here too, after every coverage upload.
     if: ${{ !cancelled() && needs.prepare-ci.outputs.run-full-ci == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -822,6 +822,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      # Loads `mise.ci.toml`, and `mise.ci.lock` for the `--locked` install.
+      MISE_ENV: ci
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -832,11 +835,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Tell Codecov every upload is in
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+      - name: Load shared env vars
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
+
+      - name: Install the Codecov CLI
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          use_oidc: true
-          run_command: send-notifications
+          version: ${{ env.MISE_VERSION }}
+          install_args: github:codecov/codecov-cli
+          cache: true
+          cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|codecov-notify|${{ runner.os }}|${{ runner.arch }}
+
+      - name: Upload test results and tell Codecov every upload is in
+        uses: ./.github/actions/codecov-publish-test-results
 
   set-pipeline-exit-status:
     permissions: {}

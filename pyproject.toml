@@ -190,6 +190,10 @@ ignore = [
 "scripts/*.py" = [
   "INP001",   # Standalone scripts, no package needed
 ]
+".github/actions/*/*.py" = [
+  "INP001",   # Run by path from a composite action, not imported
+  "T201",     # `print` writes GitHub workflow commands to the step log
+]
 "docs/**/files/*.py" = [
   "BLE001",   # Do not catch blind exception: `Exception`
   "D100",     # missing docstring in public module
