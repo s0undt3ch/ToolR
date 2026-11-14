@@ -734,7 +734,7 @@ fn render_commands(
     out.push_str("```\n\n");
     out.push_str("## Entries\n\n");
     for entry in entries {
-        render_entry_md(&mut out, entry);
+        render_entry_md(&mut out, entry, import_module);
     }
     // Normalise trailing whitespace + EOF.
     let mut trimmed = out.trim_end().to_string();
@@ -742,7 +742,18 @@ fn render_commands(
     trimmed
 }
 
-fn render_entry_md(out: &mut String, entry: &Entry) {
+/// The module a reader should cite for an entry: the defining module when
+/// every segment is public, else the public `import_module` the name is
+/// exported from (a `_private` module is not something to import from).
+fn public_source<'a>(source_module: &'a str, import_module: &'a str) -> &'a str {
+    if source_module.split('.').any(|part| part.starts_with('_')) {
+        import_module
+    } else {
+        source_module
+    }
+}
+
+fn render_entry_md(out: &mut String, entry: &Entry, import_module: &str) {
     let kind = match entry.kind {
         EntryKind::Function => "function",
         EntryKind::Class => "class",
@@ -753,7 +764,7 @@ fn render_entry_md(out: &mut String, entry: &Entry) {
     let _ = writeln!(
         out,
         "**Kind:** {kind} &nbsp;·&nbsp; **Source:** `{}`\n",
-        entry.source_module
+        public_source(&entry.source_module, import_module)
     );
     if let Some(sig) = &entry.signature {
         out.push_str("```python\n");
@@ -1046,6 +1057,29 @@ mod tests {
         let mut out = String::new();
         render_member_md(&mut out, &member);
         assert!(out.contains("_No docstring on the source definition._"));
+    }
+
+    #[test]
+    fn public_source_hides_private_modules() {
+        assert_eq!(public_source("toolr.utils._signature", "toolr"), "toolr");
+        assert_eq!(public_source("toolr._context", "toolr"), "toolr");
+        assert_eq!(public_source("toolr.sources", "toolr"), "toolr.sources");
+    }
+
+    #[test]
+    fn render_entry_md_cites_the_public_module() {
+        let entry = Entry {
+            name: "command".to_string(),
+            kind: EntryKind::Function,
+            source_module: "toolr._decorators".to_string(),
+            signature: None,
+            docstring: None,
+            members: Vec::new(),
+        };
+        let mut out = String::new();
+        render_entry_md(&mut out, &entry, "toolr");
+        assert!(out.contains("**Source:** `toolr`"), "{out}");
+        assert!(!out.contains("_decorators"), "{out}");
     }
 
     #[test]

@@ -23,7 +23,7 @@ from toolr.testing import (
 
 ### `CommandsTester`
 
-**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.testing._discovery`
+**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.testing`
 
 ```python
 class CommandsTester
@@ -101,7 +101,7 @@ Raises:
 
 ### `ConsoleVerbosity`
 
-**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.utils._console`
+**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.testing`
 
 ```python
 class ConsoleVerbosity
@@ -119,7 +119,7 @@ Console verbosity levels, which decide which `ctx` log lines are written.
 
 ### `ContextForTesting`
 
-**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.testing._make_context`
+**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.testing`
 
 ```python
 class ContextForTesting
@@ -188,7 +188,7 @@ testing-only subclass rather than added to the real `Context`.
 
 ### `DEFAULT_TEST_CONSOLE_WIDTH`
 
-**Kind:** constant &nbsp;·&nbsp; **Source:** `toolr.testing._make_context`
+**Kind:** constant &nbsp;·&nbsp; **Source:** `toolr.testing`
 
 ```python
 DEFAULT_TEST_CONSOLE_WIDTH = 1000
@@ -198,7 +198,7 @@ _No docstring on the source definition._
 
 ### `RunMock`
 
-**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.testing._run_mock`
+**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.testing`
 
 ```python
 class RunMock
@@ -370,7 +370,7 @@ directly on `.mock` is *not* cleared unless you pass
 
 ### `make_command_result`
 
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.testing._run_mock`
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.testing`
 
 ```python
 def make_command_result(
@@ -388,7 +388,7 @@ Build a genuine `CommandResult`, with fresh `stdout`/`stderr` streams.
 
 ### `make_context`
 
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.testing._make_context`
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.testing`
 
 ```python
 def make_context(
@@ -439,7 +439,7 @@ Returns:
 
 ### `set_current_context`
 
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.testing._current_context`
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.testing`
 
 ```python
 @contextmanager

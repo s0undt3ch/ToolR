@@ -1,87 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
-import textwrap
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-
-from toolr._runner import SCHEMA_VERSION
-
-
-@pytest.fixture
-def tools_module(tmp_path: Path) -> Callable[[str], Path]:
-    """Factory: write a ``tools/demo.py`` with the given body. Returns the repo root."""
-
-    def _make(body: str) -> Path:
-        tools_dir = tmp_path / "tools"
-        tools_dir.mkdir(parents=True, exist_ok=True)
-        (tools_dir / "__init__.py").write_text("")
-        (tools_dir / "demo.py").write_text(textwrap.dedent(body))
-        return tmp_path
-
-    return _make
-
-
-@pytest.fixture
-def spec_file(tmp_path: Path) -> Callable[..., Path]:
-    """Factory: write a runner spec JSON to ``tmp_path/spec.json``. Returns its path."""
-
-    def _make(
-        *,
-        command: str,
-        function: str,
-        args: dict[str, object] | None = None,
-        repo_root: Path | None = None,
-    ) -> Path:
-        payload = {
-            "schema_version": SCHEMA_VERSION,
-            "group": "demo",
-            "command": command,
-            "module": "tools.demo",
-            "function": function,
-            "args": args or {},
-            "context": {
-                "repo_root": str(repo_root or tmp_path),
-                "verbosity": "normal",
-                "timestamps": False,
-                "log_level": "INFO",
-            },
-        }
-        spec_path = tmp_path / "spec.json"
-        spec_path.write_text(json.dumps(payload))
-        return spec_path
-
-    return _make
-
-
-@pytest.fixture
-def run_runner(tmp_path: Path) -> Callable[[Path], subprocess.CompletedProcess[str]]:
-    """Factory: spawn ``python -m toolr._runner`` with ``TOOLR_SPEC_FILE`` set."""
-
-    def _run(spec_path: Path) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
-        env["TOOLR_SPEC_FILE"] = str(spec_path)
-        # PYTHONPATH addition lets ``import tools.demo`` find the tmp ``tools/`` package.
-        env["PYTHONPATH"] = str(tmp_path) + os.pathsep + env.get("PYTHONPATH", "")
-        # cwd=tmp_path makes the tmp ``tools/`` package the unambiguous ``tools``
-        # import target (the real toolr project root also contains a ``tools/``
-        # directory which would otherwise shadow it via ``python -m`` injecting
-        # cwd as ``sys.path[0]``).
-        return subprocess.run(
-            [sys.executable, "-m", "toolr._runner"],
-            env=env,
-            cwd=str(tmp_path),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-    return _run
 
 
 def test_runner_invokes_target_function(

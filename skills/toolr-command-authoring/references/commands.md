@@ -23,7 +23,7 @@ from toolr import (
 
 ### `ArgSection`
 
-**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.utils._signature`
+**Kind:** class &nbsp;·&nbsp; **Source:** `toolr`
 
 ```python
 class ArgSection
@@ -73,7 +73,7 @@ description: str | None = None
 
 ### `Context`
 
-**Kind:** class &nbsp;·&nbsp; **Source:** `toolr._context`
+**Kind:** class &nbsp;·&nbsp; **Source:** `toolr`
 
 ```python
 class Context
@@ -357,7 +357,7 @@ Installed toolr-py package version, resolved at import time via `importlib.metad
 
 ### `arg`
 
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.utils._signature`
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr`
 
 ```python
 def arg(
@@ -403,7 +403,7 @@ Args:
 
 ### `arg_section`
 
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.utils._signature`
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr`
 
 ```python
 def arg_section(title: str, *, description: str | None = None) -> ArgSection:
@@ -428,7 +428,7 @@ Returns:
 
 ### `command`
 
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr._decorators`
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr`
 
 ```python
 def command(
@@ -519,7 +519,7 @@ Returns:
 
 ### `command_group`
 
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr._decorators`
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr`
 
 ```python
 def command_group(
@@ -569,7 +569,7 @@ Returns:
 
 ### `current_context`
 
-**Kind:** function &nbsp;·&nbsp; **Source:** `toolr._context`
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr`
 
 ```python
 def current_context() -> Context:

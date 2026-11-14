@@ -260,6 +260,8 @@ disallow_incomplete_defs = true
 check_untyped_defs = true
 warn_unused_ignores = true
 mypy_path = "crates/toolr-py/python"
+# `tools/` is a namespace package (no `__init__.py`); without this mypy maps `tools/x.py` to module `x`.
+explicit_package_bases = true
 exclude = [
   "tests/.*/files/.*\\.py",
   "^tests/([^/]*/)*files/.*",

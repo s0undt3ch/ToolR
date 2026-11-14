@@ -11,6 +11,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
 
 from toolr import Context
 
@@ -102,6 +103,12 @@ SNIPPETS: tuple[Snippet, ...] = (
         ("self", "build-manifest", "--help"),
     ),
 )
+
+
+def _read_text(stream: IO[str] | IO[bytes]) -> str:
+    """Read a captured stream as text; `ctx.run` is typed as returning str or bytes."""
+    data = stream.read()
+    return data if isinstance(data, str) else data.decode()
 
 
 def _find_capture_toolr(repo_root: Path) -> Path | None:
@@ -242,8 +249,8 @@ def _prepare_fixture(
             f"regen-doc-snippets: `{toolr} project manifest rebuild` exited "
             f"{ret.returncode} in {dest}"
         )
-        sys.stderr.write(ret.stdout.read())
-        sys.stderr.write(ret.stderr.read())
+        sys.stderr.write(_read_text(ret.stdout))
+        sys.stderr.write(_read_text(ret.stderr))
         ctx.exit(1)
 
 
@@ -274,8 +281,8 @@ def _capture(ctx: Context, toolr: Path, fixture: Path, snippet: Snippet) -> str:
         # respects the COLUMNS variable.
         input="",
     )
-    stdout = result.stdout.read()
-    stderr = result.stderr.read()
+    stdout = _read_text(result.stdout)
+    stderr = _read_text(result.stderr)
     if result.returncode != 0:
         ctx.error(
             f"regen-doc-snippets: `toolr {' '.join(snippet.argv)}` exited "
@@ -376,7 +383,7 @@ def regen_doc_snippets(ctx: Context, *, check: bool = False) -> None:
             ctx.error(
                 f"regen-doc-snippets: $TOOLR_REGEN_PYTHON ({python}) cannot `import toolr._runner`"
             )
-            sys.stderr.write(probe.stderr.read())
+            sys.stderr.write(_read_text(probe.stderr))
             ctx.exit(1)
         ctx.warn(
             f"regen-doc-snippets: {python} cannot `import toolr._runner`; "
