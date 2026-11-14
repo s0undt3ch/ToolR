@@ -113,4 +113,13 @@ Not verified, so the plan tests them live or with actionlint:
 - That the cancelled gate on the real run is the only source of the stale FAILURE. Taken from
   the audit's evidence, not re-queried.
 
-[troubleshooting]: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks
+[troubleshooting]:
+https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks
+
+## Live test (2026-11-14, on #753)
+
+Adding then removing `question` while a `full-build` run was in progress gave two runs with every
+job skipped and the gate named `Ignored label event (question)`; the `full-build` run was not
+cancelled. Removing `full-build` started a real run that cancelled the full one, and its gate (`Set
+the CI Workflow(pull_request) Pipeline Exit Status`: success) left the PR mergeable.
+`github.event.action` and `github.event.label.name` are populated on these payloads.
