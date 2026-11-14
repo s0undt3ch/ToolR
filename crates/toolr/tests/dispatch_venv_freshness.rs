@@ -476,10 +476,10 @@ fn a_typo_with_an_unreadable_venv_setting_gets_only_claps_error() {
     );
 }
 
-/// uv creates the venv before it resolves, so a first sync that fails leaves a venv toolr
-/// started; the next sync finishes it without asking to replace it.
+/// uv creates the venv before it resolves, so a first sync that fails would leave a venv no
+/// marker vouches for; toolr removes it, and the next sync builds one without asking.
 #[test]
-fn a_failed_first_sync_leaves_a_venv_toolr_still_owns() {
+fn a_failed_first_sync_leaves_no_venv_to_ask_about() {
     let t = Trusted::new();
     fs::remove_dir_all(&t.fx.venv_dir).unwrap();
     t.fx.write_uv_stub("exit 3");
@@ -490,10 +490,9 @@ fn a_failed_first_sync_leaves_a_venv_toolr_still_owns() {
         .unwrap();
     assert!(!out.status.success());
     assert!(
-        t.fx.venv_dir.join("bin/python").is_file(),
-        "uv created the venv"
+        fs::symlink_metadata(&t.fx.venv_dir).is_err(),
+        "the venv uv created is removed"
     );
-    assert!(!t.fx.venv_dir.join(".toolr-sync-stamp").exists());
     t.fx.write_uv_stub("");
     let out = t
         .unapproved()
@@ -506,6 +505,73 @@ fn a_failed_first_sync_leaves_a_venv_toolr_still_owns() {
     assert!(!stderr.contains("toolr didn't build"), "stderr:\n{stderr}");
     t.unapproved().args(["hello", "world"]).assert().success();
     assert!(t.built.exists());
+}
+
+/// A sync killed mid-build leaves its claim and its lock file, and another toolr holds
+/// that lock for a moment. The command must neither run the venv uv was building nor treat it as
+/// toolr's: it waits for the lock, then refuses the venv as one toolr didn't build.
+#[test]
+fn a_stale_claim_never_runs_the_venv_while_another_toolr_holds_the_lock() {
+    use std::io::{BufRead, BufReader, Read};
+    let t = Trusted::new();
+    let pwned = t.plant();
+    let store = toolr_core::trust::TrustStore::at(t.env.state.path().join("toolr/trust"));
+    let killed = store.lock_venv(&t.fx.venv_dir, true).unwrap();
+    store.claim_venv(&t.fx.root, &t.fx.venv_dir).unwrap();
+    let lock_file = fs::read_dir(store.dir().join("locks"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    drop(killed);
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_file)
+        .unwrap();
+    held.try_lock().unwrap();
+
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"))
+        .args(["hello", "world"])
+        .current_dir(&t.fx.root)
+        .env_remove("TOOLR_TRUST_ALL")
+        .env_remove(REPLACE_KEY)
+        .env_remove("TOOLR_AUTO_SYNC")
+        .env_remove("TOOLR_VENV_LOCATION")
+        .env("TOOLR_AUTO_INSTALL_UV", "1")
+        .env("PATH", &t.fx.bin_dir)
+        .env("XDG_STATE_HOME", t.env.state.path())
+        .env("XDG_CACHE_HOME", t.env.cache.path())
+        .env("XDG_DATA_HOME", t.env.data.path())
+        .env("TOOLR_NO_CACHE_HINT", "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut seen = String::new();
+    while stderr.read_line(&mut seen).unwrap() > 0 {
+        if seen.contains("waiting for another toolr to finish syncing") {
+            break;
+        }
+    }
+    assert!(!pwned.exists(), "ran the venv while the lock was held");
+    drop(held);
+    stderr.read_to_string(&mut seen).unwrap();
+    let out = std::process::Output {
+        status: child.wait().unwrap(),
+        stdout: Vec::new(),
+        stderr: seen.into_bytes(),
+    };
+    assert_kept(&t, &out, &pwned);
+    assert!(
+        !store.venv_pending(&t.fx.venv_dir),
+        "the lock holder ends the claim"
+    );
 }
 
 #[test]
