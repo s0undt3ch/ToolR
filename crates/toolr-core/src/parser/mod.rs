@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use ruff_python_ast::ModModule;
 use ruff_python_parser::parse_module;
 
-use crate::trust::escape_control;
+use crate::text::escape_control_chars;
 
 /// Parse a raw docstring into the project's `Docstring` struct via the
 /// shared `SimpleDocstringParser`. Returns `None` only if the parser
@@ -51,7 +51,7 @@ pub fn parse_python_file(path: &Path) -> Result<ModModule> {
         let (line, column) = line_and_column(&source, usize::from(e.location.start()));
         // ruff's message quotes the offending token from the repo file, and both the stale-cache
         // warning and the fatal fresh-clone error print this text, so escape it here once.
-        anyhow::anyhow!(escape_control(&format!(
+        anyhow::anyhow!(escape_control_chars(&format!(
             "parsing {}: {} (line {line}, column {column})",
             path.display(),
             e.error
@@ -101,6 +101,14 @@ mod tests {
         let err = parse_python_file(f.path()).unwrap_err().to_string();
         assert!(!err.chars().any(char::is_control), "{err:?}");
         assert!(err.contains("\\u{1b}"), "{err}");
+    }
+
+    #[test]
+    fn syntax_error_text_escapes_bidi_marks() {
+        let f = write_tmp("a\u{202e}b = 1\n");
+        let err = parse_python_file(f.path()).unwrap_err().to_string();
+        assert!(!err.contains('\u{202e}'), "{err:?}");
+        assert!(err.contains("\\u{202e}"), "{err}");
     }
 
     #[test]
