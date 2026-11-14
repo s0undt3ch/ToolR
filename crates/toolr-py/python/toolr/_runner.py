@@ -645,13 +645,22 @@ def _print_exception(exc: BaseException, *, full: bool) -> None:
     The frames above the command function are toolr's runner. They are dropped when a frame
     of user code follows, so the traceback does not read as a toolr fault. If every frame is
     toolr's, toolr itself is at fault and all of them stay, as they do for ``full`` (`-d`).
+    The exception is a ``SyntaxError`` in a user's module: it has no frame of its own (its file,
+    line and caret are in the message), so the runner frames above it are all that is left to drop.
     """
     tb = exc.__traceback__
     if not full:
         user_tb = tb
         while user_tb is not None and user_tb.tb_frame.f_code.co_filename.startswith(_PACKAGE_DIR):
             user_tb = user_tb.tb_next
-        tb = user_tb or tb
+        if (
+            user_tb is None
+            and isinstance(exc, SyntaxError)
+            and not (exc.filename or "").startswith(_PACKAGE_DIR)
+        ):
+            tb = None
+        else:
+            tb = user_tb or tb
     traceback.print_exception(type(exc), exc, tb, file=sys.stderr)
 
 

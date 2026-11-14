@@ -168,6 +168,32 @@ def test_runner_traceback_starts_at_the_users_function(
     assert "RuntimeError: kaboom" in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("body", "error"),
+    [
+        ('raise RuntimeError("at import")', "RuntimeError: at import"),
+        ("def broken(:\n    pass", "SyntaxError"),
+    ],
+    ids=["raises", "syntax-error"],
+)
+def test_runner_import_time_error_starts_at_the_users_file(
+    tools_module: Callable[[str], Path],
+    spec_file: Callable[..., Path],
+    run_runner: Callable[[Path], subprocess.CompletedProcess[str]],
+    body: str,
+    error: str,
+) -> None:
+    """An error while importing the user's module shows no importlib or runner frames above their file."""
+    tools_module(body)
+    result = run_runner(spec_file(command="crash", function="crash"))
+    assert result.returncode == 1
+    assert "<frozen importlib" not in result.stderr, result.stderr
+    assert "_runner.py" not in result.stderr, result.stderr
+    assert error in result.stderr
+    frames = [line for line in result.stderr.splitlines() if line.lstrip().startswith("File ")]
+    assert "demo.py" in frames[0], result.stderr
+
+
 def test_runner_traceback_keeps_toolr_frames_under_debug(
     tools_module: Callable[[str], Path],
     spec_file: Callable[..., Path],
