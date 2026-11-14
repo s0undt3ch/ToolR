@@ -9,7 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use toolr_core::discovery::discover_project_root;
+
+use crate::invocation::Invocation;
 use toolr_core::venv::{resolve_venv_path, site_packages_dirs};
 
 pub struct ResolvedSource {
@@ -19,6 +20,7 @@ pub struct ResolvedSource {
 
 pub fn resolve_source_and_package(
     matches: &clap::ArgMatches,
+    run: &Invocation,
     quiet: bool,
 ) -> Result<ResolvedSource> {
     let source_dir = matches.get_one::<String>("source-dir").map(PathBuf::from);
@@ -45,9 +47,7 @@ pub fn resolve_source_and_package(
             })
         }
         (None, Some(pkg)) => {
-            let cwd = std::env::current_dir().context("getting current directory")?;
-            let repo_root =
-                discover_project_root(&cwd).context("resolving repo root for tools-venv lookup")?;
+            let repo_root = run.project_root()?;
             // The lookup reads the repository's tools venv.
             toolr_core::trust::require_trust_quietly(&repo_root, quiet)?;
             let resolved = resolve_venv_path(&repo_root).context("resolving tools-venv path")?;

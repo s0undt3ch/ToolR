@@ -745,6 +745,8 @@ fn assert_parse_error(stderr: &str, prefix: &str) {
     );
 }
 
+const PARSE_ERROR_CAUSE: &str = "cause: parsing <root>/tools/broken.py: ";
+
 const FALLBACK_WARNING: &str = "toolr: warning: tools manifest is stale and a fresh build failed; \
      falling back to cached manifest\n";
 
@@ -809,13 +811,14 @@ fn stale_manifest_build_error_cause_line() {
         p.write_tool("broken.py", BROKEN_PY);
         let (code, stderr) = run_in(p.toolr(&[]), &p.root, &["--help"]);
         assert_eq!(code, 0, "venv={with_venv}: {stderr}");
-        assert_eq!(
-            stderr,
-            format!(
-                "{FALLBACK_WARNING}toolr: warning: cause: parsing <root>/tools/broken.py\n\
-                 {REBUILD_POINTER}"
-            ),
-            "venv={with_venv}"
+        // The cause is the parser's own message with a line and column, not a byte range.
+        let cause = stderr
+            .strip_prefix(FALLBACK_WARNING)
+            .and_then(|r| r.strip_suffix(REBUILD_POINTER))
+            .and_then(|r| r.strip_prefix(&format!("toolr: warning: {}", PARSE_ERROR_CAUSE)));
+        assert!(
+            cause.is_some_and(|c| c.ends_with("(line 1, column 5)\n") && !c.contains("byte range")),
+            "venv={with_venv}: {stderr}"
         );
     }
 }

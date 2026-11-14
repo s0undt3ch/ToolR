@@ -352,17 +352,7 @@ fn resolves_inside(path: &Path, canonical_root: &Path, cwd: &Path) -> bool {
 /// A crafted directory name could otherwise use control characters to
 /// overwrite the path the user is asked to trust.
 pub fn shown(path: &Path) -> String {
-    path.display()
-        .to_string()
-        .chars()
-        .map(|c| {
-            if c.is_control() {
-                c.escape_default().to_string()
-            } else {
-                c.to_string()
-            }
-        })
-        .collect()
+    crate::text::escape_control_chars(&path.display().to_string())
 }
 
 fn confirm(input: &mut dyn BufRead, out: &mut dyn Write, repo: &Path) -> bool {
@@ -600,8 +590,9 @@ mod tests {
     fn shown_escapes_control_characters() {
         assert_eq!(
             shown(Path::new("evil\r~/mine\x1b[2K")),
-            "evil\\r~/mine\\u{1b}[2K"
+            "evil\\u{d}~/mine\\u{1b}[2K"
         );
+        assert_eq!(shown(Path::new("a\u{202e}b")), "a\\u{202e}b");
     }
 
     #[test]

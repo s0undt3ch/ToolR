@@ -10,6 +10,7 @@ use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
+use crate::invocation::Invocation;
 use toolr_core::exit_status::process_exit_code;
 use toolr_core::trust::{
     TrustMode, TrustStore, Trusted, require_trust_quietly, shown, trust_all_env,
@@ -18,33 +19,37 @@ use toolr_core::trust::{
 /// `quiet` is the root `-q`, the only place toolr takes it. A handler that may install uv must honour it and get a case in
 /// `tests/quiet_uv_consent.rs`. The `-q` output rule is stated on the arg in
 /// `cli::root_flag_args`.
-pub fn dispatch_project(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
+pub(crate) fn dispatch_project(
+    matches: &ArgMatches,
+    run: &Invocation,
+    quiet: bool,
+) -> Result<ExitCode> {
     match matches.subcommand() {
-        Some(("init", init_m)) => project_init(init_m, quiet),
+        Some(("init", init_m)) => project_init(init_m, run, quiet),
         Some(("venv", venv_m)) => match venv_m.subcommand() {
-            Some(("path", _)) => venv_path(quiet),
-            Some(("shell", _)) => venv_shell(quiet),
-            Some(("run", run_m)) => venv_run(run_m, quiet),
-            Some(("sync", sync_m)) => venv_sync(sync_m, quiet),
-            Some(("lock", lock_m)) => venv_lock(lock_m, quiet),
-            Some(("add", add_m)) => venv_add(add_m, quiet),
-            Some(("remove", remove_m)) => venv_remove(remove_m, quiet),
+            Some(("path", _)) => venv_path(run, quiet),
+            Some(("shell", _)) => venv_shell(run, quiet),
+            Some(("run", run_m)) => venv_run(run_m, run, quiet),
+            Some(("sync", sync_m)) => venv_sync(sync_m, run, quiet),
+            Some(("lock", lock_m)) => venv_lock(lock_m, run, quiet),
+            Some(("add", add_m)) => venv_add(add_m, run, quiet),
+            Some(("remove", remove_m)) => venv_remove(remove_m, run, quiet),
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("manifest", manifest_m)) => match manifest_m.subcommand() {
-            Some(("rebuild", _)) => manifest_rebuild(quiet),
+            Some(("rebuild", _)) => manifest_rebuild(run, quiet),
             _ => unreachable!("clap enforces subcommand_required"),
         },
-        Some(("trust", trust_m)) => project_trust(trust_m, quiet),
-        Some(("untrust", untrust_m)) => project_untrust(untrust_m, quiet),
+        Some(("trust", trust_m)) => project_trust(trust_m, run, quiet),
+        Some(("untrust", untrust_m)) => project_untrust(untrust_m, run, quiet),
         _ => unreachable!("clap enforces subcommand_required"),
     }
 }
 
-/// Make the tools venv under `cwd` ready: the uv consent, uv's `--quiet` and the trust prompt
+/// Make the tools venv of the project at `repo_root` ready: the uv consent, uv's `--quiet` and the trust prompt
 /// all follow `quiet`, and `tweak` adds what the caller needs on top.
 pub(crate) fn ready_venv(
-    cwd: &Path,
+    repo_root: &Path,
     quiet: bool,
     tweak: impl FnOnce(toolr_core::project::EnsureOpts) -> toolr_core::project::EnsureOpts,
 ) -> Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> {
@@ -54,24 +59,22 @@ pub(crate) fn ready_venv(
         .with_trust(TrustMode {
             never_prompt: quiet,
         });
-    toolr_core::project::ensure_venv_ready(cwd, consent, tweak(opts))
+    toolr_core::project::ensure_venv_ready(repo_root, consent, tweak(opts))
 }
 
-/// What a `project` handler that works on the tools venv starts from.
-struct ProjectCtx {
-    cwd: PathBuf,
+/// What a `project` handler that works on the tools venv starts from: the run and its
+/// project root, looked up once.
+struct ProjectCtx<'a> {
+    run: &'a Invocation,
 }
 
-impl ProjectCtx {
-    fn new() -> Result<Self> {
-        Ok(Self {
-            cwd: std::env::current_dir()?,
-        })
+impl<'a> ProjectCtx<'a> {
+    fn new(run: &'a Invocation) -> Self {
+        Self { run }
     }
 
     fn repo_root(&self) -> Result<PathBuf> {
-        toolr_core::discovery::discover_project_root(&self.cwd)
-            .context(toolr_core::project::NothingToSync::NoProject)
+        self.run.project_root()
     }
 }
 
@@ -101,19 +104,19 @@ fn nothing_to_sync_exit<T>(result: &Result<T>, if_project: bool) -> Option<ExitC
     (if_project && toolr_core::project::is_nothing_to_sync(e)).then_some(ExitCode::SUCCESS)
 }
 
-fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
-    let start = match matches.get_one::<PathBuf>("path") {
-        Some(p) => p.clone(),
-        None => std::env::current_dir()?,
-    };
-    Ok(toolr_core::discovery::discover_project_root(&start)?)
+fn root_from_path_arg(matches: &ArgMatches, run: &Invocation) -> Result<PathBuf> {
+    match matches.get_one::<PathBuf>("path") {
+        Some(start) => toolr_core::discovery::discover_project_root(start)
+            .map_err(|e| toolr_core::project::NothingToSync::no_project(&e).into()),
+        None => run.project_root(),
+    }
 }
 
 /// Trust first, then sync: stdout stays the trusted root alone (the human
 /// confirmation goes to stderr), and a declined sync keeps the trust and exits
 /// 0.
-fn project_trust(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
-    let root = root_from_path_arg(matches)?;
+fn project_trust(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitCode> {
+    let root = root_from_path_arg(matches, run)?;
     let was_trusted = TrustStore::open_default()?.is_trusted(&root)?;
     let (record, trusted) = toolr_core::trust::grant_trust(&root)?;
     let repo = shown(&record.repo_path);
@@ -141,8 +144,8 @@ fn project_trust(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn project_untrust(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
-    let root = root_from_path_arg(matches)?;
+fn project_untrust(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitCode> {
+    let root = root_from_path_arg(matches, run)?;
     let store = TrustStore::open_default()?;
     let (repo, existed) = store.untrust(&root)?;
     if existed {
@@ -156,7 +159,7 @@ fn project_untrust(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn project_init(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
+fn project_init(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitCode> {
     let force = matches.get_flag("force");
     let no_sync = matches.get_flag("no-sync");
     let no_example = matches.get_flag("no-example");
@@ -171,7 +174,7 @@ fn project_init(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
         .cloned()
         .unwrap_or_else(detect_requires_python);
 
-    let cwd = std::env::current_dir()?;
+    let cwd = run.cwd.clone();
     let opts = ScaffoldOptions {
         requires_python,
         venv_location,
@@ -341,11 +344,10 @@ fn requires_python_from(python: Option<&Path>) -> String {
     format!(">=3.{minor}")
 }
 
-fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
+fn manifest_rebuild(run: &Invocation, quiet: bool) -> Result<ExitCode> {
     use toolr_core::manifest_build::rebuild_manifest_full;
 
-    let cwd = std::env::current_dir()?;
-    let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+    let repo_root = run.project_root()?;
     // The rebuild parses `tools/*.py` and globs the venv's plugin fragments.
     trust_root(&repo_root, quiet)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
@@ -371,8 +373,8 @@ fn manifest_rebuild(quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_sync(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
-    let ctx = ProjectCtx::new()?;
+fn venv_sync(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new(run);
     let force = matches.get_flag("force");
     let upgrade_all = matches.get_flag("upgrade");
     let upgrade_pkgs: Vec<String> = matches
@@ -395,7 +397,7 @@ fn venv_sync(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     )?;
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let result = ready_venv(&ctx.cwd, quiet, |o| {
+    let result = ready_venv(&repo_root, quiet, |o| {
         o.with_force_sync(force)
             .with_upgrade(upgrade)
             .with_trusted(trusted)
@@ -445,8 +447,8 @@ fn build_upgrade_mode(all: bool, pkgs: Vec<String>) -> toolr_core::venv::Upgrade
     }
 }
 
-fn venv_lock(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
-    let ctx = ProjectCtx::new()?;
+fn venv_lock(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new(run);
     let upgrade_all = matches.get_flag("upgrade");
     let upgrade_pkgs: Vec<String> = matches
         .get_many::<String>("upgrade-package")
@@ -464,7 +466,7 @@ fn venv_lock(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
 
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o.with_trusted(trusted))?;
+    let (resolved, uv) = ready_venv(&repo_root, quiet, |o| o.with_trusted(trusted))?;
 
     let status = toolr_core::venv::run_uv_lock(&uv, &tools_dir, &resolved, &upgrade, quiet)?;
     if !status.success() {
@@ -477,17 +479,18 @@ fn venv_lock(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_add(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
-    let ctx = ProjectCtx::new()?;
+fn venv_add(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new(run);
     let specs: Vec<String> = matches
         .get_many::<String>("packages")
         .expect("clap marks this required")
         .cloned()
         .collect();
 
-    let tools_dir = ctx.repo_root()?.join("tools");
+    let repo_root = ctx.repo_root()?;
+    let tools_dir = repo_root.join("tools");
 
-    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o)?;
+    let (resolved, uv) = ready_venv(&repo_root, quiet, |o| o)?;
 
     let status = toolr_core::venv::run_uv_add(&uv, &tools_dir, &resolved, &specs, quiet)?;
     if !status.success() {
@@ -504,8 +507,8 @@ fn venv_add(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_remove(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
-    let ctx = ProjectCtx::new()?;
+fn venv_remove(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new(run);
     let packages: Vec<String> = matches
         .get_many::<String>("packages")
         .expect("clap marks this required")
@@ -518,7 +521,7 @@ fn venv_remove(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
     require_declared(&tools_dir, &packages, "nothing to remove")?;
     let pyproject = tools_dir.join("pyproject.toml");
 
-    let (resolved, uv) = ready_venv(&ctx.cwd, quiet, |o| o.with_trusted(trusted))?;
+    let (resolved, uv) = ready_venv(&repo_root, quiet, |o| o.with_trusted(trusted))?;
 
     let status = toolr_core::venv::run_uv_remove(&uv, &tools_dir, &resolved, &packages, quiet)?;
     if !status.success() {
@@ -602,19 +605,18 @@ fn normalize_dist_name(name: &str) -> String {
     value
 }
 
-fn venv_path(quiet: bool) -> Result<ExitCode> {
-    let cwd = std::env::current_dir()?;
-    let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+fn venv_path(run: &Invocation, quiet: bool) -> Result<ExitCode> {
+    let repo_root = run.project_root()?;
     trust_root(&repo_root, quiet)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
     println!("{}", resolved.venv_dir.display());
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_shell(quiet: bool) -> Result<ExitCode> {
+fn venv_shell(run: &Invocation, quiet: bool) -> Result<ExitCode> {
     use std::process::Command;
 
-    let (resolved, _) = ready_venv(&ProjectCtx::new()?.cwd, quiet, |o| o)?;
+    let (resolved, _) = ready_venv(&run.project_root()?, quiet, |o| o)?;
 
     let shell = default_shell_path();
     let bin_dir = venv_bin_dir(&resolved.venv_dir);
@@ -629,8 +631,8 @@ fn venv_shell(quiet: bool) -> Result<ExitCode> {
     Ok(ExitCode::from(process_exit_code(status)))
 }
 
-fn venv_run(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
-    let ctx = ProjectCtx::new()?;
+fn venv_run(matches: &ArgMatches, run: &Invocation, quiet: bool) -> Result<ExitCode> {
+    let ctx = ProjectCtx::new(run);
     let no_sync = matches.get_flag("no-sync");
     let argv: Vec<String> = matches
         .get_many::<String>("command")
@@ -678,7 +680,7 @@ fn venv_run(matches: &ArgMatches, quiet: bool) -> Result<ExitCode> {
         // Default: freshness-gated auto-sync (same path as `venv sync`,
         // and as `venv shell`), then run. `--quiet` forwards to uv's
         // --quiet inside the sync.
-        ready_venv(&ctx.cwd, quiet, |o| o)?.0
+        ready_venv(&ctx.repo_root()?, quiet, |o| o)?.0
     };
 
     run_command_in_venv(&resolved.venv_dir, &argv)

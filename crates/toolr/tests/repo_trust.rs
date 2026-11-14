@@ -300,7 +300,7 @@ fn trust_commands_escape_control_characters() {
     let repo = fs::canonicalize(parent.path()).unwrap().join("evil\rLEGIT");
     common::write_project(&repo);
     let expected = format!(
-        "{}\\rLEGIT\n",
+        "{}\\u{{d}}LEGIT\n",
         repo.parent().unwrap().join("evil").display()
     );
     env.toolr(&repo)
