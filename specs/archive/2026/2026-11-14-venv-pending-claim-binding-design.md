@@ -31,7 +31,7 @@ taking the lock, so it can ask about a foreign venv without making other toolrs 
 answer. Without the claim, B reads A's build as foreign: on a terminal it asks to remove it,
 without one it fails. So the claim stays, but only to tell B's sync to wait for the lock.
 
-A second review (R2-01) showed why the claim must never vouch for the venv. The second design
+A second review showed why the claim must never vouch for the venv. The second design
 counted a claim while some toolr held the venv's sync lock, through a `try_lock` probe. Any
 holder counted, a toolr that was only probing included, and a SIGKILLed sync leaves its claim
 and its lock file behind (on Windows the file always stays). So a killed sync's claim read as
