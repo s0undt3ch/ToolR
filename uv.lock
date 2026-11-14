@@ -28,7 +28,7 @@ dev = [
     { name = "attrs", specifier = ">=26.1.0" },
     { name = "coverage", specifier = ">=7.16.0" },
     { name = "hypothesis", specifier = ">=6.168.0" },
-    { name = "mkdocs", specifier = ">=1.6.1" },
+    { name = "mkdocs", specifier = ">=1.6.1,<2" },
     { name = "packaging", specifier = ">=26.3" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-randomly", specifier = ">=5.0.0" },
@@ -41,17 +41,17 @@ dev = [
 ]
 docs = [
     { name = "markdown-include", specifier = ">=0.8.1" },
-    { name = "mkdocs", specifier = ">=1.6.1" },
+    { name = "mkdocs", specifier = ">=1.6.1,<2" },
     { name = "mkdocs-awesome-nav", specifier = ">=3.3.0" },
     { name = "mkdocs-llmstxt", specifier = ">=0.5.1" },
-    { name = "mkdocs-material", specifier = ">=9.7.7" },
+    { name = "mkdocs-material", specifier = ">=9.7.7,<10" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.6" },
     { name = "toolr-py", editable = "crates/toolr-py" },
 ]
 pre-commit = [
     { name = "attrs", specifier = ">=26.1.0" },
     { name = "hypothesis", specifier = ">=6.168.0" },
-    { name = "mkdocs", specifier = ">=1.6.1" },
+    { name = "mkdocs", specifier = ">=1.6.1,<2" },
     { name = "msgspec", specifier = ">=0.21.1" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pytest", specifier = ">=9.1.1" },
