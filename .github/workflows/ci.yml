@@ -5,16 +5,19 @@ on:
   push:
     branches: [main]
   pull_request:
-    # Default PR triggers PLUS labeled/unlabeled: applying or removing the
-    # `full-build` or `full-bench` label re-runs CI so the new matrix /
-    # bench shape takes effect without needing a dummy commit. Other label
-    # changes also trigger a re-run (cheap and self-correcting);
-    # `tools/ci.py` ignores labels other than `full-build`/`full-bench`.
+    # `labeled`/`unlabeled` re-run CI for the `full-build`/`full-bench` labels; other label events are no-ops.
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
   # A new push to a PR cancels that PR's older runs. Runs on main never cancel each other.
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}-${{ github.head_ref || github.run_id }}
+  # An ignored label event gets its own group so it cannot cancel the real run.
+  # The ignored-event filter is copied 4 times; tests/workflows/test_ci_label_filter.py keeps the copies identical.
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}-${{
+    (github.event.action == 'labeled' || github.event.action == 'unlabeled')
+    && github.event.label.name != 'full-build'
+    && github.event.label.name != 'full-bench'
+    && github.run_id || github.head_ref || github.run_id }}
   cancel-in-progress: ${{ !contains(github.ref, 'refs/heads/main') }}
 
 permissions: {}
@@ -34,6 +37,11 @@ env:
 jobs:
   prepare-ci:
     name: Prepare CI
+    # Ignored-event filter copy: tests/workflows/test_ci_label_filter.py keeps the copies identical.
+    if: >-
+      ${{ !((github.event.action == 'labeled' || github.event.action == 'unlabeled')
+      && github.event.label.name != 'full-build'
+      && github.event.label.name != 'full-bench') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -114,6 +122,11 @@ jobs:
 
   pre-commit:
     name: Pre-commit
+    # Ignored-event filter copy: tests/workflows/test_ci_label_filter.py keeps the copies identical.
+    if: >-
+      ${{ !((github.event.action == 'labeled' || github.event.action == 'unlabeled')
+      && github.event.label.name != 'full-build'
+      && github.event.label.name != 'full-bench') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -845,7 +858,14 @@ jobs:
     # skipped because an upstream dependency failed reports `skipped`, not
     # `failure`, so a failure is only visible here on the job that directly
     # failed. `skipped` itself is acceptable — bench jobs skip routinely.
-    name: Set the ${{ github.workflow }}(${{ github.event_name }}) Pipeline Exit Status
+    # Ignored label runs rename it: a skipped check under the required name would count as passing.
+    # Ignored-event filter copy: tests/workflows/test_ci_label_filter.py keeps the copies identical.
+    name: >-
+      ${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled')
+      && github.event.label.name != 'full-build'
+      && github.event.label.name != 'full-bench'
+      && format('Ignored label event ({0})', github.event.label.name)
+      || format('Set the {0}({1}) Pipeline Exit Status', github.workflow, github.event_name) }}
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
