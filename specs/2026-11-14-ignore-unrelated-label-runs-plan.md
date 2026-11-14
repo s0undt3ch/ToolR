@@ -18,8 +18,8 @@ record the message in the design's "not verified" list and adjust.
 
 ## Task 2: Guard test
 
-`tests/workflows/test_ci_label_filter.py` (add `tests/workflows/__init__.py`; use a factory
-fixture if one is needed). Parse `ci.yml` with ruamel and assert:
+`tests/workflows/test_ci_label_filter.py` (`tests/workflows/__init__.py` already exists; use a factory
+fixture if one is needed). Parse `ci.yml` with PyYAML and assert:
 
 - The ignored-event expression is identical in `concurrency.group`, `prepare-ci.if`,
   `pre-commit.if` and the gate `name` (normalised whitespace).
