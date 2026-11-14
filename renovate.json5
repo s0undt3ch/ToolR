@@ -13,11 +13,11 @@
   timezone: "Etc/UTC",
   schedule: ["before 6am on monday"],
 
-  // Open fix PRs for OSV advisories on *direct* deps only. Renovate doesn't
-  // query OSV for transitive deps (ones that live only in Cargo.lock or
-  // uv.lock), so those wait for `lockFileMaintenance` below or a manual
-  // `cargo update -p` / `uv lock --upgrade-package` when Scorecard flags
-  // them. Security PRs bypass the weekly schedule above.
+  // Open fix PRs for OSV advisories. Direct deps are covered; transitive ones
+  // in Cargo.lock or uv.lock can get a PR too (#746 was one, for soupsieve).
+  // Where none appears, `lockFileMaintenance` below or a manual
+  // `cargo update -p` / `uv lock --upgrade-package` remains the fallback.
+  // Security PRs bypass the weekly schedule above.
   osvVulnerabilityAlerts: true,
 
   // Once a month, regenerate the lockfiles (`cargo update`, `uv lock`) to
@@ -97,6 +97,12 @@
       description: "Tag Python (pyproject.toml) updates",
       matchManagers: ["pep621"],
       addLabels: ["dependencies:python"],
+    },
+    {
+      description: "Hold mkdocs/mkdocs-material majors (capped in pyproject.toml); delete with the caps on the Zensical move",
+      matchPackageNames: ["mkdocs", "mkdocs-material"],
+      matchUpdateTypes: ["major"],
+      enabled: false,
     },
     {
       description: "Tag GitHub Actions updates",

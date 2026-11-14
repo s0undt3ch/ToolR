@@ -179,6 +179,9 @@ toolr release-notes check --base <parent>     # the CI gate, run locally
 CI fails a PR with a `feat`, `fix`, `revert` or breaking commit and no note. A `Release-Notes: skip`
 trailer on any commit exempts the PR. The full rules are in [`release-notes/README.md`](https://github.com/s0undt3ch/ToolR/blob/main/release-notes/README.md).
 
+Before dispatching the release workflow, wait for CI on `main` to be green for the commit you are
+releasing; `release.yml` does not check it.
+
 ## Recovering a half-published release
 
 `release.yml` runs from `main` only; its first job fails on any other ref. The `publish-release` job

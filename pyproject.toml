@@ -46,6 +46,8 @@ toolr-py = { workspace = true }
 toolr-plugin-example = { workspace = true }
 
 [dependency-groups]
+# Every group keeps mkdocs<2 and mkdocs-material<10: neither major is drop-in, and Material is
+# end of life on 2027-05-05. Drop the caps, and the matching renovate.json5 rule, with the Zensical move.
 dev = [
     "toolr-plugin-example",
     "toolr-py",
@@ -59,15 +61,15 @@ dev = [
     "pyyaml",
     "ruamel.yaml>=0.18",
     "packaging>=26.3",
-    "mkdocs>=1.6.1",  # for the llms.txt gate tests; the docs group has the rest of the stack
+    "mkdocs>=1.6.1,<2",  # for the llms.txt gate tests; the docs group has the rest of the stack
 ]
 docs = [
     "toolr-py",
     "markdown-include>=0.8.1",
-    "mkdocs>=1.6.1",
+    "mkdocs>=1.6.1,<2",
     "mkdocs-awesome-nav>=3.3.0",
     "mkdocs-llmstxt>=0.5.1",
-    "mkdocs-material>=9.7.7",
+    "mkdocs-material>=9.7.7,<10",
     "mkdocstrings[python]>=1.0.6",
 ]
 # The venv `mypy` the `s0undt3ch/pre-commit-hooks` mypy hook runs (binary
@@ -78,7 +80,7 @@ pre-commit = [
     "mypy>=2.3.1",
     "attrs>=26.1.0",
     "hypothesis>=6.168.0",
-    "mkdocs>=1.6.1",
+    "mkdocs>=1.6.1,<2",
     "msgspec>=0.21.1",
     "pytest>=9.1.1",
     "rich>=15.0.0",
