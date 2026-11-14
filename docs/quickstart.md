@@ -136,7 +136,7 @@ For the full authoring guide, head to [Writing commands](writing-commands/index.
 ## Optional next steps
 
 - **Install shell tab completion:**
-  `toolr self completion install bash` (or `zsh` / `fish`).
+  `toolr self completion install bash` (or `zsh` / `fish` / `powershell`).
 - **Learn the mental model:** [How toolr is laid out](concepts.md) — one
   page covering the binary, the tools venv, the manifest, and the cache.
 - **Ship your tools with a third-party PyPI package:** see
