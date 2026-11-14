@@ -4,7 +4,6 @@ strict: true
 theme:
   name: material
   logo: imgs/toolr.png
-  icon: imgs/toolr.png
   favicon: imgs/toolr.png
   palette:
     primary: black
