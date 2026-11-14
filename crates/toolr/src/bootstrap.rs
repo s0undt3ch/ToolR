@@ -82,7 +82,8 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
         "toolr: warning: tools manifest is stale and a fresh build failed; \
          falling back to cached manifest"
     );
-    let s = err.to_string();
+    // The whole chain: the outermost context alone names the file but not what is wrong with it.
+    let s = format!("{err:#}");
     let first = s.lines().next().unwrap_or(&s);
     eprintln!("toolr: warning: cause: {first}");
     if !had_cache {

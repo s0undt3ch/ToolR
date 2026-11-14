@@ -235,3 +235,56 @@ fn unknown_command_in_bare_tools_repo_gets_only_the_existing_warning() {
     );
     assert!(stderr.contains("has no `pyproject.toml`"), "{stderr}");
 }
+
+/// M-02: every built-in that needs a project says the same thing when there is none, whichever
+/// way it looks the root up.
+#[test]
+fn every_builtin_reports_the_same_no_project_message() {
+    let tmp = TempDir::new().unwrap();
+    if common::ancestor_with_tools_dir(tmp.path()).is_some() {
+        return;
+    }
+    let cache = TempDir::new().unwrap();
+    let cases: [&[&str]; 9] = [
+        &["project", "venv", "path"],
+        &["project", "venv", "sync"],
+        &["project", "venv", "lock"],
+        &["project", "venv", "add", "requests"],
+        &["project", "venv", "remove", "requests"],
+        &["project", "venv", "run", "true"],
+        &["project", "manifest", "rebuild"],
+        &["project", "trust"],
+        &["self", "build-manifest", "some_package"],
+    ];
+    let mut first_line = None;
+    for args in cases {
+        let out = toolr_in(tmp.path(), &cache).args(args).output().unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{args:?}: {stderr}");
+        let line = stderr.trim_end();
+        assert_eq!(line.lines().count(), 1, "{args:?}: {stderr}");
+        assert!(
+            line.starts_with("toolr: no toolr project found above"),
+            "{args:?}: {stderr}"
+        );
+        // The directory differs by nothing between runs, so the whole message must match.
+        assert_eq!(*first_line.get_or_insert(line.to_owned()), line, "{args:?}");
+    }
+}
+
+/// `--path` takes the same error as the working directory does.
+#[test]
+fn trust_with_a_path_outside_a_project_reports_the_same_message() {
+    let tmp = TempDir::new().unwrap();
+    if common::ancestor_with_tools_dir(tmp.path()).is_some() {
+        return;
+    }
+    let cache = TempDir::new().unwrap();
+    toolr_in(tmp.path(), &cache)
+        .args(["project", "trust"])
+        .arg(tmp.path())
+        .assert()
+        .failure()
+        .stderr(contains("toolr: no toolr project found above"))
+        .stderr(contains("locating project root").not());
+}

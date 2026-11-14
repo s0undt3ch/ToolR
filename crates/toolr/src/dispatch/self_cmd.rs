@@ -10,9 +10,15 @@ use toolr_core::complete::{
 use toolr_core::env::{non_empty_env_path, xdg_dir_env};
 use toolr_core::trust::shown;
 
-pub(super) fn run_self(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
+use crate::invocation::Invocation;
+
+pub(super) fn run_self(
+    matches: &clap::ArgMatches,
+    run: &Invocation,
+    quiet: bool,
+) -> anyhow::Result<ExitCode> {
     match matches.subcommand() {
-        Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches, quiet),
+        Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches, run, quiet),
         Some(("cache", cache_matches)) => crate::self_cache::dispatch(cache_matches, quiet),
         Some(("trusted", trusted_matches)) => run_self_trusted(trusted_matches, quiet),
         Some(("completion", completion_matches)) => {
@@ -54,8 +60,12 @@ fn run_self_trusted(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<E
     Ok(ExitCode::SUCCESS)
 }
 
-fn run_self_build_manifest(matches: &clap::ArgMatches, quiet: bool) -> anyhow::Result<ExitCode> {
-    let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches, quiet)?;
+fn run_self_build_manifest(
+    matches: &clap::ArgMatches,
+    run: &Invocation,
+    quiet: bool,
+) -> anyhow::Result<ExitCode> {
+    let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches, run, quiet)?;
 
     let output_path = resolve_output_path(matches, &resolved.source_dir);
 
@@ -304,11 +314,13 @@ pub(super) fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::invocation::RootArgv;
 
     /// `run_self` given matches clap would never produce for `self` (it requires a subcommand).
     fn self_error(cmd: clap::Command, args: &[&str]) -> String {
         let matches = cmd.no_binary_name(true).try_get_matches_from(args).unwrap();
-        run_self(&matches, false).unwrap_err().to_string()
+        let run = Invocation::new(RootArgv::new(vec!["toolr".into()]), std::env::temp_dir());
+        run_self(&matches, &run, false).unwrap_err().to_string()
     }
 
     #[test]

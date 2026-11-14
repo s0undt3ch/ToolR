@@ -43,8 +43,7 @@ fn lock_errors_when_not_in_a_toolr_repo() {
     assert!(!output.status.success(), "expected non-zero exit");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("locating project root")
-            || stderr.contains("resolving the tools venv path"),
+        stderr.contains("toolr: no toolr project found above"),
         "stderr should explain the missing project, got:\n{stderr}"
     );
 }

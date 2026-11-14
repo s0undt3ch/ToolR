@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use clap::ArgAction;
 use toolr_core::discovery::{DiscoveryError, discover_project_root};
+use toolr_core::project::NothingToSync;
 
 use crate::cli::spellings;
 use crate::help::HelpMode;
@@ -205,6 +206,14 @@ impl Invocation {
     /// The project root, or why there is none.
     pub(crate) fn root(&self) -> Result<&Path, &DiscoveryError> {
         self.resolved().as_ref().map(PathBuf::as_path)
+    }
+
+    /// The project root, or the one "no project" error every built-in reports.
+    pub(crate) fn project_root(&self) -> anyhow::Result<PathBuf> {
+        match self.root() {
+            Ok(root) => Ok(root.to_path_buf()),
+            Err(e) => Err(NothingToSync::no_project(e).into()),
+        }
     }
 
     /// The working directory and the owned lookup result: `?` on the owned error keeps its source chain.
