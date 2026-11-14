@@ -100,11 +100,12 @@ Verified (docs, fetched 2026-11-14):
 - Repository: `pre-commit` is the only job without `needs:`; the gate's `if: always()` is
   enforced by `GATE_JOB_IF`.
 
+Verified: `prek` ran `jactionlint` on the expressions and it accepted them.
+
 Not verified, so the plan tests them live or with actionlint:
 
 - That `github.event.label.name` and `github.event.action` are populated for `labeled` and
   `unlabeled` in a `pull_request` payload (expected from the webhook payload, not fetched).
-- That `jactionlint` accepts the expressions.
 - That a skipped job still creates a check-run, and under which name. The design does not rely on
   it, because no job whose name is the required one is skipped on an ignored run.
 - That Actions evaluates `jobs.<id>.name` with `needs` and `github` for an `always()` gate whose

@@ -2,12 +2,10 @@
 
 The filter expression is written out four times because the `env` context is unavailable in
 `concurrency`, `jobs.<id>.if` and `jobs.<id>.name`. These tests keep the copies identical.
-Set `TOOLR_TEST_CI_YML` to point them at another workflow file.
 """
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -18,10 +16,8 @@ import yaml
 from tools.ci import FULL_BENCH_LABEL
 from tools.ci import FULL_BUILD_LABEL
 
-CI_YML = Path(
-    os.environ.get("TOOLR_TEST_CI_YML")
-    or Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
-)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 STATUS_FUNCTION_RE = re.compile(r"\b(?:always|cancelled|failure|success)\(\)")
 GATE = "set-pipeline-exit-status"
 ROOT_JOB = "prepare-ci"
