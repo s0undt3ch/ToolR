@@ -46,6 +46,8 @@ toolr-py = { workspace = true }
 toolr-plugin-example = { workspace = true }
 
 [dependency-groups]
+# Every group keeps mkdocs<2 and mkdocs-material<10: neither major is drop-in, and Material is
+# end of life on 2027-05-05. Drop the caps, and the matching renovate.json5 rule, with the Zensical move.
 dev = [
     "toolr-plugin-example",
     "toolr-py",
@@ -61,7 +63,6 @@ dev = [
     "packaging>=26.3",
     "mkdocs>=1.6.1,<2",  # for the llms.txt gate tests; the docs group has the rest of the stack
 ]
-# mkdocs 2 and Material 10 are not drop-in (Material EOL 2027-05-05); the Zensical move is tracked separately.
 docs = [
     "toolr-py",
     "markdown-include>=0.8.1",

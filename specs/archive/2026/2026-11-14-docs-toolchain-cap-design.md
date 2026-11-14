@@ -12,7 +12,9 @@
 ## Design
 
 - Cap `mkdocs>=1.6.1,<2` (every group that lists it) and `mkdocs-material>=9.7.7,<10` in `pyproject.toml`,
-  with a one-line why-comment. Run plain `uv lock`; the lock diff is the specifier change only.
+  with one why-comment above `[dependency-groups]`. Run plain `uv lock`; the lock diff is the specifier change only.
+- Disable Renovate major updates for `mkdocs` and `mkdocs-material`: with the caps, every such PR is red.
+  Delete the rule with the caps when the docs move to Zensical.
 - C-02: one line in the `CONTRIBUTING.md` release section telling the releaser to wait for green CI on
   `main` before dispatching the workflow.
 - C-05: reword the comment: transitive advisories can get a PR too; `lockFileMaintenance`, manual

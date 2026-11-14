@@ -99,7 +99,7 @@
       addLabels: ["dependencies:python"],
     },
     {
-      description: "Hold the docs toolchain below its next majors until the Zensical move",
+      description: "Hold mkdocs/mkdocs-material majors (capped in pyproject.toml); delete with the caps on the Zensical move",
       matchPackageNames: ["mkdocs", "mkdocs-material"],
       matchUpdateTypes: ["major"],
       enabled: false,
