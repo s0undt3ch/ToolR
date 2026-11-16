@@ -91,7 +91,7 @@ jobs:
         run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up mise
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           version: ${{ env.MISE_VERSION }}
           cache: true
@@ -256,7 +256,7 @@ jobs:
           merge-multiple: true
 
       - name: Set up mise
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           version: ${{ env.MISE_VERSION }}
           install: false
@@ -274,7 +274,7 @@ jobs:
         env:
           # Must match the `jdx/packslip` action pin in release.yml; Renovate
           # bumps both in one PR.
-          PACKSLIP_VERSION: 1.11.3
+          PACKSLIP_VERSION: 1.11.4
           GH_TOKEN: ${{ github.token }}
         # mise verifies GitHub artifact attestations only when it finds some:
         # none found (or an API error) falls through to an unverified install,
@@ -852,7 +852,7 @@ jobs:
         run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
 
       - name: Install the Codecov CLI
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           version: ${{ env.MISE_VERSION }}
           install_args: github:codecov/codecov-cli
