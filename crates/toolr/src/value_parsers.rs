@@ -409,7 +409,8 @@ fn two_digits(b: &[u8]) -> Option<i64> {
 
 fn date_parser() -> ValueParser {
     ValueParser::new(|s: &str| -> Result<String, String> {
-        strtime::parse("%Y-%m-%d", s)
+        // jiff only skips ASCII whitespace; chrono skipped any Unicode whitespace.
+        strtime::parse("%Y-%m-%d", s.trim_start())
             .and_then(|t| t.to_date())
             .map(|d| d.strftime("%Y-%m-%d").to_string())
             .map_err(|e| format!("expected YYYY-MM-DD, got `{s}`: {e}"))
@@ -418,8 +419,9 @@ fn date_parser() -> ValueParser {
 
 fn time_parser() -> ValueParser {
     ValueParser::new(|s: &str| -> Result<String, String> {
-        strtime::parse("%H:%M:%S", s)
-            .or_else(|_| strtime::parse("%H:%M:%S%.f", s))
+        let trimmed = s.trim_start();
+        strtime::parse("%H:%M:%S", trimmed)
+            .or_else(|_| strtime::parse("%H:%M:%S%.f", trimmed))
             .and_then(|t| t.to_time())
             .map(|t| t.strftime("%H:%M:%S%.f").to_string())
             .map_err(|e| format!("expected HH:MM:SS[.fff], got `{s}`: {e}"))
@@ -629,6 +631,34 @@ mod tests {
         }
         let err = parse_string(&SupportedType::Time, "24:00:00").unwrap_err();
         assert!(err.to_string().contains("expected HH:MM:SS[.fff]"));
+    }
+
+    #[test]
+    fn date_and_time_parsers_skip_leading_unicode_whitespace_like_chrono() {
+        for (ty, input, expected) in [
+            (SupportedType::Date, "\u{a0}2026-01-05", "2026-01-05"),
+            (SupportedType::Date, " \t2026-01-05", "2026-01-05"),
+            (SupportedType::Time, "\u{a0}12:34:56", "12:34:56"),
+            (SupportedType::Time, "\u{2003}12:34:56.5", "12:34:56.5"),
+        ] {
+            assert_eq!(parse_string(&ty, input).unwrap(), expected, "{input:?}");
+        }
+        for (ty, input) in [
+            (SupportedType::Date, "2026-01-05\u{a0}"),
+            (SupportedType::Time, "12:34:56 "),
+        ] {
+            assert!(parse_string(&ty, input).is_err(), "{input:?}");
+        }
+    }
+
+    #[test]
+    fn date_parser_rejects_years_beyond_four_digits() {
+        for input in ["+10000-01-05", "-10000-01-01"] {
+            assert!(
+                parse_string(&SupportedType::Date, input).is_err(),
+                "{input}"
+            );
+        }
     }
 
     #[test]
