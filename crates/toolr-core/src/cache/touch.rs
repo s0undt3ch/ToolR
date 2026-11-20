@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use chrono::Utc;
+use jiff::Timestamp;
 
 use super::meta::{Meta, MetaError};
 
@@ -19,7 +19,7 @@ pub fn touch_last_used(cache_dir: &Path) -> Result<(), MetaError> {
         }
         Err(e) => return Err(e),
     };
-    meta.last_used_at = Utc::now();
+    meta.last_used_at = Timestamp::now();
     meta.write(cache_dir)?;
     Ok(())
 }
@@ -46,7 +46,7 @@ pub fn touch_or_backfill(
 ) -> Result<(), MetaError> {
     match Meta::load(cache_dir) {
         Ok(mut meta) => {
-            meta.last_used_at = Utc::now();
+            meta.last_used_at = Timestamp::now();
             meta.write(cache_dir)?;
             Ok(())
         }

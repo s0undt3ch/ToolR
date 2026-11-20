@@ -6,7 +6,7 @@ use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use crate::uv::toolr_state_dir;
@@ -27,7 +27,7 @@ pub struct TrustRecord {
     pub kind: KeyKind,
     /// The repository path shown to the user.
     pub repo_path: PathBuf,
-    pub trusted_at: DateTime<Utc>,
+    pub trusted_at: Timestamp,
     pub toolr_version: String,
 }
 
@@ -261,7 +261,7 @@ impl TrustStore {
             key: key.key.clone(),
             kind: key.kind,
             repo_path: key.display.clone(),
-            trusted_at: Utc::now(),
+            trusted_at: Timestamp::now(),
             toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         };
         create_private_dir(&self.dir)?;

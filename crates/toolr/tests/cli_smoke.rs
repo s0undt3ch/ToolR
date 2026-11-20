@@ -455,7 +455,7 @@ fn dispatch_in_tree_venv_lets_an_abandoned_cache_venv_age_out() {
         env!("CARGO_PKG_VERSION"),
         resolved.python_version.clone(),
     );
-    old.last_used_at -= chrono::Duration::days(90);
+    old.last_used_at -= jiff::SignedDuration::from_hours(90 * 24);
     old.write(&abandoned).unwrap();
 
     let output = preflight_cmd(tmp.path())

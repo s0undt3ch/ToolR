@@ -5,7 +5,7 @@ mod common;
 use std::fs;
 use std::path::Path;
 
-use chrono::Utc;
+use jiff::Timestamp;
 use tempfile::TempDir;
 
 fn write_entry(cache_root: &Path, key: &str, repo_path: &str, bytes: usize) {
@@ -13,7 +13,7 @@ fn write_entry(cache_root: &Path, key: &str, repo_path: &str, bytes: usize) {
     fs::create_dir_all(cache_dir.join("venv")).unwrap();
     fs::write(cache_dir.join("venv/blob.bin"), vec![0u8; bytes]).unwrap();
 
-    let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let now = Timestamp::now().strftime("%Y-%m-%dT%H:%M:%SZ").to_string();
     let json = format!(
         r#"{{
           "schema_version": 1,

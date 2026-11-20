@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 
 use super::classify::classify_entries;
 use super::enumerate::enumerate_caches_unsized;
@@ -18,7 +18,7 @@ pub const HINT_ORPHAN_THRESHOLD: usize = 10;
 pub fn compute_hint(
     cache_root: &Path,
     orphan_threshold: usize,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Result<Option<String>> {
     let entries = enumerate_caches_unsized(cache_root)?;
     if entries.is_empty() {
