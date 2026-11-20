@@ -922,6 +922,32 @@ mod tests {
         assert!(!store.is_trusted(&f.root()).unwrap());
     }
 
+    fn record_with_trusted_at(trusted_at: &str) -> String {
+        let f = Fixture::new();
+        let store = f.store();
+        let record = store.trust(&f.root()).unwrap();
+        let mut json = serde_json::to_value(&record).unwrap();
+        json["trusted_at"] = trusted_at.into();
+        json.to_string()
+    }
+
+    #[test]
+    fn trust_record_reads_chrono_written_timestamps() {
+        let parse = |s: &str| serde_json::from_str::<TrustRecord>(&record_with_trusted_at(s));
+        let z = parse("2026-01-01T00:00:00Z").unwrap();
+        let offset = parse("2026-01-01T00:00:00+00:00").unwrap();
+        parse("2026-01-01T00:00:00.123456789Z").unwrap();
+        assert_eq!(z.trusted_at, offset.trusted_at);
+    }
+
+    #[test]
+    fn trust_record_serialises_trusted_at_as_rfc3339_z() {
+        let record: TrustRecord =
+            serde_json::from_str(&record_with_trusted_at("2026-05-11T12:34:56+00:00")).unwrap();
+        let json = serde_json::to_value(&record).unwrap();
+        assert_eq!(json["trusted_at"], "2026-05-11T12:34:56Z");
+    }
+
     #[test]
     fn missing_project_root_untrusts_cleanly() {
         let f = Fixture::new();

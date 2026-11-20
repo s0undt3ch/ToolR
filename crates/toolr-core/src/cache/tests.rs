@@ -29,6 +29,36 @@ fn loads_v1_sidecar_without_interpreter_fields() {
 }
 
 #[test]
+fn meta_reads_chrono_written_timestamps() {
+    for ts in [
+        "2026-01-01T00:00:00Z",
+        "2026-01-01T00:00:00+00:00",
+        "2026-01-01T00:00:00.123456789Z",
+    ] {
+        let tmp = TempDir::new().unwrap();
+        let json = format!(
+            r#"{{"schema_version":1,"repo_path":"/r","toolr_version":"0","python_version":"3.13","created_at":"{ts}","last_used_at":"{ts}"}}"#
+        );
+        std::fs::write(tmp.path().join("meta.json"), json).unwrap();
+        Meta::load(tmp.path()).unwrap_or_else(|e| panic!("{ts}: {e}"));
+    }
+}
+
+#[test]
+fn meta_serialises_golden_timestamps() {
+    let mut m = sample_meta();
+    let json = serde_json::to_value(&m).unwrap();
+    assert_eq!(json["created_at"], "2026-05-11T12:00:00Z");
+    assert_eq!(json["last_used_at"], "2026-05-11T12:34:56Z");
+
+    let mut json = json;
+    json["last_used_at"] = "2026-05-11T12:34:56.123456789Z".into();
+    m = serde_json::from_value(json).unwrap();
+    let json = serde_json::to_value(&m).unwrap();
+    assert_eq!(json["last_used_at"], "2026-05-11T12:34:56.123456789Z");
+}
+
+#[test]
 fn meta_round_trips_through_json() {
     let m = sample_meta();
     let s = serde_json::to_string_pretty(&m).expect("serialize");
