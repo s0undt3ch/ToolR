@@ -34,17 +34,27 @@ fn loads_v1_sidecar_without_interpreter_fields() {
 
 #[test]
 fn meta_reads_chrono_written_timestamps() {
-    for ts in [
-        "2026-01-01T00:00:00Z",
-        "2026-01-01T00:00:00+00:00",
-        "2026-01-01T00:00:00.123456789Z",
+    let midnight = Offset::UTC
+        .to_timestamp(date(2026, 1, 1).at(0, 0, 0, 0))
+        .unwrap();
+    for (ts, expected) in [
+        ("2026-01-01T00:00:00Z", midnight),
+        ("2026-01-01T00:00:00+00:00", midnight),
+        (
+            "2026-01-01T00:00:00.123456789Z",
+            Offset::UTC
+                .to_timestamp(date(2026, 1, 1).at(0, 0, 0, 123_456_789))
+                .unwrap(),
+        ),
     ] {
         let tmp = TempDir::new().unwrap();
         let json = format!(
             r#"{{"schema_version":1,"repo_path":"/r","toolr_version":"0","python_version":"3.13","created_at":"{ts}","last_used_at":"{ts}"}}"#
         );
         std::fs::write(tmp.path().join("meta.json"), json).unwrap();
-        Meta::load(tmp.path()).unwrap_or_else(|e| panic!("{ts}: {e}"));
+        let meta = Meta::load(tmp.path()).unwrap_or_else(|e| panic!("{ts}: {e}"));
+        assert_eq!(meta.created_at, expected, "{ts}");
+        assert_eq!(meta.last_used_at, expected, "{ts}");
     }
 }
 
