@@ -408,6 +408,13 @@ def test_unwrap_annotated_returns_bare_type_untouched() -> None:
         (dt.date, "2026-01-02", dt.date(2026, 1, 2)),
         (dt.time, "03:04:05", dt.time(3, 4, 5)),
         (
+            dt.datetime,
+            "2026-05-11T12:00:00.5+00:00",
+            dt.datetime(2026, 5, 11, 12, 0, 0, 500000, tzinfo=dt.UTC),
+        ),
+        (dt.time, "12:34:56.5", dt.time(12, 34, 56, 500000)),
+        (dt.time, "12:34:59", dt.time(12, 34, 59)),
+        (
             uuid.UUID,
             "12345678-1234-5678-1234-567812345678",
             uuid.UUID("12345678-1234-5678-1234-567812345678"),

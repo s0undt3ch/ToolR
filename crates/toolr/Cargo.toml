@@ -22,6 +22,7 @@ dirs.workspace = true
 dunce.workspace = true
 email_address.workspace = true
 humansize.workspace = true
+jiff.workspace = true
 libc.workspace = true
 pep440_rs.workspace = true
 serde_json.workspace = true

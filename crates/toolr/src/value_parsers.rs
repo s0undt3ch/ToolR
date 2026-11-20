@@ -9,11 +9,13 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use clap::Arg;
 use clap::ValueHint;
 use clap::builder::ValueParser;
 use email_address::EmailAddress;
+use jiff::Timestamp;
+use jiff::fmt::strtime;
+use jiff::tz::Offset;
 use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
@@ -318,25 +320,27 @@ fn is_writable_dir(path: &std::path::Path) -> bool {
 
 fn datetime_parser() -> ValueParser {
     ValueParser::new(|s: &str| -> Result<String, String> {
-        DateTime::parse_from_rfc3339(s)
-            .map(|dt| dt.with_timezone(&Utc).to_rfc3339())
+        s.parse::<Timestamp>()
+            .map(|ts| ts.display_with_offset(Offset::UTC).to_string())
             .map_err(|e| format!("expected RFC 3339 datetime, got `{s}`: {e}"))
     })
 }
 
 fn date_parser() -> ValueParser {
     ValueParser::new(|s: &str| -> Result<String, String> {
-        NaiveDate::parse_from_str(s, "%Y-%m-%d")
-            .map(|d| d.format("%Y-%m-%d").to_string())
+        strtime::parse("%Y-%m-%d", s)
+            .and_then(|t| t.to_date())
+            .map(|d| d.strftime("%Y-%m-%d").to_string())
             .map_err(|e| format!("expected YYYY-MM-DD, got `{s}`: {e}"))
     })
 }
 
 fn time_parser() -> ValueParser {
     ValueParser::new(|s: &str| -> Result<String, String> {
-        NaiveTime::parse_from_str(s, "%H:%M:%S")
-            .or_else(|_| NaiveTime::parse_from_str(s, "%H:%M:%S%.f"))
-            .map(|t| t.format("%H:%M:%S%.f").to_string())
+        strtime::parse("%H:%M:%S", s)
+            .or_else(|_| strtime::parse("%H:%M:%S%.f", s))
+            .and_then(|t| t.to_time())
+            .map(|t| t.strftime("%H:%M:%S%.f").to_string())
             .map_err(|e| format!("expected HH:MM:SS[.fff], got `{s}`: {e}"))
     })
 }
@@ -388,6 +392,75 @@ mod tests {
 
     fn build_command_with(ty: &SupportedType) -> Command {
         Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty))
+    }
+
+    fn parse_string(ty: &SupportedType, value: &str) -> Result<String, clap::Error> {
+        build_command_with(ty)
+            .try_get_matches_from(["test", "--v", value])
+            .map(|m| m.get_one::<String>("v").unwrap().clone())
+    }
+
+    #[test]
+    fn datetime_parser_normalises_to_utc_offset() {
+        for (input, expected) in [
+            ("2026-05-11T14:00:00+02:00", "2026-05-11T12:00:00+00:00"),
+            ("2026-05-11T12:00:00Z", "2026-05-11T12:00:00+00:00"),
+        ] {
+            assert_eq!(
+                parse_string(&SupportedType::DateTime, input).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn datetime_parser_keeps_fractional_seconds() {
+        assert_eq!(
+            parse_string(&SupportedType::DateTime, "2026-05-11T12:00:00.123456789Z").unwrap(),
+            "2026-05-11T12:00:00.123456789+00:00"
+        );
+    }
+
+    #[test]
+    fn datetime_parser_rejects_garbage() {
+        let err = parse_string(&SupportedType::DateTime, "yesterday").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("expected RFC 3339 datetime, got `yesterday`")
+        );
+    }
+
+    #[test]
+    fn date_parser_normalises_and_rejects_invalid() {
+        assert_eq!(
+            parse_string(&SupportedType::Date, "2026-1-5").unwrap(),
+            "2026-01-05"
+        );
+        for bad in ["2026-02-30", "not-a-date"] {
+            let err = parse_string(&SupportedType::Date, bad).unwrap_err();
+            assert!(err.to_string().contains("expected YYYY-MM-DD"), "{bad}");
+        }
+    }
+
+    #[test]
+    fn time_parser_accepts_whole_and_fractional_seconds() {
+        for (input, expected) in [
+            ("12:34:56", "12:34:56"),
+            ("1:2:3", "01:02:03"),
+            ("12:34:56.5", "12:34:56.5"),
+        ] {
+            assert_eq!(parse_string(&SupportedType::Time, input).unwrap(), expected);
+        }
+        let err = parse_string(&SupportedType::Time, "24:00:00").unwrap_err();
+        assert!(err.to_string().contains("expected HH:MM:SS[.fff]"));
+    }
+
+    #[test]
+    fn time_parser_clamps_leap_second() {
+        assert_eq!(
+            parse_string(&SupportedType::Time, "12:34:60").unwrap(),
+            "12:34:59"
+        );
     }
 
     #[test]
