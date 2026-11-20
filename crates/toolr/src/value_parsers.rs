@@ -320,6 +320,12 @@ fn is_writable_dir(path: &std::path::Path) -> bool {
 
 fn datetime_parser() -> ValueParser {
     ValueParser::new(|s: &str| -> Result<String, String> {
+        // jiff would silently drop a bracketed zone annotation; RFC 3339 has none.
+        if s.contains('[') {
+            return Err(format!(
+                "expected RFC 3339 datetime, got `{s}`: zone annotations are not supported"
+            ));
+        }
         s.parse::<Timestamp>()
             .map(|ts| ts.display_with_offset(Offset::UTC).to_string())
             .map_err(|e| format!("expected RFC 3339 datetime, got `{s}`: {e}"))
@@ -419,6 +425,56 @@ mod tests {
             parse_string(&SupportedType::DateTime, "2026-05-11T12:00:00.123456789Z").unwrap(),
             "2026-05-11T12:00:00.123456789+00:00"
         );
+    }
+
+    #[test]
+    fn datetime_parser_accepts_short_offsets_comma_fraction_and_no_seconds() {
+        for (input, expected) in [
+            ("2026-05-11T14:00:00+02", "2026-05-11T12:00:00+00:00"),
+            ("2026-05-11T14:00:00+0200", "2026-05-11T12:00:00+00:00"),
+            ("2026-05-11T12:00:00,5Z", "2026-05-11T12:00:00.5+00:00"),
+            ("2026-05-11T12:00Z", "2026-05-11T12:00:00+00:00"),
+        ] {
+            assert_eq!(
+                parse_string(&SupportedType::DateTime, input).unwrap(),
+                expected,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn datetime_parser_rejects_zone_annotations() {
+        let err = parse_string(
+            &SupportedType::DateTime,
+            "2026-05-11T12:00:00+02:00[Europe/Paris]",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("expected RFC 3339 datetime, got"));
+    }
+
+    #[test]
+    fn datetime_parser_clamps_leap_second() {
+        assert_eq!(
+            parse_string(&SupportedType::DateTime, "2026-12-31T23:59:60Z").unwrap(),
+            "2026-12-31T23:59:59+00:00"
+        );
+    }
+
+    #[test]
+    fn datetime_and_time_parsers_reject_more_than_nine_fraction_digits() {
+        for (ty, input) in [
+            (SupportedType::DateTime, "2026-05-11T12:00:00.1234567891Z"),
+            (SupportedType::Time, "12:34:56.1234567891"),
+        ] {
+            assert!(parse_string(&ty, input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn datetime_parser_rejects_instants_outside_the_supported_range() {
+        let err = parse_string(&SupportedType::DateTime, "9999-12-31T23:59:59-01:00").unwrap_err();
+        assert!(err.to_string().contains("expected RFC 3339 datetime, got"));
     }
 
     #[test]
