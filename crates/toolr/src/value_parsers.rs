@@ -13,9 +13,9 @@ use clap::Arg;
 use clap::ValueHint;
 use clap::builder::ValueParser;
 use email_address::EmailAddress;
-use jiff::Timestamp;
+use jiff::SignedDuration;
+use jiff::civil::DateTime;
 use jiff::fmt::strtime;
-use jiff::tz::Offset;
 use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
@@ -320,16 +320,90 @@ fn is_writable_dir(path: &std::path::Path) -> bool {
 
 fn datetime_parser() -> ValueParser {
     ValueParser::new(|s: &str| -> Result<String, String> {
-        // jiff would silently drop a bracketed zone annotation; RFC 3339 has none.
-        if s.contains('[') {
-            return Err(format!(
-                "expected RFC 3339 datetime, got `{s}`: zone annotations are not supported"
-            ));
-        }
-        s.parse::<Timestamp>()
-            .map(|ts| ts.display_with_offset(Offset::UTC).to_string())
-            .map_err(|e| format!("expected RFC 3339 datetime, got `{s}`: {e}"))
+        rfc3339_to_utc(s).map_err(|e| format!("expected RFC 3339 datetime, got `{s}`: {e}"))
     })
+}
+
+/// RFC 3339 datetime -> UTC string `YYYY-MM-DDTHH:MM:SS[.frac]+00:00`.
+///
+/// Goes through `civil::DateTime`, not `Timestamp`: `Timestamp::MAX` ends about
+/// 26 hours before `9999-12-31T23:59:59Z`, which is a common sentinel value.
+const SHAPE: &str = "expected `YYYY-MM-DDTHH:MM:SS[.f]` followed by `Z` or `±HH:MM`";
+
+fn rfc3339_to_utc(s: &str) -> Result<String, String> {
+    let (body, offset_secs) = split_offset(s).ok_or(SHAPE)?;
+    let civil = parse_civil(body).ok_or(SHAPE)?;
+    let utc = civil
+        .checked_sub(SignedDuration::from_secs(offset_secs))
+        .map_err(|e| e.to_string())?;
+    if !(1..=9999).contains(&utc.year()) {
+        return Err("year is outside 0001..=9999".to_string());
+    }
+    Ok(format!("{utc}+00:00"))
+}
+
+/// Splits `Z`, `z`, `+HH:MM`, `-HH:MM` or `\u{2212}HH:MM` off the end.
+fn split_offset(s: &str) -> Option<(&str, i64)> {
+    if let Some(body) = s.strip_suffix(['Z', 'z']) {
+        return Some((body, 0));
+    }
+    let i = s.rfind(['+', '-', '\u{2212}'])?;
+    let (body, off) = s.split_at(i);
+    let mut chars = off.chars();
+    let sign = if chars.next()? == '+' { 1 } else { -1 };
+    let off = chars.as_str().as_bytes();
+    if off.len() != 5 || off[2] != b':' {
+        return None;
+    }
+    let h = two_digits(&off[0..2])?;
+    let m = two_digits(&off[3..5])?;
+    (h <= 23 && m <= 59).then_some((body, sign * (h * 3600 + m * 60)))
+}
+
+fn parse_civil(b: &str) -> Option<DateTime> {
+    let b = b.as_bytes();
+    if b.len() < 19
+        || b[4] != b'-'
+        || b[7] != b'-'
+        || !matches!(b[10], b'T' | b't' | b' ')
+        || b[13] != b':'
+        || b[16] != b':'
+    {
+        return None;
+    }
+    let year = two_digits(&b[0..2])? * 100 + two_digits(&b[2..4])?;
+    let nanos = match &b[19..] {
+        [] => 0,
+        [b'.', frac @ ..]
+            if (1..=9).contains(&frac.len()) && frac.iter().all(u8::is_ascii_digit) =>
+        {
+            let n: i64 = std::str::from_utf8(frac).ok()?.parse().ok()?;
+            n * 10_i64.pow(9 - frac.len() as u32)
+        }
+        _ => return None,
+    };
+    // A leap second becomes :59; chrono let :60 through and Python then crashed on it.
+    let second = match two_digits(&b[17..19])? {
+        60 => 59,
+        s => s,
+    };
+    DateTime::new(
+        year as i16,
+        two_digits(&b[5..7])? as i8,
+        two_digits(&b[8..10])? as i8,
+        two_digits(&b[11..13])? as i8,
+        two_digits(&b[14..16])? as i8,
+        second as i8,
+        nanos as i32,
+    )
+    .ok()
+}
+
+fn two_digits(b: &[u8]) -> Option<i64> {
+    match b {
+        [a @ b'0'..=b'9', c @ b'0'..=b'9'] => Some(i64::from((a - b'0') * 10 + (c - b'0'))),
+        _ => None,
+    }
 }
 
 fn date_parser() -> ValueParser {
@@ -428,12 +502,25 @@ mod tests {
     }
 
     #[test]
-    fn datetime_parser_accepts_short_offsets_comma_fraction_and_no_seconds() {
+    fn datetime_parser_accepts_what_chrono_accepted() {
         for (input, expected) in [
-            ("2026-05-11T14:00:00+02", "2026-05-11T12:00:00+00:00"),
-            ("2026-05-11T14:00:00+0200", "2026-05-11T12:00:00+00:00"),
-            ("2026-05-11T12:00:00,5Z", "2026-05-11T12:00:00.5+00:00"),
-            ("2026-05-11T12:00Z", "2026-05-11T12:00:00+00:00"),
+            ("2026-05-11t12:00:00z", "2026-05-11T12:00:00+00:00"),
+            ("2026-05-11 12:00:00Z", "2026-05-11T12:00:00+00:00"),
+            ("2026-05-11T12:00:00-00:00", "2026-05-11T12:00:00+00:00"),
+            ("2026-05-11T12:00:00+23:59", "2026-05-10T12:01:00+00:00"),
+            // U+2212 MINUS SIGN as the offset sign
+            (
+                "2026-05-11T12:00:00\u{2212}02:00",
+                "2026-05-11T14:00:00+00:00",
+            ),
+            ("2026-05-11T12:00:00.5+05:30", "2026-05-11T06:30:00.5+00:00"),
+            ("9999-12-31T23:59:59Z", "9999-12-31T23:59:59+00:00"),
+            ("9999-12-30T23:59:59Z", "9999-12-30T23:59:59+00:00"),
+            (
+                "9999-12-31T23:59:59.999999999Z",
+                "9999-12-31T23:59:59.999999999+00:00",
+            ),
+            ("0001-01-01T00:00:00Z", "0001-01-01T00:00:00+00:00"),
         ] {
             assert_eq!(
                 parse_string(&SupportedType::DateTime, input).unwrap(),
@@ -444,13 +531,40 @@ mod tests {
     }
 
     #[test]
-    fn datetime_parser_rejects_zone_annotations() {
-        let err = parse_string(
-            &SupportedType::DateTime,
+    fn datetime_parser_rejects_what_chrono_rejected_or_python_cannot_read() {
+        for input in [
+            "2026-05-11T14:00:00+02",
+            "2026-05-11T14:00:00+0200",
+            "2026-05-11T12:00:00,5Z",
+            "2026-05-11T12:00Z",
+            "2026-05-11T12Z",
+            "20260511T120000Z",
+            "2026-05-11T12:00:00+00:00:30",
+            "2026-05-11T12:00:00+24:00",
+            "2026-05-11T12:00:00+25:00",
+            "2026-05-11T12:00:00+00:60",
+            "2026-05-11T12:00:00.Z",
+            "2026-05-11T12:00:00",
+            "+002026-05-11T12:00:00Z",
             "2026-05-11T12:00:00+02:00[Europe/Paris]",
-        )
-        .unwrap_err();
-        assert!(err.to_string().contains("expected RFC 3339 datetime, got"));
+            "2026-05-11T12:00:00Z[UTC]",
+            " 2026-05-11T12:00:00Z",
+            "2026-05-11T12:00:00Z ",
+            "2026-02-30T12:00:00Z",
+            "2026-05-11T24:00:00Z",
+            "2026-05-11T12:00:61Z",
+            // before year 1 or after year 9999 once converted to UTC
+            "0001-01-01T00:00:00+00:01",
+            "0000-12-31T23:59:59Z",
+            "9999-12-31T23:59:59-00:01",
+            "",
+        ] {
+            let err = parse_string(&SupportedType::DateTime, input).unwrap_err();
+            assert!(
+                err.to_string().contains("expected RFC 3339 datetime, got"),
+                "{input:?}"
+            );
+        }
     }
 
     #[test]
@@ -469,12 +583,6 @@ mod tests {
         ] {
             assert!(parse_string(&ty, input).is_err(), "{input}");
         }
-    }
-
-    #[test]
-    fn datetime_parser_rejects_instants_outside_the_supported_range() {
-        let err = parse_string(&SupportedType::DateTime, "9999-12-31T23:59:59-01:00").unwrap_err();
-        assert!(err.to_string().contains("expected RFC 3339 datetime, got"));
     }
 
     #[test]
