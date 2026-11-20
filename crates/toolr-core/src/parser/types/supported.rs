@@ -253,7 +253,7 @@ impl SupportedType {
             },
             SupportedType::DateTime => TypeDoc {
                 annotation: "toolr.types.DateTime",
-                validated_by: "clap (jiff RFC 3339)",
+                validated_by: "clap (strict RFC 3339)",
                 wire_format: "string",
                 python_receives: "`datetime.datetime`",
                 note: "",

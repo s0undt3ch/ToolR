@@ -936,7 +936,8 @@ mod tests {
         let parse = |s: &str| serde_json::from_str::<TrustRecord>(&record_with_trusted_at(s));
         let z = parse("2026-01-01T00:00:00Z").unwrap();
         let offset = parse("2026-01-01T00:00:00+00:00").unwrap();
-        parse("2026-01-01T00:00:00.123456789Z").unwrap();
+        let fractional = parse("2026-01-01T00:00:00.123456789Z").unwrap();
+        assert_eq!(fractional.trusted_at.subsec_nanosecond(), 123_456_789);
         assert_eq!(z.trusted_at, offset.trusted_at);
     }
 
