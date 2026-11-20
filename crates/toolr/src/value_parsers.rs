@@ -324,20 +324,21 @@ fn datetime_parser() -> ValueParser {
     })
 }
 
+const SHAPE: &str = "expected `YYYY-MM-DDTHH:MM:SS[.f]` followed by `Z` or `±HH:MM`";
+const OUT_OF_RANGE: &str = "year is outside 0001..=9999";
+
 /// RFC 3339 datetime -> UTC string `YYYY-MM-DDTHH:MM:SS[.frac]+00:00`.
 ///
 /// Goes through `civil::DateTime`, not `Timestamp`: `Timestamp::MAX` ends about
 /// 26 hours before `9999-12-31T23:59:59Z`, which is a common sentinel value.
-const SHAPE: &str = "expected `YYYY-MM-DDTHH:MM:SS[.f]` followed by `Z` or `±HH:MM`";
-
 fn rfc3339_to_utc(s: &str) -> Result<String, String> {
     let (body, offset_secs) = split_offset(s).ok_or(SHAPE)?;
     let civil = parse_civil(body).ok_or(SHAPE)?;
     let utc = civil
         .checked_sub(SignedDuration::from_secs(offset_secs))
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| OUT_OF_RANGE)?;
     if !(1..=9999).contains(&utc.year()) {
-        return Err("year is outside 0001..=9999".to_string());
+        return Err(OUT_OF_RANGE.into());
     }
     Ok(format!("{utc}+00:00"))
 }
@@ -582,6 +583,17 @@ mod tests {
             (SupportedType::Time, "12:34:56.1234567891"),
         ] {
             assert!(parse_string(&ty, input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn datetime_parser_names_the_range_when_the_utc_year_overflows() {
+        for input in ["9999-12-31T23:59:59-01:00", "0000-12-31T23:59:59Z"] {
+            let err = parse_string(&SupportedType::DateTime, input).unwrap_err();
+            assert!(
+                err.to_string().contains("year is outside 0001..=9999"),
+                "{input}"
+            );
         }
     }
 
