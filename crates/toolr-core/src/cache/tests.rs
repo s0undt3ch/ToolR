@@ -1,7 +1,7 @@
 use super::locks::{LockSweep, sweep_one, sweep_rebuild_locks};
 use super::meta::{Meta, MetaError, SCHEMA_VERSION};
 use crate::manifest::{LOCKS_DIR, lock_path_for_repo};
-use chrono::{TimeZone, Utc};
+use jiff::{SignedDuration, Timestamp, civil::date, tz::Offset};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
@@ -11,8 +11,12 @@ fn sample_meta() -> Meta {
         repo_path: PathBuf::from("/home/u/repo"),
         toolr_version: "1.0.0".into(),
         python_version: "3.13.1".into(),
-        created_at: Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap(),
-        last_used_at: Utc.with_ymd_and_hms(2026, 5, 11, 12, 34, 56).unwrap(),
+        created_at: Offset::UTC
+            .to_timestamp(date(2026, 5, 11).at(12, 0, 0, 0))
+            .unwrap(),
+        last_used_at: Offset::UTC
+            .to_timestamp(date(2026, 5, 11).at(12, 34, 56, 0))
+            .unwrap(),
         interpreter_path: None,
         interpreter_hash: None,
     }
@@ -26,6 +30,46 @@ fn loads_v1_sidecar_without_interpreter_fields() {
     let m = Meta::load(tmp.path()).unwrap();
     assert!(m.interpreter_path.is_none());
     assert!(m.interpreter_hash.is_none());
+}
+
+#[test]
+fn meta_reads_chrono_written_timestamps() {
+    let midnight = Offset::UTC
+        .to_timestamp(date(2026, 1, 1).at(0, 0, 0, 0))
+        .unwrap();
+    for (ts, expected) in [
+        ("2026-01-01T00:00:00Z", midnight),
+        ("2026-01-01T00:00:00+00:00", midnight),
+        (
+            "2026-01-01T00:00:00.123456789Z",
+            Offset::UTC
+                .to_timestamp(date(2026, 1, 1).at(0, 0, 0, 123_456_789))
+                .unwrap(),
+        ),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        let json = format!(
+            r#"{{"schema_version":1,"repo_path":"/r","toolr_version":"0","python_version":"3.13","created_at":"{ts}","last_used_at":"{ts}"}}"#
+        );
+        std::fs::write(tmp.path().join("meta.json"), json).unwrap();
+        let meta = Meta::load(tmp.path()).unwrap_or_else(|e| panic!("{ts}: {e}"));
+        assert_eq!(meta.created_at, expected, "{ts}");
+        assert_eq!(meta.last_used_at, expected, "{ts}");
+    }
+}
+
+#[test]
+fn meta_serialises_golden_timestamps() {
+    let mut m = sample_meta();
+    let json = serde_json::to_value(&m).unwrap();
+    assert_eq!(json["created_at"], "2026-05-11T12:00:00Z");
+    assert_eq!(json["last_used_at"], "2026-05-11T12:34:56Z");
+
+    let mut json = json;
+    json["last_used_at"] = "2026-05-11T12:34:56.123456789Z".into();
+    m = serde_json::from_value(json).unwrap();
+    let json = serde_json::to_value(&m).unwrap();
+    assert_eq!(json["last_used_at"], "2026-05-11T12:34:56.123456789Z");
 }
 
 #[test]
@@ -246,7 +290,7 @@ fn make_entry(
     root: &std::path::Path,
     key: &str,
     repo_path: &str,
-    last_used: chrono::DateTime<Utc>,
+    last_used: Timestamp,
     venv_byte_count: usize,
 ) {
     let cache_dir = root.join(key);
@@ -275,7 +319,9 @@ fn enumerate_caches_returns_empty_when_root_missing() {
 #[test]
 fn enumerate_caches_finds_all_meta_sidecars() {
     let tmp = TempDir::new().unwrap();
-    let when = Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap();
+    let when = Offset::UTC
+        .to_timestamp(date(2026, 5, 11).at(12, 0, 0, 0))
+        .unwrap();
     make_entry(tmp.path(), "key-a", "/repo/a", when, 1024);
     make_entry(tmp.path(), "key-b", "/repo/b", when, 2048);
 
@@ -302,7 +348,9 @@ fn enumerate_caches_skips_directories_without_meta() {
 #[test]
 fn enumerate_caches_ignores_the_manifest_rebuild_locks_dir() {
     let tmp = TempDir::new().unwrap();
-    let when = Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap();
+    let when = Offset::UTC
+        .to_timestamp(date(2026, 5, 11).at(12, 0, 0, 0))
+        .unwrap();
     make_entry(tmp.path(), "key-a", "/repo/a", when, 1024);
     let locks = tmp.path().join(crate::manifest::LOCKS_DIR);
     std::fs::create_dir_all(&locks).unwrap();
@@ -314,13 +362,14 @@ fn enumerate_caches_ignores_the_manifest_rebuild_locks_dir() {
 }
 
 use super::classify::{PruneReason, classify_entries};
-use chrono::Duration as ChronoDuration;
 
-fn now_fixture() -> chrono::DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap()
+fn now_fixture() -> Timestamp {
+    Offset::UTC
+        .to_timestamp(date(2026, 5, 11).at(12, 0, 0, 0))
+        .unwrap()
 }
 
-fn entry_at(repo: &str, last_used: chrono::DateTime<Utc>) -> CachedVenv {
+fn entry_at(repo: &str, last_used: Timestamp) -> CachedVenv {
     CachedVenv {
         repo_key: "k".into(),
         cache_dir: PathBuf::from(format!("/cache/{repo}")),
@@ -357,7 +406,10 @@ fn classify_marks_old_last_used_as_stale() {
     let tmp = TempDir::new().unwrap();
     let repo = tmp.path().join("real-repo");
     std::fs::create_dir_all(&repo).unwrap();
-    let mut entry = entry_at("ignored", now_fixture() - ChronoDuration::days(45));
+    let mut entry = entry_at(
+        "ignored",
+        now_fixture() - SignedDuration::from_hours(45 * 24),
+    );
     entry.meta.repo_path = repo;
     let result = classify_entries(vec![entry], now_fixture(), 30);
     assert_eq!(result.stale.len(), 1);
@@ -370,7 +422,10 @@ fn classify_keeps_recently_used_existing_repos() {
     let tmp = TempDir::new().unwrap();
     let repo = tmp.path().join("real-repo");
     std::fs::create_dir_all(&repo).unwrap();
-    let mut entry = entry_at("ignored", now_fixture() - ChronoDuration::days(3));
+    let mut entry = entry_at(
+        "ignored",
+        now_fixture() - SignedDuration::from_hours(3 * 24),
+    );
     entry.meta.repo_path = repo;
     let result = classify_entries(vec![entry], now_fixture(), 30);
     assert_eq!(result.keep.len(), 1);
@@ -380,7 +435,10 @@ fn classify_keeps_recently_used_existing_repos() {
 
 #[test]
 fn classify_prefers_orphan_over_stale_when_both_apply() {
-    let mut entry = entry_at("/no/such/repo", now_fixture() - ChronoDuration::days(90));
+    let mut entry = entry_at(
+        "/no/such/repo",
+        now_fixture() - SignedDuration::from_hours(90 * 24),
+    );
     entry.meta.repo_path = PathBuf::from("/no/such/repo");
     let result = classify_entries(vec![entry], now_fixture(), 30);
     assert_eq!(result.orphan.len(), 1);

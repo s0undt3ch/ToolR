@@ -1,6 +1,6 @@
 //! Sort enumerated cache entries into keep / orphan / stale.
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use jiff::{SignedDuration, Timestamp};
 
 use super::enumerate::CachedVenv;
 
@@ -33,10 +33,10 @@ pub struct Classification {
 /// whose repo no longer exists is always reported as orphan.
 pub fn classify_entries(
     entries: Vec<CachedVenv>,
-    now: DateTime<Utc>,
+    now: Timestamp,
     stale_after_days: u32,
 ) -> Classification {
-    let threshold = ChronoDuration::days(stale_after_days as i64);
+    let threshold = SignedDuration::from_hours(i64::from(stale_after_days) * 24);
     let mut result = Classification::default();
     for entry in entries {
         if !entry.meta.repo_path.is_dir() {
@@ -48,7 +48,7 @@ pub fn classify_entries(
             });
             continue;
         }
-        let age = now.signed_duration_since(entry.meta.last_used_at);
+        let age = now.duration_since(entry.meta.last_used_at);
         if age >= threshold {
             result.stale.push(Candidate {
                 entry,

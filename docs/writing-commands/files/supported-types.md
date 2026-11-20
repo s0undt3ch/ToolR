@@ -14,9 +14,9 @@
 | `toolr.types.DirectoryPath` | clap (`canonicalize()`, directory) | resolved string | `pathlib.Path` |
 | `toolr.types.ExecutablePath` | clap (`canonicalize()`, executable file) | resolved string | `pathlib.Path` |
 | `toolr.types.WritableDirectoryPath` | clap (`canonicalize()`, writable directory) | resolved string | `pathlib.Path` |
-| `toolr.types.DateTime` | clap (chrono RFC 3339) | string | `datetime.datetime` |
-| `toolr.types.Date` | clap (chrono ISO date) | string | `datetime.date` |
-| `toolr.types.Time` | clap (chrono ISO time) | string | `datetime.time` |
+| `toolr.types.DateTime` | clap (jiff RFC 3339) | string | `datetime.datetime` |
+| `toolr.types.Date` | clap (jiff ISO date) | string | `datetime.date` |
+| `toolr.types.Time` | clap (jiff ISO time) | string | `datetime.time` |
 | `toolr.types.UUID` | clap (`uuid` crate) | string | `uuid.UUID` |
 | `toolr.types.IPv4` | clap (`std::net::Ipv4Addr`) | string | `ipaddress.IPv4Address` |
 | `toolr.types.IPv6` | clap (`std::net::Ipv6Addr`) | string | `ipaddress.IPv6Address` |

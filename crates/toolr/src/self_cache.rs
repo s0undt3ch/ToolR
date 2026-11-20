@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use clap::ArgMatches;
 use humansize::{BINARY, format_size};
+use jiff::Timestamp;
 
 use toolr_core::cache::{CachedVenv, enumerate_caches};
 
@@ -51,7 +51,7 @@ fn write_table(out: &mut dyn Write, caches: &[CachedVenv]) -> Result<()> {
     let mut w_size = "SIZE".len();
     let mut w_last = "LAST USED".len();
 
-    let now = Utc::now();
+    let now = Timestamp::now();
     let rows: Vec<(String, String, String)> = caches
         .iter()
         .map(|c| {
@@ -93,40 +93,43 @@ fn write_table(out: &mut dyn Write, caches: &[CachedVenv]) -> Result<()> {
 
 /// Human-friendly relative time. Coarse buckets are fine — the column
 /// exists to let users spot ancient entries at a glance.
-pub fn human_ago(now: DateTime<Utc>, then: DateTime<Utc>) -> String {
-    let delta = now.signed_duration_since(then);
-    let secs = delta.num_seconds();
+pub fn human_ago(now: Timestamp, then: Timestamp) -> String {
+    let delta = now.duration_since(then);
+    let secs = delta.as_secs();
+    let days = secs / 86_400;
     if secs < 60 {
         "just now".into()
     } else if secs < 3600 {
-        format!("{}m ago", delta.num_minutes())
+        format!("{}m ago", secs / 60)
     } else if secs < 86_400 {
-        format!("{}h ago", delta.num_hours())
-    } else if delta.num_days() < 30 {
-        format!("{}d ago", delta.num_days())
-    } else if delta.num_days() < 365 {
-        format!("{}mo ago", delta.num_days() / 30)
+        format!("{}h ago", secs / 3600)
+    } else if days < 30 {
+        format!("{days}d ago")
+    } else if days < 365 {
+        format!("{}mo ago", days / 30)
     } else {
-        format!("{}y ago", delta.num_days() / 365)
+        format!("{}y ago", days / 365)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, TimeZone, Utc};
+    use jiff::{SignedDuration, civil::date, tz::Offset};
 
     use super::human_ago;
 
     #[test]
     fn human_ago_picks_the_coarsest_bucket() {
-        let now = Utc.with_ymd_and_hms(2026, 11, 4, 12, 0, 0).unwrap();
+        let now = Offset::UTC
+            .to_timestamp(date(2026, 11, 4).at(12, 0, 0, 0))
+            .unwrap();
         let cases = [
-            (Duration::seconds(30), "just now"),
-            (Duration::minutes(5), "5m ago"),
-            (Duration::hours(3), "3h ago"),
-            (Duration::days(4), "4d ago"),
-            (Duration::days(90), "3mo ago"),
-            (Duration::days(800), "2y ago"),
+            (SignedDuration::from_secs(30), "just now"),
+            (SignedDuration::from_mins(5), "5m ago"),
+            (SignedDuration::from_hours(3), "3h ago"),
+            (SignedDuration::from_hours(4 * 24), "4d ago"),
+            (SignedDuration::from_hours(90 * 24), "3mo ago"),
+            (SignedDuration::from_hours(800 * 24), "2y ago"),
         ];
         for (age, expected) in cases {
             assert_eq!(human_ago(now, now - age), expected, "{age:?}");

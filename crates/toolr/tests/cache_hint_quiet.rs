@@ -13,7 +13,7 @@ mod common;
 use std::fs;
 use std::path::Path;
 
-use chrono::Utc;
+use jiff::Timestamp;
 use tempfile::TempDir;
 
 /// Write a single orphan cache entry (its `repo_path` points nowhere,
@@ -22,7 +22,7 @@ fn write_orphan(cache_root: &Path, key: &str) {
     let cache_dir = cache_root.join(key);
     fs::create_dir_all(cache_dir.join("venv")).unwrap();
     fs::write(cache_dir.join("venv/blob.bin"), vec![0u8; 1024]).unwrap();
-    let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let now = Timestamp::now().strftime("%Y-%m-%dT%H:%M:%SZ").to_string();
     let meta = serde_json::json!({
         "schema_version": 1,
         "repo_path": format!("/no/such/repo/{key}"),

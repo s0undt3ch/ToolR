@@ -12,7 +12,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -39,9 +39,9 @@ pub struct Meta {
     /// Concrete Python version used (e.g. "3.13.1").
     pub python_version: String,
     /// When this cache entry was first materialised.
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// Updated on every toolr invocation against this cache entry.
-    pub last_used_at: DateTime<Utc>,
+    pub last_used_at: Timestamp,
     /// Deprecated: no longer written or read. Kept so older `meta.json`
     /// files still parse.
     #[serde(default)]
@@ -74,7 +74,7 @@ impl Meta {
         toolr_version: impl Into<String>,
         python_version: impl Into<String>,
     ) -> Self {
-        let now = Utc::now();
+        let now = Timestamp::now();
         Self {
             schema_version: SCHEMA_VERSION,
             repo_path: repo_path.into(),

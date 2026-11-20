@@ -5,20 +5,15 @@ mod common;
 use std::fs;
 use std::path::Path;
 
-use chrono::{Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
 use tempfile::TempDir;
 use toolr_core::manifest::{LOCKS_DIR, lock_path_for_repo};
 
-fn write_entry(
-    cache_root: &Path,
-    key: &str,
-    repo_path: &Path,
-    last_used_at: chrono::DateTime<Utc>,
-) {
+fn write_entry(cache_root: &Path, key: &str, repo_path: &Path, last_used_at: Timestamp) {
     let cache_dir = cache_root.join(key);
     fs::create_dir_all(cache_dir.join("venv")).unwrap();
     fs::write(cache_dir.join("venv/blob.bin"), vec![0u8; 256]).unwrap();
-    let stamp = last_used_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let stamp = last_used_at.strftime("%Y-%m-%dT%H:%M:%SZ").to_string();
     // Build JSON via serde_json so Windows backslash paths get
     // properly escaped — `format!` + `Path::display()` produced
     // invalid JSON on Windows (`"C:\Users\..."` has illegal escapes),
@@ -44,11 +39,11 @@ fn prune_removes_orphan_entries() {
         &cache_root,
         "orphan-key",
         Path::new("/definitely/missing/repo"),
-        Utc::now(),
+        Timestamp::now(),
     );
     let live_repo = tmp.path().join("live-repo");
     fs::create_dir_all(&live_repo).unwrap();
-    write_entry(&cache_root, "live-key", &live_repo, Utc::now());
+    write_entry(&cache_root, "live-key", &live_repo, Timestamp::now());
 
     let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
@@ -81,13 +76,13 @@ fn prune_removes_stale_entries() {
         &cache_root,
         "stale-key",
         &live_repo,
-        Utc::now() - Duration::days(60),
+        Timestamp::now() - SignedDuration::from_hours(60 * 24),
     );
     write_entry(
         &cache_root,
         "fresh-key",
         &live_repo,
-        Utc::now() - Duration::days(2),
+        Timestamp::now() - SignedDuration::from_hours(2 * 24),
     );
 
     let output = common::toolr()
@@ -118,7 +113,7 @@ fn prune_dry_run_leaves_disk_untouched() {
         &cache_root,
         "orphan-key",
         Path::new("/definitely/missing/repo"),
-        Utc::now(),
+        Timestamp::now(),
     );
 
     let output = common::toolr()
@@ -147,8 +142,8 @@ fn prune_all_with_yes_nukes_everything() {
     let live_repo = tmp.path().join("live-repo");
     fs::create_dir_all(&live_repo).unwrap();
 
-    write_entry(&cache_root, "a", &live_repo, Utc::now());
-    write_entry(&cache_root, "b", &live_repo, Utc::now());
+    write_entry(&cache_root, "a", &live_repo, Timestamp::now());
+    write_entry(&cache_root, "b", &live_repo, Timestamp::now());
 
     let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
@@ -182,7 +177,7 @@ fn prune_all_asks_and_takes_yes_or_y() {
         fs::create_dir_all(&cache_root).unwrap();
         let live_repo = tmp.path().join("live-repo");
         fs::create_dir_all(&live_repo).unwrap();
-        write_entry(&cache_root, "a", &live_repo, Utc::now());
+        write_entry(&cache_root, "a", &live_repo, Timestamp::now());
 
         let mut cmd = common::toolr_std();
         cmd.env("XDG_CACHE_HOME", tmp.path())
@@ -210,7 +205,7 @@ fn passive_hint_appears_when_orphan_count_is_high() {
             &cache_root,
             &format!("orphan-{i}"),
             Path::new("/definitely/missing/repo"),
-            Utc::now(),
+            Timestamp::now(),
         );
     }
 
@@ -241,7 +236,7 @@ fn passive_hint_is_suppressed_by_env_var() {
             &cache_root,
             &format!("orphan-{i}"),
             Path::new("/definitely/missing/repo"),
-            Utc::now(),
+            Timestamp::now(),
         );
     }
     let output = common::toolr()
@@ -266,7 +261,7 @@ fn prune_all_refuses_without_yes_when_non_interactive() {
     fs::create_dir_all(&cache_root).unwrap();
     let live_repo = tmp.path().join("live-repo");
     fs::create_dir_all(&live_repo).unwrap();
-    write_entry(&cache_root, "a", &live_repo, Utc::now());
+    write_entry(&cache_root, "a", &live_repo, Timestamp::now());
 
     let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
@@ -287,7 +282,7 @@ fn cache_with_kept_and_stray_lock() -> (TempDir, std::path::PathBuf, std::path::
     let cache_root = tmp.path().join("toolr");
     let live_repo = tmp.path().join("live-repo");
     fs::create_dir_all(live_repo.join("tools")).unwrap();
-    write_entry(&cache_root, "live-key", &live_repo, Utc::now());
+    write_entry(&cache_root, "live-key", &live_repo, Timestamp::now());
     let kept = lock_path_for_repo(&cache_root, &live_repo);
     let stray = cache_root.join(LOCKS_DIR).join("stray.lock");
     fs::create_dir_all(cache_root.join(LOCKS_DIR)).unwrap();
@@ -440,7 +435,7 @@ fn cache_with_two_orphans() -> (TempDir, Vec<std::path::PathBuf>) {
                 &cache_root,
                 key,
                 Path::new("/definitely/missing/repo"),
-                Utc::now(),
+                Timestamp::now(),
             );
             cache_root.join(key)
         })

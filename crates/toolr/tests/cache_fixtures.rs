@@ -7,20 +7,20 @@ use std::fs;
 use std::path::Path;
 
 use assert_cmd::Command;
-use chrono::{Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
 use tempfile::TempDir;
 
 fn write_entry(
     cache_root: &Path,
     key: &str,
     repo_path: &Path,
-    last_used_at: chrono::DateTime<Utc>,
+    last_used_at: Timestamp,
     bytes: usize,
 ) {
     let cache_dir = cache_root.join(key);
     fs::create_dir_all(cache_dir.join("venv")).unwrap();
     fs::write(cache_dir.join("venv/blob.bin"), vec![0u8; bytes]).unwrap();
-    let stamp = last_used_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let stamp = last_used_at.strftime("%Y-%m-%dT%H:%M:%SZ").to_string();
     // Build the JSON via serde_json so paths with backslashes (Windows)
     // get properly escaped. Hand-rolled `format!` produced invalid JSON
     // on Windows — `"C:\Users\..."` has illegal escape sequences and the
@@ -67,21 +67,21 @@ fn end_to_end_list_then_prune_then_prune_all() {
         &cache_root,
         "orphan",
         Path::new("/no/such/repo"),
-        Utc::now(),
+        Timestamp::now(),
         256,
     );
     write_entry(
         &cache_root,
         "stale",
         &live_repo,
-        Utc::now() - Duration::days(60),
+        Timestamp::now() - SignedDuration::from_hours(60 * 24),
         256,
     );
     write_entry(
         &cache_root,
         "fresh",
         &live_repo,
-        Utc::now() - Duration::days(1),
+        Timestamp::now() - SignedDuration::from_hours(24),
         256,
     );
 

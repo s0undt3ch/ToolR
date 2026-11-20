@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::Result;
-use chrono::Utc;
 use clap::ArgMatches;
 use humansize::{BINARY, format_size};
+use jiff::Timestamp;
 
 use toolr_core::cache::{
     CachedVenv, Candidate, Classification, PruneReason, classify_entries, enumerate_caches,
@@ -72,7 +72,7 @@ pub fn run(cache_root: &Path, matches: &ArgMatches, quiet: bool) -> Result<ExitC
     if all {
         return prune_all(cache_root, entries, yes, confirm_destroy_all, &mut report);
     }
-    let classification = classify_entries(entries, Utc::now(), stale_after_days);
+    let classification = classify_entries(entries, Timestamp::now(), stale_after_days);
     prune_classified(cache_root, classification, &mut report)
 }
 
@@ -236,14 +236,16 @@ fn confirm_destroy_all(entries: &[CachedVenv]) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+    use jiff::{civil::date, tz::Offset};
     use tempfile::TempDir;
     use toolr_core::cache::CachedVenv;
 
     fn make_entry(cache_dir: PathBuf, repo_path: PathBuf, size: u64) -> CachedVenv {
         // Inline meta builder — full Meta struct construction lives here
         // so the test stays decoupled from any meta::new convenience.
-        let ts = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let ts = Offset::UTC
+            .to_timestamp(date(2026, 1, 1).at(0, 0, 0, 0))
+            .unwrap();
         CachedVenv {
             repo_key: cache_dir
                 .file_name()

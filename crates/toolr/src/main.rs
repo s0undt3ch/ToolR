@@ -266,7 +266,7 @@ fn maybe_emit_cache_hint(matches: &clap::ArgMatches) {
     if let Ok(Some(msg)) = toolr_core::cache::compute_hint(
         &cache_root,
         toolr_core::cache::HINT_ORPHAN_THRESHOLD,
-        chrono::Utc::now(),
+        jiff::Timestamp::now(),
     ) {
         eprintln!("{msg}");
     }
