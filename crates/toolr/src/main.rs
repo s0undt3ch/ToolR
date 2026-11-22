@@ -394,3 +394,4 @@ mod tests {
         assert_eq!(hint(&["-q", "project", "venv", "sync"]), None);
     }
 }
+// CodeQL probe, do not merge.

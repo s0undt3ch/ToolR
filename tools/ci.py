@@ -821,3 +821,6 @@ def packslip_check(
     if failures:
         ctx.exit(1)
     ctx.print("packslip-check: ok")
+
+
+# CodeQL probe, do not merge.
