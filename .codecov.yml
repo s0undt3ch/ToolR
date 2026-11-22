@@ -86,6 +86,10 @@ ignore:
   # care about what they exercise, not their own line hits.
   - "tests"
   - "crates/*/tests"
+  # Rust unit tests: `src/<module>/tests.rs`, plus the `*_test.rs` files
+  # some of them `include!`. Mirrored in xtask's `patch_coverage.rs`.
+  - "crates/**/tests.rs"
+  - "crates/**/*_test.rs"
   # Embedded shell completion scripts; not Rust/Python source.
   - "crates/toolr-core/src/complete/scripts"
   # Init-template fixture text — copied verbatim into new projects.

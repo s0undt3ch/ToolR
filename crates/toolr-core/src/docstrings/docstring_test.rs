@@ -1,4 +1,3 @@
-#[cfg(test)]
 mod test_suite {
     use crate::docstrings::SimpleDocstringParser;
 
@@ -812,7 +811,6 @@ Notes:
     }
 }
 
-#[cfg(test)]
 mod wrapped_args_tests {
     use crate::docstrings::SimpleDocstringParser;
 

@@ -6,7 +6,6 @@
 // Version Changed) gets its own branch in the renderer; this file
 // exercises every one so a regression that drops a section can't
 // land silently.
-#[cfg(test)]
 mod full_description_test {
     use crate::docstrings::SimpleDocstringParser;
 
@@ -225,7 +224,6 @@ Examples:
     }
 }
 
-#[cfg(test)]
 mod backtick_normalization {
     use crate::SimpleDocstringParser;
 

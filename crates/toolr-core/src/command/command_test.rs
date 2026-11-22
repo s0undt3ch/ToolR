@@ -1,4 +1,3 @@
-#[cfg(test)]
 mod test_suite {
     use anyhow::{Result, anyhow};
     use std::collections::HashMap;

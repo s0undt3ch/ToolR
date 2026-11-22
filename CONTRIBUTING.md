@@ -62,10 +62,16 @@ cargo build -p toolr --release
 
 | Suite                                  | Run with                          | Lives at                               |
 | -------------------------------------- | --------------------------------- | -------------------------------------- |
-| Rust unit tests                        | `cargo test -p toolr-core`        | `crates/toolr-core/src/**/*.rs`        |
+| Rust unit tests                        | `cargo test -p toolr-core`        | `crates/*/src/**/tests.rs`             |
 | Rust integration tests                 | `cargo test -p toolr --test '*'`  | `crates/toolr/tests/*.rs` (`assert_cmd`) |
 | Python unit tests                      | `uv run pytest`                   | `tests/**/*.py`                        |
 | Distribution lock-tests (opt-in, slow) | `uv run pytest -m distribution`   | `tests/distribution/`                  |
+
+Rust unit tests always live in their own file: `src/foo.rs` declares `#[cfg(test)] mod tests;`, and the
+tests go in `src/foo/tests.rs` (`src/foo/mod.rs` uses `src/foo/tests.rs` too). One `tests.rs` per module.
+A test-only file that a `tests.rs` pulls in with `include!` ends in `_test.rs`. The `no-inline-test-modules`
+pre-commit hook refuses an inline `#[cfg(test)] mod x { … }`. Codecov and `cargo xtask patch-coverage` ignore
+`tests.rs` and `*_test.rs`.
 
 The Rust integration tests spawn the built `toolr` binary via `assert_cmd`. Don't shadow them with
 Python-level subprocess tests unless the behaviour can't be exercised in Rust.

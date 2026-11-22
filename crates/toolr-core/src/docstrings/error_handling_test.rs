@@ -1,4 +1,3 @@
-#[cfg(test)]
 mod error_handling_tests {
     use crate::docstrings::{ParseError, SimpleDocstringParser};
 
