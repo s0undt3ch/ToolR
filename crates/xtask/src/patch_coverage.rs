@@ -7,8 +7,9 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-/// Paths `.codecov.yml` ignores that would otherwise match `crates/*/src/**/*.rs`.
-const IGNORED_PREFIXES: [&str; 5] = [
+/// Directories and files `.codecov.yml` ignores that would otherwise match `crates/*/src/**/*.rs`.
+/// Keep this and `IGNORED_SUFFIXES` in sync with `.codecov.yml`'s `ignore` list.
+const IGNORED_PATHS: [&str; 5] = [
     "crates/toolr-py/src/",
     "crates/toolr-core/src/complete/scripts/",
     "crates/toolr/src/init_templates/",
@@ -125,7 +126,7 @@ fn is_measured(path: &str) -> bool {
         && parts.next().is_some();
     in_crate_src
         && path.ends_with(".rs")
-        && !IGNORED_PREFIXES.iter().any(|p| path.starts_with(p))
+        && !IGNORED_PATHS.iter().any(|p| path.starts_with(p))
         && !IGNORED_SUFFIXES.iter().any(|s| path.ends_with(s))
 }
 

@@ -158,6 +158,5 @@ mod unix {
 }
 
 // Unix-only so Windows builds don't drag in the otherwise-unused imports.
-#[cfg(test)]
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 mod tests;

@@ -850,7 +850,7 @@ fn list_of_directory_paths_is_read_back_as_strings() {
     assert_eq!(extract_many(&arg, &matches).len(), 2);
 }
 
-mod dispatched_pack_tests {
+mod dispatched_pack {
     //! `pack_child_args` packs a matched dispatched-leaf into a
     //! `PackedChild`. These tests pin the on-the-wire encoding (which
     //! reuses `extract_value`, so flags stay bools and missing
@@ -1333,7 +1333,7 @@ mod dispatched_pack_tests {
     }
 }
 
-mod output_options_tests {
+mod output_options {
     use super::super::*;
     use toolr_core::manifest::Manifest;
 

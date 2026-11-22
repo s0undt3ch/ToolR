@@ -134,8 +134,8 @@ repos:
       - id: no-inline-test-modules
         name: Keep Rust test modules in their own files
         language: pygrep
-        # `test` anywhere in the `cfg(...)` except under `not(...)`, with any attributes or comments
-        # between it and `mod`.
+        # Any `cfg(...)` naming `test` (not under `not(...)`), with attributes or comments before `mod`.
+        # The shapes it must catch and allow are pinned in tests/tools/precommit/no_inline_test_modules/.
         entry: '#\[cfg\([^\]]*(?<!not\()\btest\b[^\]]*\]\s*(#\[[^\]]*\]\s*|//[^\n]*\n\s*|/\*.*?\*/\s*)*(pub(\([a-z]+\))?\s+)?mod\s+\w+\s*\{'
         args: [--multiline]
         files: ^crates/[^/]+/src/.*\.rs$

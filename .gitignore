@@ -255,6 +255,7 @@ tags
 .claude.local.md
 
 # Rust unit-test dirs (`src/<module>/tests.rs`) that `build/` and `ENV/` above would hide
-# (`ENV/` matches `env/` on case-insensitive filesystems).
+# (`ENV/` matches `env/` on case-insensitive filesystems). A new module named after another
+# pattern here (`lib/`, `dist/`, `var/`, ...) needs its own line.
 !crates/*/src/**/build/
 !crates/*/src/**/env/
