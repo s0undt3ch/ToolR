@@ -8,10 +8,12 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 
 /// Paths `.codecov.yml` ignores that would otherwise match `crates/*/src/**/*.rs`.
-const IGNORED_PREFIXES: [&str; 3] = [
+const IGNORED_PREFIXES: [&str; 5] = [
     "crates/toolr-py/src/",
     "crates/toolr-core/src/complete/scripts/",
     "crates/toolr/src/init_templates/",
+    "crates/toolr-core/src/test_env.rs",
+    "crates/toolr-core/src/test_fs.rs",
 ];
 
 /// File names `.codecov.yml` ignores anywhere under `crates/*/src/`: unit tests and the test-only

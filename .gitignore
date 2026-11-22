@@ -257,8 +257,4 @@ tags
 # Rust unit-test dirs (`src/<module>/tests.rs`) that `build/` and `ENV/` above would hide
 # (`ENV/` matches `env/` on case-insensitive filesystems).
 !crates/*/src/**/build/
-crates/*/src/**/build/*
-!crates/*/src/**/build/tests.rs
 !crates/*/src/**/env/
-crates/*/src/**/env/*
-!crates/*/src/**/env/tests.rs

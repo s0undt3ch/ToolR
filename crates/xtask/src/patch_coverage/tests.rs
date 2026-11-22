@@ -55,6 +55,11 @@ diff --git a/crates/demo/src/lib/case_test.rs b/crates/demo/src/lib/case_test.rs
 +++ b/crates/demo/src/lib/case_test.rs
 @@ -1 +1 @@
 +included tests
+diff --git a/crates/toolr-core/src/test_fs.rs b/crates/toolr-core/src/test_fs.rs
+--- a/crates/toolr-core/src/test_fs.rs
++++ b/crates/toolr-core/src/test_fs.rs
+@@ -1 +1 @@
++shared test helper
 diff --git a/crates/demo/tests/t.rs b/crates/demo/tests/t.rs
 --- a/crates/demo/tests/t.rs
 +++ b/crates/demo/tests/t.rs

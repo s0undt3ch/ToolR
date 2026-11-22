@@ -90,6 +90,9 @@ ignore:
   # some of them `include!`. Mirrored in xtask's `patch_coverage.rs`.
   - "crates/**/tests.rs"
   - "crates/**/*_test.rs"
+  # Test-only helpers shared across unit tests.
+  - "crates/toolr-core/src/test_env.rs"
+  - "crates/toolr-core/src/test_fs.rs"
   # Embedded shell completion scripts; not Rust/Python source.
   - "crates/toolr-core/src/complete/scripts"
   # Init-template fixture text — copied verbatim into new projects.
