@@ -36,6 +36,14 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Fail if a Rust file holds an inline `cfg(test)` module.
+    ///
+    /// Unit tests live in their own `tests.rs` file (see "Tests" in
+    /// CONTRIBUTING.md). Run by the `no-inline-test-modules` pre-commit hook.
+    CheckTestModules {
+        /// Rust source files to check.
+        files: Vec<PathBuf>,
+    },
     /// Report coverage of the lines this branch changed.
     ///
     /// Intersects `git diff -U0 <base>...HEAD` for `crates/*/src/**/*.rs`

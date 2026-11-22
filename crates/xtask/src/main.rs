@@ -9,6 +9,7 @@
 mod build_skill_refs;
 mod cli;
 mod patch_coverage;
+mod test_modules;
 
 use anyhow::Result;
 use clap::Parser;
@@ -19,6 +20,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::BuildSkillRefs { check } => build_skill_refs::run(check),
+        Command::CheckTestModules { files } => test_modules::run(&files),
         Command::PatchCoverage {
             base,
             lcov,

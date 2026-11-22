@@ -133,11 +133,8 @@ repos:
       # CONTRIBUTING.md: Rust unit tests live in their own `tests.rs` files.
       - id: no-inline-test-modules
         name: Keep Rust test modules in their own files
-        language: pygrep
-        # Any `cfg(...)` naming `test` (not under `not(...)`), with attributes or comments before `mod`.
-        # The shapes it must catch and allow are pinned in tests/tools/precommit/no_inline_test_modules/.
-        entry: '#\[cfg\([^\]]*(?<!not\()\btest\b[^\]]*\]\s*(#\[[^\]]*\]\s*|//[^\n]*\n\s*|/\*.*?\*/\s*)*(pub(\([a-z]+\))?\s+)?mod\s+\w+\s*\{'
-        args: [--multiline]
+        entry: cargo xtask check-test-modules
+        language: system
         files: ^crates/[^/]+/src/.*\.rs$
 
       - id: release-notes
