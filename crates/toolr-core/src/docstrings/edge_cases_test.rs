@@ -1,4 +1,3 @@
-#[cfg(test)]
 mod edge_cases_test {
     use crate::docstrings::SimpleDocstringParser;
 

@@ -130,6 +130,13 @@ repos:
         pass_filenames: false
         files: ^(tests/|tools/precommit/(tests_layout|_common)\.py$)
 
+      # CONTRIBUTING.md: Rust unit tests live in their own `tests.rs` files.
+      - id: no-inline-test-modules
+        name: Keep Rust test modules in their own files
+        entry: cargo xtask check-test-modules
+        language: system
+        files: ^crates/[^/]+/src/.*\.rs$
+
       - id: release-notes
         name: Validate queued release notes
         entry: toolr release-notes check

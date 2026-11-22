@@ -1,4 +1,3 @@
-#[cfg(test)]
 mod known_headers_test {
     use crate::docstrings::{KNOWN_SECTION_HEADERS, SimpleDocstringParser};
 

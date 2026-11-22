@@ -47,8 +47,9 @@ prek run --all-files              # run every pre-commit hook
 ### Coverage
 
 Codecov gates every PR (`.codecov.yml`): changed lines need **99% patch coverage**, and each crate's
-project coverage can't drop below its base. `tests/`, `crates/*/tests`, `crates/toolr-py/src` and
-`crates/toolr-core/src/complete/scripts` are ignored, but `#[cfg(test)]` modules inside `src/` count.
+project coverage can't drop below its base. `tests/`, `crates/*/tests`, `crates/toolr-py/src`,
+`crates/toolr-core/src/complete/scripts` and Rust unit tests (`src/**/tests.rs`, `src/**/*_test.rs`) are
+ignored.
 
 ```sh
 # Rust: the CI command, with lcov output for local inspection (several minutes)
@@ -79,6 +80,8 @@ to dodge the metric.
 - Adding a `toolr.types` supported type: the checklist is "Adding a supported type" in
   `CONTRIBUTING.md`. The compiler enforces only the Rust `match` steps.
 - Built-in completion entries: `crates/toolr/src/builtin_completions.rs` (derived from `cli::build_command`).
+- Rust unit tests: `src/foo.rs` declares `#[cfg(test)] mod tests;` and the tests go in `src/foo/tests.rs`
+  (one per module; see "Tests" in `CONTRIBUTING.md`). The `no-inline-test-modules` hook rejects inline ones.
 - Static manifest parser: `crates/toolr-core/src/parser/`.
 - Tab-completion freshness: `crates/toolr-core/src/complete/freshness.rs`.
 - Reference plugin / example: `examples/plugin-package/`.

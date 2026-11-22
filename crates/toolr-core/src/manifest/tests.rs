@@ -305,7 +305,6 @@ mod dispatched_from_tests {
     }
 }
 
-#[cfg(test)]
 mod is_dispatcher_tests {
     use super::*;
 
