@@ -1179,7 +1179,7 @@ fn bash_path_completion_scales_linearly_with_the_listing() {
 }
 
 /// The login name and home directory `~user` expands to, which ignore `$HOME`.
-fn passwd_entry() -> (String, PathBuf) {
+fn current_user_home() -> (String, PathBuf) {
     // SAFETY: getpwuid returns static storage, copied out before any other call.
     unsafe {
         let pw = libc::getpwuid(libc::getuid());
@@ -1194,7 +1194,7 @@ fn passwd_entry() -> (String, PathBuf) {
 fn bash_path_marks_a_tilde_user_directory() {
     // `~user` ignores `$HOME`, so read (never write) a directory already in the real home whose
     // name is a prefix of nothing else there, so the reply is exactly that one directory.
-    let (user, home) = passwd_entry();
+    let (user, home) = current_user_home();
     let names: Vec<String> = std::fs::read_dir(&home)
         .map(|rd| {
             rd.filter_map(|e| e.ok()?.file_name().into_string().ok())

@@ -584,10 +584,10 @@ mod tests {
         assert_per_path(&tmp.path().join("main"));
     }
 
-    /// A trusted repository with one linked worktree, plus an attacker's directory.
+    /// The owner's repository with one linked worktree, plus an attacker's directory.
     struct Crafted {
         _tmp: TempDir,
-        trusted: PathBuf,
+        owner_repo: PathBuf,
         live_wt: PathBuf,
         attacker: PathBuf,
     }
@@ -595,19 +595,19 @@ mod tests {
     impl Crafted {
         fn new() -> Self {
             let tmp = TempDir::new().unwrap();
-            let trusted = init_repo(&tmp.path().join("trusted"));
-            let live_wt = add_worktree(&trusted, &tmp.path().join("live"));
+            let owner_repo = init_repo(&tmp.path().join("owner_repo"));
+            let live_wt = add_worktree(&owner_repo, &tmp.path().join("live"));
             fs::create_dir(tmp.path().join("attacker")).unwrap();
             let attacker = canon(&tmp.path().join("attacker"));
             Self {
                 _tmp: tmp,
-                trusted,
+                owner_repo,
                 live_wt,
                 attacker,
             }
         }
-        fn trusted_key(&self) -> PathBuf {
-            self.trusted.join(".git")
+        fn owner_key(&self) -> PathBuf {
+            self.owner_repo.join(".git")
         }
         fn write(&self, rel: &str, content: &str) {
             let path = self.attacker.join(rel);
@@ -617,11 +617,11 @@ mod tests {
     }
 
     #[test]
-    fn crafted_gitfile_to_trusted_dot_git() {
+    fn crafted_gitfile_to_owner_dot_git() {
         let c = Crafted::new();
-        c.write(".git", &format!("gitdir: {}\n", c.trusted_key().display()));
+        c.write(".git", &format!("gitdir: {}\n", c.owner_key().display()));
         let got = resolve(&c.attacker);
-        assert_ne!(got.key, c.trusted_key());
+        assert_ne!(got.key, c.owner_key());
         assert_per_path(&c.attacker);
     }
 
@@ -630,9 +630,9 @@ mod tests {
         let c = Crafted::new();
         let live_gitdir = fs::read_to_string(c.live_wt.join(".git")).unwrap();
         c.write(".git", &live_gitdir);
-        assert_eq!(resolve(&c.live_wt).key, c.trusted_key());
+        assert_eq!(resolve(&c.live_wt).key, c.owner_key());
         let got = resolve(&c.attacker);
-        assert_ne!(got.key, c.trusted_key());
+        assert_ne!(got.key, c.owner_key());
         assert_eq!(got.key, c.attacker);
         assert_eq!(got.kind, KeyKind::PerPath);
         assert_eq!(got.repair, None);
@@ -646,9 +646,9 @@ mod tests {
             "g/gitdir",
             &format!("{}\n", c.attacker.join(".git").display()),
         );
-        c.write("g/commondir", &format!("{}\n", c.trusted_key().display()));
+        c.write("g/commondir", &format!("{}\n", c.owner_key().display()));
         let got = resolve(&c.attacker);
-        assert_ne!(got.key, c.trusted_key());
+        assert_ne!(got.key, c.owner_key());
         assert_per_path(&c.attacker);
     }
 
@@ -662,10 +662,10 @@ mod tests {
         );
         c.write(
             "x/worktrees/g/commondir",
-            &format!("{}\n", c.trusted_key().display()),
+            &format!("{}\n", c.owner_key().display()),
         );
         let got = resolve(&c.attacker);
-        assert_ne!(got.key, c.trusted_key());
+        assert_ne!(got.key, c.owner_key());
         assert_eq!(got.key, c.attacker.join("x"));
         assert_eq!(got.kind, KeyKind::Repository);
     }
@@ -673,14 +673,14 @@ mod tests {
     #[test]
     fn forged_worktree_under_per_path_dir_is_a_different_kind() {
         let tmp = TempDir::new().unwrap();
-        let trusted = tmp.path().join("p");
-        fs::create_dir_all(trusted.join("worktrees/proj")).unwrap();
-        fs::create_dir_all(trusted.join("worktrees/g")).unwrap();
-        fs::write(trusted.join("worktrees/proj/.git"), "gitdir: ../g\n").unwrap();
-        fs::write(trusted.join("worktrees/g/gitdir"), "../proj/.git\n").unwrap();
-        let per_path = resolve(&trusted);
+        let per_path_dir = tmp.path().join("p");
+        fs::create_dir_all(per_path_dir.join("worktrees/proj")).unwrap();
+        fs::create_dir_all(per_path_dir.join("worktrees/g")).unwrap();
+        fs::write(per_path_dir.join("worktrees/proj/.git"), "gitdir: ../g\n").unwrap();
+        fs::write(per_path_dir.join("worktrees/g/gitdir"), "../proj/.git\n").unwrap();
+        let per_path = resolve(&per_path_dir);
         assert_eq!(per_path.kind, KeyKind::PerPath);
-        let forged = resolve(&trusted.join("worktrees/proj"));
+        let forged = resolve(&per_path_dir.join("worktrees/proj"));
         assert_eq!(forged.key, per_path.key);
         assert_eq!(forged.kind, KeyKind::Repository);
         assert_ne!(forged.kind, per_path.kind);
@@ -716,18 +716,18 @@ mod tests {
         init_repo(&c.attacker);
         fs::write(
             c.attacker.join(".git/commondir"),
-            format!("{}\n", c.trusted_key().display()),
+            format!("{}\n", c.owner_key().display()),
         )
         .unwrap();
         let got = resolve(&c.attacker);
-        assert_ne!(got.key, c.trusted_key());
+        assert_ne!(got.key, c.owner_key());
         assert_eq!(got.key, c.attacker.join(".git"));
     }
 
     #[test]
     fn malformed_gitfile_is_per_path() {
         let c = Crafted::new();
-        c.write(".git", &format!("{}\n", c.trusted_key().display()));
+        c.write(".git", &format!("{}\n", c.owner_key().display()));
         assert_per_path(&c.attacker);
         c.write(".git", "gitdir:   \n");
         assert_per_path(&c.attacker);
@@ -738,7 +738,7 @@ mod tests {
     #[test]
     fn worktree_without_back_link_is_per_path_without_hint() {
         let c = Crafted::new();
-        let gitdir = c.trusted.join(".git/worktrees/live");
+        let gitdir = c.owner_repo.join(".git/worktrees/live");
         fs::remove_file(gitdir.join("gitdir")).unwrap();
         assert_per_path(&c.live_wt);
     }
@@ -746,7 +746,7 @@ mod tests {
     #[test]
     fn back_link_must_name_dot_git() {
         let c = Crafted::new();
-        let gitdir = c.trusted.join(".git/worktrees/live");
+        let gitdir = c.owner_repo.join(".git/worktrees/live");
         fs::write(
             gitdir.join("gitdir"),
             format!("{}\n", c.live_wt.join("other").display()),
@@ -754,7 +754,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             per_path_hint(&c.live_wt),
-            hint(&c.live_wt, &c.trusted, "live")
+            hint(&c.live_wt, &c.owner_repo, "live")
         );
     }
 
@@ -763,7 +763,7 @@ mod tests {
     fn symlinked_dot_git_dir_and_file_are_per_path() {
         use std::os::unix::fs::symlink;
         let c = Crafted::new();
-        symlink(c.trusted_key(), c.attacker.join(".git")).unwrap();
+        symlink(c.owner_key(), c.attacker.join(".git")).unwrap();
         assert_per_path(&c.attacker);
 
         let other = c.attacker.join("other");
@@ -898,7 +898,7 @@ mod tests {
 
     impl Crafted {
         fn live_back_link(&self) -> PathBuf {
-            self.trusted.join(".git/worktrees/live/gitdir")
+            self.owner_repo.join(".git/worktrees/live/gitdir")
         }
     }
 
