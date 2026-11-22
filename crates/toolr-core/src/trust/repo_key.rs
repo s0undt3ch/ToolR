@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn crafted_gitfile_to_trusted_dot_git() {
+    fn crafted_gitfile_to_owner_dot_git() {
         let c = Crafted::new();
         c.write(".git", &format!("gitdir: {}\n", c.owner_key().display()));
         let got = resolve(&c.attacker);
@@ -673,14 +673,14 @@ mod tests {
     #[test]
     fn forged_worktree_under_per_path_dir_is_a_different_kind() {
         let tmp = TempDir::new().unwrap();
-        let owner_repo = tmp.path().join("p");
-        fs::create_dir_all(owner_repo.join("worktrees/proj")).unwrap();
-        fs::create_dir_all(owner_repo.join("worktrees/g")).unwrap();
-        fs::write(owner_repo.join("worktrees/proj/.git"), "gitdir: ../g\n").unwrap();
-        fs::write(owner_repo.join("worktrees/g/gitdir"), "../proj/.git\n").unwrap();
-        let per_path = resolve(&owner_repo);
+        let per_path_dir = tmp.path().join("p");
+        fs::create_dir_all(per_path_dir.join("worktrees/proj")).unwrap();
+        fs::create_dir_all(per_path_dir.join("worktrees/g")).unwrap();
+        fs::write(per_path_dir.join("worktrees/proj/.git"), "gitdir: ../g\n").unwrap();
+        fs::write(per_path_dir.join("worktrees/g/gitdir"), "../proj/.git\n").unwrap();
+        let per_path = resolve(&per_path_dir);
         assert_eq!(per_path.kind, KeyKind::PerPath);
-        let forged = resolve(&owner_repo.join("worktrees/proj"));
+        let forged = resolve(&per_path_dir.join("worktrees/proj"));
         assert_eq!(forged.key, per_path.key);
         assert_eq!(forged.kind, KeyKind::Repository);
         assert_ne!(forged.kind, per_path.kind);
