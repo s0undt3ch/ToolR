@@ -50,6 +50,18 @@ fn finds_test_modules_nested_in_other_inline_modules() {
 }
 
 #[test]
+fn finds_test_modules_in_function_and_const_bodies() {
+    let source = "fn f() {\n    #[cfg(test)]\n    mod in_fn {}\n}\nconst _: () = {\n    #[cfg(test)]\n    mod in_const {}\n};";
+    assert_eq!(found(source), ["in_fn", "in_const"]);
+}
+
+#[test]
+fn treats_a_cfg_it_cannot_read_as_test() {
+    assert_eq!(found("#[cfg(unix = )]\nmod unreadable {}"), ["unreadable"]);
+    assert_eq!(found("#[cfg(all(unix, x = ))]\nmod nested {}"), ["nested"]);
+}
+
+#[test]
 fn does_not_look_inside_a_test_module() {
     assert_eq!(
         found("#[cfg(test)]\nmod tests {\n    #[cfg(test)]\n    mod deeper {}\n}"),
