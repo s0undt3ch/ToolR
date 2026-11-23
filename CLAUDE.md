@@ -81,7 +81,7 @@ to dodge the metric.
   `CONTRIBUTING.md`. The compiler enforces only the Rust `match` steps.
 - Built-in completion entries: `crates/toolr/src/builtin_completions.rs` (derived from `cli::build_command`).
 - Rust unit tests: `src/foo.rs` declares `#[cfg(test)] mod tests;` and the tests go in `src/foo/tests.rs`
-  (one per module; see "Tests" in `CONTRIBUTING.md`). The `no-inline-test-modules` hook rejects inline ones.
+  (one per module; see "Tests" in `CONTRIBUTING.md`). The `check-tests-layout` hook rejects inline ones.
 - Static manifest parser: `crates/toolr-core/src/parser/`.
 - Tab-completion freshness: `crates/toolr-core/src/complete/freshness.rs`.
 - Reference plugin / example: `examples/plugin-package/`.

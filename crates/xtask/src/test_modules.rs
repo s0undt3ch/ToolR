@@ -2,17 +2,23 @@
 //! Parses with `syn`, so attribute order, comments and strings can't hide or fake a test module.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
 use syn::{Attribute, ItemMod, Meta, Token};
 
-/// Fail if any of `files` holds an inline module gated on `cfg(test)`.
+/// Fail if any of `files` holds an inline module gated on `cfg(test)`. With no `files`, check every
+/// Rust source under `crates/*/src/` in the current directory.
 pub fn run(files: &[PathBuf]) -> Result<()> {
+    let files = if files.is_empty() {
+        workspace_sources(Path::new("."))?
+    } else {
+        files.to_vec()
+    };
     let mut found = Vec::new();
-    for file in files {
+    for file in &files {
         let source =
             fs::read_to_string(file).with_context(|| format!("read {}", file.display()))?;
         let names =
@@ -29,6 +35,32 @@ pub fn run(files: &[PathBuf]) -> Result<()> {
         "move each test module into its own `tests.rs` and declare it with `mod tests;` \
          (see \"Tests\" in CONTRIBUTING.md)"
     )
+}
+
+/// Every `.rs` file under `<root>/crates/*/src/`, sorted.
+fn workspace_sources(root: &Path) -> Result<Vec<PathBuf>> {
+    let crates = root.join("crates");
+    let mut sources = Vec::new();
+    for entry in fs::read_dir(&crates).with_context(|| format!("read {}", crates.display()))? {
+        let src = entry?.path().join("src");
+        if src.is_dir() {
+            collect_rust_files(&src, &mut sources)?;
+        }
+    }
+    sources.sort();
+    Ok(sources)
+}
+
+fn collect_rust_files(dir: &Path, sources: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))? {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_rust_files(&path, sources)?;
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            sources.push(path);
+        }
+    }
+    Ok(())
 }
 
 /// Names of the inline modules in `source` that `cfg(test)` gates, wherever they sit: at the top

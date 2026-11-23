@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from toolr.testing import make_context
+
 from tools.ci import REPO_ROOT
+from tools.precommit.tests_layout import check_tests_layout
 from tools.precommit.tests_layout import layout_problems
+
+from tests.tools.precommit.recording_run import RecordingRun
 
 
 @pytest.fixture
@@ -72,3 +78,32 @@ def test_top_level_test_modules_are_reported(make_tree: Callable[..., Path]) -> 
 def test_top_level_support_modules_are_allowed(make_tree: Callable[..., Path]) -> None:
     root = make_tree("__init__.py", "conftest.py", "_git.py", "area/__init__.py", "area/test_b.py")
     assert layout_problems(root) == []
+
+
+def test_command_passes_on_the_repo() -> None:
+    """Run the real ``cargo xtask check-test-modules`` against this workspace."""
+    check_tests_layout(make_context(REPO_ROOT))
+
+
+def test_command_runs_the_xtask_rust_check() -> None:
+    run = RecordingRun(("", "", 0))
+    check_tests_layout(make_context(REPO_ROOT, run=run))
+    assert run.calls == [(shutil.which("cargo"), "xtask", "check-test-modules")]
+
+
+def test_inline_rust_test_module_fails_the_command() -> None:
+    run = RecordingRun(("", "crates/x/src/lib.rs: inline test module `tests`", 1))
+    with pytest.raises(SystemExit) as excinfo:
+        check_tests_layout(make_context(REPO_ROOT, run=run))
+    assert excinfo.value.code == 1
+
+
+def test_python_layout_problem_fails_the_command(make_tree: Callable[..., Path]) -> None:
+    root = make_tree("tests/test_top.py")
+    run = RecordingRun(("", "", 0))
+    ctx = make_context(root, run=run)
+    with pytest.raises(SystemExit) as excinfo:
+        check_tests_layout(ctx)
+    assert excinfo.value.code == 1
+    assert "move tests/test_top.py" in ctx.stderr
+    assert len(run.calls) == 1

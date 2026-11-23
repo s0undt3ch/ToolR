@@ -1,5 +1,5 @@
 """
-Pre-commit hook command that keeps the ``tests/`` tree to the project's layout rules.
+Pre-commit hook command that keeps Python and Rust tests to the project's layout rules.
 """
 
 from __future__ import annotations
@@ -10,9 +10,8 @@ from rich.markup import escape
 
 from toolr import Context
 
+from ._common import cargo_path
 from ._common import group
-
-from tools.ci import REPO_ROOT
 
 FIXTURES_DIR = "files"
 
@@ -60,15 +59,19 @@ def layout_problems(tests_dir: Path) -> list[str]:
 
 @group.command
 def check_tests_layout(ctx: Context) -> None:
-    """Check the ``tests/`` layout rules.
+    """Check the Python and Rust test layout rules.
 
-    Every directory holding a ``.py`` file has an ``__init__.py`` (no namespace packages), so test
-    modules import as ``tests.…`` and can't shadow real packages such as ``tools``. Every non-``.py``
-    file lives in a ``files/`` directory next to the tests that use it, and ``files/`` trees are data,
-    not packages. No ``test_*.py`` sits directly in ``tests/``.
+    Every directory under ``tests/`` holding a ``.py`` file has an ``__init__.py`` (no namespace
+    packages), so test modules import as ``tests.…`` and can't shadow real packages such as ``tools``.
+    Every non-``.py`` file lives in a ``files/`` directory next to the tests that use it, and ``files/``
+    trees are data, not packages. No ``test_*.py`` sits directly in ``tests/``.
+
+    Rust unit tests live in their own ``tests.rs`` files. ``cargo xtask check-test-modules`` parses
+    every source under ``crates/*/src/`` and rejects inline modules gated on ``cfg(test)``.
     """
-    problems = layout_problems(REPO_ROOT / "tests")
+    problems = layout_problems(ctx.repo_root / "tests")
     for problem in problems:
         ctx.error(escape(problem))
-    if problems:
+    ret = ctx.run(cargo_path(ctx), "xtask", "check-test-modules", cwd=ctx.repo_root)
+    if problems or ret.returncode:
         ctx.exit(1)

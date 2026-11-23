@@ -124,18 +124,11 @@ repos:
           )$
 
       - id: check-tests-layout
-        name: Check the tests/ layout (packages and files/ fixtures)
+        name: Check the Python and Rust test layout
         entry: toolr pre-commit check-tests-layout
         language: system
         pass_filenames: false
-        files: ^(tests/|tools/precommit/(tests_layout|_common)\.py$)
-
-      # CONTRIBUTING.md: Rust unit tests live in their own `tests.rs` files.
-      - id: no-inline-test-modules
-        name: Keep Rust test modules in their own files
-        entry: cargo xtask check-test-modules
-        language: system
-        files: ^crates/[^/]+/src/.*\.rs$
+        files: ^(tests/|crates/[^/]+/src/.*\.rs$|tools/precommit/(tests_layout|_common)\.py$)
 
       - id: release-notes
         name: Validate queued release notes
@@ -232,20 +225,11 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      # toolr-py builds toolr-core without its `full` feature, which no
-      # workspace build does because of feature unification, so lint it here.
-      - id: clippy-toolr-py-lean
-        name: clippy (toolr-core without `full`, and toolr-py)
-        entry: bash -c 'cargo clippy -p toolr-core --no-default-features --all-targets -- -D warnings && cargo clippy -p toolr-py --all-targets -- -D warnings'
+      # toolr-py builds toolr-core without `full`, which feature unification
+      # keeps every workspace build from doing.
+      - id: check-lean-build
+        name: Check toolr-core without `full`, and toolr-py
+        entry: toolr pre-commit check-lean-build
         language: system
         pass_filenames: false
-        files: ^(crates/toolr-(core|py)/.*\.rs|Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
-
-      # toolr-py links whatever toolr-core needs without `full`; a new
-      # dependency must be optional and listed in `full`, or added here.
-      - id: toolr-core-lean-deps
-        name: toolr-core without `full` depends only on allowlisted crates
-        entry: bash -c 'allowed="libc serde winapi"; tree=$(cargo tree -p toolr-core --no-default-features -e normal --depth 1 --prefix none --target all) || exit 1; deps=$(awk "NR > 1 { print \$1 }" <<<"$tree" | sort -u | paste -sd " " -); [ "$deps" = "$allowed" ] || { echo "toolr-core without full depends on \"$deps\", expected \"$allowed\"" >&2; exit 1; }'
-        language: system
-        pass_filenames: false
-        files: ^(Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
+        files: ^(crates/toolr-(core|py)/.*\.rs|Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml|tools/precommit/(lean|_common)\.py)$
