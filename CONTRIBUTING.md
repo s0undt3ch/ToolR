@@ -24,7 +24,7 @@ A GitHub release archive of the standalone binary ships alongside.
 `toolr-py` builds `toolr-core` without its default `full` feature, so it links only the `command` and
 `docstrings` modules. A new `toolr-core` dependency must be `optional = true` and listed as `dep:<name>` in
 `full`. To use another `toolr-core` module from `toolr-py`, ungate it in `lib.rs` and make its dependencies
-non-optional, then add them to the allowlist in the `toolr-core-lean-deps` pre-commit hook.
+non-optional, then add them to `LEAN_DEPS_ALLOWLIST` in `tools/precommit/lean.py`.
 
 ## Dev setup
 
@@ -70,8 +70,8 @@ cargo build -p toolr --release
 Rust unit tests always live in their own file: `src/foo.rs` declares `#[cfg(test)] mod tests;`, and the
 tests go in `src/foo/tests.rs`. `src/foo/mod.rs` uses `src/foo/tests.rs` too, and `src/lib.rs` or `src/main.rs`
 uses `src/tests.rs`. One `tests.rs` per module.
-A test-only file that a `tests.rs` pulls in with `include!` ends in `_test.rs`. The `no-inline-test-modules`
-pre-commit hook (`cargo xtask check-test-modules`) refuses any inline module that a `cfg(…)` naming `test`
+A test-only file that a `tests.rs` pulls in with `include!` ends in `_test.rs`. The `check-tests-layout`
+pre-commit hook (via `cargo xtask check-test-modules`) refuses any inline module that a `cfg(…)` naming `test`
 gates. Codecov and `cargo xtask patch-coverage` ignore
 `tests.rs` and `*_test.rs`. A test-only helper shared across modules gets its own file too
 (`crates/toolr-core/src/test_env.rs`, `test_fs.rs`); a new one goes in both `.codecov.yml`'s `ignore` and

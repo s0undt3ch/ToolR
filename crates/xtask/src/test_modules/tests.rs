@@ -94,3 +94,43 @@ fn run_reports_unreadable_and_unparsable_files() {
     let err = run(&[broken]).expect_err("broken file fails");
     assert!(format!("{err:#}").starts_with("parse "), "{err:#}");
 }
+
+#[test]
+fn workspace_sources_walks_each_crate_src_tree() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path();
+    for file in [
+        "crates/a/src/lib.rs",
+        "crates/a/src/x/y.rs",
+        "crates/a/src/notes.txt",
+        "crates/a/tests/e2e.rs",
+        "crates/b/src/main.rs",
+        "crates/no-src/Cargo.toml",
+    ] {
+        let path = root.join(file);
+        fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+        fs::write(&path, "").expect("write");
+    }
+    fs::write(root.join("crates/README.md"), "").expect("write");
+
+    let sources = workspace_sources(root).expect("walk");
+    let relative: Vec<_> = sources
+        .iter()
+        .map(|path| path.strip_prefix(root).expect("under root").to_path_buf())
+        .collect();
+    assert_eq!(
+        relative,
+        [
+            PathBuf::from("crates/a/src/lib.rs"),
+            PathBuf::from("crates/a/src/x/y.rs"),
+            PathBuf::from("crates/b/src/main.rs"),
+        ]
+    );
+}
+
+#[test]
+fn workspace_sources_without_crates_dir_names_it() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let err = workspace_sources(dir.path()).expect_err("no crates/");
+    assert!(err.to_string().contains("crates"), "{err}");
+}
