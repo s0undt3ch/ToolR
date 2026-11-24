@@ -80,17 +80,20 @@ def test_top_level_support_modules_are_allowed(make_tree: Callable[..., Path]) -
     assert layout_problems(root) == []
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 def test_command_passes_on_the_repo() -> None:
     """Run the real ``cargo xtask check-test-modules`` against this workspace."""
     check_tests_layout(make_context(REPO_ROOT))
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 def test_command_runs_the_xtask_rust_check() -> None:
     run = RecordingRun(("", "", 0))
     check_tests_layout(make_context(REPO_ROOT, run=run))
     assert run.calls == [(shutil.which("cargo"), "xtask", "check-test-modules")]
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 def test_inline_rust_test_module_fails_the_command() -> None:
     run = RecordingRun(("", "crates/x/src/lib.rs: inline test module `tests`", 1))
     with pytest.raises(SystemExit) as excinfo:
@@ -98,6 +101,7 @@ def test_inline_rust_test_module_fails_the_command() -> None:
     assert excinfo.value.code == 1
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 def test_python_layout_problem_fails_the_command(make_tree: Callable[..., Path]) -> None:
     root = make_tree("tests/test_top.py")
     run = RecordingRun(("", "", 0))
