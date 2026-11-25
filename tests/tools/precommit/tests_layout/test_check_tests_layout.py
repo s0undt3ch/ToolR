@@ -10,10 +10,10 @@ import pytest
 
 from toolr.testing import make_context
 
-from tools.ci import REPO_ROOT
 from tools.precommit.tests_layout import check_tests_layout
 from tools.precommit.tests_layout import layout_problems
 
+from tests._paths import REPO_ROOT
 from tests.tools.precommit.recording_run import RecordingRun
 
 

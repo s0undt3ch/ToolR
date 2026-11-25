@@ -10,11 +10,15 @@ from pathlib import Path
 import pytest
 import yaml
 
+from toolr.testing import make_context
+
 import tools.precommit.python_versions as python_versions_module
-from tools.ci import REPO_ROOT
 from tools.precommit.python_versions import CONFIG_TOML_FILES
 from tools.precommit.python_versions import CP_TAG_WORKFLOWS
+from tools.precommit.python_versions import check_python_versions
 from tools.precommit.python_versions import python_version_mismatches
+
+from tests._paths import REPO_ROOT
 
 
 def test_repo_python_versions_agree() -> None:
@@ -120,3 +124,18 @@ def test_tools_ci_wheel_list_drift_reported(
 
     assert len(mismatches) == 1, mismatches
     assert location in mismatches[0]
+
+
+def test_check_python_versions_reads_ctx_repo_root(
+    make_python_versions_tree: Callable[[], Path],
+) -> None:
+    root = make_python_versions_tree()
+    mise = root / "mise.toml"
+    mise.write_text(
+        re.sub(r'"3\.11\.\d+"', "", mise.read_text(encoding="utf-8"), count=1), encoding="utf-8"
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        check_python_versions(make_context(root))
+
+    assert excinfo.value.code == 1

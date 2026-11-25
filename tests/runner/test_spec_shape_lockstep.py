@@ -19,7 +19,7 @@ from toolr._runner import RunnerSpec
 from toolr.sources import ArgSchema
 from toolr.sources import CommandSchema
 
-from tools.ci import REPO_ROOT
+from tests._paths import REPO_ROOT
 
 SPEC_RS = REPO_ROOT / "crates" / "toolr-core" / "src" / "execute" / "spec.rs"
 
