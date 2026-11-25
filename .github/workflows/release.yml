@@ -70,6 +70,7 @@ jobs:
         uses: actions-cool/check-user-permission@c21884f3dda18dafc2f8b402fe807ccc9ec1aa5e # v2.4.0
         with:
           require: admin
+          error-if-missing: true
           username: ${{ github.triggering_actor }}
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

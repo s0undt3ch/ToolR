@@ -17,7 +17,7 @@ concurrency:
     (github.event.action == 'labeled' || github.event.action == 'unlabeled')
     && github.event.label.name != 'full-build'
     && github.event.label.name != 'full-bench'
-    && github.run_id || github.head_ref || github.run_id }}
+    && github.run_id || github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ !contains(github.ref, 'refs/heads/main') }}
 
 permissions: {}
