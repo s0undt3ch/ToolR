@@ -19,6 +19,7 @@ patch = subprocess
 source =
   toolr
   tests
+  tools
 
 omit =
   setup.py
@@ -35,6 +36,9 @@ toolr_py =
 tests =
   tests
   */tests
+tools =
+  tools
+  */tools
 
 [report]
 # Regexes for lines to exclude from consideration
