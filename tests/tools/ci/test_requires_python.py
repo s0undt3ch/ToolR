@@ -1,4 +1,4 @@
-"""Tests for ``supported_minors`` and ``python3_floor``, which derive ``ALL_CPYTHONS`` in ``tools/ci.py``.
+"""Tests for ``supported_minors`` and ``python3_floor``, which derive the test matrix in ``tools/ci.py``.
 
 ``project.requires-python`` in ``crates/toolr-py/pyproject.toml`` is the source of truth for the supported
 CPython range. ``MIN_PYTHON_MINOR`` is checked by ``crates/toolr-core/tests/python_floor_lockstep.rs`` instead.

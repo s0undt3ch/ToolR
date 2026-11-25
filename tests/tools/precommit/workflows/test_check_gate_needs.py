@@ -9,8 +9,9 @@ import pytest
 
 from toolr.testing import make_context
 
-from tools.ci import REPO_ROOT
 from tools.precommit.workflows import check_gate_needs
+
+from tests._paths import REPO_ROOT
 
 GATE_USES = "./.github/actions/pipeline-gate"
 

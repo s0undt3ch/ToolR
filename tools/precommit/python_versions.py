@@ -18,7 +18,6 @@ from ._common import group
 
 from tools.ci import ABI3_WHEEL_PYTHONS
 from tools.ci import BINARY_WHEEL_PYTHONS
-from tools.ci import REPO_ROOT
 from tools.ci import python3_floor
 from tools.ci import supported_minors
 
@@ -169,7 +168,7 @@ def check_python_versions(ctx: Context) -> None:
     floor setting (pyo3 ``abi3-*``, cibuildwheel, ruff, mypy, the other ``requires-python`` floors
     and the workflows' hard-coded cp-tags) repeat it by hand; this reports each one that disagrees.
     """
-    mismatches = python_version_mismatches(REPO_ROOT)
+    mismatches = python_version_mismatches(ctx.repo_root)
     for mismatch in mismatches:
         # Messages quote TOML keys like `[tools]`, which rich would eat as markup.
         ctx.error(escape(mismatch))

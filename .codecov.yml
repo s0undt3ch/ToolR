@@ -74,6 +74,10 @@ component_management:
       name: "xtask"
       paths:
         - "crates/xtask/src/**"
+    - component_id: tools
+      name: "tools"
+      paths:
+        - "tools/**"
 
 # Source files we never measure. Listing them here keeps the displayed
 # coverage focused on production code and prevents un-instrumented

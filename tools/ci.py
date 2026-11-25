@@ -40,13 +40,7 @@ CI_INERT_FILES = frozenset(
     {"CLAUDE.md", "SECURITY.md", "renovate.json5", "typos.toml", ".rumdl.toml"}
 )
 
-# tools/ci.py → repo root (two parents up resolves the `tools/` directory).
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
 group = command_group("ci", "CI utilities", docstring=__doc__)
-
-
-TOOLR_PY_PYPROJECT = REPO_ROOT / "crates" / "toolr-py" / "pyproject.toml"
 
 
 def python3_floor(requires_python: str) -> int:
@@ -92,12 +86,16 @@ def _requires_python(pyproject: Path) -> str:
     return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["requires-python"]
 
 
-# Every supported CPython, dotted form derived below. This drives the
-# *test* matrix only — the toolr-py wheel itself is now a single abi3
-# build (see ABI3_WHEEL_PYTHONS). Derived from `requires-python` in
-# `crates/toolr-py/pyproject.toml`.
-# An unbounded or malformed `requires-python` fails at import, on purpose: the wheel build would fail anyway.
-ALL_CPYTHONS = [f"cp3{minor}" for minor in supported_minors(_requires_python(TOOLR_PY_PYPROJECT))]
+def _test_pythons(repo_root: Path) -> list[str]:
+    """Return every supported CPython, dotted, from toolr-py's ``requires-python``.
+
+    This drives the *test* matrix only; the toolr-py wheel is a single abi3 build (see
+    ``ABI3_WHEEL_PYTHONS``). An unbounded or malformed ``requires-python`` raises, on purpose: the
+    wheel build would fail anyway.
+    """
+    pyproject = repo_root / "crates" / "toolr-py" / "pyproject.toml"
+    return [f"3.{minor}" for minor in supported_minors(_requires_python(pyproject))]
+
 
 # CPython ABI tags cibuildwheel builds for the toolr-py (pyo3) wheel.
 # abi3 stable-ABI → a single cp311 wheel covers all CPython >=3.11;
@@ -105,37 +103,9 @@ ALL_CPYTHONS = [f"cp3{minor}" for minor in supported_minors(_requires_python(TOO
 # Cargo.toml) makes maturin tag the wheel `cp311-abi3-<platform>`, which
 # pip installs on any CPython >=3.11. Building cp312/cp313/cp314 would
 # only re-emit the identical abi3 wheel, so we build cp311 alone while
-# TEST_PYTHONS below still exercises the full interpreter range.
+# `_test_pythons` still covers the full interpreter range.
 ABI3_WHEEL_PYTHONS = ["cp311"]
 
-
-def _cp_tag_to_dotted(tag: str) -> str:
-    """Convert a cibuildwheel ABI tag back to the dotted form.
-
-    `cp311` -> `3.11`, `cp310` -> `3.10`, etc. Used to derive the
-    `_test.yml` matrix's `python-version` entries from `ALL_CPYTHONS`
-    so the test matrix and the supported-CPython list can't drift.
-    """
-    if not tag.startswith("cp"):
-        msg = f"unexpected python tag: {tag!r}"
-        raise ValueError(msg)
-    rest = tag[2:]
-    return f"{rest[:1]}.{rest[1:]}"
-
-
-# Dotted-form CPython versions for the `_test.yml` matrix. Derived from
-# ALL_CPYTHONS so a single bump propagates. Stays the full range even
-# though the wheel is abi3/single-build — we test every CPython against
-# the one shared wheel.
-TEST_PYTHONS = [_cp_tag_to_dotted(t) for t in ALL_CPYTHONS]
-
-# Windows and macOS runner-minutes cost far more than Linux, so PR builds
-# only exercise the latest CPython on those two OSes; Linux still gets
-# the full TEST_PYTHONS range on every build. Tied to `_select_workflow_mode`
-# (release mode) rather than a dedicated label, so it widens automatically
-# for the same triggers that already widen the wheel/archive matrix
-# (push to `main`, or a `full-build`-labelled PR).
-TEST_PYTHONS_NARROW = [TEST_PYTHONS[-1]]
 
 # Not the latest: 3.15 defaults to UTF-8 mode (PEP 686), which hides cp1252 bugs
 # (an `open()` without `encoding=`) that hit every Windows user on 3.11-3.14.
@@ -470,10 +440,13 @@ def generate_build_matrix(
             t for t in _BINARY_ARCHIVE_TRIPLES if t["triple"] in _CI_BINARY_ARCHIVE_TRIPLE_NAMES
         ]
 
+    test_pythons = _test_pythons(ctx.repo_root)
+    # Windows and macOS runner-minutes cost far more than Linux, so outside release mode those two
+    # OSes run one CPython: the latest on macOS, TEST_PYTHONS_WINDOWS_NARROW on Windows.
     if workflow == Workflow.RELEASE:
-        test_pythons_narrow = test_pythons_windows = TEST_PYTHONS
+        test_pythons_narrow = test_pythons_windows = test_pythons
     else:
-        test_pythons_narrow = TEST_PYTHONS_NARROW
+        test_pythons_narrow = test_pythons[-1:]
         test_pythons_windows = TEST_PYTHONS_WINDOWS_NARROW
 
     outputs: dict[str, object] = {
@@ -481,7 +454,7 @@ def generate_build_matrix(
         "binary-archive-triples": binary_archive_triples,
         "pythons-binary": BINARY_WHEEL_PYTHONS,
         "pythons-py": ABI3_WHEEL_PYTHONS,
-        "test-pythons": TEST_PYTHONS,
+        "test-pythons": test_pythons,
         "test-pythons-narrow": test_pythons_narrow,
         "test-pythons-windows": test_pythons_windows,
         "run-full-bench": run_full_bench,
@@ -521,7 +494,7 @@ def generate_build_matrix(
             f"- toolr-py wheel: `{', '.join(ABI3_WHEEL_PYTHONS)}` "
             "(abi3 stable-ABI — one wheel covers all CPython >=3.11)\n"
         )
-        wfh.write(f"- Test interpreters (Linux): `{', '.join(TEST_PYTHONS)}`\n")
+        wfh.write(f"- Test interpreters (Linux): `{', '.join(test_pythons)}`\n")
         wfh.write(f"- Test interpreters (macOS): `{', '.join(test_pythons_narrow)}`\n")
         wfh.write(f"- Test interpreters (Windows): `{', '.join(test_pythons_windows)}`\n\n")
         wfh.write("### Benchmarks\n\n")

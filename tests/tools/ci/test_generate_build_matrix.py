@@ -11,7 +11,6 @@ import pytest
 from toolr.testing import make_context
 
 from tools.ci import FULL_BUILD_LABEL
-from tools.ci import TEST_PYTHONS
 from tools.ci import _run_full_ci
 from tools.ci import generate_build_matrix
 
@@ -20,13 +19,19 @@ from tests._git import Git
 PrRepoFactory = Callable[..., tuple[Path, dict[str, str]]]
 EventFactory = Callable[..., None]
 
+TOOLR_PY_PYPROJECT = '[project]\nname = "toolr-py"\nrequires-python = ">=3.11,<3.14"\n'
+TEST_PYTHONS = ["3.11", "3.12", "3.13"]
+
 
 @pytest.fixture
 def pr_repo(tmp_path: Path, git: Git) -> PrRepoFactory:
     """Factory: a git repo with a base commit and a head commit changing `changed`."""
 
     def factory(changed: list[str]) -> tuple[Path, dict[str, str]]:
-        repo = git.make_repo(tmp_path / "repo", files={"README.md": "base\n"})
+        repo = git.make_repo(
+            tmp_path / "repo",
+            files={"README.md": "base\n", "crates/toolr-py/pyproject.toml": TOOLR_PY_PYPROJECT},
+        )
         base = git(repo, "rev-parse", "HEAD").strip()
         for name in changed:
             path = repo / name
@@ -199,7 +204,7 @@ def test_generate_build_matrix_emits_run_full_ci(
 @pytest.mark.parametrize(
     ("event_name", "ref", "windows", "macos"),
     [
-        pytest.param("pull_request", "", ["3.14"], [TEST_PYTHONS[-1]], id="pr"),
+        pytest.param("pull_request", "", ["3.14"], ["3.13"], id="pr"),
         pytest.param("push", "refs/heads/main", TEST_PYTHONS, TEST_PYTHONS, id="push-main"),
     ],
 )

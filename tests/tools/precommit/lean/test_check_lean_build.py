@@ -9,12 +9,12 @@ import pytest
 
 from toolr.testing import make_context
 
-from tools.ci import REPO_ROOT
 from tools.precommit.lean import CLIPPY_LEAN_ARGS
 from tools.precommit.lean import LEAN_TREE_ARGS
 from tools.precommit.lean import check_lean_build
 from tools.precommit.lean import direct_deps
 
+from tests._paths import REPO_ROOT
 from tests.tools.precommit.recording_run import RecordingRun
 
 ROOT_LINE = "toolr-core v0.37.0 (~/toolr/crates/toolr-core)\n"

@@ -83,7 +83,8 @@ def test_filter_names_exactly_the_matrix_labels(workflow: dict[str, Any]) -> Non
 def test_ignored_runs_never_share_the_real_run_group(workflow: dict[str, Any]) -> None:
     group = _norm(workflow["concurrency"]["group"])
     assert group.endswith(
-        f"{_copies(workflow)['concurrency.group']} && github.run_id || github.head_ref || github.run_id }}}}"
+        f"{_copies(workflow)['concurrency.group']} && github.run_id"
+        " || github.event.pull_request.number || github.run_id }}"
     )
 
 
