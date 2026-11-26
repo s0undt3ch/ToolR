@@ -21,6 +21,7 @@ ROOT_LINE = "toolr-core v0.37.0 (~/toolr/crates/toolr-core)\n"
 ALLOWED_TREE = ROOT_LINE + "libc v0.2.191\nserde v1.0.229\nwinapi v0.3.9\n"
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 def test_repo_lean_build_matches_the_allowlist() -> None:
     """Run the real ``cargo tree`` against this workspace; clippy is stubbed, it takes minutes."""
     real = make_context(REPO_ROOT)
@@ -33,6 +34,7 @@ def test_repo_lean_build_matches_the_allowlist() -> None:
     assert run.args == [LEAN_TREE_ARGS, *CLIPPY_LEAN_ARGS]
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 def test_runs_the_cargo_on_path() -> None:
     run = RecordingRun((ALLOWED_TREE, "", 0), ("", "", 0), ("", "", 0))
     check_lean_build(make_context(REPO_ROOT, run=run))
@@ -68,6 +70,7 @@ def test_direct_deps_of_a_crate_without_dependencies() -> None:
     assert direct_deps(ROOT_LINE) == []
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 @pytest.mark.parametrize(
     ("tree", "found"),
     [
@@ -89,6 +92,7 @@ def test_rejects_deps_off_the_allowlist(tree: str, found: str) -> None:
     assert run.args == [LEAN_TREE_ARGS]
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 def test_cargo_tree_failure_is_reported() -> None:
     run = RecordingRun(("", "error: package ID specification `toolr-core` did not match", 101))
     ctx = make_context(REPO_ROOT, run=run)
@@ -98,6 +102,7 @@ def test_cargo_tree_failure_is_reported() -> None:
     assert "cargo tree failed: error: package ID specification" in ctx.stderr
 
 
+@pytest.mark.skip_if_binaries_missing("cargo")
 @pytest.mark.parametrize(("results", "code"), [([101], 101), ([0, 2], 2)], ids=["core", "py"])
 def test_clippy_failure_stops_with_its_code(results: list[int], code: int) -> None:
     run = RecordingRun((ALLOWED_TREE, "", 0), *(("", "", rc) for rc in results))
